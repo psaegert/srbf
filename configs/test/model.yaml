@@ -23,3 +23,4 @@ learnable_positional_embeddings: true
 max_input_length: 32
 
 simplipy_engine: './simplipy_engine.yaml'
+tokenizer: './tokenizer.yaml'
