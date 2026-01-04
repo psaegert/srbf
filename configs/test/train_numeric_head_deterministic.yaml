@@ -1,15 +1,15 @@
-model: ./model.yaml
+model: ./model_numeric_head_deterministic.yaml
 
 optimizer:
   name: AdamW
   kwargs:
-    lr: 1  # Will be multiplied by scheduler
+    lr: 1
     weight_decay: 0.01
     betas: [0.9, 0.95]
 
 lr_schedule:
   - [0, 0.0]
-  - [100_000, 1e-4]  # 5% of steps
+  - [100_000, 1e-4]
 
 batch_size: 4
 
@@ -26,3 +26,4 @@ wandb_watch_log_freq: 1000
 
 steps: 2
 device: cpu
+numeric_loss_weight: 1.0
