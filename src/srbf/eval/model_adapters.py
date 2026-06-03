@@ -82,6 +82,8 @@ class FlashANSRAdapter(EvaluationModelAdapter):
             self.model.fit(*fit_args, complexity=complexity_value)
             fit_time = time.time() - fit_time_start
             record["fit_time"] = fit_time
+            record["generation_time"] = getattr(self.model, "_generation_time", None)
+            record["refinement_time"] = getattr(self.model, "_refinement_time", None)
             record["prediction_success"] = True
         except (ConvergenceError, OverflowError, TypeError, ValueError) as exc:
             record["error"] = str(exc)
