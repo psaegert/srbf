@@ -42,6 +42,7 @@ class EvaluationEngine:
         progress: bool = True,
         log_placeholders: bool = True,
         summary_interval: Optional[int] = 50,
+        meta: Optional[Mapping[str, Any]] = None,
     ) -> dict[str, list[Any]]:
         """Execute the evaluation loop and return accumulated results."""
 
@@ -106,7 +107,7 @@ class EvaluationEngine:
                     progress_bar.update(1)
 
                 if save_every is not None and processed % save_every == 0 and resolved_output is not None:
-                    self.result_store.save(resolved_output)
+                    self.result_store.save(resolved_output, meta=meta)
 
                 if (
                     tracker is not None
@@ -124,7 +125,7 @@ class EvaluationEngine:
         final_snapshot = self.result_store.snapshot()
 
         if resolved_output is not None:
-            self.result_store.save(resolved_output)
+            self.result_store.save(resolved_output, meta=meta)
 
         if tracker is not None:
             tracker.print_summary("Final evaluation summary")

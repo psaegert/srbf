@@ -682,6 +682,8 @@ def _load_existing_results(path: str) -> Mapping[str, Sequence[Any]] | None:
         payload = pickle.load(handle)
     if not isinstance(payload, Mapping):  # pragma: no cover - defensive
         raise ValueError("Stored evaluation results must be a mapping")
+    if "__meta__" in payload:  # provenance is a non-list key; strip before the row-store sees it
+        payload = {k: v for k, v in payload.items() if k != "__meta__"}
     return payload  # type: ignore[return-value]
 
 
