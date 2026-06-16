@@ -5,6 +5,7 @@ import time
 import warnings
 import functools
 import re
+from contextlib import nullcontext
 from typing import Any, Callable, Iterable, Mapping, Optional, TYPE_CHECKING
 
 import numpy as np
@@ -65,6 +66,32 @@ class FlashANSRAdapter(EvaluationModelAdapter):
             self.model.refiner_workers = self.refiner_workers
 
     def evaluate_sample(self, sample: EvaluationSample) -> EvaluationResult:
+        """Serial fit + evaluate. Composes the two phases below; behaviour matches the pre-split path
+        (the overlapped engine drives the phases separately across two threads).
+
+        The ``np.errstate`` here restores the ``np.seterr(all=numpy_errors)`` policy that the old
+        ``fit()`` applied around the whole generate+refine span. It is applied ONLY on this serial
+        composition (single-threaded); the phases are left un-wrapped so the overlapped engine's two
+        threads never clobber a process-global error policy across each other (refinement workers
+        already set their own policy per job, and the deployed ``numpy_errors='ignore'`` is value-neutral
+        vs the numpy default -- only warning emission differs)."""
+        numpy_errors = getattr(self.model, "numpy_errors", None)
+        with np.errstate(all=numpy_errors) if numpy_errors is not None else nullcontext():
+            record, gen_state, fit_t0 = self.generate_phase(sample)
+            return self.refine_extract_phase(sample, record, gen_state, fit_t0, wall_clock=True)
+
+    def generate_phase(
+        self,
+        sample: EvaluationSample,
+    ) -> tuple[dict[str, Any], Any | None, float]:
+        """GPU generation phase: build the record and run ``model._fit_generate`` -> ``GenState``.
+
+        Returns ``(record, gen_state, fit_t0)``. On a generation-phase error ``gen_state`` is ``None``
+        and the error is recorded. Writes NOTHING to model instance state (the generate phase only
+        touches ``self.model._prompt_prefix`` / ``_mcts_cache`` / ``_n_params``, none of which the
+        commit path reads), so the overlapped engine can run this for problem N+1 on the GPU-owner
+        thread while problem N is committed on the main thread.
+        """
         record = sample.clone_metadata()
         record["length_penalty"] = getattr(self.model, "length_penalty", None)
         record["constants_penalty"] = getattr(self.model, "constants_penalty", None)
@@ -74,21 +101,57 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         complexity_value = self._resolve_complexity(record)
         variable_names = record.get("variable_names")
 
-        fit_time_start = time.time()
+        fit_t0 = time.time()
         try:
-            fit_args: list[Any] = [sample.x_support, y_fit]
             if variable_names is not None:
-                fit_args.append(variable_names)
-            self.model.fit(*fit_args, complexity=complexity_value)
-            fit_time = time.time() - fit_time_start
-            record["fit_time"] = fit_time
-            record["generation_time"] = getattr(self.model, "_generation_time", None)
-            record["refinement_time"] = getattr(self.model, "_refinement_time", None)
-            record["prediction_success"] = True
+                gen_state = self.model._fit_generate(sample.x_support, y_fit, variable_names, complexity=complexity_value)
+            else:
+                gen_state = self.model._fit_generate(sample.x_support, y_fit, complexity=complexity_value)
+        except (ConvergenceError, OverflowError, TypeError, ValueError) as exc:
+            record["error"] = str(exc)
+            record["prediction_success"] = False
+            return record, None, fit_t0
+        return record, gen_state, fit_t0
+
+    def refine_extract_phase(
+        self,
+        sample: EvaluationSample,
+        record: dict[str, Any],
+        gen_state: Any | None,
+        fit_t0: float,
+        *,
+        wall_clock: bool = False,
+        refine_seed: int | None = None,
+    ) -> EvaluationResult:
+        """CPU refinement + extraction phase: refine the GenState, commit it, predict and read out.
+
+        MUST run on the commit thread in sample order: it commits the ``FitResult`` to model instance
+        state via ``_apply_fit_result`` and then reads it back through ``predict`` / ``get_expression``.
+        With ``prune_constant_budget == 0`` (every deployed eval config, and the overlap engine's hard
+        gate) it touches no GPU. ``wall_clock`` selects the ``fit_time`` semantics: ``True`` (serial)
+        records the wall-clock span since ``fit_t0`` (byte-identical to the pre-split ``fit()`` timing);
+        ``False`` (overlapped, where wall-clock spans overlap and are meaningless per problem) records
+        the well-defined component sum ``generation_time + refinement_time``. ``refine_seed`` (default
+        ``None`` = fresh OS entropy, the deployed behaviour) pins the per-candidate p0-noise seeds so a
+        quality-equivalence gate can drive serial and overlapped runs from identical candidates.
+        """
+        if gen_state is None:
+            # Generation-phase error already recorded on `record`.
+            return EvaluationResult(record)
+
+        try:
+            fit_result = self.model._fit_refine(gen_state, refine_seed=refine_seed)
         except (ConvergenceError, OverflowError, TypeError, ValueError) as exc:
             record["error"] = str(exc)
             record["prediction_success"] = False
             return EvaluationResult(record)
+
+        self.model._apply_fit_result(fit_result)
+
+        record["fit_time"] = (time.time() - fit_t0) if wall_clock else (fit_result.generation_time + fit_result.refinement_time)
+        record["generation_time"] = fit_result.generation_time
+        record["refinement_time"] = fit_result.refinement_time
+        record["prediction_success"] = True
 
         if not getattr(self.model, "_results", None):
             warnings.warn("Model produced no results. Filling nan.")
