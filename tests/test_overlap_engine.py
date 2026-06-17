@@ -59,17 +59,23 @@ def _fake_model(*, refine_pool=True, prune=0.0, method="softmax_sampling", choic
 class FakeAdapter:
     """Deterministic two-phase adapter: refine doubles the sample id; order is verifiable via `sid`."""
 
-    def __init__(self, model, *, gen_raises_on=None, refine_raises_on=None, pool_breaks_on=None):
+    def __init__(self, model, *, gen_raises_on=None, refine_raises_on=None, pool_breaks_on=None,
+                 gen_pool_breaks_on=None):
         self.model = model
         self._gen_raises_on = set(gen_raises_on or [])
         self._refine_raises_on = set(refine_raises_on or [])
         self._pool_breaks_on = set(pool_breaks_on or [])
+        self._gen_pool_breaks_on = set(gen_pool_breaks_on or [])
 
     def prepare(self, *, data_source=None):
         return None
 
     def generate_phase(self, sample):
         record = sample.clone_metadata()
+        if sample.sid in self._gen_pool_breaks_on:
+            # The producer-side BrokenProcessPool (the overlap simplify pass dies) -- the dominant
+            # high-c abort timing Step 4b enables.
+            raise BrokenProcessPool(f"gen-side pool died on {sample.sid}")
         if sample.sid in self._gen_raises_on:
             raise RuntimeError(f"gen boom on {sample.sid}")
         # GenState-faithful: carries `memory_for_scoring` (the engine drops it to bound GPU residency).
@@ -114,7 +120,6 @@ def test_overlap_matches_serial_and_preserves_order():
     (dict(refine_pool=False), "no persistent refine pool"),
     (dict(prune=16.0), "prune"),
     (dict(method="mcts"), "softmax"),
-    (dict(choices=8192), "threshold"),
 ])
 def test_falls_back_to_serial_when_unsupported(model_kw, reason):
     samples = [FakeSample(i) for i in range(8)]
@@ -126,6 +131,22 @@ def test_falls_back_to_serial_when_unsupported(model_kw, reason):
         snap = eng.run(limit=len(samples), verbose=True, progress=False,
                        log_placeholders=False, summary_interval=None)
     assert snap["value"] == [i * 2 for i in range(8)]   # serial fallback still correct
+
+
+@pytest.mark.parametrize("choices", [4096, 8192, 262144])
+def test_overlap_engages_at_high_c(choices):
+    """Step 4b: choices >= the simplify-parallel threshold (4096) is NO LONGER gated. The producer's
+    post-generation simplify and the consumer's refine share the pool safely (generation dominates at
+    high c, so they do not contend), so overlap engages and matches serial exactly."""
+    samples = [FakeSample(i) for i in range(12)]
+    adapter = FakeAdapter(_fake_model(choices=choices))
+    eng = OverlappedEvaluationEngine(FakeSource(samples), adapter, result_store=ResultStore())
+    ok, why = eng._overlap_supported()
+    assert ok is True, f"overlap should engage at high c after Step 4b (got: {why!r})"
+    snap = eng.run(limit=len(samples), verbose=False, progress=False,
+                   log_placeholders=False, summary_interval=None)
+    assert snap["sid"] == list(range(12))               # order preserved
+    assert snap["value"] == [i * 2 for i in range(12)]  # results match the deterministic adapter
 
 
 def test_adapter_without_phase_split_falls_back():
@@ -179,6 +200,36 @@ def test_pool_break_tears_down_with_clear_error_and_commits_prior():
     assert adapter.model._overlap_mode is False
     alive = [t for t in __import__("threading").enumerate() if t.name == "overlap-gpu-producer" and t.is_alive()]
     assert not alive
+
+
+class _SaveSpyStore(ResultStore):
+    """Counts save() calls (without writing to disk) so a test can assert a checkpoint was attempted."""
+
+    def __init__(self):
+        super().__init__()
+        self.save_calls = 0
+
+    def save(self, *args, **kwargs):
+        self.save_calls += 1  # record only; no file IO in the unit test
+
+
+def test_producer_pool_break_checkpoints_then_aborts():
+    # Step-4b review regression: a BrokenProcessPool from the PRODUCER's generate_phase (the overlap
+    # simplify pass dying -- the DOMINANT high-c abort timing 4b enables) routes to exc_box, which must
+    # checkpoint the contiguous committed results BEFORE surfacing -- symmetric with the consumer/
+    # pool_broke path. Without the fix, save_every=None + output_path would discard the whole run.
+    samples = [FakeSample(i) for i in range(8)]
+    adapter = FakeAdapter(_fake_model(), gen_pool_breaks_on=[5])
+    store = _SaveSpyStore()
+    eng = OverlappedEvaluationEngine(FakeSource(samples), adapter, result_store=store)
+    with pytest.raises(BrokenProcessPool):
+        eng.run(limit=8, output_path="results/_test_producer_break.pkl",
+                verbose=False, progress=False, log_placeholders=False, summary_interval=None)
+    assert store.save_calls >= 1                          # THE FIX: exc_box abort path checkpoints first
+    assert store.size >= 1                                # contiguous prior results were committed
+    assert adapter.model._overlap_mode is False           # overlap flag reset on teardown
+    alive = [t for t in __import__("threading").enumerate() if t.name == "overlap-gpu-producer" and t.is_alive()]
+    assert not alive                                      # no producer thread left hung
 
 
 def test_overlap_mode_flag_set_during_run_and_reset_after():

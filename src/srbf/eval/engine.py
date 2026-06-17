@@ -1,7 +1,6 @@
 """General-purpose evaluation runner tying data sources and model adapters together."""
 from __future__ import annotations
 
-import multiprocessing as mp
 import queue
 import threading
 from collections import Counter
@@ -271,11 +270,16 @@ class OverlappedEvaluationEngine(EvaluationEngine):
        ``model._prompt_prefix`` / ``_mcts_cache`` / ``_n_params`` (none read by the commit path); the
        commit path writes ``_results`` / ``variable_mapping`` / ``_input_dim`` / the timings (none read
        by the generate phase). The field sets are disjoint.
-    3. **No concurrent use of the shared refine pool.** The producer's ``generate()`` would otherwise
-       route the post-generation simplify pass onto the *same* ``model._refine_pool`` the consumer's
-       refine uses. That only happens at ``choices >= _SIMPLIFY_PARALLEL_THRESHOLD`` (4096), so overlap
-       is gated to ``choices < 4096`` (the deployed c=1024 path). Larger ``c`` falls back to the serial
-       engine until Step-4b routes generate-side simplify off the shared pool.
+    3. **Safe concurrent use of the shared refine pool (Step 4b).** At ``choices >=
+       _SIMPLIFY_PARALLEL_THRESHOLD`` (4096) the producer's post-generation simplify pass and the
+       consumer's refine share ``model._refine_pool``. This is race-free (refine ships per-job X/y,
+       simplify is a pure function, ``ProcessPoolExecutor.map`` is thread-safe) and contention-free in
+       practice: generation dominates so heavily at high ``c`` that refine(N) finishes early in
+       gen(N+1)'s window, so simplify(N+1) runs effectively uncontended (pipeline = gen+simplify = the
+       ceiling). Under ``_overlap_mode`` BOTH the refine and simplify paths re-raise a
+       ``BrokenProcessPool`` rather than close/re-fork the shared pool while the GPU producer thread is
+       live, so a worker death aborts the run cleanly instead of forking after CUDA. (Pre-4b this was
+       gated to ``choices < 4096``.)
 
     Results are committed strictly in sample order on the main thread, so ``result_store`` ordering and
     ``save_every`` checkpoints are byte-identical to the serial engine, and a save only ever sees
@@ -312,23 +316,15 @@ class OverlappedEvaluationEngine(EvaluationEngine):
         if method != "softmax_sampling":
             return False, f"generation method {method!r} is not 'softmax_sampling'"
 
-        try:  # local import avoids any module-load cycle with flash_ansr.flash_ansr
-            from flash_ansr.flash_ansr import _SIMPLIFY_PARALLEL_THRESHOLD
-        except Exception:  # pragma: no cover - defensive
-            _SIMPLIFY_PARALLEL_THRESHOLD = 4096
-        choices = int(getattr(gen_cfg, "choices", 0) or 0)
-        n_workers = min(16, max(1, int(getattr(model, "refiner_workers", 1) or 1)))
-        producer_uses_pool = (
-            bool(getattr(model, "parallel_simplify", True))
-            and choices >= _SIMPLIFY_PARALLEL_THRESHOLD
-            and n_workers > 1
-            and "fork" in mp.get_all_start_methods()
-        )
-        if producer_uses_pool:
-            return False, (
-                f"choices={choices} >= simplify-parallel threshold {_SIMPLIFY_PARALLEL_THRESHOLD}: "
-                "the generate phase would contend on the shared refine pool (lifted in Step 4b)"
-            )
+        # Step 4b: choices >= _SIMPLIFY_PARALLEL_THRESHOLD is NO LONGER gated off. At high c the
+        # producer's post-generation simplify pass and the consumer's refine share model._refine_pool,
+        # but generation dominates so heavily there that refine(N) finishes early in gen(N+1)'s window
+        # and simplify(N+1) then runs effectively uncontended (pipeline = gen+simplify = the ceiling).
+        # Concurrent pool use is race-free: refine ships per-job X/y (no shared _GLOBAL_REFINEMENT_DATA),
+        # simplify is a pure function, and ProcessPoolExecutor.map is thread-safe across threads. Under
+        # _overlap_mode BOTH the refine (_fit_refine) and simplify (_parallel_build_simplify_map) paths
+        # RE-RAISE a BrokenProcessPool instead of closing/re-forking the shared pool while the GPU
+        # producer thread is live, so a worker death aborts the run cleanly (no fork-after-CUDA).
         return True, ""
 
     # -------------------------------------------------------------- dispatch
@@ -502,7 +498,16 @@ class OverlappedEvaluationEngine(EvaluationEngine):
                 "persistent_refine_pool=False."
             ) from pool_broke
 
-        if exc_box:  # a producer-side failure (e.g. CUDA OOM in generate) -> surface it
+        if exc_box:
+            # A producer-side failure (CUDA OOM in generate, or a producer-side BrokenProcessPool from
+            # the overlap simplify pass -- the dominant high-c abort timing Step 4b enables). Checkpoint
+            # the contiguous committed results FIRST, symmetric with the pool_broke path above
+            # (:486-503): without this, save_every=None + output_path set would discard the entire
+            # committed multi-hour run on this path. Safe + no double-save: the producer is joined
+            # (:478-484) and the consumer has exited its loop, so the main thread is the sole
+            # result_store accessor, and pool_broke (:486) and exc_box reaches are mutually exclusive.
+            if resolved_output is not None:
+                self.result_store.save(resolved_output, meta=meta)
             raise exc_box[0]
 
         final_snapshot = self.result_store.snapshot()
@@ -535,6 +540,13 @@ class OverlappedEvaluationEngine(EvaluationEngine):
                 else:
                     try:
                         record, gen_state, fit_t0 = adapter.generate_phase(sample)
+                    except BrokenProcessPool:
+                        # Step 4b: the shared pool died during the producer's simplify pass. This is a
+                        # run-level abort (propagate to the outer handler -> exc_box -> surfaced after a
+                        # clean teardown + checkpoint), NOT a per-problem gen_error -- otherwise the
+                        # producer would keep hammering the dead pool and checkpoint a run of spurious
+                        # failures (acute on a multi-hour c=262144 run).
+                        raise
                     except Exception as exc:  # noqa: BLE001 - unexpected gen error (expected ones are caught inside)
                         item = ("gen_error", sample, exc)
                     else:
