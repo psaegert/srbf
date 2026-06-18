@@ -49,6 +49,24 @@ def fvu(y_true: np.ndarray | None, y_pred: np.ndarray | None) -> float:
     ss_res = np.mean((y_true - y_pred) ** 2)
     if ss_res == 0:
         return 0.0
+
+    # Overflow guard. A finite-but-DIVERGENT prediction can make the squared residual
+    # overflow to +inf; the 1/ss_res rescale below then drives scale -> 0, collapsing every
+    # term to 0 so safe_divide(0, 0) returns 0.0 and is_perfect_fit() spuriously fires
+    # (e.g. fvu([1,2,3,4,5], [1,2,3,4,1e167]) used to return 0.0). Decide good-vs-bad robustly
+    # by re-scaling the residual and total variance by the GT magnitude (an O(1) normalizer
+    # that never collapses a genuine divergence to zero). The finite-ss_res path is left
+    # byte-identical, so all non-pathological results are unchanged.
+    if not np.isfinite(ss_res):
+        denom = np.max(np.abs(y_true))
+        if not np.isfinite(denom) or denom == 0.0:
+            return np.inf
+        ss_res_n = np.mean(((y_true - y_pred) / denom) ** 2)
+        ss_tot_n = np.mean(((y_true - np.mean(y_true)) / denom) ** 2)
+        if not np.isfinite(ss_res_n):
+            return np.inf
+        return safe_divide(ss_res_n, ss_tot_n)
+
     scale = 1.0 / ss_res
 
     ss_res = np.mean((y_true * scale - y_pred * scale) ** 2)
