@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 import os
 import pickle
 import warnings
@@ -160,6 +162,51 @@ def build_evaluation_run(
 # ---------------------------------------------------------------------------
 # Builders
 
+def _canonical_skeleton_sha(skeletons: Sequence[Sequence[str]]) -> str:
+    """The pinned-skeleton-set fingerprint. Serialization is fixed (matches val100_skeletons.json's
+    sha256_canonical generator): JSON list-of-token-lists, no whitespace. Changing it silently breaks
+    every stored pin hash -- don't."""
+    return hashlib.sha256(
+        json.dumps([list(s) for s in skeletons], separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def _load_skeleton_list(spec: Any) -> list[tuple[str, ...]] | None:
+    """Resolve a ``data_source.skeleton_list`` spec to an ordered list of skeleton tuples.
+
+    Accepts a path to the pinned JSON (``{"_meta": {...}, "skeletons": [[tok, ...], ...]}`` or a bare
+    list), or an inline list of token lists. Returns None when no pin is configured. The pin freezes
+    WHICH skeletons evaluate (e.g. the standard-eval val100); SkeletonDatasetSource hard-fails if any
+    are absent from the pool. See STANDARD_EVAL.md item 1.
+
+    When the loaded object carries ``_meta.sha256_canonical``, the canonical fingerprint of the loaded
+    skeletons is recomputed and asserted to match -- so a pin FILE that was edited or corrupted fails
+    loudly at load (the in-pool check alone would pass any 100 in-pool skeletons). This makes the stored
+    canonical sha a live invariant, not just documentation.
+    """
+    if spec is None:
+        return None
+    if isinstance(spec, str):
+        with open(substitute_root_path(spec)) as fh:
+            data = json.load(fh)
+    else:
+        data = spec
+    if isinstance(data, Mapping):
+        skeletons = data["skeletons"]
+        stored_sha = data.get("_meta", {}).get("sha256_canonical")
+        if stored_sha is not None:
+            computed = _canonical_skeleton_sha(skeletons)
+            if computed != stored_sha:
+                raise ValueError(
+                    f"skeleton_list pin file integrity check failed: canonical sha256 {computed} != "
+                    f"stored {stored_sha} (the pin file was edited or corrupted). 'val' must mean the "
+                    f"exact pinned set; refusing to run on a mismatched pin."
+                )
+    else:
+        skeletons = data
+    return [tuple(s) for s in skeletons]
+
+
 def _build_data_source(
     config: Mapping[str, Any],
     *,
@@ -205,6 +252,7 @@ def _build_data_source(
             datasets_per_expression=_coerce_optional_int(config.get("datasets_per_expression"), "data_source.datasets_per_expression"),
             datasets_random_seed=_coerce_optional_int(config.get("datasets_random_seed"), "data_source.datasets_random_seed"),
             max_trials=max_trials,
+            skeleton_list=_load_skeleton_list(config.get("skeleton_list")),
         )
         return source, {"dataset": dataset}
 
@@ -286,12 +334,17 @@ def _infer_total_limit_from_data_source(config: Mapping[str, Any]) -> tuple[int 
         dataset_spec = config.get("dataset")
         if dataset_spec is None:
             raise ValueError("data_source.dataset must be provided for skeleton_dataset sources")
-        dataset = _load_dataset(dataset_spec)
         repeats = _coerce_optional_int(
             config.get("datasets_per_expression"),
             "data_source.datasets_per_expression",
         )
         per_expression = repeats if repeats is not None and repeats > 0 else 1
+        # A pinned skeleton_list fixes the expression count to exactly len(pin); without it, fall back
+        # to the live pool size. (Loading the JSON pin is far cheaper than loading the dataset.)
+        pinned = _load_skeleton_list(config.get("skeleton_list"))
+        if pinned is not None:
+            return len(pinned) * per_expression, {}
+        dataset = _load_dataset(dataset_spec)
         pool_size = len(getattr(dataset, "skeleton_pool"))
         return pool_size * per_expression, {"dataset": dataset}
 
@@ -394,6 +447,7 @@ def _build_flash_ansr_adapter(config: Mapping[str, Any], context: Mapping[str, A
         device=adapter_device,
         complexity=complexity,
         refiner_workers=refiner_workers,
+        candidate_store_dir=config.get("candidate_store_dir"),
     )
 
 

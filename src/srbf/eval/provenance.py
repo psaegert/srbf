@@ -102,6 +102,10 @@ def _resolve_inputs(config_path: str, experiment: str | None) -> dict[str, str]:
     if ds.get("dataset"):
         d = ds["dataset"]
         files["dataset_cfg"] = substitute_root_path(str(d if isinstance(d, str) else (d.get("path") or d.get("config"))))
+    if isinstance(ds.get("skeleton_list"), str):
+        # the pinned eval-set file (e.g. standard-eval val100) -- hashing it records WHICH skeletons
+        # ran, so "val" is provenance-verifiable even though the pool lives under gitignored data/.
+        files["skeleton_list_pin"] = substitute_root_path(str(ds["skeleton_list"]))
     return files
 
 

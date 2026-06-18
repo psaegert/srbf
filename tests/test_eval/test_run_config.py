@@ -370,7 +370,7 @@ def test_flash_ansr_generation_overrides(tmp_path, monkeypatch):
             return SimpleNamespace()
 
     class DummyAdapter:
-        def __init__(self, model, device, complexity, refiner_workers):
+        def __init__(self, model, device, complexity, refiner_workers, candidate_store_dir=None):
             self.model = model
             self.device = device
             self.complexity = complexity
@@ -443,7 +443,7 @@ def test_flash_ansr_inline_evaluation_config(monkeypatch):
             return SimpleNamespace()
 
     class DummyAdapter:
-        def __init__(self, model, device, complexity, refiner_workers):
+        def __init__(self, model, device, complexity, refiner_workers, candidate_store_dir=None):
             self.model = model
             self.device = device
             self.complexity = complexity
@@ -623,3 +623,24 @@ def test_partial_skeleton_dataset_infers_remaining(tmp_path, monkeypatch):
     assert plan.total_limit == 6
     assert captured["target_size"] == 2
     assert plan.engine is not None
+
+
+def test_load_skeleton_list_enforces_canonical_sha():
+    # A pin file carrying _meta.sha256_canonical is integrity-checked at load: a tampered skeleton
+    # (same stored sha, different content) must RAISE -- the canonical sha is a live invariant, not doc.
+    skeletons = [["+", "x1", "x2"], ["sin", "x1"]]
+    good_sha = run_config._canonical_skeleton_sha(skeletons)
+    good = {"_meta": {"sha256_canonical": good_sha}, "skeletons": skeletons}
+    assert run_config._load_skeleton_list(good) == [("+", "x1", "x2"), ("sin", "x1")]
+
+    tampered = {"_meta": {"sha256_canonical": good_sha}, "skeletons": [["+", "x2", "x1"], ["sin", "x1"]]}
+    with pytest.raises(ValueError, match="integrity check failed"):
+        run_config._load_skeleton_list(tampered)
+
+
+def test_load_skeleton_list_inline_slice_skips_integrity_check():
+    # Inline shard slices carry no _meta -> no canonical sha to check (they are captured by config_sha).
+    sliced = {"skeletons": [["+", "x1", "x2"]]}
+    assert run_config._load_skeleton_list(sliced) == [("+", "x1", "x2")]
+    assert run_config._load_skeleton_list([["sin", "x1"]]) == [("sin", "x1")]
+    assert run_config._load_skeleton_list(None) is None

@@ -16,6 +16,7 @@ from flash_ansr.expressions.normalization import normalize_skeleton, normalize_e
 from sympy import lambdify
 
 from flash_ansr.eval.core import EvaluationModelAdapter, EvaluationResult, EvaluationSample
+from flash_ansr.eval.candidate_store import CandidateStoreWriter, build_candidate_ledger
 from flash_ansr.flash_ansr import FlashANSR
 from flash_ansr.refine import ConvergenceError
 
@@ -51,11 +52,18 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         device: str = "cpu",
         complexity: str | list[int | float] | int | float = "none",
         refiner_workers: int | None = None,
+        candidate_store_dir: str | None = None,
     ) -> None:
         self.model = model
         self.device = device
         self.complexity = complexity
         self.refiner_workers = refiner_workers
+        # Save-all-candidates (thorough-tier quality shards only): when set, every problem's FULL
+        # candidate ledger is streamed to a compact columnar store. Off (None) -> zero overhead, so
+        # timing runs are untouched. The writer is created lazily on first capture. See STANDARD_EVAL.md
+        # Section 7 + item 5.
+        self.candidate_store_dir = candidate_store_dir
+        self._candidate_store: Any | None = None
 
     def get_simplipy_engine(self) -> Any:  # pragma: no cover - trivial accessor
         return self.model.simplipy_engine
@@ -148,6 +156,9 @@ class FlashANSRAdapter(EvaluationModelAdapter):
 
         self.model._apply_fit_result(fit_result)
 
+        if self.candidate_store_dir is not None:
+            self._capture_candidate_ledger(record, gen_state, fit_result)
+
         record["fit_time"] = (time.time() - fit_t0) if wall_clock else (fit_result.generation_time + fit_result.refinement_time)
         record["generation_time"] = fit_result.generation_time
         record["refinement_time"] = fit_result.refinement_time
@@ -198,6 +209,48 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         record["predicted_log_prob"] = best_result.get("log_prob")
 
         return EvaluationResult(record)
+
+    # ------------------------------------------------------------------
+    def _capture_candidate_ledger(self, record: dict[str, Any], gen_state: Any, fit_result: Any) -> None:
+        """Stream this problem's FULL candidate ledger to the compact columnar store (save-all tier).
+
+        Joins the generation pool (``gen_state.raw_beams``/``log_probs``) with the refined results
+        (``fit_result.results``) and writes one compressed .npz per problem, keyed by the resume-stable
+        ``eval_row_index`` the data source stamped on the sample. Best-effort: any failure here warns and
+        is swallowed -- candidate capture must never abort an eval row. Runs only on the consumer thread
+        (single writer), so it is safe under the overlap engine too."""
+        try:
+            problem_id = record.get("eval_row_index")
+            if problem_id is None:
+                warnings.warn(
+                    "candidate_store_dir is set but the sample carries no 'eval_row_index'; skipping "
+                    "candidate capture for this problem (the data source must stamp it).",
+                    RuntimeWarning,
+                )
+                return
+            if self._candidate_store is None:
+                self._candidate_store = CandidateStoreWriter(
+                    self.candidate_store_dir, vocab_size=len(self.model.tokenizer)
+                )
+            if self._candidate_store.has_problem(int(problem_id)):
+                return  # already written (resume)
+
+            tokenizer = self.model.tokenizer
+
+            def _decode_expr(raw_beam: list[int]) -> list[str]:
+                expr_ids = tokenizer.extract_expression_from_beam(list(raw_beam))[0]
+                return tokenizer.decode(expr_ids, special_tokens="<constant>")
+
+            ledger = build_candidate_ledger(
+                gen_state.raw_beams,
+                gen_state.log_probs,
+                fit_result.results,
+                decode_expr=_decode_expr,
+                is_valid=self.model.simplipy_engine.is_valid,
+            )
+            self._candidate_store.write_problem(int(problem_id), **ledger)
+        except Exception as exc:  # noqa: BLE001 - capture is auxiliary; never break the eval row
+            warnings.warn(f"Candidate-ledger capture failed for this problem: {exc}", RuntimeWarning)
 
     # ------------------------------------------------------------------
     def _resolve_complexity(self, metadata: dict[str, Any]) -> int | float | None:
