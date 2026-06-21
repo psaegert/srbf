@@ -17,7 +17,7 @@ from simplipy import SimpliPyEngine
 from flash_ansr.benchmarks import FastSRBBenchmark
 from flash_ansr.data import FlashANSRDataset
 from flash_ansr.eval.data_sources import FastSRBSource, SkeletonDatasetSource
-from flash_ansr.eval.engine import EvaluationEngine
+from flash_ansr.eval.engine import EvaluationEngine, OverlappedEvaluationEngine
 from flash_ansr.eval.model_adapters import (
     BruteForceAdapter,
     E2EAdapter,
@@ -142,7 +142,7 @@ def build_evaluation_run(
 
     adapter = _build_model_adapter(model_cfg, context=context)
 
-    engine = EvaluationEngine(
+    engine = _select_engine_cls(adapter)(
         data_source=data_source,
         model_adapter=adapter,
         result_store=store,
@@ -161,6 +161,18 @@ def build_evaluation_run(
 
 # ---------------------------------------------------------------------------
 # Builders
+
+def _select_engine_cls(adapter: Any) -> type[EvaluationEngine]:
+    """Pick the evaluation engine. Use the OverlappedEvaluationEngine (generate(N+1) || refine(N)) ONLY when a
+    persistent refine pool was actually created on the model -- i.e. the caller opted in via
+    ``model_adapter.persistent_refine_pool`` AND fork + ``refiner_workers > 1`` made the pool real. Otherwise the
+    plain serial EvaluationEngine, byte-identical to the historical default. Keying the CLASS off the live pool
+    (not just the flag) keeps the default fully inert: when no pool exists, no overlap code path is exercised at
+    all. The overlap engine ALSO self-degrades internally if its preconditions fail, so this is belt-and-braces.
+    """
+    model = getattr(adapter, "model", None)
+    return OverlappedEvaluationEngine if getattr(model, "_refine_pool", None) is not None else EvaluationEngine
+
 
 def _canonical_skeleton_sha(skeletons: Sequence[Sequence[str]]) -> str:
     """The pinned-skeleton-set fingerprint. Serialization is fixed (matches val100_skeletons.json's
@@ -436,6 +448,11 @@ def _build_flash_ansr_adapter(config: Mapping[str, Any], context: Mapping[str, A
         device=eval_cfg.get("device", config.get("device", "cpu")),
         refiner_workers=config.get("refiner_workers", eval_cfg.get("refiner_workers")),
         prune_constant_budget=eval_cfg.get("prune_constant_budget", 0),
+        # Opt-in: a persistent fork pool (forked pre-CUDA) enables the OverlappedEvaluationEngine
+        # (generate(N+1) || refine(N)). Default False -> per-call pool + serial engine = current behaviour.
+        # Resolves no-op if fork is unavailable or refiner_workers <= 1 (then no pool -> serial engine).
+        persistent_refine_pool=bool(config.get("persistent_refine_pool",
+                                               eval_cfg.get("persistent_refine_pool", False))),
     )
 
     complexity = config.get("complexity", eval_cfg.get("complexity", "none"))

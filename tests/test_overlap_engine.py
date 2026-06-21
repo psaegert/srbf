@@ -266,3 +266,22 @@ def test_consumer_failure_does_not_hang_producer():
     # the producer thread must not be left alive
     alive = [t for t in __import__("threading").enumerate() if t.name == "overlap-gpu-producer" and t.is_alive()]
     assert not alive
+
+
+# --------------------------------------------------------------------------- run_config wiring
+def test_select_engine_cls_overlap_when_pool_present():
+    """run_config picks the overlap engine iff a persistent refine pool was actually created."""
+    from flash_ansr.eval.run_config import _select_engine_cls
+    assert _select_engine_cls(FakeAdapter(_fake_model(refine_pool=True))) is OverlappedEvaluationEngine
+
+
+def test_select_engine_cls_serial_when_no_pool():
+    """Default (no persistent pool) -> the serial engine, byte-identical to the historical default."""
+    from flash_ansr.eval.run_config import _select_engine_cls
+    assert _select_engine_cls(FakeAdapter(_fake_model(refine_pool=False))) is EvaluationEngine
+
+
+def test_select_engine_cls_serial_when_no_model():
+    """A non-FlashANSR adapter (no .model, e.g. PySR) -> the serial engine."""
+    from flash_ansr.eval.run_config import _select_engine_cls
+    assert _select_engine_cls(types.SimpleNamespace(model=None)) is EvaluationEngine
