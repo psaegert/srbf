@@ -10,10 +10,10 @@ from typing import Any, Callable, Iterable, Mapping, Optional, TYPE_CHECKING
 
 import numpy as np
 import simplipy
-import sympy as sp
 from flash_ansr.baselines import BruteForceModel, SkeletonPoolModel
 from flash_ansr.expressions.normalization import normalize_skeleton, normalize_expression
-from sympy import lambdify
+# sympy is imported lazily inside the two baseline adapters that use it (E2E, NeSymReS);
+# it is an optional `[baselines]` extra, not a core runtime dependency.
 
 from flash_ansr.eval.core import EvaluationModelAdapter, EvaluationResult, EvaluationSample
 from flash_ansr.eval.candidate_store import CandidateStoreWriter, build_candidate_ledger
@@ -594,6 +594,7 @@ class E2EAdapter(EvaluationModelAdapter):
             predicted_expression_raw = str(predicted_tree.infix())
             canonical_infix = _canonicalize_e2e_infix(predicted_expression_raw)
             try:
+                import sympy as sp  # lazy: only the E2E baseline adapter needs sympy
                 sympy_expr = sp.parse_expr(canonical_infix)
                 predicted_expression = str(sympy_expr)
             except Exception:
@@ -900,6 +901,7 @@ def _convert_constants(constants: Any) -> list[float] | Any:
 
 
 def _evaluate_symbolic_expression(predicted_expr: Any, X_support: np.ndarray, X_val: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    from sympy import lambdify  # lazy: only the NeSymReS baseline adapter needs sympy
     var_symbols = [f"x_{idx + 1}" for idx in range(X_support.shape[1])]
     evaluate_expression = lambdify(var_symbols, predicted_expr, "numpy")
     y_pred = np.asarray(evaluate_expression(*X_support.T), dtype=float).reshape(-1, 1)
