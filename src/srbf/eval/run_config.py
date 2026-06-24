@@ -448,11 +448,13 @@ def _build_flash_ansr_adapter(config: Mapping[str, Any], context: Mapping[str, A
         device=eval_cfg.get("device", config.get("device", "cpu")),
         refiner_workers=config.get("refiner_workers", eval_cfg.get("refiner_workers")),
         prune_constant_budget=eval_cfg.get("prune_constant_budget", 0),
-        # Opt-in: a persistent fork pool (forked pre-CUDA) enables the OverlappedEvaluationEngine
-        # (generate(N+1) || refine(N)). Default False -> per-call pool + serial engine = current behaviour.
-        # Resolves no-op if fork is unavailable or refiner_workers <= 1 (then no pool -> serial engine).
+        # Default ON (2026-06-24): a persistent fork pool (forked pre-CUDA) enables the
+        # OverlappedEvaluationEngine (generate(N+1) || refine(N)). Self-degrades to the serial engine
+        # (byte-identical) if fork is unavailable or refiner_workers <= 1, so enabling it by default is
+        # safe: quality is unchanged, throughput improves where gen/refine can overlap. An explicit
+        # False forces the serial engine.
         persistent_refine_pool=bool(config.get("persistent_refine_pool",
-                                               eval_cfg.get("persistent_refine_pool", False))),
+                                               eval_cfg.get("persistent_refine_pool", True))),
     )
 
     complexity = config.get("complexity", eval_cfg.get("complexity", "none"))
