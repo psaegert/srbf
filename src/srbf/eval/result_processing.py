@@ -38,7 +38,6 @@ DEFAULT_NEGATIVES: dict[str, Any] = {
     'labels': [],
     'labels_decoded': [],
     'n_support': np.nan,
-    'parsimony': np.nan,
     'predicted_expression': [],
     'predicted_expression_prefix': [],
     'predicted_skeleton_prefix': [],
