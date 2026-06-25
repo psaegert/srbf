@@ -17,7 +17,7 @@ import yaml
 
 from simplipy import SimpliPyEngine
 
-from flash_ansr.expressions.compilation import codify
+from simplipy.utils import codify
 
 
 Number = Union[int, float]
