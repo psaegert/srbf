@@ -12,7 +12,7 @@ from simplipy.utils import construct_expressions
 
 from flash_ansr.expressions import SkeletonPool
 from flash_ansr.refine import Refiner, ConvergenceError
-from flash_ansr.scoring import compute_fvu, normalize_variance, score_from_fvu
+from flash_ansr.scoring import compute_fvu, count_constants, is_constant_token, normalize_variance, score_from_fvu
 from flash_ansr.utils.paths import substitute_root_path
 
 
@@ -118,21 +118,11 @@ class BruteForceModel(BaseEstimator):
 
     @staticmethod
     def _is_constant_token(token: str) -> bool:
-        if token == '<constant>':
-            return True
-        if token.startswith('C_') and token[2:].isdigit():
-            return True
-        if token in {'0', '1', '(-1)', 'np.pi', 'np.e', 'float("inf")', 'float("-inf")', 'float("nan")'}:
-            return True
-        try:
-            float(token)
-            return True
-        except ValueError:
-            return False
+        return is_constant_token(token)
 
     @classmethod
     def _count_constants(cls, expression: Sequence[str]) -> int:
-        return sum(1 for token in expression if cls._is_constant_token(token))
+        return count_constants(expression)
 
     @staticmethod
     def _score_from_fvu(
