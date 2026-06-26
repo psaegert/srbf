@@ -9,9 +9,9 @@ Motivation (see ../STANDARD_EVAL.md Section 7):
     (uint8 tokens since vocab=83<256, float32 scalars, uint8 flags), and STREAM: flush ONE problem at a time
     to its own compressed file, never holding the full pool or accumulating across problems.
 
-This module is a standalone, dependency-light prototype (numpy only). It will move to
-src/flash_ansr/eval/ and gain a capture hook in the generation path once integrated (the eval harness
-currently keeps only the single best candidate -- model_adapters.py:162).
+This module is a standalone, dependency-light prototype (numpy only). A capture hook in the
+generation path can be wired once integrated (the eval harness currently keeps only the single
+best candidate -- model_adapters.py:162).
 
 Layout: one compressed .npz per (problem) under <out_dir>/, columns:
   tokens   uint8   [sum(len)]      flat concatenation of all candidates' token-ids

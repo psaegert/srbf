@@ -10,7 +10,7 @@ work, whose licenses and notices are reproduced below.
 Neural Symbolic Regression that Scales (NeSymReS)
 -------------------------------------------------------------------------------
 
-The function `load_nesymres` in `src/flash_ansr/compat/nesymres.py` is largely
+The function `load_nesymres` in `src/srbf/compat/nesymres.py` is largely
 based on code from the "Neural Symbolic Regression that Scales" repository:
 https://github.com/SymposiumOrganization/NeuralSymbolicRegressionThatScales
 
@@ -43,9 +43,9 @@ That project is distributed under the MIT License:
 Fast Symbolic Regression Benchmarking (FastSRB)
 -------------------------------------------------------------------------------
 
-The FastSRB benchmark sampling code in `src/flash_ansr/benchmarks/fastsrb.py`
+The FastSRB benchmark sampling code in `src/srbf/benchmarks/fastsrb.py`
 (and the `FastSRBSource` evaluation data source in
-`src/flash_ansr/eval/data_sources.py`) is translated and adapted from the Julia
+`src/srbf/eval/data_sources.py`) is translated and adapted from the Julia
 FastSRB benchmarking code by Viktor Martinek:
 https://github.com/viktmar/FastSRB
 
