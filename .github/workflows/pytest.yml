@@ -5,15 +5,11 @@ on:
 
 name: pytest
 
-# NOTE (pre-0.6): srbf depends on the flash-ansr public API surface frozen in flash-ansr's contract
-# test, including the Step-1 additions (scoring.count_constants/is_constant_token, get_root,
-# substitute_root_path). Until flash-ansr 0.6 ships that surface to PyPI the `flash-ansr~=0.6` pin is
-# unsatisfiable, so CI installs flash-ansr from the `release/v0.6.0` branch (which carries the
-# contract). Shim lifecycle: (1) NOW -> @release/v0.6.0; (2) once that PR merges to main (the branch
-# is typically deleted then), switch the ref to @main, which will carry the contract; (3) once
-# flash-ansr 0.6 is on PyPI, delete this whole step and let `pip install -e .` resolve the
-# `flash-ansr~=0.6` pin. Some eval tests additionally need provisioned assets (models, skeleton-pool
-# fixtures) under FLASH_ANSR_ROOT and skip when absent.
+# srbf depends one-way on flash-ansr (>=0.6, published on PyPI). `pip install -e .` resolves the
+# `flash-ansr~=0.6` pin and the runtime deps from PyPI; pytest is added separately. The heavy optional
+# baselines (PySR/Julia, sympy for E2E/NeSymReS) are kept OUT of CI: the eval tests mock or skip those
+# adapter paths. Some eval tests need provisioned assets (models, skeleton-pool fixtures) under
+# FLASH_ANSR_ROOT and skip when absent.
 
 jobs:
   pytest:
@@ -31,15 +27,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: "Install flash-ansr (pre-0.6 shim: from the release branch until 0.6 is on PyPI)"
+      - name: Install srbf + test deps (resolves flash-ansr~=0.6 + runtime deps from PyPI)
         run: |
           python -m pip install --upgrade pip
-          pip install "flash-ansr @ git+https://github.com/psaegert/flash-ansr@release/v0.6.0"
-
-      - name: Install srbf + runtime/dev deps (no-deps honours the pre-0.6 flash-ansr source install)
-        run: |
-          pip install -e . --no-deps
-          pip install simplipy numpy pandas scikit-learn torch tqdm pyyaml zss editdistance pytest pytest-cov
+          pip install -e .
+          pip install pytest pytest-cov
 
       - name: Fetch FastSRB benchmark
         run: |
