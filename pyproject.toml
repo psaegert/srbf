@@ -1,4 +1,4 @@
-# srbf: the symbolic-regression evaluation framework, carved from flash-ansr (REPO_SPLIT_PLAN §2/§9).
+# srbf: the symbolic-regression evaluation framework, carved from flash-ansr.
 # Internal self-imports are srbf.* ; the §5 contract imports stay flash_ansr.* (one-way dependency;
 # flash-ansr must NEVER import srbf).
 [project]
@@ -41,7 +41,7 @@ Repository = "https://github.com/psaegert/srbf"
 Issues = "https://github.com/psaegert/srbf/issues"
 
 # NB: the NeSymReS/E2E vendored model trees + weights are NOT pip deps and never enter the wheel;
-# they are provisioned by a git-clone bench-setup flow (REPO_SPLIT_PLAN §9) using scripts/patch_nesymres.py.
+# they are provisioned by a git-clone bench-setup flow using scripts/patch_nesymres.py.
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]

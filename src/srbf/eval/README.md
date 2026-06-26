@@ -31,7 +31,7 @@ All commands below assume you stay in the repo root and that datasets live under
 3. **Run the CLI.**
 
 	```bash
-	flash_ansr evaluate-run \
+	srbf evaluate-run \
 	  -c configs/evaluation/run_flash_ansr_nguyen.yaml \
 	  --limit 1000 --save-every 100 -v
 	```
@@ -54,7 +54,7 @@ All commands below assume you stay in the repo root and that datasets live under
 4. **Run directly or via watchdog.**
 
 	```bash
-	flash_ansr evaluate-run -c configs/evaluation/run_pysr_nguyen.yaml -v
+	srbf evaluate-run -c configs/evaluation/run_pysr_nguyen.yaml -v
 	```
 
 5. **Artifacts** mirror the FlashANSR layout inside `results/evaluation/.../pysr_*.pkl`.
@@ -120,7 +120,7 @@ Make sure `models/nesymres/` contains the 100M checkpoint triplet before running
 ## 3. Running a smoke test
 
 ```bash
-flash_ansr evaluate-run \
+srbf evaluate-run \
 	-c configs/evaluation/scaling/nesymres_fastsrb.yaml \
 	--experiment nesymres_fastsrb_beam_00001 \
 	--limit 2 -v
