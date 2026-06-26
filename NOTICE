@@ -1,0 +1,7 @@
+srbf — the symbolic-regression evaluation framework carved from flash-ansr.
+
+Copyright (c) 2024 Paul Saegert. Distributed under the MIT License (see LICENSE).
+
+This product includes third-party work (the NeSymReS adapter glue and the FastSRB
+benchmark sampling code). Their licenses and attributions are reproduced in
+THIRD_PARTY_LICENSES.

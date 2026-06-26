@@ -7,9 +7,9 @@ import numpy as np
 import pytest
 
 from flash_ansr import get_path
-from flash_ansr.benchmarks import FastSRBBenchmark
+from srbf.benchmarks import FastSRBBenchmark
 from flash_ansr.data import FlashANSRDataset
-from flash_ansr.eval.data_sources import FastSRBSource, SkeletonDatasetSource
+from srbf.eval.data_sources import FastSRBSource, SkeletonDatasetSource
 from flash_ansr.expressions.normalization import normalize_expression, normalize_skeleton
 from flash_ansr.expressions.skeleton_pool import NoValidSampleFoundError
 

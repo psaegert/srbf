@@ -3,7 +3,7 @@ import pytest
 from simplipy import SimpliPyEngine
 
 from flash_ansr import SkeletonPool
-from flash_ansr.baselines import BruteForceModel
+from srbf.baselines import BruteForceModel
 
 
 @pytest.fixture(scope="module")

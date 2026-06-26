@@ -2,9 +2,9 @@ import pickle
 
 import numpy as np
 
-from flash_ansr.eval.core import EvaluationSample, EvaluationResult
-from flash_ansr.eval.engine import EvaluationEngine
-from flash_ansr.eval.result_store import ResultStore
+from srbf.eval.core import EvaluationSample, EvaluationResult
+from srbf.eval.engine import EvaluationEngine
+from srbf.eval.result_store import ResultStore
 
 
 class _ListDataSource:

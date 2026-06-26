@@ -3,9 +3,9 @@ import pytest
 from simplipy import SimpliPyEngine
 
 from flash_ansr import SkeletonPool
-from flash_ansr.baselines import BruteForceModel, SkeletonPoolModel
-from flash_ansr.eval.core import EvaluationSample
-from flash_ansr.eval.model_adapters import BruteForceAdapter, SkeletonPoolAdapter
+from srbf.baselines import BruteForceModel, SkeletonPoolModel
+from srbf.eval.core import EvaluationSample
+from srbf.eval.model_adapters import BruteForceAdapter, SkeletonPoolAdapter
 
 
 @pytest.fixture(scope="module")

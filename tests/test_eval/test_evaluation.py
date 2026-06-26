@@ -5,8 +5,8 @@ import warnings
 
 import torch
 
-from flash_ansr.eval.evaluation import Evaluation
-from flash_ansr.eval.result_store import ResultStore
+from srbf.eval.evaluation import Evaluation
+from srbf.eval.result_store import ResultStore
 from flash_ansr import (
     get_path,
     FlashANSR,

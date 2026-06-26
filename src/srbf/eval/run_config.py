@@ -11,14 +11,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, MutableMapping, Sequence
 
-from flash_ansr.baselines import BruteForceModel, SkeletonPoolModel
+from srbf.baselines import BruteForceModel, SkeletonPoolModel
 from simplipy import SimpliPyEngine
 
-from flash_ansr.benchmarks import FastSRBBenchmark
+from srbf.benchmarks import FastSRBBenchmark
 from flash_ansr.data import FlashANSRDataset
-from flash_ansr.eval.data_sources import FastSRBSource, SkeletonDatasetSource
-from flash_ansr.eval.engine import EvaluationEngine, OverlappedEvaluationEngine
-from flash_ansr.eval.model_adapters import (
+from srbf.eval.data_sources import FastSRBSource, SkeletonDatasetSource
+from srbf.eval.engine import EvaluationEngine, OverlappedEvaluationEngine
+from srbf.eval.model_adapters import (
     BruteForceAdapter,
     E2EAdapter,
     FlashANSRAdapter,
@@ -26,7 +26,7 @@ from flash_ansr.eval.model_adapters import (
     PySRAdapter,
     SkeletonPoolAdapter,
 )
-from flash_ansr.eval.result_store import ResultStore
+from srbf.eval.result_store import ResultStore
 from flash_ansr.flash_ansr import FlashANSR
 from flash_ansr.utils.config_io import load_config
 from flash_ansr.utils.generation import create_generation_config
@@ -503,7 +503,7 @@ def _build_pysr_adapter(config: Mapping[str, Any], context: Mapping[str, Any]) -
 
 
 def _build_nesymres_adapter(config: Mapping[str, Any], context: Mapping[str, Any]) -> NeSymReSAdapter:  # noqa: ARG001
-    from flash_ansr.compat.nesymres import load_nesymres
+    from srbf.compat.nesymres import load_nesymres
 
     eq_setting_path = config.get("eq_setting_path")
     config_path = config.get("config_path")

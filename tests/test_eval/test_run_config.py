@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 
-run_config = importlib.import_module("flash_ansr.eval.run_config")
+run_config = importlib.import_module("srbf.eval.run_config")
 
 
 def _write_results(path, length: int) -> None:

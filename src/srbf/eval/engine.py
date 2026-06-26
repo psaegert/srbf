@@ -11,13 +11,13 @@ from typing import Any, Callable, Iterable, Mapping, Optional
 
 from tqdm import tqdm
 
-from flash_ansr.eval.core import (
+from srbf.eval.core import (
     EvaluationDataSource,
     EvaluationModelAdapter,
     EvaluationResult,
     EvaluationSample,
 )
-from flash_ansr.eval.result_store import ResultStore
+from srbf.eval.result_store import ResultStore
 from flash_ansr.utils.paths import substitute_root_path
 
 

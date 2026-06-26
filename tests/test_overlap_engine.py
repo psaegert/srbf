@@ -12,9 +12,9 @@ from concurrent.futures.process import BrokenProcessPool
 
 import pytest
 
-from flash_ansr.eval.core import EvaluationResult
-from flash_ansr.eval.engine import EvaluationEngine, OverlappedEvaluationEngine
-from flash_ansr.eval.result_store import ResultStore
+from srbf.eval.core import EvaluationResult
+from srbf.eval.engine import EvaluationEngine, OverlappedEvaluationEngine
+from srbf.eval.result_store import ResultStore
 
 
 class FakeSample:
@@ -271,17 +271,17 @@ def test_consumer_failure_does_not_hang_producer():
 # --------------------------------------------------------------------------- run_config wiring
 def test_select_engine_cls_overlap_when_pool_present():
     """run_config picks the overlap engine iff a persistent refine pool was actually created."""
-    from flash_ansr.eval.run_config import _select_engine_cls
+    from srbf.eval.run_config import _select_engine_cls
     assert _select_engine_cls(FakeAdapter(_fake_model(refine_pool=True))) is OverlappedEvaluationEngine
 
 
 def test_select_engine_cls_serial_when_no_pool():
     """Default (no persistent pool) -> the serial engine, byte-identical to the historical default."""
-    from flash_ansr.eval.run_config import _select_engine_cls
+    from srbf.eval.run_config import _select_engine_cls
     assert _select_engine_cls(FakeAdapter(_fake_model(refine_pool=False))) is EvaluationEngine
 
 
 def test_select_engine_cls_serial_when_no_model():
     """A non-FlashANSR adapter (no .model, e.g. PySR) -> the serial engine."""
-    from flash_ansr.eval.run_config import _select_engine_cls
+    from srbf.eval.run_config import _select_engine_cls
     assert _select_engine_cls(types.SimpleNamespace(model=None)) is EvaluationEngine

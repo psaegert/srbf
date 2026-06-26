@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from flash_ansr.eval.core import EvaluationResult, EvaluationSample
-from flash_ansr.eval import model_adapters
+from srbf.eval.core import EvaluationResult, EvaluationSample
+from srbf.eval import model_adapters
 
 
 class _DummyModel:

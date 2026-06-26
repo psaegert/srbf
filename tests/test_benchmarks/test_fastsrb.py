@@ -13,7 +13,7 @@ example:
     yaml_path = tmp_path / "fastsrb.yaml"
     yaml_path.write_text(yaml_content, encoding="utf-8")
 
-    from flash_ansr.benchmarks import FastSRBBenchmark
+    from srbf.benchmarks import FastSRBBenchmark
 
     benchmark = FastSRBBenchmark(yaml_path, random_state=0)
 

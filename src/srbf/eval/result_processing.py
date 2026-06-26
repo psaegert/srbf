@@ -7,15 +7,15 @@ from typing import Any
 import numpy as np
 from editdistance import eval as edit_distance
 
-from flash_ansr.eval.metrics.numeric import (
+from srbf.eval.metrics.numeric import (
     fvu,
     is_perfect_fit,
     log10_fvu,
     safe_divide,
 )
-from flash_ansr.eval.metrics.symbolic import total_nestedness
-from flash_ansr.eval.metrics.token_prediction import f1_score, precision, recall
-from flash_ansr.eval.metrics.zss import zss_tree_edit_distance
+from srbf.eval.metrics.symbolic import total_nestedness
+from srbf.eval.metrics.token_prediction import f1_score, precision, recall
+from srbf.eval.metrics.zss import zss_tree_edit_distance
 
 
 # ── Default placeholder values for missing / failed predictions ───────────

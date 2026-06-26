@@ -6,7 +6,7 @@ import warnings as _warnings
 import numpy as np
 import pytest
 
-from flash_ansr.eval.candidate_store import (
+from srbf.eval.candidate_store import (
     CandidateStoreReader,
     CandidateStoreWriter,
     FIT_FAILED,
@@ -14,7 +14,7 @@ from flash_ansr.eval.candidate_store import (
     INVALID,
     build_candidate_ledger,
 )
-from flash_ansr.eval.model_adapters import FlashANSRAdapter
+from srbf.eval.model_adapters import FlashANSRAdapter
 
 
 def test_build_candidate_ledger_join_classifies_every_candidate():

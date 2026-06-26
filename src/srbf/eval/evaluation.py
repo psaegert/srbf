@@ -3,10 +3,10 @@ from typing import Any
 
 from flash_ansr.flash_ansr import FlashANSR
 from flash_ansr.data import FlashANSRDataset
-from flash_ansr.eval.data_sources import SkeletonDatasetSource
-from flash_ansr.eval.engine import EvaluationEngine
-from flash_ansr.eval.model_adapters import FlashANSRAdapter
-from flash_ansr.eval.result_store import ResultStore
+from srbf.eval.data_sources import SkeletonDatasetSource
+from srbf.eval.engine import EvaluationEngine
+from srbf.eval.model_adapters import FlashANSRAdapter
+from srbf.eval.result_store import ResultStore
 from flash_ansr.utils.config_io import load_config
 
 

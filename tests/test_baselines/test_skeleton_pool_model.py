@@ -3,7 +3,7 @@ import pytest
 from simplipy import SimpliPyEngine
 
 from flash_ansr import SkeletonPool
-from flash_ansr.baselines.skeleton_pool_model import SkeletonPoolModel
+from srbf.baselines.skeleton_pool_model import SkeletonPoolModel
 
 
 @pytest.fixture(scope="module")

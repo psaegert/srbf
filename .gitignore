@@ -1,0 +1,35 @@
+# Models, data, and out-of-band-provisioned baseline model trees (NOT part of the wheel;
+# provisioned via the bench-setup flow — see README "Baseline models").
+/models
+data
+/results
+/nesymres
+/e2e
+
+# Packaging / build
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# Environments
+.venv/
+venv/
+
+# Editors
+.vscode/
+
+# Wandb / profiling
+wandb
+.prof

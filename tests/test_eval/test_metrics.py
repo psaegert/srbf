@@ -4,9 +4,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from flash_ansr.eval.metrics.bootstrap import bootstrapped_metric_ci
-from flash_ansr.eval.metrics.numeric import fvu, is_perfect_fit
-from flash_ansr.eval.metrics.zss import build_tree, zss_tree_edit_distance
+from srbf.eval.metrics.bootstrap import bootstrapped_metric_ci
+from srbf.eval.metrics.numeric import fvu, is_perfect_fit
+from srbf.eval.metrics.zss import build_tree, zss_tree_edit_distance
 
 
 def test_fvu_perfect_fit_is_zero() -> None:

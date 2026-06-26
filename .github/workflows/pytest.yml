@@ -1,0 +1,51 @@
+on:
+  push:
+    branches: main
+  pull_request:
+
+name: pytest
+
+# NOTE (pre-1.0): srbf depends on the flash-ansr public API surface frozen in flash-ansr's §5
+# contract test, including the Step-1 additions (scoring.count_constants/is_constant_token,
+# get_root, substitute_root_path). Until flash-ansr 1.0 ships that surface to PyPI, the
+# `flash-ansr~=1.0` pin is unsatisfiable, so CI installs flash-ansr from its main branch. Some eval
+# tests additionally need provisioned assets (models, skeleton-pool fixtures) under FLASH_ANSR_ROOT;
+# greening the full suite is part of the "validate srbf 0.1 against flash-ansr@main" milestone.
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v6.0.1
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install flash-ansr (pre-1.0: from main until 1.0 is on PyPI)
+        run: |
+          python -m pip install --upgrade pip
+          pip install "flash-ansr @ git+https://github.com/psaegert/flash-ansr@main"
+
+      - name: Install srbf + runtime/dev deps (no-deps honours the pre-1.0 flash-ansr source install)
+        run: |
+          pip install -e . --no-deps
+          pip install simplipy numpy pandas scikit-learn torch tqdm pyyaml zss editdistance pytest pytest-cov
+
+      - name: Fetch FastSRB benchmark
+        run: |
+          mkdir -p data/ansr-data/test_set/fastsrb
+          curl -L "https://raw.githubusercontent.com/viktmar/FastSRB/main/src/expressions.yaml" \
+            -o data/ansr-data/test_set/fastsrb/expressions.yaml
+
+      - name: Run tests
+        env:
+          FLASH_ANSR_ROOT: ${{ github.workspace }}
+        run: |
+          pytest tests
