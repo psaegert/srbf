@@ -12,7 +12,7 @@ license = "MIT"
 license-files = ["LICEN[CS]E*", "THIRD_PARTY_LICENSES*"]
 
 dependencies = [
-    "flash-ansr~=0.6",   # one-way dep; CI-tested ceiling (0.6.x). Until flash-ansr 0.6 is on PyPI, install from @main / --no-deps.
+    "flash-ansr~=0.6",   # one-way dep; CI-tested 0.6.x ceiling (flash-ansr never imports srbf).
     "simplipy>=0.3.0",   # DIRECT: eval/baselines/benchmarks all import it
     "numpy>=1.24",
     "pandas>=1.3",       # runtime: baselines imported top-level by eval/model_adapters.py
@@ -34,7 +34,7 @@ baselines = [
 dev = ["pre-commit", "pytest", "pytest-cov", "mypy", "flake8", "srbf[baselines]"]
 
 [project.scripts]
-srbf = "srbf.__main__:main"   # carries ONLY evaluate-run
+srbf = "srbf.__main__:main"   # carries ONLY the eval `run` command
 
 [project.urls]
 Repository = "https://github.com/psaegert/srbf"

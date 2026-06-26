@@ -1,62 +1,68 @@
-# srbf — Symbolic Regression Benchmark Framework
+# srbf: Symbolic Regression Benchmark Framework
 
-`srbf` is the evaluation framework carved out of [flash-ansr](https://github.com/psaegert/flash-ansr):
-the evaluation engine, model adapters, benchmarks, and metrics for evaluating symbolic-regression
-models. It depends one-way on `flash-ansr` (`srbf` imports `flash-ansr`; `flash-ansr` never imports
-`srbf`).
+`srbf` evaluates symbolic-regression models on shared benchmarks with shared metrics. It is the
+evaluation framework carved out of [flash-ansr](https://github.com/psaegert/flash-ansr): the
+evaluation engine, model adapters, benchmarks, and metrics. It depends one-way on `flash-ansr`
+(`srbf` imports `flash-ansr`; `flash-ansr` never imports `srbf`).
 
-> **Status: 0.1 — cleanly-carved eval, not yet a general framework.** The engine seam
-> (`srbf.eval.core` Protocols + `srbf.eval.engine`) is model-agnostic, but every concrete adapter
-> imports `flash-ansr`, and the adapter set is a closed registry. A plugin `register_adapter()` API
-> and raw-dataset (`(X, y)` CSV/parquet) ingestion are a planned follow-on.
+**Built for contributions.** Developers of SR methods add their model by opening a PR with an
+**adapter** (two methods) plus install instructions. The built-in adapters (`flash_ansr`, `pysr`,
+`nesymres`, `e2e`, `skeleton_pool`, `brute_force`) are reference examples, not a closed set. See the
+[adapter contribution guide](docs/adapters.md).
+
+> **Status: 0.1, cleanly-carved eval.** The engine seam (`srbf.eval.core` Protocols +
+> `srbf.eval.engine`) is model-agnostic, but every built-in adapter imports `flash-ansr` and the
+> adapter set is a registry edited by PR. A plugin `register_adapter()` entry-point and raw-dataset
+> (`(X, y)` CSV/parquet) ingestion are planned follow-ons.
 
 ## Install
 
 ```bash
-pip install srbf                 # engine + metrics + the flash-ansr / PySR adapters
-pip install "srbf[baselines]"    # + the pip-installable baseline deps (sympy, pysr, omegaconf)
+pip install srbf                 # engine + metrics + the pip-installable adapters (flash-ansr, PySR)
+pip install "srbf[baselines]"    # + pip baseline deps (sympy, pysr, omegaconf)
 ```
 
-`srbf` requires `flash-ansr` (its one-way dependency) and `simplipy`.
+`srbf` pulls in `flash-ansr` and `simplipy` automatically. The unpackaged research baselines
+(NeSymReS, E2E) are provisioned out-of-band; see [docs/models.md](docs/models.md).
 
-## Usage
-
-Run an evaluation from a unified config:
+## Quickstart
 
 ```bash
-srbf evaluate-run -c <config.yaml> -v
+# 1. point srbf at a tree holding configs/, data/, and models/ (your srbf checkout works)
+export FLASH_ANSR_ROOT=$(pwd)
+
+# 2. get a model to evaluate (flash-ansr's CLI ships with srbf)
+flash_ansr install psaegert/flash-ansr-v23.0-3M
+
+# 3. fetch a benchmark + build its skeleton pool   (see docs/benchmarks.md)
+#    ...then run an evaluation:
+srbf run -c configs/evaluation/scaling/v23.0-3M_val.yaml --limit 50 -v
 ```
 
-or programmatically:
+Outputs land under `results/evaluation/.../*.pkl`, one row per evaluated dataset with flat metric
+columns. Run programmatically instead:
 
 ```python
 from srbf import build_evaluation_run
 
-plan = build_evaluation_run(config="path/to/config.yaml")
+plan = build_evaluation_run(config="configs/evaluation/scaling/v23.0-3M_val.yaml")
 plan.engine.run(limit=plan.remaining, output_path=plan.output_path)
 ```
 
-## Baseline models (out-of-band provisioning)
+## Documentation
 
-The pip wheel ships the engine, metrics, and the pip-installable adapters (flash-ansr, PySR). The
-**unpackaged research baselines** — NeSymReS and the E2E (`symbolicregression`) model — are NOT pip
-dependencies: their upstream source trees + weights are provisioned by a clone-based bench-setup
-flow (`scripts/patch_nesymres.py` patches a recursive upstream clone; weights download separately).
-This keeps the wheel clean while supporting reproducible baseline comparisons.
-
-## Asset root
-
-`srbf` resolves config/data/model assets through `flash-ansr`'s shared project root. Point it at your
-srbf checkout for eval runs:
-
-```bash
-export FLASH_ANSR_ROOT=/path/to/srbf
-```
+| Guide | What it covers |
+|---|---|
+| [Running evaluations](docs/running.md) | the `srbf run` CLI, config anatomy (data_source / model_adapter / runner / experiments), outputs, resume |
+| [Benchmarks & datasets](docs/benchmarks.md) | fetching FastSRB, building skeleton pools with `flash_ansr import-data`, custom sets |
+| [Models & provisioning](docs/models.md) | installing/patching the built-in models; the `model_adapter` block per type |
+| [**Adding your model**](docs/adapters.md) | the adapter protocol + registry, and the PR flow to contribute a new SR method |
 
 ## Development
 
 ```bash
 pip install -e ".[dev]"
+pre-commit run --all-files
 pytest tests
 ```
 
