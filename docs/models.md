@@ -8,14 +8,14 @@ How to provision the symbolic-regression models that `srbf` evaluates, and how e
 | --------------- | ------------------------------------ | ------- |
 | `flash_ansr`    | pip (`flash_ansr install <repo>`)    | [FlashANSR](#flashansr-pip) |
 | `pysr`          | pip (`pip install pysr` + Julia)     | [PySR](#pysr-pip) |
-| `nesymres`      | clone + patch (research baseline)    | [NeSymReS](#nesymres-clonepatch) |
-| `e2e`           | clone + patch (research baseline)    | [E2E / symbolicregression](#e2e--symbolicregression-clonepatch) |
+| `nesymres`      | clone + patch (research baseline)    | [NeSymReS](#nesymres-clone-patch) |
+| `e2e`           | clone + patch (research baseline)    | [E2E / symbolicregression](#e2e-symbolicregression-clone-patch) |
 | `skeleton_pool` | none (synthetic baseline)            | [No-provisioning baselines](#no-provisioning-baselines) |
 | `brute_force`   | none (synthetic baseline)            | [No-provisioning baselines](#no-provisioning-baselines) |
 
 `srbf` is a community framework: new SR methods are contributed by PR with their own adapter plus install instructions. The built-ins below show the pattern; to add your own model, see [docs/adapters.md](./adapters.md).
 
-See also: [docs/running.md](./running.md) (running a config), [docs/benchmarks.md](./benchmarks.md) (the data the models are scored on), and the [project README](../README.md).
+See also: [docs/running.md](./running.md) (running a config), [docs/benchmarks.md](./benchmarks.md) (the data the models are scored on), and the [project README](https://github.com/psaegert/srbf/blob/main/README.md).
 
 ## Asset root and `{{ROOT}}`
 
@@ -108,7 +108,7 @@ Key fields: `niterations` (the compute-scaling axis, overridden per experiment),
 
 ---
 
-The next two are **research baselines**: upstream source trees that are not pip-installable as-is on modern Python. The default recipe is a clone of the upstream repo, a patch with the script under [scripts/](../scripts/), an editable install, and a separate weights download. **These patch scripts are one default recipe, not the only way.** If you maintain a fork that already builds, install that instead.
+The next two are **research baselines**: upstream source trees that are not pip-installable as-is on modern Python. The default recipe is a clone of the upstream repo, a patch with the script under [scripts/](https://github.com/psaegert/srbf/tree/main/scripts), an editable install, and a separate weights download. **These patch scripts are one default recipe, not the only way.** If you maintain a fork that already builds, install that instead.
 
 ## NeSymReS (clone + patch)
 
