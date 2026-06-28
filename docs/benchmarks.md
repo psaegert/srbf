@@ -5,7 +5,7 @@ what to evaluate, how to fetch the FastSRB benchmark, how to build a skeleton po
 flash-ansr's `import-data` CLI, and how to point at your own benchmark set. For the CLI that
 *runs* an evaluation see [docs/running.md](running.md); for the model side see
 [docs/models.md](models.md) and [docs/adapters.md](adapters.md); for the project overview see
-[../README.md](../README.md).
+[../README.md](https://github.com/psaegert/srbf/blob/main/README.md).
 
 `srbf` resolves `{{ROOT}}` in every config path against the `FLASH_ANSR_ROOT` environment
 variable. Point it at a checkout that holds `configs/`, `data/`, and `models/`:

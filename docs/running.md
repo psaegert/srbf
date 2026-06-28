@@ -9,7 +9,7 @@ See also:
 [benchmarks.md](benchmarks.md) (preparing benchmark sets),
 [models.md](models.md) (the built-in adapters and their config keys),
 [adapters.md](adapters.md) (add your own model),
-and the [project README](../README.md).
+and the [project README](https://github.com/psaegert/srbf/blob/main/README.md).
 
 ## Prerequisites
 
@@ -64,7 +64,7 @@ references them with YAML anchors (`*name`), merges them with `<<:`, and applies
 overrides. The three sub-blocks are `data_source`, `model_adapter`, and `runner`.
 
 Here is the structure, abridged from
-[`configs/evaluation/scaling/v23.0-20M_fastsrb.yaml`](../configs/evaluation/scaling/v23.0-20M_fastsrb.yaml):
+[`configs/evaluation/scaling/v23.0-20M_fastsrb.yaml`](https://github.com/psaegert/srbf/blob/main/configs/evaluation/scaling/v23.0-20M_fastsrb.yaml):
 
 ```yaml
 defaults:
@@ -209,7 +209,7 @@ the pickle embeds a `__meta__` provenance entry (config path, git state). `srbf`
 This is the load-bearing subset. The complete schema (~30 columns, including
 `only_approx_fvu_*`, skeleton lengths, unique-variable precision/recall, nestedness, and
 the raw `x`/`y` arrays) is the keys of the `_DEFAULTS` dict in
-[`src/srbf/eval/result_processing.py`](../src/srbf/eval/result_processing.py).
+[`src/srbf/eval/result_processing.py`](https://github.com/psaegert/srbf/blob/main/src/srbf/eval/result_processing.py).
 
 ### Placeholders
 
@@ -272,7 +272,7 @@ engine, metrics, and the pip-installable adapters (`flash_ansr`, `pysr`); `pip i
 The unpackaged research baselines (`nesymres`, `e2e` / `symbolicregression`) are not pip
 dependencies. Their upstream source trees and weights are provisioned out-of-band via a
 clone-and-patch flow using the scripts under
-[`scripts/`](../scripts/): `patch_nesymres.py` and `patch_symbolicregression.py` (each takes
+[`scripts/`](https://github.com/psaegert/srbf/tree/main/scripts): `patch_nesymres.py` and `patch_symbolicregression.py` (each takes
 the path to the corresponding clone) plus `patch_typing_io.py` (patches the active
 environment, no args); weights download separately. This is **one default recipe**, not the
 only way to wire those models in. See [models.md](models.md) for the exact per-baseline steps.

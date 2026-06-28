@@ -1,0 +1,55 @@
+# Project information
+site_name: srbf
+site_description: Symbolic Regression Benchmark Framework
+site_author: Paul Saegert
+repo_url: https://github.com/psaegert/srbf
+repo_name: psaegert/srbf
+edit_uri: blob/main/docs/
+
+# Theme configuration
+theme:
+  name: material
+  palette:
+    # Light mode
+    - scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.instant
+    - navigation.path
+    - navigation.prune
+    - navigation.indexes
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+
+# Extensions for better rendering
+markdown_extensions:
+  - toc:
+      permalink: true
+  - attr_list
+  - footnotes
+  - md_in_html
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+
+nav:
+  - Home: index.md
+  - Running evaluations: running.md
+  - Benchmarks & datasets: benchmarks.md
+  - Models & provisioning: models.md
+  - Adding your model: adapters.md
+
+plugins:
+  - search
+  - autorefs
