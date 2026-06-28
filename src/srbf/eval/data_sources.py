@@ -15,13 +15,11 @@ from srbf.benchmarks import FastSRBBenchmark
 from flash_ansr.data import FlashANSRDataset, FlashANSRPreprocessor
 from srbf.eval.core import EvaluationDataSource, EvaluationSample
 from srbf.eval.sample_metadata import build_base_metadata
-from symbolic_data import NoValidSampleFoundError, SkeletonPool
-from simplipy.utils import substitude_constants as substitute_constants
+from symbolic_data import NoValidSampleFoundError, SkeletonPool, Sample, sample_from_skeleton
 from simplipy import (
     normalize_expression,
     normalize_skeleton,
 )
-from flash_ansr.utils.tensor_ops import mask_unused_variable_columns
 
 
 T = TypeVar("T")
@@ -287,55 +285,43 @@ class SkeletonDatasetSource(EvaluationDataSource):
                 warnings.warn("Skeleton missing from pool codes; skipping sample.", RuntimeWarning)
                 return self._build_placeholder_sample(skeleton, reason="skeleton_missing")
 
-        code, constants_tokens = pool.skeleton_codes[skeleton]
-        n_constants = len(constants_tokens)
-        n_points = self.n_support * 2 if self.n_support is not None else None
+        # Delegate the (X, y) generation core -- sample_data -> support/validation split -> additive
+        # noise -> unused-variable masking -- to symbolic_data.sample_from_skeleton, which reproduces
+        # it exactly (the data layer owns the sampling seam; srbf keeps the tokenizer/eval metadata).
+        # The noise rng is srbf's persistent generator (seeded by datasets_random_seed, created lazily);
+        # it is only *drawn* on a successful attempt, support-then-val, so threading it preserves the
+        # exact noise stream. symbolic_data always masks unused columns, whereas flash-ansr masks only
+        # under zero-padding -- gate the flag on padding=="zero" to reproduce that behavior.
+        rng = None
+        if self.noise_level > 0.0:
+            if self._noise_rng is None:
+                self._noise_rng = np.random.default_rng(self.datasets_random_seed)
+            rng = self._noise_rng
 
-        for _ in range(8):
-            try:
-                x_all, y_all, literals = pool.sample_data(code, n_constants, n_support=n_points)
-            except NoValidSampleFoundError:
-                continue
+        sample = sample_from_skeleton(
+            pool,
+            skeleton,
+            n_support=self.n_support,
+            noise_level=self.noise_level,
+            mask_unused_variables=(getattr(self.dataset, "padding", None) == "zero"),
+            rng=rng,
+            max_trials=8,
+        )
 
-            if x_all.size == 0 or y_all.size == 0:
-                continue
+        if sample is None:
+            warnings.warn("Failed to sample deterministic skeleton after multiple attempts; skipping.", RuntimeWarning)
+            return self._build_placeholder_sample(skeleton, reason="max_trials_exhausted")
 
-            X_support, X_val, y_support, y_val = self._split_support_and_validation(x_all, y_all)
-            if X_support.size == 0:
-                continue
-
-            y_support_noisy, y_val_noisy = self._apply_noise(y_support, y_val)
-
-            mask_unused_variable_columns(
-                arrays=(X_support, X_val),
-                variables=self.dataset.skeleton_pool.variables,
-                skeleton_tokens=skeleton,
-                padding=getattr(self.dataset, "padding", None),
-            )
-
-            metadata = self._build_metadata_for_skeleton(
-                skeleton=skeleton,
-                literals=literals,
-                X_support=X_support,
-                y_support=y_support,
-                y_support_noisy=y_support_noisy,
-                X_val=X_val,
-                y_val=y_val,
-                y_val_noisy=y_val_noisy,
-            )
-
-            return EvaluationSample(
-                x_support=X_support,
-                y_support=y_support,
-                x_validation=X_val,
-                y_validation=y_val,
-                y_support_noisy=y_support_noisy,
-                y_validation_noisy=y_val_noisy,
-                metadata=metadata,
-            )
-
-        warnings.warn("Failed to sample deterministic skeleton after multiple attempts; skipping.", RuntimeWarning)
-        return self._build_placeholder_sample(skeleton, reason="max_trials_exhausted")
+        metadata = self._build_metadata_from_sample(skeleton, sample)
+        return EvaluationSample(
+            x_support=sample.x_support,
+            y_support=sample.y_support,
+            x_validation=sample.x_validation,
+            y_validation=sample.y_validation,
+            y_support_noisy=sample.y_support_noisy,
+            y_validation_noisy=sample.y_validation_noisy,
+            metadata=metadata,
+        )
 
     def _ensure_skeleton_sequence(self) -> None:
         if self._skeleton_sequence is not None:
@@ -427,103 +413,37 @@ class SkeletonDatasetSource(EvaluationDataSource):
             if random_state is not None:
                 random.setstate(random_state)
 
-    def _split_support_and_validation(
-        self,
-        x_all: np.ndarray,
-        y_all: np.ndarray,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        total_points = x_all.shape[0]
-        if total_points == 0:
-            return (
-                np.empty((0, x_all.shape[1]), dtype=np.float32),
-                np.empty((0, x_all.shape[1]), dtype=np.float32),
-                np.empty((0, y_all.shape[1]), dtype=np.float32),
-                np.empty((0, y_all.shape[1]), dtype=np.float32),
-            )
-
-        support_count = self.n_support if self.n_support is not None else total_points // 2
-        support_count = max(1, min(support_count, total_points))
-        if support_count == total_points and total_points > 1:
-            support_count = total_points // 2
-
-        X_support = x_all[:support_count].astype(np.float32, copy=True)
-        y_support = y_all[:support_count].astype(np.float32, copy=True)
-
-        if support_count < total_points:
-            X_val = x_all[support_count:].astype(np.float32, copy=True)
-            y_val = y_all[support_count:].astype(np.float32, copy=True)
-        else:
-            X_val = np.empty((0, x_all.shape[1]), dtype=np.float32)
-            y_val = np.empty((0, y_all.shape[1]), dtype=np.float32)
-
-        return X_support, X_val, y_support, y_val
-
-    def _apply_noise(
-        self,
-        y_support: np.ndarray,
-        y_val: np.ndarray,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        if self.noise_level <= 0.0:
-            return y_support.copy(), y_val.copy()
-
-        rng = self._noise_rng
-        if rng is None:
-            rng = np.random.default_rng(self.datasets_random_seed)
-            self._noise_rng = rng
-
-        def _inject_noise(array: np.ndarray) -> np.ndarray:
-            if array.size == 0:
-                return array.copy()
-            noisy = array.copy()
-            y_std = float(np.std(noisy))
-            if np.isfinite(y_std) and y_std > 0:
-                noise = rng.standard_normal(size=noisy.shape).astype(np.float32)
-                noisy = noisy + (self.noise_level * y_std * noise)
-            return noisy
-
-        return _inject_noise(y_support), _inject_noise(y_val)
-
-    def _build_metadata_for_skeleton(
-        self,
-        *,
-        skeleton: tuple[str, ...],
-        literals: np.ndarray,
-        X_support: np.ndarray,
-        y_support: np.ndarray,
-        y_support_noisy: np.ndarray,
-        X_val: np.ndarray,
-        y_val: np.ndarray,
-        y_val_noisy: np.ndarray,
-    ) -> Dict[str, Any]:
+    def _build_metadata_from_sample(self, skeleton: tuple[str, ...], sample: Sample) -> Dict[str, Any]:
+        # GT expression/complexity/constants come from the delegated Sample (same simplipy
+        # normalize/substitute calls on the same realized literals -> byte-identical to the old
+        # in-line build); only the tokenizer/eval bits stay here.
         skeleton_list = normalize_skeleton(skeleton)
         if skeleton_list is None:
             raise ValueError("Skeleton tokens must be provided for metadata building")
-        expression_tokens = substitute_constants(list(skeleton_list), values=literals, inplace=False)
-        normalized_expression = normalize_expression(expression_tokens)
         input_ids = self._encode_input_ids(skeleton_list)
         tokenizer = self.dataset.tokenizer
 
         metadata = build_base_metadata(
             skeleton=skeleton_list,
-            expression=normalized_expression,
+            expression=sample.expression,
             variables=list(self.dataset.skeleton_pool.variables),
-            x_support=X_support,
-            y_support=y_support,
-            x_validation=X_val,
-            y_validation=y_val,
-            y_support_noisy=y_support_noisy,
-            y_validation_noisy=y_val_noisy,
+            x_support=sample.x_support,
+            y_support=sample.y_support,
+            x_validation=sample.x_validation,
+            y_validation=sample.y_validation,
+            y_support_noisy=sample.y_support_noisy,
+            y_validation_noisy=sample.y_validation_noisy,
             noise_level=self.noise_level,
             skeleton_hash=skeleton_list,
             labels_decoded=tokenizer.decode(input_ids, special_tokens="<constant>"),
-            complexity=len(expression_tokens) if expression_tokens else None,
+            complexity=sample.complexity,
         )
 
         metadata.update(
             {
                 "input_ids": np.asarray(input_ids, dtype=np.int64),
                 "labels": np.asarray(input_ids[1:], dtype=np.int64),
-                "constants": self._format_constants(literals),
+                "constants": [np.asarray(sample.constants, dtype=np.float32)] if sample.constants else [],
             }
         )
         return metadata
@@ -592,12 +512,6 @@ class SkeletonDatasetSource(EvaluationDataSource):
         bos = tokenizer["<bos>"]
         eos = tokenizer["<eos>"]
         return [int(bos), *map(int, body_ids), int(eos)]
-
-    def _format_constants(self, literals: np.ndarray) -> list[np.ndarray]:
-        if literals is None or literals.size == 0:
-            return []
-        literals_array = np.asarray(literals, dtype=np.float32)
-        return [literals_array.copy()]
 
     # ---------------------------------------------------------------------
     # Helper methods
