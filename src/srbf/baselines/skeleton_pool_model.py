@@ -11,7 +11,7 @@ import torch
 from sklearn.base import BaseEstimator
 from simplipy import SimpliPyEngine
 
-from flash_ansr.expressions import SkeletonPool, NoValidSampleFoundError
+from symbolic_data import SkeletonPool, NoValidSampleFoundError
 from flash_ansr.refine import Refiner, ConvergenceError
 from flash_ansr.scoring import compute_fvu, count_constants, is_constant_token, normalize_variance, score_from_fvu
 from flash_ansr.results import (

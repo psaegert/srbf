@@ -11,7 +11,7 @@ from typing import Any, Callable, Iterable, Mapping, Optional, TYPE_CHECKING
 import numpy as np
 import simplipy
 from srbf.baselines import BruteForceModel, SkeletonPoolModel
-from flash_ansr.expressions.normalization import normalize_skeleton, normalize_expression
+from simplipy import normalize_skeleton, normalize_expression
 # sympy is imported lazily inside the two baseline adapters that use it (E2E, NeSymReS);
 # it is an optional `[baselines]` extra, not a core runtime dependency.
 
