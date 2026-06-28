@@ -10,7 +10,7 @@ from sklearn.base import BaseEstimator
 from simplipy import SimpliPyEngine
 from simplipy.utils import construct_expressions
 
-from flash_ansr.expressions import SkeletonPool
+from symbolic_data import SkeletonPool
 from flash_ansr.refine import Refiner, ConvergenceError
 from flash_ansr.scoring import compute_fvu, count_constants, is_constant_token, normalize_variance, score_from_fvu
 from flash_ansr.utils.paths import substitute_root_path
