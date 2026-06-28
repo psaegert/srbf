@@ -10,6 +10,7 @@ from flash_ansr import get_path
 from srbf.benchmarks import FastSRBBenchmark
 from flash_ansr.data import FlashANSRDataset
 from srbf.eval.data_sources import FastSRBSource, SkeletonDatasetSource
+from symbolic_data import sample_from_skeleton
 from flash_ansr.expressions.normalization import normalize_expression, normalize_skeleton
 from flash_ansr.expressions.skeleton_pool import NoValidSampleFoundError
 
@@ -290,6 +291,51 @@ def test_skeleton_source_masks_unused_variables_when_zero_padding():
         assert np.all(sample.x_support[:, column_idx] == 0)
         if sample.x_validation.size:
             assert np.all(sample.x_validation[:, column_idx] == 0)
+    finally:
+        dataset.shutdown()
+
+
+def test_skeleton_source_noise_path_matches_direct_delegation():
+    # SkeletonDatasetSource delegates (X, y) generation to symbolic_data.sample_from_skeleton and
+    # keeps only the eval metadata. This pins the noise path (the riskiest branch -- the existing
+    # tests run noise_level=0): seeding the global np.random identically and handing the same
+    # seeded noise generator to a direct sample_from_skeleton call must reproduce the wrapper's
+    # arrays byte-for-byte, proving the wrapper threads every parameter faithfully and applies noise.
+    dataset = _make_dataset()
+    try:
+        seed = 7
+        source = SkeletonDatasetSource(
+            dataset, n_support=16, datasets_per_expression=1, target_size=1,
+            device="cpu", datasets_random_seed=seed, noise_level=0.05,
+        )
+        source.prepare()
+        skeleton = source._skeleton_sequence[0]
+        pool = dataset.skeleton_pool
+
+        np.random.seed(123)
+        source._noise_rng = None
+        evaluation_sample = source._build_deterministic_sample(skeleton)
+
+        np.random.seed(123)
+        direct = sample_from_skeleton(
+            pool, skeleton, n_support=16, noise_level=0.05,
+            mask_unused_variables=(dataset.padding == "zero"),
+            rng=np.random.default_rng(seed), max_trials=8,
+        )
+
+        assert direct is not None and not evaluation_sample.metadata.get("placeholder")
+        for field in ("x_support", "y_support", "x_validation", "y_validation", "y_support_noisy", "y_validation_noisy"):
+            np.testing.assert_array_equal(getattr(evaluation_sample, field), getattr(direct, field))
+
+        # Noise was actually injected (not a no-op copy) wherever the signal has spread.
+        if np.std(evaluation_sample.y_support) > 0:
+            assert not np.array_equal(evaluation_sample.y_support, evaluation_sample.y_support_noisy)
+
+        # The eval metadata the source is responsible for is still populated.
+        assert evaluation_sample.metadata["expression"] is not None
+        assert evaluation_sample.metadata["complexity"] is not None
+        assert "input_ids" in evaluation_sample.metadata
+        assert "constants" in evaluation_sample.metadata
     finally:
         dataset.shutdown()
 
