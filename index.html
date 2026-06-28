@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>srbf — Symbolic Regression Benchmark Framework</title>
+  <meta name="description" content="srbf: results dashboard for the Symbolic Regression Benchmark Framework (coming soon).">
+  <style>
+    :root { --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --card:#161b22; --border:#30363d; }
+    @media (prefers-color-scheme: light) {
+      :root { --bg:#ffffff; --fg:#1f2328; --muted:#636c76; --accent:#0969da; --card:#f6f8fa; --border:#d0d7de; }
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: var(--bg); color: var(--fg); padding: 2rem; }
+    main { max-width: 720px; width:100%; text-align:center; }
+    .logo { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 3rem; font-weight: 700;
+      letter-spacing: -0.02em; margin: 0 0 0.25rem; }
+    .tag { color: var(--muted); font-size: 1.1rem; margin: 0 0 2rem; }
+    .badge { display:inline-block; padding:0.3rem 0.8rem; border:1px solid var(--border); border-radius:999px;
+      color: var(--muted); font-size:0.85rem; margin-bottom:2rem; }
+    .card { background: var(--card); border:1px solid var(--border); border-radius:12px; padding:2rem; margin-bottom:2rem; }
+    .card h2 { margin:0 0 0.5rem; font-size:1.25rem; }
+    .card p { color: var(--muted); margin:0; line-height:1.6; }
+    .links { display:flex; gap:1rem; justify-content:center; flex-wrap:wrap; }
+    .links a { color: var(--accent); text-decoration:none; border:1px solid var(--border); border-radius:8px;
+      padding:0.6rem 1.1rem; transition: border-color .15s; }
+    .links a:hover { border-color: var(--accent); }
+    footer { color: var(--muted); font-size:0.8rem; margin-top:2.5rem; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--card);
+      border:1px solid var(--border); border-radius:6px; padding:0.15rem 0.4rem; font-size:0.9em; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1 class="logo">srbf</h1>
+    <p class="tag">Symbolic Regression Benchmark Framework</p>
+    <span class="badge">📊 Results dashboard — coming soon</span>
+    <div class="card">
+      <h2>Leaderboards &amp; results</h2>
+      <p>This page will host the shared symbolic-regression leaderboards: recovery, accuracy, and
+      robustness across methods and benchmarks, evaluated with one engine and one set of metrics.
+      It's a placeholder for now while the result set is assembled.</p>
+    </div>
+    <div class="links">
+      <a href="https://github.com/psaegert/srbf">GitHub</a>
+      <a href="https://srbf.readthedocs.io">Documentation</a>
+      <a href="https://pypi.org/project/srbf/">PyPI</a>
+    </div>
+    <footer>Add your model with an adapter PR &middot; <code>pip install srbf</code></footer>
+  </main>
+</body>
+</html>
