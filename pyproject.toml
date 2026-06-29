@@ -7,12 +7,12 @@ description = "srbf: the symbolic-regression evaluation framework (engine, adapt
 authors = [{ name = "Paul Saegert" }]
 readme = "README.md"
 requires-python = ">=3.12"
-version = "0.3.0"
+version = "0.4.0"
 license = "MIT"
 license-files = ["LICEN[CS]E*", "THIRD_PARTY_LICENSES*"]
 
 dependencies = [
-    "flash-ansr~=0.7",   # one-way dep; carved data layer now in symbolic-data
+    "flash-ansr~=0.8",   # one-way dep; carved data layer now in symbolic-data
     "simplipy>=0.3.1",   # DIRECT: eval/baselines/benchmarks + normalize_* (moved here from flash-ansr)
     "symbolic-data",     # DIRECT: SkeletonPool / sampling data layer carved from flash-ansr
     "numpy>=1.24",

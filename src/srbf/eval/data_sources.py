@@ -11,7 +11,7 @@ from typing import Any, Dict, Iterable, Iterator, Mapping, Sequence, TypeVar
 import numpy as np
 from simplipy.utils import numbers_to_constant
 
-from srbf.benchmarks import FastSRBBenchmark
+from symbolic_data import FastSRBBenchmark
 from flash_ansr.data import FlashANSRDataset, FlashANSRPreprocessor
 from srbf.eval.core import EvaluationDataSource, EvaluationSample
 from srbf.eval.sample_metadata import build_base_metadata
