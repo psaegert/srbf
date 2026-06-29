@@ -14,7 +14,7 @@ from typing import Any, Callable, Mapping, MutableMapping, Sequence
 from srbf.baselines import BruteForceModel, SkeletonPoolModel
 from simplipy import SimpliPyEngine
 
-from srbf.benchmarks import FastSRBBenchmark
+from symbolic_data import FastSRBBenchmark
 from flash_ansr.data import FlashANSRDataset
 from srbf.eval.data_sources import FastSRBSource, SkeletonDatasetSource
 from srbf.eval.engine import EvaluationEngine, OverlappedEvaluationEngine
