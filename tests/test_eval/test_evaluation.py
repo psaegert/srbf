@@ -14,7 +14,7 @@ from flash_ansr import (
     install_model,
 )
 from flash_ansr.data import FlashANSRDataset
-from flash_ansr.expressions import SkeletonPool
+from symbolic_data import SkeletonPool
 
 
 MODEL = "psaegert/flash-ansr-v23.0-3M"

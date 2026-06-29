@@ -11,8 +11,8 @@ from srbf.benchmarks import FastSRBBenchmark
 from flash_ansr.data import FlashANSRDataset
 from srbf.eval.data_sources import FastSRBSource, SkeletonDatasetSource
 from symbolic_data import sample_from_skeleton
-from flash_ansr.expressions.normalization import normalize_expression, normalize_skeleton
-from flash_ansr.expressions.skeleton_pool import NoValidSampleFoundError
+from simplipy import normalize_expression, normalize_skeleton
+from symbolic_data import NoValidSampleFoundError
 
 
 DATASET_CONFIG = Path(__file__).resolve().parents[2] / "configs" / "test" / "dataset_val.yaml"
