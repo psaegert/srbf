@@ -13,7 +13,7 @@ import pytest
 import yaml
 
 from srbf.benchmark import Benchmark
-from srbf.eval import config as run_config
+from srbf import config as run_config
 
 
 def _write_results(path, length: int) -> None:

@@ -19,7 +19,7 @@ from typing import Any, Callable, Iterable, Mapping, Optional
 
 from tqdm import tqdm
 
-from srbf.eval.result_store import ResultStore
+from srbf.store import ResultStore
 from flash_ansr.utils.paths import substitute_root_path
 
 
@@ -70,7 +70,7 @@ class Benchmark:
         the resolved-total/completed check, and the cheap model-free source build -- so resuming a
         mostly-finished sweep never reloads the model for an already-complete experiment.
         """
-        from srbf.eval import config as run_config
+        from srbf import config as run_config
 
         raw_config = run_config.load_config(config) if isinstance(config, str) else dict(config)
         config_dict = run_config.select_experiment(raw_config, experiment)

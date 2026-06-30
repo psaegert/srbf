@@ -8,8 +8,8 @@ integration (no HF / no model).
 import numpy as np
 
 from symbolic_data import Problem, ProblemSource
-from srbf.eval.core import EvaluationSample
-from srbf.eval.data_sources import CatalogSource
+from srbf.core import EvaluationSample
+from srbf.data_sources import CatalogSource
 
 
 def _problem(skeleton, expression, variables, complexity, *, eq_id=None, n_support=8, n_val=4,

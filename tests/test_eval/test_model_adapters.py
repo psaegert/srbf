@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from srbf.eval.core import EvaluationResult, EvaluationSample
-from srbf.eval import model_adapters
+from srbf.core import EvaluationResult, EvaluationSample
+from srbf import model_adapters
 
 
 class _DummyModel:

@@ -8,8 +8,8 @@ import pickle
 import numpy as np
 
 from srbf.benchmark import Benchmark
-from srbf.eval.core import EvaluationSample, EvaluationResult
-from srbf.eval.result_store import ResultStore
+from srbf.core import EvaluationSample, EvaluationResult
+from srbf.store import ResultStore
 
 
 class _ListSource:

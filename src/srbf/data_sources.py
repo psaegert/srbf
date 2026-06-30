@@ -20,8 +20,8 @@ import numpy as np
 
 from simplipy import normalize_skeleton
 
-from srbf.eval.core import EvaluationDataSource, EvaluationSample
-from srbf.eval.sample_metadata import build_base_metadata
+from srbf.core import EvaluationDataSource, EvaluationSample
+from srbf.sample_metadata import build_base_metadata
 
 
 class CatalogSource(EvaluationDataSource):

@@ -1,7 +1,7 @@
 """srbf command-line interface: the ``run`` subcommand carved from flash-ansr.
 
 flash-ansr keeps the rest of its CLI (train / benchmark / import-data / install / ...); only
-``run`` is evaluation-bound and lives here. The eval imports are ``srbf.eval.*``; the
+``run`` is evaluation-bound and lives here. The benchmark imports are ``srbf.*``; the
 flash-ansr ``utils`` imports are the cross-repo contract (srbf depends one-way on flash-ansr).
 """
 import argparse
@@ -35,7 +35,7 @@ def main(argv: list[str] | None = None) -> None:
             raw_config = load_config(config_path)
             experiment_map = raw_config.get("experiments") if isinstance(raw_config, dict) else None
 
-            from srbf.eval.provenance import collect_provenance, format_provenance
+            from srbf.provenance import collect_provenance, format_provenance
             base_prov = collect_provenance(config_path, None)
             print(format_provenance(base_prov), flush=True)
 

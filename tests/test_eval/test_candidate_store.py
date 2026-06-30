@@ -6,8 +6,8 @@ import warnings as _warnings
 import numpy as np
 import pytest
 
-from srbf.eval.candidate_store import CandidateStoreReader, CandidateStoreWriter
-from srbf.eval.model_adapters import FlashANSRAdapter
+from srbf.candidate_store import CandidateStoreReader, CandidateStoreWriter
+from srbf.model_adapters import FlashANSRAdapter
 # The candidate-ledger JOIN (gen pool U refined, classified) now lives in flash-ansr (infer() builds
 # result.ledger); srbf only persists it. FIT_* + CandidateLedger come from there.
 from flash_ansr.inference import CandidateLedger, FIT_FAILED, FIT_OK, INVALID

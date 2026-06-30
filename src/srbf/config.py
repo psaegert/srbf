@@ -21,8 +21,8 @@ from typing import Any, Callable, Mapping, MutableMapping, Sequence, cast
 
 from simplipy import SimpliPyEngine
 
-from srbf.eval.data_sources import CatalogSource
-from srbf.eval.model_adapters import (
+from srbf.data_sources import CatalogSource
+from srbf.model_adapters import (
     BruteForceAdapter,
     E2EAdapter,
     FlashANSRAdapter,

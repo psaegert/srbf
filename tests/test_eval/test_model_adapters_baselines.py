@@ -4,8 +4,8 @@ from simplipy import SimpliPyEngine
 
 from symbolic_data import LampleChartonCatalog
 from srbf.baselines import BruteForceModel, LampleChartonModel
-from srbf.eval.core import EvaluationSample
-from srbf.eval.model_adapters import BruteForceAdapter, LampleChartonAdapter
+from srbf.core import EvaluationSample
+from srbf.model_adapters import BruteForceAdapter, LampleChartonAdapter
 
 
 @pytest.fixture(scope="module")

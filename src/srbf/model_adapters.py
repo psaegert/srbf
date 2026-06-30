@@ -15,8 +15,8 @@ from simplipy import normalize_skeleton, normalize_expression
 # sympy is imported lazily inside the two baseline adapters that use it (E2E, NeSymReS);
 # it is an optional `[baselines]` extra, not a core runtime dependency.
 
-from srbf.eval.core import EvaluationModelAdapter, EvaluationResult, EvaluationSample
-from srbf.eval.candidate_store import CandidateStoreWriter
+from srbf.core import EvaluationModelAdapter, EvaluationResult, EvaluationSample
+from srbf.candidate_store import CandidateStoreWriter
 from flash_ansr.flash_ansr import FlashANSR
 from flash_ansr.refine import ConvergenceError
 
