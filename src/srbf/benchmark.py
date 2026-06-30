@@ -32,10 +32,117 @@ class Benchmark:
         model_adapter: Any,
         *,
         result_store: ResultStore | None = None,
+        output_path: Optional[str] = None,
+        save_every: Optional[int] = None,
+        limit: Optional[int] = None,
+        completed: bool = False,
+        total_limit: Optional[int] = None,
+        existing_results: int = 0,
     ) -> None:
         self.source = source
         self.model_adapter = model_adapter
         self.result_store = result_store or ResultStore()
+        # Resolved run parameters (set by `from_config`; `run()` falls back to these when its own
+        # arguments are left None). `completed` => the configured target is already reached and `run()`
+        # is a no-op. `total_limit` / `existing_results` are reporting-only (CLI summary).
+        self.output_path = output_path
+        self.save_every = save_every
+        self.limit = limit
+        self.completed = completed
+        self.total_limit = total_limit
+        self.existing_results = existing_results
+
+    @classmethod
+    def from_config(
+        cls,
+        config: "str | Mapping[str, Any]",
+        *,
+        limit_override: int | None = None,
+        output_override: str | None = None,
+        save_every_override: int | None = None,
+        resume: bool | None = None,
+        experiment: str | None = None,
+    ) -> "Benchmark":
+        """Build a ready-to-run `Benchmark` from a unified run config.
+
+        Mirrors the old ``build_evaluation_run`` flow, with one load-bearing ordering invariant: the
+        model adapter (which loads the model, possibly onto a GPU) is built LAST -- after resume-load,
+        the resolved-total/completed check, and the cheap model-free source build -- so resuming a
+        mostly-finished sweep never reloads the model for an already-complete experiment.
+        """
+        from srbf.eval import config as run_config
+
+        raw_config = run_config.load_config(config) if isinstance(config, str) else dict(config)
+        config_dict = run_config.select_experiment(raw_config, experiment)
+        run_cfg = run_config.extract_run_section(config_dict)
+
+        data_cfg = run_cfg.get("data_source")
+        if not isinstance(data_cfg, Mapping):
+            raise KeyError("run.data_source section is required")
+        model_cfg = run_cfg.get("model_adapter")
+        if not isinstance(model_cfg, Mapping):
+            raise KeyError("run.model_adapter section is required")
+        runner_cfg = run_cfg.get("runner", {})
+
+        save_every = save_every_override if save_every_override is not None else runner_cfg.get("save_every")
+        save_every = run_config.coerce_optional_int(save_every, "runner.save_every")
+
+        output_path = output_override or runner_cfg.get("output")
+        if save_every is not None and output_path is None:
+            raise ValueError("runner.output must be provided when save_every is set")
+
+        resume_flag = runner_cfg.get("resume", True)
+        if resume is not None:
+            resume_flag = resume
+
+        initial_results = None
+        if resume_flag and output_path:
+            initial_results = run_config.load_existing_results(output_path)
+        store = ResultStore(initial_results)
+        existing = store.size
+
+        # Explicit total: CLI override, runner.limit, or data_source.target_size. When none is set, the
+        # source's own size_hint bounds the run (finite for a frozen catalog; unbounded otherwise).
+        limit_value = limit_override if limit_override is not None else runner_cfg.get("limit")
+        limit_value = run_config.coerce_optional_int(limit_value, "runner.limit")
+        if limit_value is None:
+            limit_value = run_config.coerce_optional_int(data_cfg.get("target_size"), "data_source.target_size")
+
+        total_limit: int | None
+        remaining: int | None
+        target_override: int | None
+        if limit_value is not None:
+            total_limit = limit_value
+            remaining = max(0, limit_value - existing)
+            if remaining == 0:
+                return cls(None, None, result_store=store, output_path=output_path,
+                           save_every=save_every, completed=True, total_limit=total_limit,
+                           existing_results=existing)
+            target_override = remaining
+        else:
+            total_limit = None
+            remaining = None
+            target_override = None
+
+        source = run_config.build_catalog_source(data_cfg, target_size=target_override, skip=existing)
+
+        size_hint = getattr(source, "size_hint", None)
+        pending = size_hint() if callable(size_hint) else None
+        if pending is not None and pending <= 0:
+            return cls(None, None, result_store=store, output_path=output_path, save_every=save_every,
+                       completed=True, total_limit=total_limit if total_limit is not None else existing,
+                       existing_results=existing)
+        if total_limit is None and pending is not None:
+            # Frozen catalog with no explicit total: the source's own count is the total. Set an explicit
+            # remaining cap too (belt-and-braces with the source's bound). An OPEN generative source has
+            # pending=None -> remaining stays None -> the run is unbounded (capped only by --limit).
+            total_limit = existing + pending
+            remaining = pending
+
+        adapter = run_config.build_model_adapter(model_cfg)  # LAST: loads the model
+
+        return cls(source, adapter, result_store=store, output_path=output_path, save_every=save_every,
+                   limit=remaining, completed=False, total_limit=total_limit, existing_results=existing)
 
     def run(
         self,
@@ -50,6 +157,18 @@ class Benchmark:
         meta: Optional[Mapping[str, Any]] = None,
     ) -> dict[str, list[Any]]:
         """Execute the serial evaluation loop and return accumulated results."""
+
+        # A `from_config` Benchmark whose target is already reached: nothing to do.
+        if self.completed:
+            if verbose:
+                target = self.total_limit if self.total_limit is not None else "configured"
+                print(f"Evaluation already completed ({self.existing_results}/{target}). Nothing to do.")
+            return self.result_store.snapshot()
+
+        # Fall back to the parameters `from_config` resolved when the caller leaves them unset.
+        limit = limit if limit is not None else self.limit
+        save_every = save_every if save_every is not None else self.save_every
+        output_path = output_path if output_path is not None else self.output_path
 
         if save_every is not None and output_path is None:
             raise ValueError("output_path must be provided when save_every is configured")

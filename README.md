@@ -43,10 +43,10 @@ Outputs land under `results/evaluation/.../*.pkl`, one row per evaluated dataset
 columns. Run programmatically instead:
 
 ```python
-from srbf import build_evaluation_run
+from srbf import Benchmark
 
-plan = build_evaluation_run(config="configs/evaluation/scaling/v23.0-3M_val.yaml")
-plan.engine.run(limit=plan.remaining, output_path=plan.output_path)
+benchmark = Benchmark.from_config(config="configs/evaluation/scaling/v23.0-3M_val.yaml")
+benchmark.run()  # resume-aware; a no-op if the configured target is already reached
 ```
 
 ## Documentation
