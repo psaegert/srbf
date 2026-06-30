@@ -4,6 +4,25 @@ All notable changes to srbf are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-06-30
+
+Adds the config-sweep + reporting layer (folded in from the planned 0.5.x scope) and finishes the
+config/docs migration. Re-pinned `symbolic-data>=0.9`.
+
+### Added
+- **Inline `!sweep` config cross-products** (`srbf.Sweep` / `register_sweep_yaml` / `resolve_sweeps`):
+  `!sweep [..]` = an anonymous grid axis; `!sweep {name: L, values: [..]}` = a named axis (co-named
+  sweeps zip element-wise). `Benchmark.runs_from_config` expands an `experiments:` map and/or `!sweep`
+  into per-run Benchmarks; `srbf run --sweep-filter AXIS=VALUE` selects runs.
+- **Multi-draw reporting** `bootstrap_report` / `draw_distribution`: group per-problem metrics by
+  `benchmark_eq_id` and bootstrap a CI (the no-seeding reproducibility story for sampling sources).
+
+### Changed
+- Migrated all `configs/evaluation/` configs to the catalog schema + `!sweep` (the 19-rung "choices
+  ladder" collapses to one zipped axis); baselines resolve their catalog by name via
+  `symbolic_data.build_catalog`; docs/README rewritten to the catalog/Benchmark/`!sweep` surface.
+- `test_scaling_configs.py` upgraded from a key-presence check to a real catalog-schema gate.
+
 ## [0.5.0] - 2026-06-30
 
 The data-layer redesign: srbf consumes `symbolic_data`'s catalog/`ProblemSource` API and

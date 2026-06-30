@@ -7,7 +7,7 @@ from srbf.benchmark import Benchmark
 from srbf.sweep import Sweep, register_sweep_yaml, resolve_sweeps
 from srbf.reporting import bootstrap_report, draw_distribution
 
-__version__ = "0.5.0"
+__version__ = "0.5.1"
 
 __all__ = [
     "Benchmark",

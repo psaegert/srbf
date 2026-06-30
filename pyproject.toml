@@ -7,14 +7,14 @@ description = "srbf: the symbolic-regression benchmark framework (Benchmark driv
 authors = [{ name = "Paul Saegert" }]
 readme = "README.md"
 requires-python = ">=3.12"
-version = "0.5.0"
+version = "0.5.1"
 license = "MIT"
 license-files = ["LICEN[CS]E*", "THIRD_PARTY_LICENSES*"]
 
 dependencies = [
     "flash-ansr~=0.9",   # one-way dep; provides FlashANSR.infer() + the CandidateLedger join
     "simplipy>=0.3.1",   # DIRECT: baselines + normalize_* (moved here from flash-ansr)
-    "symbolic-data>=0.8", # DIRECT: catalog / ProblemSource data layer (CatalogSource wraps it)
+    "symbolic-data>=0.9", # DIRECT: catalog / ProblemSource data layer (CatalogSource wraps it)
     "numpy>=1.24",
     "pandas>=1.3",       # runtime: baselines imported top-level by model_adapters.py
     "scikit-learn>=1.0", # runtime: baselines BaseEstimator, same reason
