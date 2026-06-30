@@ -1,10 +1,19 @@
-"""srbf: the symbolic-regression evaluation framework, carved from flash-ansr.
+"""srbf: the symbolic-regression benchmark framework, carved from flash-ansr.
 
-Engine + model adapters + benchmarks + metrics for evaluating symbolic-regression models.
-Depends one-way on flash-ansr (srbf imports flash-ansr; flash-ansr never imports srbf).
+The Benchmark driver + model adapters + metrics for evaluating symbolic-regression models over
+symbolic-data catalogs. Depends one-way on flash-ansr (srbf imports flash-ansr; never the reverse).
 """
 from srbf.benchmark import Benchmark
+from srbf.sweep import Sweep, register_sweep_yaml, resolve_sweeps
+from srbf.reporting import bootstrap_report, draw_distribution
 
 __version__ = "0.5.0"
 
-__all__ = ["Benchmark"]
+__all__ = [
+    "Benchmark",
+    "Sweep",
+    "register_sweep_yaml",
+    "resolve_sweeps",
+    "bootstrap_report",
+    "draw_distribution",
+]

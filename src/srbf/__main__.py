@@ -18,6 +18,8 @@ def main(argv: list[str] | None = None) -> None:
     run_parser.add_argument('--save-every', type=int, default=None, help='Override periodic save frequency')
     run_parser.add_argument('--no-resume', action='store_true', help='Ignore previous results even if the output file exists')
     run_parser.add_argument('--experiment', type=str, default=None, help='Name of the experiment defined in the config to execute')
+    run_parser.add_argument('--sweep-filter', type=str, default=None, metavar='AXIS=VALUE[,AXIS=VALUE]',
+                            help='Run only the !sweep runs whose axis labels match (e.g. ladder=256)')
     run_parser.add_argument('-v', '--verbose', action='store_true', help='Print a progress bar')
 
     args = parser.parse_args(argv)
@@ -25,51 +27,49 @@ def main(argv: list[str] | None = None) -> None:
     match args.command_name:
         case 'run':
             from srbf.benchmark import Benchmark
-            from flash_ansr.utils.config_io import load_config
             from flash_ansr.utils.paths import substitute_root_path
 
             config_path = substitute_root_path(args.config)
             if args.verbose:
                 print(f"Running evaluation from {config_path}")
 
-            raw_config = load_config(config_path)
-            experiment_map = raw_config.get("experiments") if isinstance(raw_config, dict) else None
+            sweep_filter = None
+            if args.sweep_filter:
+                sweep_filter = dict(pair.split('=', 1) for pair in args.sweep_filter.split(',') if '=' in pair)
 
             from srbf.provenance import collect_provenance, format_provenance
             base_prov = collect_provenance(config_path, None)
             print(format_provenance(base_prov), flush=True)
 
-            def _execute(experiment_name: str | None = None) -> None:
-                label = f"[{experiment_name}] " if experiment_name else ""
-                benchmark = Benchmark.from_config(
-                    config=config_path,
-                    limit_override=args.limit,
-                    output_override=args.output_file,
-                    save_every_override=args.save_every,
-                    resume=None if not args.no_resume else False,
-                    experiment=experiment_name,
-                )
+            # One Benchmark per resolved run (experiments map and/or inline !sweep). Adapters are built
+            # lazily inside from_config, so completed runs never load their model.
+            benchmarks = Benchmark.runs_from_config(
+                config=config_path,
+                limit_override=args.limit,
+                output_override=args.output_file,
+                save_every_override=args.save_every,
+                resume=None if not args.no_resume else False,
+                experiment=args.experiment,
+                sweep_filter=sweep_filter,
+            )
+            if args.verbose:
+                print(f"Resolved {len(benchmarks)} run(s) from config.")
+
+            for benchmark in benchmarks:
+                tag = ", ".join(f"{k}={v}" for k, v in benchmark.label.items())
+                label = f"[{tag}] " if tag else ""
+                if args.verbose and tag:
+                    print(f"--> {tag}")
                 # `run()` is a no-op (prints "already completed") when the configured target is reached.
                 benchmark.run(
                     verbose=args.verbose,
                     progress=args.verbose,
-                    meta={**base_prov, "experiment": experiment_name},
+                    meta={**base_prov, **benchmark.label},
                 )
                 if args.verbose and not benchmark.completed:
                     destination = benchmark.output_path or 'memory'
                     print(f"{label}Evaluation finished with {benchmark.result_store.size} samples "
                           f"(saved to {destination}).")
-
-            if experiment_map and args.experiment is None:
-                experiment_names = list(experiment_map.keys())
-                if args.verbose:
-                    print(f"No --experiment provided; running all {len(experiment_names)} experiments defined in config.")
-                for experiment_name in experiment_names:
-                    if args.verbose:
-                        print(f"--> {experiment_name}")
-                    _execute(experiment_name)
-            else:
-                _execute(args.experiment)
         case _:
             parser.print_help()
 

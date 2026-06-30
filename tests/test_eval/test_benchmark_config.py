@@ -360,3 +360,47 @@ def test_from_config_end_to_end_through_catalog_source(monkeypatch):
     assert bench.result_store.size == 3
     assert snapshot["prediction_success"] == [True, True, True]
     assert sorted(snapshot["benchmark_eq_id"]) == ["E1", "E2", "E3"]
+
+
+# --- runs_from_config: experiments map + inline !sweep -----------------------------------
+
+def test_runs_from_config_expands_named_sweep(monkeypatch):
+    from srbf.sweep import Sweep
+    captured: list[dict[str, Any]] = []
+
+    def fake_src(cfg, *, target_size, skip):
+        captured.append(cfg)
+        return SimpleNamespace(size_hint=lambda: 4)
+
+    monkeypatch.setattr(run_config, "build_catalog_source", fake_src)
+    monkeypatch.setattr(run_config, "build_model_adapter", lambda cfg: object())
+
+    cfg = {"run": {
+        "data_source": {"catalog": "v23-val", "problems_per_expression": Sweep([10, 5], name="L")},
+        "model_adapter": {"type": "flash_ansr", "choices": Sweep([16, 256], name="L")},
+        "runner": {},
+    }}
+    benches = Benchmark.runs_from_config(cfg)
+    assert len(benches) == 2                                  # zipped on "L", not a 2x2 grid
+    assert [c["problems_per_expression"] for c in captured] == [10, 5]   # matched to the rung
+
+    # --sweep-filter selects one rung (label value = first-declared member of the axis)
+    one = Benchmark.runs_from_config(cfg, sweep_filter={"L": 5})
+    assert len(one) == 1 and one[0].label == {"L": 5}
+
+
+def test_runs_from_config_expands_experiments(monkeypatch):
+    monkeypatch.setattr(run_config, "build_catalog_source",
+                        lambda cfg, *, target_size, skip: SimpleNamespace(size_hint=lambda: 3))
+    monkeypatch.setattr(run_config, "build_model_adapter", lambda cfg: object())
+
+    cfg = {"experiments": {
+        "a": {"run": {"data_source": {"catalog": "v23-val"}, "model_adapter": {"type": "flash_ansr"}, "runner": {}}},
+        "b": {"run": {"data_source": {"catalog": "fastsrb"}, "model_adapter": {"type": "flash_ansr"}, "runner": {}}},
+    }}
+    benches = Benchmark.runs_from_config(cfg)
+    assert len(benches) == 2
+    assert {b.label["experiment"] for b in benches} == {"a", "b"}
+
+    only = Benchmark.runs_from_config(cfg, experiment="b")
+    assert len(only) == 1 and only[0].label["experiment"] == "b"

@@ -38,10 +38,13 @@ class Benchmark:
         completed: bool = False,
         total_limit: Optional[int] = None,
         existing_results: int = 0,
+        label: Optional[Mapping[str, Any]] = None,
     ) -> None:
         self.source = source
         self.model_adapter = model_adapter
         self.result_store = result_store or ResultStore()
+        # Run identity for a sweep/experiment (e.g. {"experiment": ..., "ladder": 256}); display-only.
+        self.label = dict(label) if label else {}
         # Resolved run parameters (set by `from_config`; `run()` falls back to these when its own
         # arguments are left None). `completed` => the configured target is already reached and `run()`
         # is a no-op. `total_limit` / `existing_results` are reporting-only (CLI summary).
@@ -143,6 +146,61 @@ class Benchmark:
 
         return cls(source, adapter, result_store=store, output_path=output_path, save_every=save_every,
                    limit=remaining, completed=False, total_limit=total_limit, existing_results=existing)
+
+    @classmethod
+    def runs_from_config(
+        cls,
+        config: "str | Mapping[str, Any]",
+        *,
+        limit_override: int | None = None,
+        output_override: str | None = None,
+        save_every_override: int | None = None,
+        resume: bool | None = None,
+        experiment: str | None = None,
+        sweep_filter: Mapping[str, Any] | None = None,
+    ) -> "list[Benchmark]":
+        """Expand a config (``experiments:`` map and/or inline ``!sweep``) into a list of Benchmarks.
+
+        One Benchmark per resolved run: each ``experiments:`` entry (or the top-level run) is expanded
+        by :func:`srbf.sweep.resolve_sweeps`, and each resolved single-run config is built via
+        :meth:`from_config` (so resume/limit/completed math + model-LAST ordering apply per run). The
+        adapter is still built lazily inside ``from_config``, so a completed run never loads its model.
+        ``sweep_filter`` keeps only runs whose axis labels match (e.g. ``{"ladder": 256}``).
+        """
+        from srbf import config as run_config
+        from srbf.sweep import register_sweep_yaml, resolve_sweeps
+
+        register_sweep_yaml()
+        raw = run_config.load_config(config) if isinstance(config, str) else dict(config)
+
+        experiments = raw.get("experiments") if isinstance(raw, Mapping) else None
+        base: list[tuple[str | None, Mapping[str, Any]]]
+        if experiments:
+            names = [experiment] if experiment is not None else list(experiments.keys())
+            base = [(name, run_config.select_experiment(raw, name)) for name in names]
+        else:
+            base = [(None, dict(raw))]
+
+        benchmarks: list[Benchmark] = []
+        for exp_name, exp_cfg in base:
+            for resolved, labels in resolve_sweeps(exp_cfg):
+                if sweep_filter and not all(str(labels.get(k)) == str(v) for k, v in sweep_filter.items()):
+                    continue
+                bench = cls.from_config(
+                    resolved,
+                    limit_override=limit_override,
+                    output_override=output_override,
+                    save_every_override=save_every_override,
+                    resume=resume,
+                    experiment=None,
+                )
+                run_label: dict[str, Any] = {}
+                if exp_name is not None:
+                    run_label["experiment"] = exp_name
+                run_label.update(labels)
+                bench.label = run_label
+                benchmarks.append(bench)
+        return benchmarks
 
     def run(
         self,
