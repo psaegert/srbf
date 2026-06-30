@@ -4,6 +4,49 @@ All notable changes to srbf are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-06-30
+
+The data-layer redesign: srbf consumes `symbolic_data`'s catalog/`ProblemSource` API and
+flash-ansr 0.9's public inference API, and the `eval/` engine layer collapses into a single
+`Benchmark` driver. Breaking. Re-pinned `flash-ansr~=0.9`, `symbolic-data>=0.8`.
+
+### Changed
+- **Data source** is now always a `symbolic_data` catalog. The old `SkeletonDatasetSource` +
+  `FastSRBSource` (and the `type: skeleton_dataset` / `type: fastsrb` config split) are replaced by
+  one `CatalogSource` wrapping a `symbolic_data.ProblemSource`. The `data_source` config is
+  `{catalog: <name/ref>, sampling: {n_support, n_validation, noise, problems_per_expression},
+  target_size}`; the frozen sha-pinned `v23-val` catalog is the drift-safe validation set (the old
+  val100 skeleton-pin machinery is gone). Non-flash_ansr adapters now require an explicit
+  `model_adapter.simplipy_engine` (no dataset to borrow one from).
+- **`FlashANSRAdapter`** is a thin mapper over `FlashANSR.infer()` -> `InferenceResult` (best
+  candidate + the full classified `CandidateLedger`); no more `model._results` / `nth_best_beam` /
+  generate-refine-phase scraping. The candidate-ledger JOIN lives in flash-ansr now; srbf only
+  persists it (`CandidateStoreWriter`).
+- **`Benchmark`** (`srbf.Benchmark`) replaces the `Evaluation*` driver surface. `Benchmark.run` is a
+  plain serial loop (no cross-problem overlap; per-problem timing stays uncontended).
+  `Benchmark.from_config` absorbs `build_evaluation_run` (resume/limit/completed math), building the
+  model adapter last so a resumed sweep never reloads the model for a finished experiment.
+- Baselines moved onto `symbolic_data.LampleChartonCatalog`: `SkeletonPoolModel` ->
+  `LampleChartonModel` (adapter type `skeleton_pool` -> `lample_charton`; param `skeleton_pool` ->
+  `catalog`).
+- Relocated the package: dropped the `srbf/eval/` subpackage (modules moved to top-level `srbf/`;
+  `result_store` -> `store`). `import srbf.eval.X` -> `import srbf.X`.
+
+### Removed
+- `EvaluationEngine` / `OverlappedEvaluationEngine` (the cross-problem overlap), `Evaluation`,
+  `EvaluationRunPlan` / `build_evaluation_run` (-> `Benchmark.from_config`), `run_config.py`,
+  `data_sources.SkeletonDatasetSource` / `FastSRBSource`, and srbf's duplicate
+  `build_candidate_ledger` + `FIT_*` (imported from `flash_ansr.inference` now). The
+  `srbf.benchmarks` re-export shim (its `symbolic_data.FastSRBBenchmark` source was removed upstream;
+  FastSRB is the `fastsrb` catalog).
+
+### Deferred (to 0.5.1)
+- Inline `!sweep` config cross-products + multi-draw bootstrap reporting (the `experiments:` map
+  still works), the columnar (Parquet) result store + typed `Result`/`ResultCollection` projection
+  (the pickle `ResultStore` is unchanged behind its seam), and migrating the `configs/evaluation/`
+  scaling configs to the new catalog schema (cheaper bundled with the `!sweep` collapse). Configs are
+  not shipped in the wheel.
+
 ## [0.4.0] - 2026-06-29
 
 ### Changed

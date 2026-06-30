@@ -1,24 +1,24 @@
 # srbf: Symbolic Regression Benchmark Framework
 
 `srbf` evaluates symbolic-regression models on shared benchmarks with shared metrics. It is the
-evaluation framework carved out of [flash-ansr](https://github.com/psaegert/flash-ansr): the
-evaluation engine, model adapters, benchmarks, and metrics. It depends one-way on `flash-ansr`
-(`srbf` imports `flash-ansr`; `flash-ansr` never imports `srbf`).
+benchmark framework carved out of [flash-ansr](https://github.com/psaegert/flash-ansr): the
+`Benchmark` driver, model adapters, and metrics, over `symbolic-data` catalogs. It depends one-way on
+`flash-ansr` (`srbf` imports `flash-ansr`; `flash-ansr` never imports `srbf`).
 
 **Built for contributions.** Developers of SR methods add their model by opening a PR with an
 **adapter** (two methods) plus install instructions. The built-in adapters (`flash_ansr`, `pysr`,
-`nesymres`, `e2e`, `skeleton_pool`, `brute_force`) are reference examples, not a closed set. See the
+`nesymres`, `e2e`, `lample_charton`, `brute_force`) are reference examples, not a closed set. See the
 [adapter contribution guide](docs/adapters.md).
 
-> **Status: 0.1, cleanly-carved eval.** The engine seam (`srbf.eval.core` Protocols +
-> `srbf.eval.engine`) is model-agnostic, but every built-in adapter imports `flash-ansr` and the
-> adapter set is a registry edited by PR. A plugin `register_adapter()` entry-point and raw-dataset
-> (`(X, y)` CSV/parquet) ingestion are planned follow-ons.
+> **Status: 0.5, data-layer redesign.** The benchmark seam (`srbf.core` Protocols + the `Benchmark`
+> driver) is model-agnostic, the data source is any `symbolic-data` catalog, and adapters are a thin
+> mapper over each model (flash-ansr via `FlashANSR.infer()`). Inline `!sweep` config cross-products
+> and multi-draw bootstrap reporting are planned for 0.5.1.
 
 ## Install
 
 ```bash
-pip install srbf                 # engine + metrics + the pip-installable adapters (flash-ansr, PySR)
+pip install srbf                 # benchmark driver + metrics + the pip-installable adapters (flash-ansr, PySR)
 pip install "srbf[baselines]"    # + pip baseline deps (sympy, pysr, omegaconf)
 ```
 

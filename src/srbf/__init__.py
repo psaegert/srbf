@@ -5,6 +5,6 @@ Depends one-way on flash-ansr (srbf imports flash-ansr; flash-ansr never imports
 """
 from srbf.benchmark import Benchmark
 
-__version__ = "0.1.0"  # 0.5.0 refactor in progress; reconciled to 0.5.0 at release
+__version__ = "0.5.0"
 
 __all__ = ["Benchmark"]
