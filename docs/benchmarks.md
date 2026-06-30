@@ -1,14 +1,14 @@
 # Benchmarks and datasets
 
-This guide covers the data `srbf` evaluates on: how the `data_source` block in a config picks
-what to evaluate, how to fetch the FastSRB benchmark, how to build a skeleton pool with
-flash-ansr's `import-data` CLI, and how to point at your own benchmark set. For the CLI that
-*runs* an evaluation see [docs/running.md](running.md); for the model side see
-[docs/models.md](models.md) and [docs/adapters.md](adapters.md); for the project overview see
+This guide covers the data `srbf` evaluates on: how the `data_source` block in a config picks what
+to evaluate, the catalogs that ship with the framework, how catalog references are resolved, and how
+to point at your own benchmark. For the CLI that *runs* an evaluation see
+[docs/running.md](running.md); for the model side see [docs/models.md](models.md) and
+[docs/adapters.md](adapters.md); for the project overview see
 [../README.md](https://github.com/psaegert/srbf/blob/main/README.md).
 
-`srbf` resolves `{{ROOT}}` in every config path against the `FLASH_ANSR_ROOT` environment
-variable. Point it at a checkout that holds `configs/`, `data/`, and `models/`:
+`srbf` resolves `{{ROOT}}` in every config path against the `FLASH_ANSR_ROOT` environment variable.
+Point it at a checkout that holds `configs/`, `models/`, and `results/`:
 
 ```bash
 export FLASH_ANSR_ROOT=$(pwd)
@@ -16,176 +16,116 @@ export FLASH_ANSR_ROOT=$(pwd)
 
 ## The `data_source` block
 
-Every evaluation config carries a `data_source` block (under `defaults:` and per `experiments:`
-entry, wired with YAML anchors). Its `type` selects one of two sources. These are the only two
-branches in `srbf.eval.run_config._build_data_source`; anything else raises
-`Unsupported data source type`.
+Every evaluation config carries a `data_source` block. The data source is always a `symbolic-data`
+catalog: `catalog` names the set of ground-truth expressions to evaluate on, and `sampling` is this
+run's usage policy over that catalog. The catalog itself owns all generation, fixed-set iteration,
+noise injection, and decontamination; `srbf` just streams the resulting problems into the benchmark
+driver.
 
-| `type` | What it evaluates on | How the data is produced |
+```yaml
+data_source:
+  catalog: v23-val              # a catalog name/ref, an HF 'user/repo:name' ref, a local path, or an inline config
+  sampling:                     # the symbolic-data usage policy (all fields optional)
+    n_support: 512              # points the model fits on
+    n_validation: 1024          # held-out points (omit for catalogs that carry their own validation)
+    noise: 0.0                  # Gaussian noise as a fraction of the target std (0 = clean)
+    problems_per_expression: 10 # distinct sampled problems per ground-truth expression
+    method: iterate             # frozen catalog -> 'iterate'; open generative catalog -> 'procedural'
+  holdouts:                     # optional decontamination / filters (see below)
+    - exclude: lample-charton-v23
+    - filter: {finite: true}
+  target_size: 1000             # cap the number of rows (also the run total when runner.limit is null)
+```
+
+### `sampling` fields
+
+| field | meaning |
+|---|---|
+| `n_support` | number of points the model fits on. `prior` (generative catalogs only) draws the support size per problem from the catalog's own prior and implies `n_validation: 0`. |
+| `n_validation` | number of held-out validation points; the first `n_support` of each sampled problem are the fit split, the rest the validation split. |
+| `noise` | additive Gaussian noise as a fraction of the target std (`0.0` = clean). |
+| `problems_per_expression` | how many distinct problems to draw per ground-truth expression; multiplies the row count. |
+| `method` | draw mode: `iterate` over a fixed catalog, `procedural` for an open generative one. Defaults follow the catalog kind. |
+| `layout` | X-point layout passed to the catalog's distribution (default `random`). |
+| `max_trials` | resample attempts before a placeholder row is written. |
+| `size` | number of expressions to draw from an open generative catalog (a generative usage policy). |
+
+### `holdouts`
+
+`holdouts` is an optional list of rules applied to every problem the catalog yields:
+
+- `{exclude: <catalog-ref>}` — **decontamination**: drop any problem whose normalized skeleton appears in the referenced catalog (e.g. exclude the training recipe from a generated test set). The reference resolves the same way as `catalog` (a name, HF ref, local path, or inline config).
+- `{filter: {...}}` — keep only problems matching a filter predicate (e.g. `{finite: true}`).
+
+## The shipped catalogs
+
+`srbf` configs reference these `symbolic-data` catalogs by name:
+
+| name | what it is | kind |
 |---|---|---|
-| `fastsrb` | the FastSRB benchmark equations | reads an `expressions.yaml` directly and samples `(X, y)` on the fly |
-| `skeleton_dataset` | a flash-ansr skeleton pool (e.g. a model's held-out `val` set) | streams skeletons from a flash-ansr dataset config, sampling data per skeleton |
+| `v23-val` | the frozen, sha-pinned v23 validation set | fixed set (deterministic; iterate) |
+| `fastsrb` | the FastSRB benchmark equations | fixed set (samples `(X, y)` per equation) |
+| `lample-charton-v23` | the generative v23 training recipe | open generative (streams skeletons) |
 
-> **Note on terminology.** `skeleton_pool` is *not* a `data_source` type. It is a *model adapter*
-> type (and a config field inside that adapter and the `brute_force` adapter), the brute-force-ish
-> baseline that fits every skeleton in a pool. If you came here looking for `skeleton_pool`, see
-> [docs/models.md](models.md) and [docs/adapters.md](adapters.md). The two data sources are
-> `fastsrb` and `skeleton_dataset`.
-
-### `fastsrb` fields
-
-From `configs/evaluation/scaling/v23.0-20M_fastsrb.yaml`:
-
-```yaml
-data_source:
-  type: fastsrb
-  benchmark_path: "{{ROOT}}/data/ansr-data/test_set/fastsrb/expressions.yaml"
-  datasets_per_expression: 10     # repeats per equation (distinct sampled datasets)
-  support_points: 512             # points the model fits on
-  sample_points: 1024             # total points drawn; the rest become the validation split
-  method: random                  # 'random' or 'range' sampling of the input grid
-  max_trials: 100                 # resample attempts before a placeholder is written
-  incremental: false
-  random_state: 42                # seeds sampling, so runs are reproducible
-  noise_level: 0.0                # Gaussian noise as a fraction of the target std (0 = clean)
-```
-
-The `fastsrb` source loads `benchmark_path` (an `expressions.yaml`) directly and samples data for
-each equation itself: there is **no skeleton-pool build step on the path to the `fastsrb` source**.
-The first `support_points` of each sampled dataset are the fit split; the remainder (up to
-`sample_points`) are the validation split. `datasets_per_expression` multiplies the row count: the
-~unique equations times the repeats. Optional fields: `eq_ids` (a string or list to evaluate a
-subset of equation ids), `n_support_override`, and `benchmark_random_state`.
-
-### `skeleton_dataset` fields
-
-From `configs/evaluation/scaling/v23.0-20M_val.yaml`:
-
-```yaml
-data_source:
-  type: skeleton_dataset
-  dataset: "{{ROOT}}/configs/v23.0-20M/dataset_val.yaml"   # a flash-ansr dataset config
-  datasets_per_expression: 10
-  n_support: 512
-  noise_level: 0.0
-  max_trials: 100
-  target_size: 1000             # 100 skeletons x 10 repeats; caps the number of rows
-```
-
-The `dataset` path is a flash-ansr dataset config (it references a `skeleton_pool:` plus a
-tokenizer and preprocessor). The source iterates the pool's skeletons in a deterministic, sorted
-order, samples `datasets_per_expression` datasets per skeleton, and stops at `target_size`. Use
-this source to evaluate on a model's own held-out validation skeletons rather than the external
-FastSRB equations. Optional: `skeleton_list` (a path to a pinned JSON skeleton set, or an inline
-list) freezes *which* skeletons evaluate, so "val" means the same set across models and machines;
-the source hard-fails if any pinned skeleton is missing from the pool.
-
-Both `*_fastsrb.yaml` and `*_val.yaml` variants ship for the model and baseline configs under
+`v23-val` is the drift-safe evaluation set: it is deterministic and sha256-pinned on Hugging Face, so
+"val" means the same problems across models and machines without any per-run seeding or pinned-list
+bookkeeping. Both a FastSRB config (`*_fastsrb.yaml`, `catalog: fastsrb`) and a validation config
+(`*_val.yaml`, `catalog: v23-val`) ship for the model and baseline configs under
 `configs/evaluation/{scaling,noise_sweep,support_sweep}/`. Evaluating on both is the standard dual
 protocol.
 
-## Getting the FastSRB benchmark
+FastSRB is [Martinek 2025](https://arxiv.org/abs/2508.14481) (MIT-licensed; attribution in
+`THIRD_PARTY_LICENSES`).
 
-FastSRB ([Martinek 2025](https://arxiv.org/abs/2508.14481), MIT-licensed; attribution in
-`THIRD_PARTY_LICENSES`) ships as a single raw `expressions.yaml`. Fetch it once into the path the
-configs expect:
+## How a catalog reference resolves
 
-```bash
-mkdir -p "$FLASH_ANSR_ROOT/data/ansr-data/test_set/fastsrb"
-wget -O "$FLASH_ANSR_ROOT/data/ansr-data/test_set/fastsrb/expressions.yaml" \
-  "https://raw.githubusercontent.com/viktmar/FastSRB/refs/heads/main/src/expressions.yaml"
-```
+The `catalog` field (and any `holdouts.exclude` reference) accepts four forms:
 
-Each entry in the file carries a `prepared` expression string and a `vars` block of per-variable
-sampling specs. The `fastsrb` data_source reads this file as is; no further preparation is needed
-to run a `*_fastsrb.yaml` config. That is all the FastSRB source requires.
+1. **A name**, e.g. `v23-val` or `fastsrb`, optionally version-pinned as `name@version`. It is looked up in the `symbolic-data` asset manifest on Hugging Face (`psaegert/symbolic-data-assets` by default), fetched with `hf_hub_download`, integrity-checked against the manifest's `sha256`, and cached. A fresh install needs network on first use; subsequent runs hit the cache.
+2. **A third-party HF ref**, `user/repo:name` or `user/repo:name@version`, against another repo's manifest, so anyone can publish and load their own catalogs.
+3. **A local path**, e.g. `{{ROOT}}/configs/my_catalog.yaml` — used as-is, no download, for fully offline operation.
+4. **An inline config** — a mapping written directly in the YAML (e.g. a generative `{type: lample_charton, ...}` spec), so the catalog is defined in place rather than referenced.
 
-## Building a skeleton pool with `flash_ansr import-data`
-
-A *skeleton pool* is a flash-ansr artifact: a set of structural expression skeletons with compiled
-sampling code. It is **not** consumed by the `fastsrb` data_source. You need one for:
-
-- the `skeleton_dataset` data_source, whose `dataset` config references a pool (a model's `val`
-  pool is usually produced during training; you can also build a pool from a benchmark), and
-- the `skeleton_pool` and `brute_force` model adapters, whose `skeleton_pool:` field points at a
-  pool (e.g. `{{ROOT}}/models/prior/skeleton_pool.yaml`); see [docs/models.md](models.md).
-
-flash-ansr is a `srbf` dependency, so its CLI is already installed. Build a pool from a raw
-benchmark file with `import-data`:
-
-```bash
-flash_ansr import-data \
-  -i "$FLASH_ANSR_ROOT/data/ansr-data/test_set/fastsrb/expressions.yaml" \
-  -p fastsrb \
-  -e dev_7-3 \
-  -b configs/test_set/skeleton_pool.yaml \
-  -o "$FLASH_ANSR_ROOT/data/ansr-data/test_set/fastsrb/skeleton_pool" \
-  -v
-```
-
-Flags (from flash-ansr's `import-data` parser):
-
-| Flag | Meaning |
-|---|---|
-| `-i, --input` | path to the raw benchmark file (`.yaml`/`.yml` or `.csv`) |
-| `-p, --parser` | parser name; `fastsrb`, `soose`, `feynman`, or `nguyen` |
-| `-e, --simplipy-engine` | SimpliPy expression-space config (e.g. `dev_7-3`, the engine the configs use) |
-| `-b, --base-skeleton-pool` | a base skeleton-pool config to extend (defines the variable budget); flash-ansr ships `configs/test_set/skeleton_pool.yaml` |
-| `-o, --output-dir` | output directory for the built pool |
-| `-v, --verbose` | print a progress bar and summary counts |
-
-This writes `skeleton_pool.yaml` and `skeletons.pkl` under the output directory. Point a
-`skeleton_pool` / `brute_force` adapter's `skeleton_pool:` field at the written `skeleton_pool.yaml`,
-or reference it from a flash-ansr dataset config consumed by a `skeleton_dataset` source.
+There is no local "build a dataset" step: a named catalog is fetched and cached on demand. Use a
+local path or inline config when you want full control or offline operation.
 
 ## Sweeps over the same data
 
-The same equations can be re-evaluated under varied conditions by overriding `data_source` fields
-per experiment with YAML anchors:
+The same expressions can be re-evaluated under varied conditions by sweeping `data_source` /
+`sampling` fields with inline `!sweep` (see [docs/running.md](running.md) for the full `!sweep`
+semantics):
 
-- **noise** (`configs/evaluation/noise_sweep/*.yaml`): override `noise_level` per experiment, e.g.
-  `0.0`, `0.001`, `0.01`, `0.1`.
-- **support size** (`configs/evaluation/support_sweep/*.yaml`): vary `support_points` /
-  `sample_points`.
-
-Example noise override (from `noise_sweep/v23.0-20M_fastsrb.yaml`):
+- **noise** (`configs/evaluation/noise_sweep/*.yaml`): sweep `sampling.noise`, e.g. `0.0`, `0.001`, `0.01`, `0.1`.
+- **support size** (`configs/evaluation/support_sweep/*.yaml`): sweep `sampling.n_support` / `sampling.n_validation`.
 
 ```yaml
-experiments:
-  flash_ansr_fastsrb_noise_0p010:
-    run:
-      data_source:
-        <<: *flash_ansr_fastsrb_source
-        noise_level: 0.01
-      # ... model_adapter, runner ...
+data_source:
+  catalog: fastsrb
+  sampling:
+    n_support: 512
+    n_validation: 512
+    noise: !sweep {name: noise, values: [0.0, 0.001, 0.01, 0.1]}
+    problems_per_expression: 10
 ```
 
 ## Pointing at a custom benchmark set
 
-You have two routes, depending on the data you have.
+You have three routes, depending on the data you have.
 
-1. **A benchmark expression list (recommended for new benchmarks).** Write an `expressions.yaml`
-   in the FastSRB layout (a mapping from equation id to an entry with a `prepared` expression and a
-   `vars` sampling-spec block), then set `benchmark_path` to it in a `fastsrb` data_source. The
-   source samples `(X, y)` itself, so reproducibility and the support/validation split come for
-   free via `random_state`, `support_points`, and `sample_points`. To restrict to a subset, set
-   `eq_ids`. If your raw file is in a CSV or another benchmark's format, run `import-data` with the
-   matching `-p` parser (`soose`, `feynman`, `nguyen`) to build a skeleton pool, then evaluate it
-   through a `skeleton_dataset` source (or a `skeleton_pool` adapter).
+1. **Publish a catalog (recommended for a shareable benchmark).** Build a `symbolic-data` catalog and publish it to a Hugging Face dataset repo with a manifest, then reference it as `your-user/your-repo:name@version` in `data_source.catalog`. Anyone can then resolve it by ref.
+2. **A local catalog config.** Write a `symbolic-data` catalog config (expressions plus their per-variable sampling spec) and point `data_source.catalog` at the local file path. The catalog samples `(X, y)` itself, so the support/validation split and noise come from `sampling`.
+3. **An inline catalog.** For a one-off, write the catalog spec directly under `data_source.catalog` as a mapping.
 
-2. **A skeleton pool of your own.** Build one with `import-data` (above) or flash-ansr's
-   `generate-skeleton-pool`, reference it from a flash-ansr dataset config, and point a
-   `skeleton_dataset` data_source's `dataset` at that config.
-
-Copy a shipped config (e.g. `configs/evaluation/scaling/v23.0-20M_fastsrb.yaml` or
-`..._val.yaml`), swap the `data_source` paths, and run it as in [docs/running.md](running.md).
+Copy a shipped config (e.g. `configs/evaluation/scaling/v23.0-3M_fastsrb.yaml` or `..._val.yaml`),
+swap the `catalog` reference, and run it as in [docs/running.md](running.md). The complete catalog
+authoring reference lives in the [`symbolic-data`](https://github.com/psaegert/symbolic-data) docs.
 
 ## Outputs
 
 Each run writes a pickle under `results/evaluation/.../*.pkl` (the `runner.output` path), with one
-row per evaluated dataset and flat metric columns: `fvu_fit` / `fvu_val` (and
-`log10_fvu_fit` / `log10_fvu_val`), `numeric_recovery_fit` / `numeric_recovery_val`,
-`symbolic_recovery`, `f1_score`, and more. When sample generation fails within `max_trials`, a
-`placeholder` row is written instead to keep row counts aligned across runs; filter on the
-`placeholder` column before any fit-based analysis. `runner.resume` continues a partial pickle. See
-[docs/running.md](running.md) for the runner and resume details.
+row per evaluated problem and flat metric columns: `fvu_fit` / `fvu_val` (and `log10_fvu_fit` /
+`log10_fvu_val`), `numeric_recovery_fit` / `numeric_recovery_val`, `symbolic_recovery`, `f1_score`,
+and more. When a problem cannot be produced within `max_trials`, a `placeholder` row is written
+instead to keep row counts aligned across runs; filter on the `placeholder` column before any
+fit-based analysis. `runner.resume` continues a partial pickle. See [docs/running.md](running.md)
+for the runner, resume, and reporting details.

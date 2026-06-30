@@ -2,26 +2,26 @@
 
 srbf is a community benchmark framework. To evaluate **your** symbolic-regression method on the same
 benchmarks and metrics as everyone else, you add an **adapter** and open a pull request. The built-in
-adapters (`flash_ansr`, `pysr`, `nesymres`, `e2e`, `skeleton_pool`, `brute_force`) are reference
+adapters (`flash_ansr`, `pysr`, `nesymres`, `e2e`, `lample_charton`, `brute_force`) are reference
 examples, not a closed set: pick the one closest to your model and copy it.
 
-An adapter is the thin layer that teaches srbf's engine how to drive your model on one problem at a
-time. You implement two methods and register a builder. That is the whole contract.
+An adapter is the thin layer that teaches the `srbf` benchmark driver how to drive your model on one
+problem at a time. You implement two methods and register a builder. That is the whole contract.
 
 ## What you submit in a PR
 
-1. An **adapter class** in `src/srbf/eval/model_adapters.py` (or a new module) implementing the
+1. An **adapter class** in `src/srbf/model_adapters.py` (or a new module) implementing the
    `EvaluationModelAdapter` protocol.
-2. A **builder function** `_build_<name>_adapter(config, context)` and a one-line entry in the
-   `_ADAPTER_REGISTRY` in `src/srbf/eval/run_config.py`.
+2. A **builder function** `_build_<name>_adapter(config)` and a one-line entry in the
+   `_ADAPTER_REGISTRY` in `src/srbf/config.py`.
 3. An **example config** under `configs/evaluation/` with a `model_adapter: {type: <name>, ...}` block.
 4. **Install instructions** for your model's dependencies (see [Provisioning](#provisioning-your-models-dependencies)).
 5. Ideally a small **test** under `tests/` and a note in [docs/models.md](models.md).
 
 ## The adapter contract
 
-An adapter implements `srbf.eval.core.EvaluationModelAdapter`, a `@runtime_checkable` `Protocol`. You
-do **not** need to subclass anything: structural typing means any object with the right methods
+An adapter implements `srbf.core.EvaluationModelAdapter`, a `@runtime_checkable` `Protocol`. You do
+**not** need to subclass anything: structural typing means any object with the right methods
 qualifies. The two methods:
 
 ```python
@@ -35,7 +35,7 @@ class EvaluationModelAdapter(Protocol):
 
 ### What you receive: `EvaluationSample`
 
-Each call to `evaluate_sample` gets one problem (`srbf.eval.core.EvaluationSample`):
+Each call to `evaluate_sample` gets one problem (`srbf.core.EvaluationSample`):
 
 | field | shape / type | meaning |
 |---|---|---|
@@ -45,7 +45,7 @@ Each call to `evaluate_sample` gets one problem (`srbf.eval.core.EvaluationSampl
 | `x_validation` | `(n_val, n_features)` | held-out inputs (may be empty) |
 | `y_validation` | `(n_val, 1)` | held-out targets |
 | `metadata` | `Mapping` | ground-truth info: `variables`, `skeleton`, GT expression, hashes, ... |
-| `is_placeholder` | `bool` | the engine emits these when data generation failed; you can skip them |
+| `is_placeholder` | `bool` | the driver emits these when a problem could not be produced; you can skip them |
 
 Helpers: `sample.n_support`, `sample.n_validation`, `sample.clone_metadata()` (a mutable copy of the
 metadata to seed your result).
@@ -54,7 +54,7 @@ metadata to seed your result).
 
 Return `EvaluationResult(record)`, where `record` is a plain `dict`. Start it from
 `sample.clone_metadata()` so the ground truth travels with the result, then add your outputs. The
-metrics layer (`srbf.eval.result_processing`) reads these keys:
+metrics layer (`srbf.result_processing`) reads these keys:
 
 | key | type | consumed for |
 |---|---|---|
@@ -68,20 +68,20 @@ metrics layer (`srbf.eval.result_processing`) reads these keys:
 | `fit_time` | `float` | wall-clock fit time (timing comparisons) |
 
 You do not compute FVU or recovery yourself: emit predictions + the expression, and srbf's metrics do
-the rest. Prefix/skeleton normalization is available from
-`flash_ansr.expressions.normalization` (`normalize_expression`, `normalize_skeleton`); convert an
-infix string to prefix with the shared `simplipy` engine (`simplipy_engine.infix_to_prefix(expr)`).
+the rest. Prefix/skeleton normalization is available from `simplipy` (`normalize_expression`,
+`normalize_skeleton`); convert an infix string to prefix with the SimpliPy engine
+(`simplipy_engine.infix_to_prefix(expr)`).
 
 ## A minimal adapter (copy this)
 
-This mirrors the built-in `PySRAdapter` (`src/srbf/eval/model_adapters.py`), the cleanest template for
+This mirrors the built-in `PySRAdapter` (`src/srbf/model_adapters.py`), the cleanest template for
 any external `fit`/`predict` regressor:
 
 ```python
 import time
 import numpy as np
-from srbf.eval.core import EvaluationModelAdapter, EvaluationSample, EvaluationResult
-from flash_ansr.expressions.normalization import normalize_expression, normalize_skeleton
+from srbf.core import EvaluationModelAdapter, EvaluationSample, EvaluationResult
+from simplipy import normalize_expression, normalize_skeleton
 
 
 class MyModelAdapter(EvaluationModelAdapter):
@@ -122,20 +122,24 @@ class MyModelAdapter(EvaluationModelAdapter):
         return EvaluationResult(record)
 ```
 
-> **Optional speed path.** The built-in `flash_ansr` adapter also implements `generate_phase` /
-> `refine_extract_phase` so the overlapped evaluation engine can pipeline generation and refinement.
-> This is an optimization, not a requirement: a plain `evaluate_sample` works everywhere. Add the
-> phase methods only if your model has a separable generate-then-refine structure.
+> **The serial driver.** The `Benchmark` driver is a plain serial loop: it calls `evaluate_sample`
+> on one problem at a time, so per-problem wall-clock timing is uncontended. Any generate-then-refine
+> overlap belongs inside your model's own per-problem inference (as `flash_ansr` does internally), not
+> in the adapter; the adapter contract is just `prepare` + `evaluate_sample`.
 
 ## Register your adapter
 
-Adapters are looked up by a `type` string through a registry in `src/srbf/eval/run_config.py`. Add a
-builder that turns a config block into your adapter, then register it:
+Adapters are looked up by a `type` string through a registry in `src/srbf/config.py`. Add a builder
+that turns a config block into your adapter, then register it. For the SimpliPy engine, reuse the
+shared `resolve_simplipy_engine` helper (it loads `model_adapter.simplipy_engine` and raises if it is
+missing):
 
 ```python
-def _build_mymodel_adapter(config, context):
+from srbf.config import resolve_simplipy_engine
+
+def _build_mymodel_adapter(config):
     return MyModelAdapter(
-        simplipy_engine=_load_simplipy(config.get("simplipy_engine", "dev_7-3")),
+        simplipy_engine=resolve_simplipy_engine(config, adapter_name="mymodel"),
         **{k: v for k, v in config.items() if k not in {"type", "simplipy_engine"}},
     )
 

@@ -2,16 +2,16 @@
 
 How to provision the symbolic-regression models that `srbf` evaluates, and how each is wired into a run config.
 
-`srbf` does not bundle model weights. Each model is reached through a **model adapter**: a small wrapper, selected by `model_adapter.type` in the config, that loads a model and turns its predictions into the metrics the engine records. The adapters described here are the **built-in reference examples**. They live in a closed registry (`srbf.eval.run_config._ADAPTER_REGISTRY`) with six entries:
+`srbf` does not bundle model weights. Each model is reached through a **model adapter**: a small wrapper, selected by `model_adapter.type` in the config, that loads a model and turns its predictions into the metrics the benchmark records. The adapters described here are the **built-in reference examples**. They live in a registry (`srbf.config._ADAPTER_REGISTRY`) with six entries:
 
-| `type`          | Provisioning                         | Section |
-| --------------- | ------------------------------------ | ------- |
-| `flash_ansr`    | pip (`flash_ansr install <repo>`)    | [FlashANSR](#flashansr-pip) |
-| `pysr`          | pip (`pip install pysr` + Julia)     | [PySR](#pysr-pip) |
-| `nesymres`      | clone + patch (research baseline)    | [NeSymReS](#nesymres-clone-patch) |
-| `e2e`           | clone + patch (research baseline)    | [E2E / symbolicregression](#e2e-symbolicregression-clone-patch) |
-| `skeleton_pool` | none (synthetic baseline)            | [No-provisioning baselines](#no-provisioning-baselines) |
-| `brute_force`   | none (synthetic baseline)            | [No-provisioning baselines](#no-provisioning-baselines) |
+| `type`           | Provisioning                         | Section |
+| ---------------- | ------------------------------------ | ------- |
+| `flash_ansr`     | pip (`flash_ansr install <repo>`)    | [FlashANSR](#flashansr-pip) |
+| `pysr`           | pip (`pip install pysr` + Julia)     | [PySR](#pysr-pip) |
+| `nesymres`       | clone + patch (research baseline)    | [NeSymReS](#nesymres-clone-patch) |
+| `e2e`            | clone + patch (research baseline)    | [E2E / symbolicregression](#e2e-symbolicregression-clone-patch) |
+| `lample_charton` | none (synthetic baseline)            | [No-provisioning baselines](#no-provisioning-baselines) |
+| `brute_force`    | none (synthetic baseline)            | [No-provisioning baselines](#no-provisioning-baselines) |
 
 `srbf` is a community framework: new SR methods are contributed by PR with their own adapter plus install instructions. The built-ins below show the pattern; to add your own model, see [docs/adapters.md](./adapters.md).
 
@@ -35,7 +35,9 @@ The four provisioned models have **mutually incompatible runtime dependencies**,
 - **E2E** drops `functorch` and rewrites its own `requirements.txt` / `pyproject.toml` from `environment.yml`.
 - **PySR** pulls in JuliaCall and triggers a Julia precompile.
 
-Installing these side by side leads to version clashes and a `torch was imported before juliacall` warning at best, and broken imports at worst. One environment per baseline keeps each reproducible. `srbf` itself plus `flash-ansr` and `simplipy` install cleanly into each.
+Installing these side by side leads to version clashes and a `torch was imported before juliacall` warning at best, and broken imports at worst. One environment per baseline keeps each reproducible. `srbf` itself plus `flash-ansr`, `simplipy`, and `symbolic-data` install cleanly into each.
+
+> **SimpliPy engine.** Every adapter except `flash_ansr` requires an explicit `model_adapter.simplipy_engine` (a SimpliPy engine config name or path, e.g. `dev_7-3`): there is no loaded dataset to borrow an engine from, so the adapter raises if it is omitted. `flash_ansr` is the exception, it loads its engine from the model.
 
 ## The `model_adapter` config block
 
@@ -77,7 +79,7 @@ model_adapter:
   device: cuda
 ```
 
-Key fields: `model_path` (checkpoint directory), `evaluation_config` (refiner + generation settings, including the nested `generation_config`), and `device`. The full block is ~30 lines; read the shipped config rather than retyping it. Per-experiment knobs (such as the candidate count `choices`) are applied with `generation_overrides` / `evaluation_overrides` in each named experiment. The `*_val.yaml` variants point the same adapter at the curated validation set.
+Key fields: `model_path` (checkpoint directory), `evaluation_config` (refiner + generation settings, including the nested `generation_config`), and `device`. The full block is ~30 lines; read the shipped config rather than retyping it. The compute-scaling knob (the candidate count `choices`) is swept with `generation_overrides` (and `evaluation_overrides` for refiner knobs). The `*_val.yaml` variants point the same adapter at the `v23-val` catalog.
 
 `flash_ansr` is the only adapter where the wheel both ships the adapter and can fetch the model, so no extra `srbf` extra is needed.
 
@@ -104,7 +106,7 @@ model_adapter:
   simplipy_engine: "dev_7-3"
 ```
 
-Key fields: `niterations` (the compute-scaling axis, overridden per experiment), `timeout_in_seconds`, and `simplipy_engine` (the simplification engine name; `dev_7-3` is installed on demand). No model weights to download: PySR fits each dataset from scratch.
+Key fields: `niterations` (the compute-scaling axis, swept per run), `timeout_in_seconds`, and `simplipy_engine` (the SimpliPy engine name; `dev_7-3` is installed on demand; required). No model weights to download: PySR fits each problem from scratch.
 
 ---
 
@@ -151,7 +153,7 @@ model_adapter:
   remove_padding: true
 ```
 
-Required fields: `eq_setting_path`, `config_path`, `weights_path`, and `simplipy_engine` (the adapter raises if any is missing). `beam_width` is the compute-scaling axis, set per experiment. The `nesymres_val.yaml` variant points the same adapter at the validation set.
+Required fields: `eq_setting_path`, `config_path`, `weights_path`, and `simplipy_engine` (the adapter raises if any is missing). `beam_width` is the compute-scaling axis, swept per run. The `nesymres_val.yaml` variant points the same adapter at the `v23-val` catalog.
 
 > Lightning warns that the checkpoint was saved with an older release. Inference works regardless; optionally upgrade it in place with `python -m pytorch_lightning.utilities.upgrade_checkpoint models/nesymres/100M.ckpt`.
 
@@ -193,22 +195,24 @@ model_adapter:
   rescale: true
 ```
 
-Required field: `model_path` (the adapter raises if missing); `simplipy_engine` is resolved from the data source if omitted. `candidates_per_bag` is the compute-scaling axis, set per experiment (some experiments also tune `max_generated_output_len`). The `e2e_val.yaml` variant targets the validation set.
+Required fields: `model_path` and `simplipy_engine` (the adapter raises if either is missing). `candidates_per_bag` is the compute-scaling axis, swept per run (some configs also tune `max_generated_output_len`). The `e2e_val.yaml` variant targets the `v23-val` catalog.
 
 ---
 
 ## No-provisioning baselines
 
-`skeleton_pool` and `brute_force` are **synthetic** baselines: they fit candidate skeletons drawn from (or enumerated over) a pre-built skeleton pool rather than calling a trained network, so there are no weights to download. They need only a `skeleton_pool.yaml` and a simplipy engine, both of which the benchmark setup already produces. See [docs/benchmarks.md](./benchmarks.md) for building the pool.
+`lample_charton` and `brute_force` are **synthetic** baselines: they fit candidate expressions drawn from (or enumerated over) a generative `symbolic-data` catalog rather than calling a trained network, so there are no weights to download. They need a generative `catalog` to draw candidates from and an explicit `simplipy_engine`.
 
-`skeleton_pool` block (`configs/evaluation/scaling/skeleton_pool_fastsrb.yaml`):
+> **Migration note.** The former `skeleton_pool` adapter is now `lample_charton`; its `skeleton_pool:` field is now `catalog:`, pointing at a generative catalog (e.g. `lample-charton-v23`).
+
+`lample_charton` block (`configs/evaluation/scaling/lample_charton_fastsrb.yaml`):
 
 ```yaml
 model_adapter:
-  type: skeleton_pool
+  type: lample_charton
   simplipy_engine: "dev_7-3"
-  skeleton_pool: "{{ROOT}}/models/prior/skeleton_pool.yaml"
-  samples: 32
+  catalog: lample-charton-v23   # the generative catalog to sample candidate expressions from
+  samples: 32                   # candidate expressions sampled per problem (the compute-scaling axis)
   unique: true
   ignore_holdouts: true
   seed: 42
@@ -222,10 +226,12 @@ model_adapter:
   likelihood_penalty: 0.0
 ```
 
-`brute_force` takes the same required `skeleton_pool` and simplipy engine, plus enumeration limits: `max_expressions` (default 10000), `max_length`, `include_constant_token` (default true), and the same refiner / penalty fields. No shipped scaling config defines a `brute_force` run; build one by copying the `skeleton_pool` block, changing `type: brute_force`, and adding `max_expressions`.
+Note the **two** distinct `catalog` fields when this adapter is used: `data_source.catalog` is the evaluation set (e.g. `fastsrb` / `v23-val`), while `model_adapter.catalog` is the generative catalog the baseline samples its candidate expressions from (e.g. `lample-charton-v23`).
+
+`brute_force` takes the same required `catalog` and `simplipy_engine`, plus enumeration limits: `max_expressions` (default 10000), `max_length`, `include_constant_token` (default true), and the same refiner / penalty fields. No shipped scaling config defines a `brute_force` run; build one by copying the `lample_charton` block, changing `type: brute_force`, and adding `max_expressions`.
 
 ---
 
 ## Where outputs land
 
-Every run writes a pickle under `results/evaluation/.../*.pkl`, **one row per evaluated dataset**, with flat metric columns (`fvu_fit`, `fvu_val`, `numeric_recovery_*`, `symbolic_recovery`, `f1_score`, ...). Rows where sample generation failed are written as `placeholder` rows so counts stay aligned across models; filter them before any fit-based analysis. `runner.resume: true` (or omitting `--no-resume`) continues a partial pickle instead of restarting. See [docs/running.md](./running.md) for the full runner and CLI behavior, and [docs/adapters.md](./adapters.md) to add a new model.
+Every run writes a pickle under `results/evaluation/.../*.pkl`, **one row per evaluated problem**, with flat metric columns (`fvu_fit`, `fvu_val`, `numeric_recovery_*`, `symbolic_recovery`, `f1_score`, ...). Rows where a problem could not be produced are written as `placeholder` rows so counts stay aligned across models; filter them before any fit-based analysis. `runner.resume: true` (or omitting `--no-resume`) continues a partial pickle instead of restarting. See [docs/running.md](./running.md) for the full runner, CLI, and reporting behavior, and [docs/adapters.md](./adapters.md) to add a new model.

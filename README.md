@@ -11,9 +11,10 @@ benchmark framework carved out of [flash-ansr](https://github.com/psaegert/flash
 [adapter contribution guide](docs/adapters.md).
 
 > **Status: 0.5, data-layer redesign.** The benchmark seam (`srbf.core` Protocols + the `Benchmark`
-> driver) is model-agnostic, the data source is any `symbolic-data` catalog, and adapters are a thin
-> mapper over each model (flash-ansr via `FlashANSR.infer()`). Inline `!sweep` config cross-products
-> and multi-draw bootstrap reporting are planned for 0.5.1.
+> driver) is model-agnostic, the data source is always a `symbolic-data` catalog, and adapters are a
+> thin mapper over each model (flash-ansr via `FlashANSR.infer()`). Inline `!sweep` config
+> cross-products and multi-draw bootstrap reporting (`bootstrap_report` / `draw_distribution`) ship in
+> this release.
 
 ## Install
 
@@ -34,27 +35,32 @@ export FLASH_ANSR_ROOT=$(pwd)
 # 2. get a model to evaluate (flash-ansr's CLI ships with srbf)
 flash_ansr install psaegert/flash-ansr-v23.0-3M
 
-# 3. fetch a benchmark + build its skeleton pool   (see docs/benchmarks.md)
-#    ...then run an evaluation:
-srbf run -c configs/evaluation/scaling/v23.0-3M_val.yaml --limit 50 -v
+# 3. run an evaluation. The config names a symbolic-data catalog (`fastsrb` / `v23-val`); it is
+#    fetched from Hugging Face on first use and cached, so there is no local data-build step.
+#    The config is a sweep over candidate counts; --sweep-filter picks one rung for a smoke test.
+srbf run -c configs/evaluation/scaling/v23.0-3M_fastsrb.yaml --sweep-filter ladder=32 --limit 50 -v
 ```
 
-Outputs land under `results/evaluation/.../*.pkl`, one row per evaluated dataset with flat metric
+Outputs land under `results/evaluation/.../*.pkl`, one row per evaluated problem with flat metric
 columns. Run programmatically instead:
 
 ```python
 from srbf import Benchmark
 
-benchmark = Benchmark.from_config(config="configs/evaluation/scaling/v23.0-3M_val.yaml")
-benchmark.run()  # resume-aware; a no-op if the configured target is already reached
+# A config with inline !sweep / experiments expands to several runs; expand and run each one.
+for benchmark in Benchmark.runs_from_config("configs/evaluation/scaling/v23.0-3M_fastsrb.yaml"):
+    benchmark.run()  # resume-aware; a no-op if that run's configured target is already reached
+
+# For a single, fully-resolved run (no !sweep / experiments), use from_config directly:
+# Benchmark.from_config(config_dict).run()
 ```
 
 ## Documentation
 
 | Guide | What it covers |
 |---|---|
-| [Running evaluations](docs/running.md) | the `srbf run` CLI, config anatomy (data_source / model_adapter / runner / experiments), outputs, resume |
-| [Benchmarks & datasets](docs/benchmarks.md) | fetching FastSRB, building skeleton pools with `flash_ansr import-data`, custom sets |
+| [Running evaluations](docs/running.md) | the `srbf run` CLI, config anatomy (data_source / model_adapter / runner / experiments / `!sweep`), outputs, resume, reporting |
+| [Benchmarks & datasets](docs/benchmarks.md) | the `data_source` catalog block, the shipped catalogs (`v23-val`, `fastsrb`, `lample-charton-v23`), custom catalogs |
 | [Models & provisioning](docs/models.md) | installing/patching the built-in models; the `model_adapter` block per type |
 | [**Adding your model**](docs/adapters.md) | the adapter protocol + registry, and the PR flow to contribute a new SR method |
 
