@@ -1,0 +1,38 @@
+run:
+  data_source:
+    catalog: fastsrb
+    sampling:
+      n_support: !sweep
+        name: ladder
+        values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
+      n_validation: 512
+      noise: 0.0
+      problems_per_expression: 10
+  model_adapter:
+    type: lample_charton
+    simplipy_engine: dev_7-3
+    samples: 2048
+    unique: true
+    ignore_holdouts: true
+    seed: 42
+    n_restarts: 8
+    refiner_method: curve_fit_lm
+    refiner_p0_noise: normal
+    refiner_p0_noise_kwargs:
+      loc: 0.0
+      scale: 5
+    numpy_errors: ignore
+    length_penalty: 0.05
+    constants_penalty: 0.0
+    likelihood_penalty: 0.0
+    catalog: lample-charton-v23
+  runner:
+    limit: null
+    save_every: 4
+    resume: true
+    output: !sweep
+      name: ladder
+      values: ['{{ROOT}}/results/evaluation/support_sweep/lample_charton/fastsrb/support_00001.pkl', '{{ROOT}}/results/evaluation/support_sweep/lample_charton/fastsrb/support_00002.pkl', '{{ROOT}}/results/evaluation/support_sweep/lample_charton/fastsrb/support_00004.pkl',
+        '{{ROOT}}/results/evaluation/support_sweep/lample_charton/fastsrb/support_00008.pkl', '{{ROOT}}/results/evaluation/support_sweep/lample_charton/fastsrb/support_00016.pkl', '{{ROOT}}/results/evaluation/support_sweep/lample_charton/fastsrb/support_00032.pkl',
+        '{{ROOT}}/results/evaluation/support_sweep/lample_charton/fastsrb/support_00064.pkl', '{{ROOT}}/results/evaluation/support_sweep/lample_charton/fastsrb/support_00128.pkl', '{{ROOT}}/results/evaluation/support_sweep/lample_charton/fastsrb/support_00256.pkl',
+        '{{ROOT}}/results/evaluation/support_sweep/lample_charton/fastsrb/support_00512.pkl', '{{ROOT}}/results/evaluation/support_sweep/lample_charton/fastsrb/support_01024.pkl', '{{ROOT}}/results/evaluation/support_sweep/lample_charton/fastsrb/support_02048.pkl']

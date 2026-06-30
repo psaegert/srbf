@@ -1,0 +1,36 @@
+run:
+  data_source:
+    catalog: fastsrb
+    sampling:
+      n_support: 512
+      n_validation: 512
+      noise: !sweep
+        name: ladder
+        values: [0.0, 0.001, 0.01, 0.1]
+      problems_per_expression: 10
+  model_adapter:
+    type: lample_charton
+    simplipy_engine: dev_7-3
+    samples: 2048
+    unique: true
+    ignore_holdouts: true
+    seed: 42
+    n_restarts: 8
+    refiner_method: curve_fit_lm
+    refiner_p0_noise: normal
+    refiner_p0_noise_kwargs:
+      loc: 0.0
+      scale: 5
+    numpy_errors: ignore
+    length_penalty: 0.05
+    constants_penalty: 0.0
+    likelihood_penalty: 0.0
+    catalog: lample-charton-v23
+  runner:
+    limit: null
+    save_every: 4
+    resume: true
+    output: !sweep
+      name: ladder
+      values: ['{{ROOT}}/results/evaluation/noise_sweep/lample_charton/fastsrb/noise_0p000.pkl', '{{ROOT}}/results/evaluation/noise_sweep/lample_charton/fastsrb/noise_0p001.pkl', '{{ROOT}}/results/evaluation/noise_sweep/lample_charton/fastsrb/noise_0p010.pkl',
+        '{{ROOT}}/results/evaluation/noise_sweep/lample_charton/fastsrb/noise_0p100.pkl']
