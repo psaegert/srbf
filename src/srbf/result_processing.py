@@ -151,7 +151,7 @@ def fill_none_with_defaults(
                     if not hasattr(data, '__len__') or len(data) == 0:
                         continue
                     try:
-                        replaced = [
+                        replaced: Any = [
                             (defaults.get(metric, np.nan) if r is None else r)
                             for r in data
                         ]

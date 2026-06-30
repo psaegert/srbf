@@ -114,7 +114,7 @@ class CatalogSource(EvaluationDataSource):
 
     # ----------------------------------------------------------------- bridge
     def _bridge(self, problem: Any, row_index: int) -> EvaluationSample:
-        skeleton = list(normalize_skeleton(list(problem.skeleton))) if problem.skeleton else None
+        skeleton: list[str] | None = normalize_skeleton(list(problem.skeleton)) if problem.skeleton else None
         input_ids = self._encode_input_ids(skeleton) if (self.tokenizer is not None and skeleton) else None
         y_support_noisy = problem.y_support_noisy if problem.y_support_noisy is not None else problem.y_support
         y_validation_noisy = problem.y_validation_noisy if problem.y_validation_noisy is not None else problem.y_validation
@@ -194,6 +194,7 @@ class CatalogSource(EvaluationDataSource):
 
     def _encode_input_ids(self, skeleton_tokens: list[str]) -> list[int]:
         tokenizer = self.tokenizer
+        assert tokenizer is not None  # only called when self.tokenizer is set (see _bridge guard)
         body_tokens = skeleton_tokens
         if "<expression>" in tokenizer and "</expression>" in tokenizer:
             body_tokens = ["<expression>", *skeleton_tokens, "</expression>"]

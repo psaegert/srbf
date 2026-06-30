@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Mapping, Sequence
 
 import zss
 from zss import Node
 
 
-def build_tree(prefix_expression: Sequence[str], operators: dict[str, int]) -> Node:
+def build_tree(prefix_expression: Sequence[str], operators: Mapping[str, int]) -> Node:
     """Convert a prefix expression into a ``zss.Node`` tree."""
     stack: list[Node] = []
 
@@ -25,7 +25,7 @@ def build_tree(prefix_expression: Sequence[str], operators: dict[str, int]) -> N
 def zss_tree_edit_distance(
     expression1: Sequence[str],
     expression2: Sequence[str],
-    operators: dict[str, int],
+    operators: Mapping[str, int],
 ) -> float:
     """Compute the Zhang-Shasha tree edit distance between two prefix expressions."""
     if len(expression1) == 0:

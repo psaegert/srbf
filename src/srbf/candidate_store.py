@@ -90,7 +90,7 @@ class CandidateStoreWriter:
         for i, t in enumerate(token_lists):
             tokens[offsets[i]:offsets[i + 1]] = np.asarray(t, dtype=np.uint8)
 
-        cols = {
+        cols: dict[str, np.ndarray] = {
             "tokens": tokens,
             "offsets": offsets,
             "fvu": np.asarray(fvu, dtype=np.float32),
@@ -113,7 +113,9 @@ class CandidateStoreWriter:
         # .npz that the globbing reader would later choke on.
         tmp = path.with_suffix(".npz.tmp")
         with tmp.open("wb") as fh:
-            np.savez_compressed(fh, **cols)
+            # numpy's savez_compressed stub doesn't model **{name: array} unpacking (it types the
+            # variadic as bool/ArrayLike); the call is correct at runtime.
+            np.savez_compressed(fh, **cols)  # type: ignore[arg-type]
         tmp.replace(path)
         nbytes = path.stat().st_size
         pid = int(problem_id)
@@ -192,7 +194,7 @@ def _self_test() -> None:
 
     with tempfile.TemporaryDirectory() as d:
         w = CandidateStoreWriter(d, vocab_size=vocab)
-        nbytes = w.write_problem(0, token_lists, fvu, log_prob, constants=constants)
+        nbytes = w.write_problem(0, token_lists, fvu.tolist(), log_prob.tolist(), constants=constants)
         man = w.close()
         per_cand = nbytes / n_cand
         print(f"n_candidates={n_cand:,}  mean_len={lengths.mean():.1f}")

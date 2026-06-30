@@ -152,7 +152,7 @@ class BruteForceModel(BaseEstimator):
         seen: set[tuple[str, ...]] = set()
 
         for leaf in self._leaf_nodes():
-            expr = (leaf,)
+            expr: tuple[str, ...] = (leaf,)
             hashes_by_size[1].add(expr)
             seen.add(expr)
             yield expr

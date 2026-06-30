@@ -88,7 +88,7 @@ def log10_fvu(y_true: np.ndarray | None, y_pred: np.ndarray | None) -> float:
 
 def is_perfect_fit(y_true: np.ndarray | None, y_pred: np.ndarray | None) -> bool:
     """Check if ``y_pred`` perfectly fits ``y_true`` within float32 epsilon."""
-    return fvu(y_true, y_pred) <= np.finfo(np.float32).eps
+    return bool(fvu(y_true, y_pred) <= np.finfo(np.float32).eps)
 
 
 def naninfmean(a: np.ndarray) -> float:

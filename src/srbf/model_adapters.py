@@ -127,7 +127,7 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         record["predicted_expression"] = best.expression_infix
         # Candidate.expression_prefix is the RAW substituted prefix; normalize it to match the stored
         # form (best.skeleton_prefix is already normalized by infer()).
-        record["predicted_expression_prefix"] = normalize_expression(list(best.expression_prefix)).copy()
+        record["predicted_expression_prefix"] = normalize_expression(list(best.expression_prefix))
         record["predicted_skeleton_prefix"] = list(best.skeleton_prefix)
         record["predicted_constants"] = list(best.constants) if best.constants is not None else None
         record["predicted_score"] = best.score
@@ -158,6 +158,7 @@ class FlashANSRAdapter(EvaluationModelAdapter):
                 )
                 return
             if self._candidate_store is None:
+                assert self.candidate_store_dir is not None  # _capture_ledger only runs when set
                 self._candidate_store = CandidateStoreWriter(
                     self.candidate_store_dir, vocab_size=len(self.model.tokenizer)
                 )
@@ -228,8 +229,8 @@ def _evaluate_refiner_baseline(model: Any, sample: EvaluationSample) -> Evaluati
         predicted_expression = model.get_expression(nth_best=0, return_prefix=False)
         predicted_prefix = model.get_expression(nth_best=0, return_prefix=True)
         record["predicted_expression"] = predicted_expression
-        record["predicted_expression_prefix"] = normalize_expression(predicted_prefix).copy()
-        record["predicted_skeleton_prefix"] = normalize_skeleton(predicted_prefix).copy()
+        record["predicted_expression_prefix"] = normalize_expression(predicted_prefix)
+        record["predicted_skeleton_prefix"] = normalize_skeleton(predicted_prefix)
     except Exception as exc:  # pragma: no cover - parse errors vary
         record["error"] = f"Failed to extract expression: {exc}"
         record["prediction_success"] = False
@@ -361,8 +362,8 @@ class PySRAdapter(EvaluationModelAdapter):
             predicted_expression = str(best["equation"])
             record["predicted_expression"] = predicted_expression
             predicted_prefix = self.simplipy_engine.infix_to_prefix(predicted_expression)
-            record["predicted_expression_prefix"] = normalize_expression(predicted_prefix).copy()
-            record["predicted_skeleton_prefix"] = normalize_skeleton(predicted_prefix).copy()
+            record["predicted_expression_prefix"] = normalize_expression(predicted_prefix)
+            record["predicted_skeleton_prefix"] = normalize_skeleton(predicted_prefix)
         except Exception as exc:  # pragma: no cover - defensive
             record["error"] = f"Failed to parse PySR expression: {exc}"
             record["prediction_success"] = False
@@ -530,8 +531,8 @@ class E2EAdapter(EvaluationModelAdapter):
 
             record["predicted_expression"] = predicted_expression
             predicted_prefix = self.simplipy_engine.infix_to_prefix(predicted_expression)
-            record["predicted_expression_prefix"] = normalize_expression(predicted_prefix).copy()
-            record["predicted_skeleton_prefix"] = normalize_skeleton(predicted_prefix).copy()
+            record["predicted_expression_prefix"] = normalize_expression(predicted_prefix)
+            record["predicted_skeleton_prefix"] = normalize_skeleton(predicted_prefix)
 
             if self.debug:
                 print("[E2EAdapter][debug] prefix:", predicted_prefix, flush=True)
