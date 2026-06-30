@@ -1,5 +1,4 @@
 import copy
-import os
 from collections import defaultdict
 from typing import Any, Generator, Literal, Sequence
 
@@ -10,7 +9,7 @@ from sklearn.base import BaseEstimator
 from simplipy import SimpliPyEngine
 from simplipy.utils import construct_expressions
 
-from symbolic_data import LampleChartonCatalog
+from symbolic_data import LampleChartonCatalog, build_catalog
 from flash_ansr.refine import Refiner, ConvergenceError
 from flash_ansr.scoring import compute_fvu, count_constants, is_constant_token, normalize_variance, score_from_fvu
 from flash_ansr.utils.paths import substitute_root_path
@@ -79,22 +78,17 @@ class BruteForceModel(BaseEstimator):
         return self._pool.n_variables
 
     def _ensure_pool(self, catalog_ref: str | dict[str, Any] | LampleChartonCatalog) -> LampleChartonCatalog:
-        if isinstance(catalog_ref, LampleChartonCatalog):
-            pool = catalog_ref
-        elif isinstance(catalog_ref, str):
-            resolved = substitute_root_path(catalog_ref)
-            if os.path.isdir(resolved):
-                _, pool = LampleChartonCatalog.load(resolved)
-            else:
-                pool = LampleChartonCatalog.from_config(resolved)
-        elif isinstance(catalog_ref, dict):
-            pool = LampleChartonCatalog.from_config(copy.deepcopy(catalog_ref))
-        else:
-            raise TypeError("`catalog` must be a LampleChartonCatalog, path string, or configuration dictionary.")
-
+        # build_catalog resolves a name[@version] (HF), a local path/file, an inline {type: ...} dict, or
+        # an existing Catalog instance -- uniform with the data_source catalog resolution.
+        ref = substitute_root_path(catalog_ref) if isinstance(catalog_ref, str) else catalog_ref
+        pool = build_catalog(ref)
+        if not isinstance(pool, LampleChartonCatalog):
+            raise TypeError(
+                f"`catalog` must resolve to a generative LampleChartonCatalog (to sample skeletons); "
+                f"got {type(pool).__name__}"
+            )
         if self.ignore_holdouts:
             pool.clear_holdouts()
-
         return pool
 
     def _truncate_input(self, X: np.ndarray) -> np.ndarray:
