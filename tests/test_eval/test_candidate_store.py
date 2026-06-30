@@ -6,55 +6,23 @@ import warnings as _warnings
 import numpy as np
 import pytest
 
-from srbf.eval.candidate_store import (
-    CandidateStoreReader,
-    CandidateStoreWriter,
-    FIT_FAILED,
-    FIT_OK,
-    INVALID,
-    build_candidate_ledger,
-)
+from srbf.eval.candidate_store import CandidateStoreReader, CandidateStoreWriter
 from srbf.eval.model_adapters import FlashANSRAdapter
-from flash_ansr.inference import CandidateLedger
-
-
-def test_build_candidate_ledger_join_classifies_every_candidate():
-    # gen pool: A,B,C,D (B,D NOT refined). results: A,C fitted + pruned variant E (not in gen pool).
-    A, B, C, D, E = [1, 2, 3], [4, 5], [6, 7, 8], [9], [2, 2, 2]
-    raw_beams = [A, B, C, D]
-    log_probs = [-1.0, -2.0, -3.0, -4.0]
-    results = [
-        {"raw_beam": A, "fvu": 0.10, "log_prob": -1.0, "fits": [(np.array([1.5, 2.5]), None, 0.10)]},
-        {"raw_beam": C, "fvu": 0.50, "log_prob": -3.0, "fits": [(np.array([9.0]), None, 0.50)]},
-        {"raw_beam": E, "fvu": 0.05, "log_prob": -9.0, "fits": [(np.array([]), None, 0.05)]},  # pruned variant
-    ]
-    valid_map = {tuple(B): True, tuple(D): False}  # B is a valid skeleton that failed to fit; D is invalid
-    ledger = build_candidate_ledger(
-        raw_beams, log_probs, results,
-        decode_expr=lambda rb: list(rb),            # identity stand-in
-        is_valid=lambda toks: valid_map[tuple(toks)],
-    )
-
-    # 5 candidates total: the 4 gen + the 1 pruned variant, gen-order first
-    assert ledger["token_lists"] == [A, B, C, D, E]
-    np.testing.assert_array_equal(ledger["fit_status"], [FIT_OK, FIT_FAILED, FIT_OK, INVALID, FIT_OK])
-    np.testing.assert_array_equal(ledger["valid"], [1, 1, 1, 0, 1])
-    # fvu: A,C,E from results; B,D NaN
-    fvu = np.array(ledger["fvu"], dtype=np.float64)
-    np.testing.assert_allclose(fvu[[0, 2, 4]], [0.10, 0.50, 0.05])
-    assert np.isnan(fvu[1]) and np.isnan(fvu[3])
-    assert ledger["constants"][0] == [1.5, 2.5] and ledger["constants"][3] == []  # fitted vs not
+# The candidate-ledger JOIN (gen pool U refined, classified) now lives in flash-ansr (infer() builds
+# result.ledger); srbf only persists it. FIT_* + CandidateLedger come from there.
+from flash_ansr.inference import CandidateLedger, FIT_FAILED, FIT_OK, INVALID
 
 
 def test_ledger_round_trips_through_writer_reader(tmp_path):
+    # A fitted (FIT_OK) candidate + a valid-but-unfit skeleton (FIT_FAILED, NaN fvu): persist the full
+    # set and read it back. (The JOIN that classifies candidates is flash-ansr's job + tested there;
+    # srbf only round-trips the resulting columns through the store.)
     A, B = [1, 2, 3], [4, 5]
-    ledger = build_candidate_ledger(
-        [A, B], [-1.0, -2.0],
-        [{"raw_beam": A, "fvu": 0.2, "log_prob": -1.0, "fits": [(np.array([7.0]), None, 0.2)]}],
-        decode_expr=lambda rb: list(rb), is_valid=lambda toks: True,
-    )
     w = CandidateStoreWriter(tmp_path, vocab_size=83)
-    w.write_problem(0, **ledger)
+    w.write_problem(
+        0, [A, B], [0.2, float("nan")], [-1.0, -2.0],
+        valid=[1, 1], fit_status=[FIT_OK, FIT_FAILED], constants=[[7.0], []],
+    )
     w.close()
     block = next(iter(CandidateStoreReader(tmp_path)))
     np.testing.assert_array_equal(CandidateStoreReader.candidate_tokens(block, 0), np.array(A, np.uint8))

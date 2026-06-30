@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Callable, Iterator, Sequence
+from typing import Iterator, Sequence
 
 import numpy as np
 
@@ -175,101 +175,6 @@ class CandidateStoreReader:
     def candidate_tokens(block: dict, i: int) -> np.ndarray:
         off = block["offsets"]
         return block["tokens"][off[i]:off[i + 1]]
-
-
-# fit_status enum (stored as uint8)
-FIT_OK = 0      # candidate refined to a valid constant fit (fvu finite)
-FIT_FAILED = 1  # valid expression skeleton, but refinement produced no valid fit (fvu NaN)
-INVALID = 2     # candidate failed the expression-validity check
-
-
-def _best_constants(result: dict) -> list[float]:
-    """Best-fit constants of a refined result. `fits` = [(constants, cov, loss), ...] best-first
-    (refine.py:97); fall back to a 'constants' field or empty."""
-    fits = result.get("fits")
-    if fits:
-        try:
-            return [float(c) for c in np.asarray(fits[0][0], dtype=np.float64).ravel()]
-        except Exception:  # noqa: BLE001 - defensive: never let a malformed fit abort the whole problem
-            pass
-    c = result.get("constants")
-    return [float(v) for v in c] if c is not None else []
-
-
-def build_candidate_ledger(
-    raw_beams: Sequence[Sequence[int]],
-    log_probs: Sequence[float],
-    results: Sequence[dict],
-    *,
-    decode_expr: Callable[[list[int]], list[str] | None] | None = None,
-    is_valid: Callable[[list[str]], bool] | None = None,
-) -> dict:
-    """Join the FULL generation candidate pool with the refined results into columnar inputs for
-    CandidateStoreWriter.write_problem -- the "all candidates" object the save-all tier exists for.
-
-    `raw_beams` / `log_probs` = the unique generation pool (gen_state.raw_beams / .log_probs).
-    `results` = refined survivors; each carries 'raw_beam' (the dedup-unique identity), 'fvu',
-    'log_prob', and 'fits'. A gen candidate present in `results` is FIT_OK (fvu from the result); one
-    ABSENT is not-fitted -- split into FIT_FAILED vs INVALID by re-running validity ONLY on that
-    (small) subset via `decode_expr` + `is_valid` (so the bulk pays no per-candidate cost, and the
-    `valid`/`fit_status` columns are correct regardless of generation's valid_only semantics). Pruned
-    variants (present in results, synthesized during refinement, absent from the gen pool) ride along
-    as FIT_OK. Token column = the raw beam ids (the dedup identity; decode offline if needed)."""
-    fitted: dict[tuple, dict] = {}
-    for r in results:
-        fitted[tuple(int(t) for t in r["raw_beam"])] = r
-
-    token_lists: list[list[int]] = []
-    fvu: list[float] = []
-    log_prob: list[float] = []
-    valid: list[int] = []
-    fit_status: list[int] = []
-    constants: list[list[float]] = []
-    seen: set[tuple] = set()
-
-    for rb, lp in zip(raw_beams, log_probs):
-        rb_list = [int(t) for t in rb]
-        key = tuple(rb_list)
-        seen.add(key)
-        token_lists.append(rb_list)
-        hit = fitted.get(key)
-        if hit is not None:
-            fvu.append(float(hit["fvu"]))
-            log_prob.append(float(hit.get("log_prob", lp)))
-            valid.append(1)
-            fit_status.append(FIT_OK)
-            constants.append(_best_constants(hit))
-            continue
-        # not fitted: split invalid vs fit-failed (re-check validity only here)
-        v = True
-        if decode_expr is not None and is_valid is not None:
-            try:
-                toks = decode_expr(rb_list)
-                v = bool(is_valid(toks)) if toks is not None else False
-            except Exception:  # noqa: BLE001
-                v = False
-        fvu.append(float("nan"))
-        log_prob.append(float(lp))
-        constants.append([])
-        valid.append(1 if v else 0)
-        fit_status.append(FIT_FAILED if v else INVALID)
-
-    for pruned in results:  # pruned variants synthesized in refinement (not in the gen pool)
-        key = tuple(int(t) for t in pruned["raw_beam"])
-        if key in seen:
-            continue
-        seen.add(key)
-        token_lists.append(list(key))
-        fvu.append(float(pruned["fvu"]))
-        log_prob.append(float(pruned.get("log_prob", float("nan"))))
-        valid.append(1)
-        fit_status.append(FIT_OK)
-        constants.append(_best_constants(pruned))
-
-    return {
-        "token_lists": token_lists, "fvu": fvu, "log_prob": log_prob,
-        "valid": valid, "fit_status": fit_status, "constants": constants,
-    }
 
 
 def _self_test() -> None:
