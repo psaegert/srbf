@@ -312,3 +312,51 @@ def test_build_pysr_adapter_requires_explicit_engine(monkeypatch):
 
     with pytest.raises(ValueError):  # no dataset to borrow an engine from anymore -> must be explicit
         run_config.build_model_adapter({"type": "pysr", "niterations": 1})
+
+
+# --- end-to-end wiring smoke -------------------------------------------------------------
+
+def test_from_config_end_to_end_through_catalog_source(monkeypatch):
+    """The one smoke exercising the REAL chain build_catalog_source -> CatalogSource.from_catalog ->
+    ProblemSource -> Benchmark.run -> store (build_catalog_source NOT mocked; only the model adapter
+    is faked, since the real flash_ansr one needs a GPU model). Catches any schema mismatch in the
+    `{catalog, sampling, holdouts}` wrapping that the mocked from_config tests structurally cannot.
+
+    Hermetic via a FROZEN in-memory catalog (no HF, no skeleton realization): freeze 3 inline problems
+    into a ProblemCatalog and feed it as the data_source `catalog:`.
+    """
+    import numpy as np
+    from symbolic_data import Problem, ProblemSource
+
+    def _p(i: int) -> Problem:
+        x = np.arange(8, dtype=np.float32).reshape(8, 1)
+        y = (x * i).astype(np.float32)
+        return Problem(
+            x_support=x, y_support=y, y_support_noisy=y.copy(),
+            x_validation=x[:2], y_validation=y[:2], y_validation_noisy=y[:2].copy(),
+            skeleton=["*", "x1", "c"], expression=["*", "x1", str(i)], constants=[float(i)],
+            variables=["x1"], complexity=3, eq_id=f"E{i}",
+        )
+
+    catalog = ProblemSource({"problems": [_p(i).to_dict() for i in (1, 2, 3)]}).to_catalog(name="smoke")
+
+    class _FakeAdapter:
+        def prepare(self, *, data_source=None):
+            return None
+
+        def evaluate_sample(self, sample):
+            return {**sample.clone_metadata(), "prediction_success": True}
+
+    monkeypatch.setattr(run_config, "build_model_adapter", lambda cfg: _FakeAdapter())
+
+    bench = Benchmark.from_config({
+        "run": {
+            "data_source": {"catalog": catalog},
+            "model_adapter": {"type": "flash_ansr"},
+            "runner": {},
+        }
+    })
+    snapshot = bench.run(verbose=False, progress=False)
+    assert bench.result_store.size == 3
+    assert snapshot["prediction_success"] == [True, True, True]
+    assert sorted(snapshot["benchmark_eq_id"]) == ["E1", "E2", "E3"]
