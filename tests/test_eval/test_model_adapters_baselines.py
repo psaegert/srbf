@@ -2,10 +2,10 @@ import numpy as np
 import pytest
 from simplipy import SimpliPyEngine
 
-from flash_ansr import SkeletonPool
-from srbf.baselines import BruteForceModel, SkeletonPoolModel
+from symbolic_data import LampleChartonCatalog
+from srbf.baselines import BruteForceModel, LampleChartonModel
 from srbf.eval.core import EvaluationSample
-from srbf.eval.model_adapters import BruteForceAdapter, SkeletonPoolAdapter
+from srbf.eval.model_adapters import BruteForceAdapter, LampleChartonAdapter
 
 
 @pytest.fixture(scope="module")
@@ -13,7 +13,7 @@ def simplipy_engine() -> SimpliPyEngine:
     return SimpliPyEngine.load("dev_7-3", install=True)
 
 
-def _build_toy_pool(engine: SimpliPyEngine) -> SkeletonPool:
+def _build_toy_pool(engine: SimpliPyEngine) -> LampleChartonCatalog:
     sample_strategy = {
         "n_operator_distribution": "equiprobable_lengths",
         "min_operators": 0,
@@ -35,7 +35,7 @@ def _build_toy_pool(engine: SimpliPyEngine) -> SkeletonPool:
         },
     }
 
-    pool = SkeletonPool.from_dict(
+    pool = LampleChartonCatalog.from_dict(
         skeletons={("x1",)},
         simplipy_engine=engine,
         sample_strategy=sample_strategy,
@@ -70,11 +70,11 @@ def _build_sample() -> EvaluationSample:
     )
 
 
-def test_skeleton_pool_adapter_identity(simplipy_engine: SimpliPyEngine) -> None:
+def test_lample_charton_adapter_identity(simplipy_engine: SimpliPyEngine) -> None:
     pool = _build_toy_pool(simplipy_engine)
-    model = SkeletonPoolModel(
+    model = LampleChartonModel(
         simplipy_engine=simplipy_engine,
-        skeleton_pool=pool,
+        catalog=pool,
         samples=1,
         unique=True,
         ignore_holdouts=True,
@@ -83,7 +83,7 @@ def test_skeleton_pool_adapter_identity(simplipy_engine: SimpliPyEngine) -> None
         refiner_p0_noise=None,
     )
 
-    adapter = SkeletonPoolAdapter(model)
+    adapter = LampleChartonAdapter(model)
     adapter.prepare()
     sample = _build_sample()
 
@@ -101,7 +101,7 @@ def test_brute_force_adapter_identity(simplipy_engine: SimpliPyEngine) -> None:
     pool = _build_toy_pool(simplipy_engine)
     model = BruteForceModel(
         simplipy_engine=simplipy_engine,
-        skeleton_pool=pool,
+        catalog=pool,
         max_expressions=16,
         max_length=2,
         include_constant_token=False,

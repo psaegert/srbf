@@ -10,7 +10,7 @@ from typing import Any, Callable, Iterable, Mapping, Optional, TYPE_CHECKING
 
 import numpy as np
 import simplipy
-from srbf.baselines import BruteForceModel, SkeletonPoolModel
+from srbf.baselines import BruteForceModel, LampleChartonModel
 from simplipy import normalize_skeleton, normalize_expression
 # sympy is imported lazily inside the two baseline adapters that use it (E2E, NeSymReS);
 # it is an optional `[baselines]` extra, not a core runtime dependency.
@@ -326,10 +326,10 @@ def _evaluate_refiner_baseline(model: Any, sample: EvaluationSample) -> Evaluati
     return EvaluationResult(record)
 
 
-class SkeletonPoolAdapter(EvaluationModelAdapter):
-    """Adapter for the sampling-only `SkeletonPoolModel` baseline."""
+class LampleChartonAdapter(EvaluationModelAdapter):
+    """Adapter for the sampling-only `LampleChartonModel` baseline."""
 
-    def __init__(self, model: SkeletonPoolModel) -> None:
+    def __init__(self, model: LampleChartonModel) -> None:
         self.model = model
 
     def get_simplipy_engine(self) -> Any:  # pragma: no cover - trivial accessor
@@ -363,7 +363,7 @@ __all__ = [
     "E2EAdapter",
     "PySRAdapter",
     "NeSymReSAdapter",
-    "SkeletonPoolAdapter",
+    "LampleChartonAdapter",
     "BruteForceAdapter",
 ]
 

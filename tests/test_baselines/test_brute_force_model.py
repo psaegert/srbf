@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from simplipy import SimpliPyEngine
 
-from flash_ansr import SkeletonPool
+from symbolic_data import LampleChartonCatalog
 from srbf.baselines import BruteForceModel
 
 
@@ -11,7 +11,7 @@ def simplipy_engine() -> SimpliPyEngine:
     return SimpliPyEngine.load("dev_7-3", install=True)
 
 
-def _build_toy_pool(engine: SimpliPyEngine) -> SkeletonPool:
+def _build_toy_pool(engine: SimpliPyEngine) -> LampleChartonCatalog:
     sample_strategy = {
         "n_operator_distribution": "equiprobable_lengths",
         "min_operators": 0,
@@ -33,7 +33,7 @@ def _build_toy_pool(engine: SimpliPyEngine) -> SkeletonPool:
         },
     }
 
-    pool = SkeletonPool.from_dict(
+    pool = LampleChartonCatalog.from_dict(
         skeletons={("x1",)},
         simplipy_engine=engine,
         sample_strategy=sample_strategy,
@@ -46,7 +46,7 @@ def _build_toy_pool(engine: SimpliPyEngine) -> SkeletonPool:
     return pool
 
 
-def _build_multivar_pool(engine: SimpliPyEngine) -> SkeletonPool:
+def _build_multivar_pool(engine: SimpliPyEngine) -> LampleChartonCatalog:
     sample_strategy = {
         "n_operator_distribution": "equiprobable_lengths",
         "min_operators": 0,
@@ -68,7 +68,7 @@ def _build_multivar_pool(engine: SimpliPyEngine) -> SkeletonPool:
         },
     }
 
-    pool = SkeletonPool.from_dict(
+    pool = LampleChartonCatalog.from_dict(
         skeletons={("x1",)},
         simplipy_engine=engine,
         sample_strategy=sample_strategy,
@@ -85,7 +85,7 @@ def test_fit_and_predict_identity(simplipy_engine: SimpliPyEngine) -> None:
     pool = _build_toy_pool(simplipy_engine)
     model = BruteForceModel(
         simplipy_engine=simplipy_engine,
-        skeleton_pool=pool,
+        catalog=pool,
         max_expressions=10,
         max_length=2,
         include_constant_token=False,
@@ -110,7 +110,7 @@ def test_respects_limits(simplipy_engine: SimpliPyEngine) -> None:
     pool = _build_toy_pool(simplipy_engine)
     model = BruteForceModel(
         simplipy_engine=simplipy_engine,
-        skeleton_pool=pool,
+        catalog=pool,
         max_expressions=3,
         max_length=1,
         include_constant_token=False,
@@ -132,7 +132,7 @@ def test_truncates_extra_columns(simplipy_engine: SimpliPyEngine) -> None:
     pool = _build_toy_pool(simplipy_engine)
     model = BruteForceModel(
         simplipy_engine=simplipy_engine,
-        skeleton_pool=pool,
+        catalog=pool,
         max_expressions=8,
         max_length=2,
         include_constant_token=False,
@@ -156,7 +156,7 @@ def test_pads_missing_columns(simplipy_engine: SimpliPyEngine) -> None:
     pool = _build_multivar_pool(simplipy_engine)
     model = BruteForceModel(
         simplipy_engine=simplipy_engine,
-        skeleton_pool=pool,
+        catalog=pool,
         max_expressions=8,
         max_length=2,
         include_constant_token=False,
@@ -178,7 +178,7 @@ def test_constant_expression_prediction(simplipy_engine: SimpliPyEngine) -> None
     pool = _build_toy_pool(simplipy_engine)
     model = BruteForceModel(
         simplipy_engine=simplipy_engine,
-        skeleton_pool=pool,
+        catalog=pool,
         max_expressions=5,
         max_length=1,
         include_constant_token=True,
@@ -201,7 +201,7 @@ def test_predict_requires_fit(simplipy_engine: SimpliPyEngine) -> None:
     pool = _build_toy_pool(simplipy_engine)
     model = BruteForceModel(
         simplipy_engine=simplipy_engine,
-        skeleton_pool=pool,
+        catalog=pool,
         max_expressions=2,
         max_length=1,
         include_constant_token=False,

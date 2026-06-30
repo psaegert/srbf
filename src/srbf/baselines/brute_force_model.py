@@ -10,7 +10,7 @@ from sklearn.base import BaseEstimator
 from simplipy import SimpliPyEngine
 from simplipy.utils import construct_expressions
 
-from symbolic_data import SkeletonPool
+from symbolic_data import LampleChartonCatalog
 from flash_ansr.refine import Refiner, ConvergenceError
 from flash_ansr.scoring import compute_fvu, count_constants, is_constant_token, normalize_variance, score_from_fvu
 from flash_ansr.utils.paths import substitute_root_path
@@ -21,7 +21,7 @@ class BruteForceModel(BaseEstimator):
 
     Expressions are generated shortest-first using ``simplipy.utils.construct_expressions``
     over the operator and variable vocabulary defined by the provided
-    ``SkeletonPool``. Each candidate is refined with the shared ``Refiner`` to
+    ``LampleChartonCatalog``. Each candidate is refined with the shared ``Refiner`` to
     fit constants against user-supplied data.
     """
 
@@ -31,7 +31,7 @@ class BruteForceModel(BaseEstimator):
         self,
         *,
         simplipy_engine: SimpliPyEngine,
-        skeleton_pool: str | dict[str, Any] | SkeletonPool,
+        catalog: str | dict[str, Any] | LampleChartonCatalog,
         max_expressions: int = 10_000,
         max_length: int | None = None,
         include_constant_token: bool = True,
@@ -69,7 +69,7 @@ class BruteForceModel(BaseEstimator):
         self.constants_penalty = float(constants_penalty)
         self.likelihood_penalty = float(likelihood_penalty)
 
-        self._pool = self._ensure_pool(skeleton_pool)
+        self._pool = self._ensure_pool(catalog)
         self._results: list[dict[str, Any]] = []
         self.results: pd.DataFrame = pd.DataFrame()
         self._input_dim: int | None = None
@@ -78,19 +78,19 @@ class BruteForceModel(BaseEstimator):
     def n_variables(self) -> int:
         return self._pool.n_variables
 
-    def _ensure_pool(self, skeleton_pool_ref: str | dict[str, Any] | SkeletonPool) -> SkeletonPool:
-        if isinstance(skeleton_pool_ref, SkeletonPool):
-            pool = skeleton_pool_ref
-        elif isinstance(skeleton_pool_ref, str):
-            resolved = substitute_root_path(skeleton_pool_ref)
+    def _ensure_pool(self, catalog_ref: str | dict[str, Any] | LampleChartonCatalog) -> LampleChartonCatalog:
+        if isinstance(catalog_ref, LampleChartonCatalog):
+            pool = catalog_ref
+        elif isinstance(catalog_ref, str):
+            resolved = substitute_root_path(catalog_ref)
             if os.path.isdir(resolved):
-                _, pool = SkeletonPool.load(resolved)
+                _, pool = LampleChartonCatalog.load(resolved)
             else:
-                pool = SkeletonPool.from_config(resolved)
-        elif isinstance(skeleton_pool_ref, dict):
-            pool = SkeletonPool.from_config(copy.deepcopy(skeleton_pool_ref))
+                pool = LampleChartonCatalog.from_config(resolved)
+        elif isinstance(catalog_ref, dict):
+            pool = LampleChartonCatalog.from_config(copy.deepcopy(catalog_ref))
         else:
-            raise TypeError("`skeleton_pool` must be a SkeletonPool, path string, or configuration dictionary.")
+            raise TypeError("`catalog` must be a LampleChartonCatalog, path string, or configuration dictionary.")
 
         if self.ignore_holdouts:
             pool.clear_holdouts()

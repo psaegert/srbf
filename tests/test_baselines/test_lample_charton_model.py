@@ -2,8 +2,8 @@ import numpy as np
 import pytest
 from simplipy import SimpliPyEngine
 
-from flash_ansr import SkeletonPool
-from srbf.baselines.skeleton_pool_model import SkeletonPoolModel
+from symbolic_data import LampleChartonCatalog
+from srbf.baselines.lample_charton_model import LampleChartonModel
 
 
 @pytest.fixture(scope="module")
@@ -11,7 +11,7 @@ def simplipy_engine() -> SimpliPyEngine:
     return SimpliPyEngine.load("dev_7-3", install=True)
 
 
-def _build_toy_pool(engine: SimpliPyEngine) -> SkeletonPool:
+def _build_toy_pool(engine: SimpliPyEngine) -> LampleChartonCatalog:
     # Deterministic pool with a single variable skeleton to keep the test fast and stable.
     sample_strategy = {
         "n_operator_distribution": "equiprobable_lengths",
@@ -34,7 +34,7 @@ def _build_toy_pool(engine: SimpliPyEngine) -> SkeletonPool:
         },
     }
 
-    pool = SkeletonPool.from_dict(
+    pool = LampleChartonCatalog.from_dict(
         skeletons={("x1",)},
         simplipy_engine=engine,
         sample_strategy=sample_strategy,
@@ -48,7 +48,7 @@ def _build_toy_pool(engine: SimpliPyEngine) -> SkeletonPool:
     return pool
 
 
-def _build_multivar_pool(engine: SimpliPyEngine) -> SkeletonPool:
+def _build_multivar_pool(engine: SimpliPyEngine) -> LampleChartonCatalog:
     sample_strategy = {
         "n_operator_distribution": "equiprobable_lengths",
         "min_operators": 0,
@@ -70,7 +70,7 @@ def _build_multivar_pool(engine: SimpliPyEngine) -> SkeletonPool:
         },
     }
 
-    pool = SkeletonPool.from_dict(
+    pool = LampleChartonCatalog.from_dict(
         skeletons={("x1",)},
         simplipy_engine=engine,
         sample_strategy=sample_strategy,
@@ -85,9 +85,9 @@ def _build_multivar_pool(engine: SimpliPyEngine) -> SkeletonPool:
 
 def test_fit_and_predict_identity(simplipy_engine: SimpliPyEngine) -> None:
     pool = _build_toy_pool(simplipy_engine)
-    model = SkeletonPoolModel(
+    model = LampleChartonModel(
         simplipy_engine=simplipy_engine,
-        skeleton_pool=pool,
+        catalog=pool,
         samples=1,
         unique=True,
         ignore_holdouts=True,
@@ -111,9 +111,9 @@ def test_fit_and_predict_identity(simplipy_engine: SimpliPyEngine) -> None:
 
 def test_truncates_extra_columns(simplipy_engine: SimpliPyEngine) -> None:
     pool = _build_toy_pool(simplipy_engine)
-    model = SkeletonPoolModel(
+    model = LampleChartonModel(
         simplipy_engine=simplipy_engine,
-        skeleton_pool=pool,
+        catalog=pool,
         samples=1,
         unique=True,
         ignore_holdouts=True,
@@ -135,9 +135,9 @@ def test_truncates_extra_columns(simplipy_engine: SimpliPyEngine) -> None:
 
 def test_pads_missing_columns(simplipy_engine: SimpliPyEngine) -> None:
     pool = _build_multivar_pool(simplipy_engine)
-    model = SkeletonPoolModel(
+    model = LampleChartonModel(
         simplipy_engine=simplipy_engine,
-        skeleton_pool=pool,
+        catalog=pool,
         samples=1,
         unique=True,
         ignore_holdouts=True,
@@ -157,9 +157,9 @@ def test_pads_missing_columns(simplipy_engine: SimpliPyEngine) -> None:
 
 def test_zero_samples_returns_empty(simplipy_engine: SimpliPyEngine) -> None:
     pool = _build_toy_pool(simplipy_engine)
-    model = SkeletonPoolModel(
+    model = LampleChartonModel(
         simplipy_engine=simplipy_engine,
-        skeleton_pool=pool,
+        catalog=pool,
         samples=0,
         unique=True,
         ignore_holdouts=True,
@@ -182,9 +182,9 @@ def test_unique_sampling_uses_cached_pool(simplipy_engine: SimpliPyEngine) -> No
     pool = _build_toy_pool(simplipy_engine)
     pool.skeletons = {("x1",), ("<constant>",)}
 
-    model = SkeletonPoolModel(
+    model = LampleChartonModel(
         simplipy_engine=simplipy_engine,
-        skeleton_pool=pool,
+        catalog=pool,
         samples=2,
         unique=True,
         ignore_holdouts=True,

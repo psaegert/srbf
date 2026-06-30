@@ -11,7 +11,7 @@ import torch
 from sklearn.base import BaseEstimator
 from simplipy import SimpliPyEngine
 
-from symbolic_data import SkeletonPool, NoValidSampleFoundError
+from symbolic_data import LampleChartonCatalog, NoValidSampleFoundError
 from flash_ansr.refine import Refiner, ConvergenceError
 from flash_ansr.scoring import compute_fvu, count_constants, is_constant_token, normalize_variance, score_from_fvu
 from flash_ansr.results import (
@@ -24,12 +24,12 @@ from flash_ansr.results import (
 from flash_ansr.utils.paths import substitute_root_path
 
 
-class SkeletonPoolModel(BaseEstimator):
+class LampleChartonModel(BaseEstimator):
     """Baseline model that samples skeletons from a pool and fits constants.
 
     This model is intended for research/ablation baselines that do **not** use
     the Flash-ANSR transformer. It samples expression skeletons from a provided
-    ``SkeletonPool`` and refines their constants against user-provided data
+    ``LampleChartonCatalog`` and refines their constants against user-provided data
     using the same `Refiner` used by `flash_ansr.flash_ansr.FlashANSR`.
     """
 
@@ -39,7 +39,7 @@ class SkeletonPoolModel(BaseEstimator):
         self,
         *,
         simplipy_engine: SimpliPyEngine,
-        skeleton_pool: str | dict[str, Any] | SkeletonPool,
+        catalog: str | dict[str, Any] | LampleChartonCatalog,
         samples: int = 32,
         unique: bool = True,
         ignore_holdouts: bool = True,
@@ -77,7 +77,7 @@ class SkeletonPoolModel(BaseEstimator):
         self.constants_penalty = float(constants_penalty)
         self.likelihood_penalty = float(likelihood_penalty)
 
-        self._pool = self._ensure_pool(skeleton_pool)
+        self._pool = self._ensure_pool(catalog)
         self._results: list[dict[str, Any]] = []
         self.results: pd.DataFrame = pd.DataFrame()
         self._input_dim: int | None = None
@@ -116,19 +116,19 @@ class SkeletonPoolModel(BaseEstimator):
             fvu, complexity, constant_count, log_prob,
             length_penalty, constants_penalty, likelihood_penalty)
 
-    def _ensure_pool(self, skeleton_pool_ref: str | dict[str, Any] | SkeletonPool) -> SkeletonPool:
-        if isinstance(skeleton_pool_ref, SkeletonPool):
-            pool = skeleton_pool_ref
-        elif isinstance(skeleton_pool_ref, str):
-            resolved = substitute_root_path(skeleton_pool_ref)
+    def _ensure_pool(self, catalog_ref: str | dict[str, Any] | LampleChartonCatalog) -> LampleChartonCatalog:
+        if isinstance(catalog_ref, LampleChartonCatalog):
+            pool = catalog_ref
+        elif isinstance(catalog_ref, str):
+            resolved = substitute_root_path(catalog_ref)
             if os.path.isdir(resolved):
-                _, pool = SkeletonPool.load(resolved)
+                _, pool = LampleChartonCatalog.load(resolved)
             else:
-                pool = SkeletonPool.from_config(resolved)
-        elif isinstance(skeleton_pool_ref, dict):
-            pool = SkeletonPool.from_config(copy.deepcopy(skeleton_pool_ref))
+                pool = LampleChartonCatalog.from_config(resolved)
+        elif isinstance(catalog_ref, dict):
+            pool = LampleChartonCatalog.from_config(copy.deepcopy(catalog_ref))
         else:
-            raise TypeError("`skeleton_pool` must be a SkeletonPool, path string, or configuration dictionary.")
+            raise TypeError("`catalog` must be a LampleChartonCatalog, path string, or configuration dictionary.")
 
         if self.ignore_holdouts:
             pool.clear_holdouts()
@@ -186,7 +186,7 @@ class SkeletonPoolModel(BaseEstimator):
 
         return selected
 
-    def fit(self, X: np.ndarray | torch.Tensor | pd.DataFrame, y: np.ndarray | torch.Tensor | pd.DataFrame | Sequence[float], *, verbose: bool = False) -> "SkeletonPoolModel":
+    def fit(self, X: np.ndarray | torch.Tensor | pd.DataFrame, y: np.ndarray | torch.Tensor | pd.DataFrame | Sequence[float], *, verbose: bool = False) -> "LampleChartonModel":
         if len(np.shape(y)) == 1:
             y = np.reshape(y, (-1, 1))
 
