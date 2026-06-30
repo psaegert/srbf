@@ -16,7 +16,7 @@ from simplipy import normalize_skeleton, normalize_expression
 # it is an optional `[baselines]` extra, not a core runtime dependency.
 
 from srbf.eval.core import EvaluationModelAdapter, EvaluationResult, EvaluationSample
-from srbf.eval.candidate_store import CandidateStoreWriter, build_candidate_ledger
+from srbf.eval.candidate_store import CandidateStoreWriter
 from flash_ansr.flash_ansr import FlashANSR
 from flash_ansr.refine import ConvergenceError
 
@@ -74,32 +74,13 @@ class FlashANSRAdapter(EvaluationModelAdapter):
             self.model.refiner_workers = self.refiner_workers
 
     def evaluate_sample(self, sample: EvaluationSample) -> EvaluationResult:
-        """Serial fit + evaluate. Composes the two phases below; behaviour matches the pre-split path
-        (the overlapped engine drives the phases separately across two threads).
+        """Serial fit + evaluate via the model's own public inference API.
 
-        The ``np.errstate`` here restores the ``np.seterr(all=numpy_errors)`` policy that the old
-        ``fit()`` applied around the whole generate+refine span. It is applied ONLY on this serial
-        composition (single-threaded); the phases are left un-wrapped so the overlapped engine's two
-        threads never clobber a process-global error policy across each other (refinement workers
-        already set their own policy per job, and the deployed ``numpy_errors='ignore'`` is value-neutral
-        vs the numpy default -- only warning emission differs)."""
-        numpy_errors = getattr(self.model, "numpy_errors", None)
-        with np.errstate(all=numpy_errors) if numpy_errors is not None else nullcontext():
-            record, gen_state, fit_t0 = self.generate_phase(sample)
-            return self.refine_extract_phase(sample, record, gen_state, fit_t0, wall_clock=True)
-
-    def generate_phase(
-        self,
-        sample: EvaluationSample,
-    ) -> tuple[dict[str, Any], Any | None, float]:
-        """GPU generation phase: build the record and run ``model._fit_generate`` -> ``GenState``.
-
-        Returns ``(record, gen_state, fit_t0)``. On a generation-phase error ``gen_state`` is ``None``
-        and the error is recorded. Writes NOTHING to model instance state (the generate phase only
-        touches ``self.model._prompt_prefix`` / ``_mcts_cache`` / ``_n_params``, none of which the
-        commit path reads), so the overlapped engine can run this for problem N+1 on the GPU-owner
-        thread while problem N is committed on the main thread.
-        """
+        ``FlashANSR.infer`` runs generation + constant refinement on one problem and returns an
+        ``InferenceResult`` (the best candidate + the full classified candidate ledger), so this
+        adapter is a THIN mapper -- no reaching into ``model._results`` / ``predict(nth_best_beam=...)``
+        / ``get_expression`` / a generate-refine phase split. ``np.errstate`` restores the model's
+        ``numpy_errors`` policy around the call (single-threaded; benign)."""
         record = sample.clone_metadata()
         record["length_penalty"] = getattr(self.model, "length_penalty", None)
         record["constants_penalty"] = getattr(self.model, "constants_penalty", None)
@@ -108,117 +89,65 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         y_fit = sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support
         complexity_value = self._resolve_complexity(record)
         variable_names = record.get("variable_names")
+        x_val = sample.x_validation if sample.x_validation.shape[0] > 0 else None
 
+        numpy_errors = getattr(self.model, "numpy_errors", None)
         fit_t0 = time.time()
         try:
-            if variable_names is not None:
-                gen_state = self.model._fit_generate(sample.x_support, y_fit, variable_names, complexity=complexity_value)
-            else:
-                gen_state = self.model._fit_generate(sample.x_support, y_fit, complexity=complexity_value)
-        except (ConvergenceError, OverflowError, TypeError, ValueError) as exc:
-            record["error"] = str(exc)
-            record["prediction_success"] = False
-            return record, None, fit_t0
-        return record, gen_state, fit_t0
-
-    def refine_extract_phase(
-        self,
-        sample: EvaluationSample,
-        record: dict[str, Any],
-        gen_state: Any | None,
-        fit_t0: float,
-        *,
-        wall_clock: bool = False,
-        refine_seed: int | None = None,
-    ) -> EvaluationResult:
-        """CPU refinement + extraction phase: refine the GenState, commit it, predict and read out.
-
-        MUST run on the commit thread in sample order: it commits the ``FitResult`` to model instance
-        state via ``_apply_fit_result`` and then reads it back through ``predict`` / ``get_expression``.
-        With ``prune_constant_budget == 0`` (every deployed eval config, and the overlap engine's hard
-        gate) it touches no GPU. ``wall_clock`` selects the ``fit_time`` semantics: ``True`` (serial)
-        records the wall-clock span since ``fit_t0`` (byte-identical to the pre-split ``fit()`` timing);
-        ``False`` (overlapped, where wall-clock spans overlap and are meaningless per problem) records
-        the well-defined component sum ``generation_time + refinement_time``. ``refine_seed`` (default
-        ``None`` = fresh OS entropy, the deployed behaviour) pins the per-candidate p0-noise seeds so a
-        quality-equivalence gate can drive serial and overlapped runs from identical candidates.
-        """
-        if gen_state is None:
-            # Generation-phase error already recorded on `record`.
-            return EvaluationResult(record)
-
-        try:
-            fit_result = self.model._fit_refine(gen_state, refine_seed=refine_seed)
+            with np.errstate(all=numpy_errors) if numpy_errors is not None else nullcontext():
+                result = self.model.infer(
+                    sample.x_support, y_fit,
+                    variable_names=variable_names if variable_names is not None else "auto",
+                    X_val=x_val,
+                    complexity=complexity_value,
+                    predict_val=True,
+                    top_k=1,
+                )
         except (ConvergenceError, OverflowError, TypeError, ValueError) as exc:
             record["error"] = str(exc)
             record["prediction_success"] = False
             return EvaluationResult(record)
 
-        self.model._apply_fit_result(fit_result)
+        record["fit_time"] = time.time() - fit_t0
+        record["generation_time"] = result.generation_time
+        record["refinement_time"] = result.refinement_time
 
+        # Full candidate ledger -> compact columnar store (save-all tier); off (None) => zero overhead.
         if self.candidate_store_dir is not None:
-            self._capture_candidate_ledger(record, gen_state, fit_result)
+            self._capture_ledger(record, result)
 
-        record["fit_time"] = (time.time() - fit_t0) if wall_clock else (fit_result.generation_time + fit_result.refinement_time)
-        record["generation_time"] = fit_result.generation_time
-        record["refinement_time"] = fit_result.refinement_time
-        record["prediction_success"] = True
-
-        if not getattr(self.model, "_results", None):
+        best = result.best
+        if best is None:
             warnings.warn("Model produced no results. Filling nan.")
             record["error"] = "Model produced no results."
             record["prediction_success"] = False
             return EvaluationResult(record)
 
-        best_result = self.model._results[0]
+        record["prediction_success"] = True
+        record["predicted_expression"] = best.expression_infix
+        # Candidate.expression_prefix is the RAW substituted prefix; normalize it to match the stored
+        # form (best.skeleton_prefix is already normalized by infer()).
+        record["predicted_expression_prefix"] = normalize_expression(list(best.expression_prefix)).copy()
+        record["predicted_skeleton_prefix"] = list(best.skeleton_prefix)
+        record["predicted_constants"] = list(best.constants) if best.constants is not None else None
+        record["predicted_score"] = best.score
+        record["predicted_log_prob"] = best.log_prob
 
-        try:
-            y_pred = self.model.predict(sample.x_support, nth_best_beam=0, nth_best_constants=0)
-            if sample.x_validation.shape[0] > 0:
-                y_pred_val = self.model.predict(sample.x_validation, nth_best_beam=0, nth_best_constants=0)
-            else:
-                y_pred_val = np.empty_like(sample.y_validation)
-            record["y_pred"] = np.asarray(y_pred).copy()
-            record["y_pred_val"] = np.asarray(y_pred_val).copy()
-        except (ConvergenceError, ValueError) as exc:
-            warnings.warn(f"Error while predicting: {exc}. Filling nan.")
-            record["error"] = str(exc)
-            record["prediction_success"] = False
-            return EvaluationResult(record)
-
-        predicted_expression = self.model.get_expression(
-            nth_best_beam=0,
-            nth_best_constants=0,
-            map_variables=True,
-        )
-        predicted_prefix = self.model.get_expression(
-            nth_best_beam=0,
-            nth_best_constants=0,
-            return_prefix=True,
-            map_variables=False,
-        )
-
-        record["predicted_expression"] = predicted_expression
-        # normalize prefix for expression (keep numeric literals) and skeleton (constants -> <constant>)
-        record["predicted_expression_prefix"] = normalize_expression(predicted_prefix).copy()
-        record["predicted_skeleton_prefix"] = normalize_skeleton(predicted_prefix).copy()
-        record["predicted_constants"] = (
-            best_result["fits"][0][0].tolist() if best_result.get("fits") else None
-        )
-        record["predicted_score"] = best_result.get("score")
-        record["predicted_log_prob"] = best_result.get("log_prob")
+        y_pred = best.y_pred
+        y_pred_val = best.y_pred_val if best.y_pred_val is not None else np.empty_like(sample.y_validation)
+        record["y_pred"] = np.asarray(y_pred).copy() if y_pred is not None else np.empty_like(sample.y_support)
+        record["y_pred_val"] = np.asarray(y_pred_val).copy()
 
         return EvaluationResult(record)
 
     # ------------------------------------------------------------------
-    def _capture_candidate_ledger(self, record: dict[str, Any], gen_state: Any, fit_result: Any) -> None:
-        """Stream this problem's FULL candidate ledger to the compact columnar store (save-all tier).
+    def _capture_ledger(self, record: dict[str, Any], result: Any) -> None:
+        """Stream this problem's FULL candidate ledger (from infer()) to the compact columnar store.
 
-        Joins the generation pool (``gen_state.raw_beams``/``log_probs``) with the refined results
-        (``fit_result.results``) and writes one compressed .npz per problem, keyed by the resume-stable
-        ``eval_row_index`` the data source stamped on the sample. Best-effort: any failure here warns and
-        is swallowed -- candidate capture must never abort an eval row. Runs only on the consumer thread
-        (single writer), so it is safe under the overlap engine too."""
+        The ledger is built by ``FlashANSR.infer`` (``result.ledger``: the generation pool U refined
+        survivors, classified FIT_OK/FAILED/INVALID). Best-effort, keyed by the resume-stable
+        ``eval_row_index`` the data source stamped on the sample; failures warn and are swallowed --
+        candidate capture must never abort an eval row."""
         try:
             problem_id = record.get("eval_row_index")
             if problem_id is None:
@@ -234,25 +163,16 @@ class FlashANSRAdapter(EvaluationModelAdapter):
                 )
             if self._candidate_store.has_problem(int(problem_id)):
                 return  # already written (resume)
-
-            tokenizer = self.model.tokenizer
-
-            def _decode_expr(raw_beam: list[int]) -> list[str]:
-                expr_ids = tokenizer.extract_expression_from_beam(list(raw_beam))[0]
-                return tokenizer.decode(expr_ids, special_tokens="<constant>")
-
-            ledger = build_candidate_ledger(
-                gen_state.raw_beams,
-                gen_state.log_probs,
-                fit_result.results,
-                decode_expr=_decode_expr,
-                is_valid=self.model.simplipy_engine.is_valid,
+            led = result.ledger
+            self._candidate_store.write_problem(
+                int(problem_id), led.token_lists, led.fvu, led.log_prob,
+                valid=led.valid, fit_status=led.fit_status, constants=led.constants,
             )
-            self._candidate_store.write_problem(int(problem_id), **ledger)
         except Exception as exc:  # noqa: BLE001 - capture is auxiliary; never break the eval row
             warnings.warn(f"Candidate-ledger capture failed for this problem: {exc}", RuntimeWarning)
 
     # ------------------------------------------------------------------
+
     def _resolve_complexity(self, metadata: dict[str, Any]) -> int | float | None:
         mode = self.complexity
         if isinstance(mode, (int, float)):

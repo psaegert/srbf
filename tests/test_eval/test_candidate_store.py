@@ -15,6 +15,7 @@ from srbf.eval.candidate_store import (
     build_candidate_ledger,
 )
 from srbf.eval.model_adapters import FlashANSRAdapter
+from flash_ansr.inference import CandidateLedger
 
 
 def test_build_candidate_ledger_join_classifies_every_candidate():
@@ -106,37 +107,38 @@ def _mock_model():
 
 
 def test_adapter_capture_writes_ledger_keyed_by_row_index(tmp_path):
+    # The join is now done by FlashANSR.infer() (result.ledger); the adapter just streams it to the
+    # store keyed by eval_row_index. (The join classification itself is tested above + in flash-ansr.)
     adapter = FlashANSRAdapter(_mock_model(), candidate_store_dir=str(tmp_path))
-    gen_state = types.SimpleNamespace(raw_beams=[[1, 2], [3, 4]], log_probs=[-1.0, -2.0])
-    fit_result = types.SimpleNamespace(
-        results=[{"raw_beam": [1, 2], "fvu": 0.1, "log_prob": -1.0, "fits": [(np.array([2.0]), None, 0.1)]}]
-    )
-    adapter._capture_candidate_ledger({"eval_row_index": 5}, gen_state, fit_result)
+    result = types.SimpleNamespace(ledger=CandidateLedger(
+        token_lists=[[1, 2], [3, 4]], fvu=[0.1, float("nan")], log_prob=[-1.0, -2.0],
+        valid=[1, 0], fit_status=[FIT_OK, INVALID], constants=[[2.0], []]))
+    adapter._capture_ledger({"eval_row_index": 5}, result)
 
     assert (tmp_path / "problem_000005.npz").exists()
     block = next(iter(CandidateStoreReader(tmp_path)))
-    np.testing.assert_array_equal(block["fit_status"], [FIT_OK, INVALID])  # [1,2] fitted; [3,4] invalid
+    np.testing.assert_array_equal(block["fit_status"], [FIT_OK, INVALID])
     np.testing.assert_array_equal(block["valid"], [1, 0])
 
     # resume: a second capture of the same row is a no-op (file already present)
-    adapter._capture_candidate_ledger({"eval_row_index": 5}, gen_state, fit_result)
+    adapter._capture_ledger({"eval_row_index": 5}, result)
     assert CandidateStoreReader(tmp_path).problem_ids() == [5]
 
 
 def test_adapter_capture_skips_without_row_index(tmp_path):
     adapter = FlashANSRAdapter(_mock_model(), candidate_store_dir=str(tmp_path))
-    gen_state = types.SimpleNamespace(raw_beams=[[1, 2]], log_probs=[-1.0])
-    fit_result = types.SimpleNamespace(results=[])
+    result = types.SimpleNamespace(ledger=CandidateLedger(
+        token_lists=[[1, 2]], fvu=[0.1], log_prob=[-1.0], valid=[1], fit_status=[FIT_OK], constants=[[]]))
     with pytest.warns(RuntimeWarning, match="eval_row_index"):
-        adapter._capture_candidate_ledger({}, gen_state, fit_result)
+        adapter._capture_ledger({}, result)
     assert not list(tmp_path.glob("problem_*.npz"))
 
 
 def test_adapter_capture_is_best_effort_on_error(tmp_path):
     adapter = FlashANSRAdapter(_mock_model(), candidate_store_dir=str(tmp_path))
-    broken = types.SimpleNamespace(raw_beams=None, log_probs=None)  # will blow up inside the join
+    broken = types.SimpleNamespace(ledger=types.SimpleNamespace())  # .token_lists missing -> caught
     with _warnings.catch_warnings():
         _warnings.simplefilter("ignore")
-        adapter._capture_candidate_ledger({"eval_row_index": 0}, broken, types.SimpleNamespace(results=[]))
+        adapter._capture_ledger({"eval_row_index": 0}, broken)
     # no crash; nothing written
     assert not list(tmp_path.glob("problem_*.npz"))
