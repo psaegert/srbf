@@ -211,76 +211,75 @@ class BruteForceModel(BaseEstimator):
         else:
             y_variance = float(np.var(y_np, axis=0, ddof=1).item())
 
-        numpy_state = np.geterr()
-        np.seterr(all=self.numpy_errors)
-
         results: list[dict[str, Any]] = []
-        for skeleton in self._expression_generator():
-            expression_tokens = list(skeleton)
+        # np.errstate restores the global error state on exit even if the loop raises a
+        # non-ConvergenceError (is_valid / construct_expressions / Refiner), so 'ignore' never
+        # leaks process-wide and silently suppresses downstream overflow/divide/invalid warnings.
+        with np.errstate(all=self.numpy_errors):
+            for skeleton in self._expression_generator():
+                expression_tokens = list(skeleton)
 
-            try:
-                refiner = Refiner(self.simplipy_engine, n_variables=self.n_variables).fit(
-                    expression=expression_tokens,
-                    X=X_np,
-                    y=y_np,
-                    n_restarts=self.n_restarts,
-                    method=self.refiner_method,
-                    p0=None,
-                    p0_noise=self.refiner_p0_noise,
-                    p0_noise_kwargs=copy.deepcopy(self.refiner_p0_noise_kwargs) if self.refiner_p0_noise_kwargs is not None else None,
-                    converge_error='ignore',
+                try:
+                    refiner = Refiner(self.simplipy_engine, n_variables=self.n_variables).fit(
+                        expression=expression_tokens,
+                        X=X_np,
+                        y=y_np,
+                        n_restarts=self.n_restarts,
+                        method=self.refiner_method,
+                        p0=None,
+                        p0_noise=self.refiner_p0_noise,
+                        p0_noise_kwargs=copy.deepcopy(self.refiner_p0_noise_kwargs) if self.refiner_p0_noise_kwargs is not None else None,
+                        converge_error='ignore',
+                    )
+                except ConvergenceError:
+                    continue
+
+                if len(refiner._all_constants_values) == 0:
+                    continue
+
+                has_constants = len(refiner.constants_symbols) > 0
+                valid_fit = refiner.valid_fit or not has_constants
+                if not valid_fit:
+                    continue
+
+                loss = float(refiner._all_constants_values[0][-1])
+                if not np.isfinite(loss):
+                    continue
+
+                fvu = self._compute_fvu(loss, sample_count, y_variance)
+                if not np.isfinite(fvu):
+                    continue
+
+                constant_count = self._count_constants(expression_tokens)
+                score = self._score_from_fvu(
+                    fvu,
+                    len(expression_tokens),
+                    constant_count,
+                    None,
+                    self.length_penalty,
+                    self.constants_penalty,
+                    self.likelihood_penalty,
                 )
-            except ConvergenceError:
-                continue
 
-            if len(refiner._all_constants_values) == 0:
-                continue
+                results.append({
+                    'log_prob': float('nan'),
+                    'fvu': fvu,
+                    'score': score,
+                    'expression': expression_tokens,
+                    'constant_count': constant_count,
+                    'complexity': len(expression_tokens),
+                    'requested_complexity': None,
+                    'raw_beam': expression_tokens,
+                    'beam': expression_tokens,
+                    'raw_beam_decoded': ' '.join(expression_tokens),
+                    'function': refiner.expression_lambda,
+                    'refiner': refiner,
+                    'fits': copy.deepcopy(refiner._all_constants_values),
+                    'prompt_metadata': None,
+                })
 
-            has_constants = len(refiner.constants_symbols) > 0
-            valid_fit = refiner.valid_fit or not has_constants
-            if not valid_fit:
-                continue
-
-            loss = float(refiner._all_constants_values[0][-1])
-            if not np.isfinite(loss):
-                continue
-
-            fvu = self._compute_fvu(loss, sample_count, y_variance)
-            if not np.isfinite(fvu):
-                continue
-
-            constant_count = self._count_constants(expression_tokens)
-            score = self._score_from_fvu(
-                fvu,
-                len(expression_tokens),
-                constant_count,
-                None,
-                self.length_penalty,
-                self.constants_penalty,
-                self.likelihood_penalty,
-            )
-
-            results.append({
-                'log_prob': float('nan'),
-                'fvu': fvu,
-                'score': score,
-                'expression': expression_tokens,
-                'constant_count': constant_count,
-                'complexity': len(expression_tokens),
-                'requested_complexity': None,
-                'raw_beam': expression_tokens,
-                'beam': expression_tokens,
-                'raw_beam_decoded': ' '.join(expression_tokens),
-                'function': refiner.expression_lambda,
-                'refiner': refiner,
-                'fits': copy.deepcopy(refiner._all_constants_values),
-                'prompt_metadata': None,
-            })
-
-            if len(results) >= self.max_expressions:
-                break
-
-        np.seterr(**numpy_state)
+                if len(results) >= self.max_expressions:
+                    break
 
         results.sort(key=lambda item: item['score'])
 

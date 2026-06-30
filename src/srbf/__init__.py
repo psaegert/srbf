@@ -7,7 +7,11 @@ from srbf.benchmark import Benchmark
 from srbf.sweep import Sweep, register_sweep_yaml, resolve_sweeps
 from srbf.reporting import bootstrap_report, draw_distribution
 
-__version__ = "0.5.1"
+# Register the `!sweep` YAML tag on import so loading any sweep config (e.g. via the shared
+# flash_ansr config loader) parses without first needing an explicit register_sweep_yaml() call.
+register_sweep_yaml()
+
+__version__ = "0.5.2"
 
 __all__ = [
     "Benchmark",

@@ -35,11 +35,13 @@ def fvu(y_true: np.ndarray | None, y_pred: np.ndarray | None) -> float:
     if y_pred is None or y_true is None:
         return np.inf
 
-    if not isinstance(y_pred, np.ndarray) and np.isnan(y_pred):
-        return np.inf
-
+    # Coerce first (lists/scalars), then guard degenerate inputs -> inf per the documented contract
+    # (a bare-list y_pred would make the old scalar np.isnan check raise an ambiguous-truth ValueError;
+    # empty arrays would crash the np.max reduction in the non-finite branch below).
     y_pred = np.asarray(y_pred, dtype=np.float64).ravel()
     y_true = np.asarray(y_true, dtype=np.float64).ravel()
+    if y_pred.size == 0 or y_true.size == 0:
+        return np.inf
 
     # Ground truth finite but prediction not → infinite error
     if np.isfinite(y_true).all() and not np.isfinite(y_pred).all():

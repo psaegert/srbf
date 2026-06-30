@@ -4,6 +4,20 @@ All notable changes to srbf are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-07-01
+
+Post-release audit fixes (no API change).
+
+### Fixed
+- `BruteForceModel.fit` and `LampleChartonModel.fit` wrap their fit loop in `np.errstate(...)`, so the
+  global numpy error state is restored even if the loop raises a non-`ConvergenceError` exception
+  (previously a raise leaked `ignore` process-wide, silently suppressing later overflow/divide/invalid
+  warnings).
+- `fvu()` returns `inf` for empty/degenerate inputs (per its documented "invalid -> inf" contract)
+  instead of raising `ValueError` on a zero-size reduction, and now accepts list / scalar `y_pred`.
+- The `!sweep` YAML tag is registered on `import srbf`, so loading a sweep config (e.g. via the shared
+  flash-ansr config loader) no longer raises `ConstructorError` without a prior `register_sweep_yaml()`.
+
 ## [0.5.1] - 2026-06-30
 
 Adds the config-sweep + reporting layer (folded in from the planned 0.5.x scope) and finishes the
