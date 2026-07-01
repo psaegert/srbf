@@ -60,6 +60,7 @@ def test_leaderboard_ranks_models_with_ci_columns():
 
 
 def test_build_report_writes_page_and_figures(tmp_path):
+    pytest.importorskip("matplotlib")  # figures live behind the [analysis] extra
     out = build_report(_runs(), str(tmp_path), operator_arity=ARITY, n_bootstrap=300)
     assert os.path.isfile(out)
     text = open(out).read()
@@ -125,6 +126,7 @@ def test_load_runs_from_manifest(tmp_path):
     assert len(runs) == 2
     assert {r.model for r in runs} == {"strong", "weak"}
     assert all(r.scaling == 512 and "y_pred_val" in r.snapshot for r in runs)
-    # the loaded runs render a report end-to-end
+    # the loaded runs render a report end-to-end (figures need the [analysis] extra)
+    pytest.importorskip("matplotlib")
     out = build_report(runs, str(tmp_path / "out"), operator_arity=ARITY, n_bootstrap=200)
     assert os.path.isfile(out)
