@@ -234,7 +234,7 @@ class BruteForceModel(BaseEstimator):
                 except ConvergenceError:
                     continue
 
-                if len(refiner._all_constants_values) == 0:
+                if len(refiner.all_constants_values) == 0:
                     continue
 
                 has_constants = len(refiner.constants_symbols) > 0
@@ -242,7 +242,7 @@ class BruteForceModel(BaseEstimator):
                 if not valid_fit:
                     continue
 
-                loss = float(refiner._all_constants_values[0][-1])
+                loss = float(refiner.all_constants_values[0][-1])
                 if not np.isfinite(loss):
                     continue
 
@@ -274,7 +274,7 @@ class BruteForceModel(BaseEstimator):
                     'raw_beam_decoded': ' '.join(expression_tokens),
                     'function': refiner.expression_lambda,
                     'refiner': refiner,
-                    'fits': copy.deepcopy(refiner._all_constants_values),
+                    'fits': copy.deepcopy(refiner.all_constants_values),
                     'prompt_metadata': None,
                 })
 

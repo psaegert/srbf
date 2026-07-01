@@ -4,6 +4,13 @@ All notable changes to srbf are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.5] - 2026-07-01
+
+### Changed
+- Baselines (`LampleChartonModel`, `BruteForceModel`) read the fit attempts via the new public
+  `Refiner.all_constants_values` property instead of the private `_all_constants_values`. Re-pinned
+  `flash-ansr>=0.9.5` (which adds the property).
+
 ## [0.5.4] - 2026-07-01
 
 ### Fixed
