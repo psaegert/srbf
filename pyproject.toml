@@ -32,7 +32,9 @@ baselines = [
     "pysr",              # PySRAdapter (lazy; also needs Julia at runtime)
     "omegaconf",         # NeSymReS adapter glue (compat/nesymres.py)
 ]
-dev = ["pre-commit", "pytest", "pytest-cov", "mypy", "flake8", "srbf[baselines]"]
+# srbf.analysis figures (leaderboard/scaling/per-benchmark/distribution -> the results page).
+analysis = ["matplotlib>=3.5"]
+dev = ["pre-commit", "pytest", "pytest-cov", "mypy", "flake8", "srbf[baselines]", "srbf[analysis]"]
 
 [project.scripts]
 srbf = "srbf.__main__:main"   # carries ONLY the eval `run` command

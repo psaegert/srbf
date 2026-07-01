@@ -18,6 +18,13 @@ validation, and reporting/metric performance. Re-pinned to the coordinated `flas
   `bootstrap_report` / `draw_distribution`. It hides the nested-dict wrapper that the lower-level
   `compute_derived_metrics` requires. Metrics are never computed inside the run (two-stage by design).
 - `compute_derived_metrics` is also exported now (the in-place primitive `derive_metrics` wraps).
+- **`srbf.analysis` -- the standardized results-page layer.** Turns raw run snapshots (tagged with
+  model / benchmark / scaling coordinate) into the four standardized views: a model/baseline
+  `leaderboard`, `scaling` curves, a `per_benchmark` breakdown, and per-expression `distribution`
+  plots (all bootstrap-CI'd, honoring the unseeded-sources policy). `build_report(runs, out_dir, ...)`
+  renders them to a Markdown page + PNG figures for the docs / github.io site. Figures live behind a
+  new optional `[analysis]` extra (`pip install 'srbf[analysis]'`, matplotlib); tables/leaderboards
+  need no extra.
 
 ### Changed
 - **Baselines de-duplicated onto a shared `_RefiningBaselineModel` base.** `BruteForceModel` and
