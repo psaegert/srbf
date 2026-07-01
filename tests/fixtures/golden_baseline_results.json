@@ -1,0 +1,1865 @@
+{
+  "bruteforce": [
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "pow2",
+        "x1"
+      ],
+      "raw_beam_decoded": "pow2 x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": -15.55356,
+      "fvu": 0.0,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "abs",
+        "x1"
+      ],
+      "raw_beam_decoded": "abs x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": -0.623346,
+      "fvu": 0.189083,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "cosh",
+        "x1"
+      ],
+      "raw_beam_decoded": "cosh x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": -0.043622,
+      "fvu": 0.718419,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "<constant>"
+      ],
+      "raw_beam_decoded": "<constant>",
+      "complexity": 1,
+      "constant_count": 1,
+      "score": 0.012211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "abs",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "abs <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "acos",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "acos <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "asin",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "asin <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "asinh",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "asinh <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "atan",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "atan <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "atanh",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "atanh <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "div2",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "div2 <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "div3",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "div3 <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "div4",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "div4 <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "div5",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "div5 <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "exp",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "exp <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "mult2",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "mult2 <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "mult3",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "mult3 <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "mult4",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "mult4 <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "mult5",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "mult5 <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "neg",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "neg <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "pow1_2",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "pow1_2 <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "pow1_3",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "pow1_3 <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "pow1_4",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "pow1_4 <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "pow1_5",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "pow1_5 <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "sin",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "sin <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "sinh",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "sinh <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "tan",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "tan <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "tanh",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "tanh <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062211,
+      "fvu": 0.916667,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "cos",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "cos <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.062213,
+      "fvu": 0.916669,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "cosh",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "cosh <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.071231,
+      "fvu": 0.935904,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "pow2",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "pow2 <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.325839,
+      "fvu": 1.682049,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "cos",
+        "x1"
+      ],
+      "raw_beam_decoded": "cos x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 0.388852,
+      "fvu": 1.944696,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "pow3",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "pow3 <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.419534,
+      "fvu": 2.087054,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "pow4",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "pow4 <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.419534,
+      "fvu": 2.087054,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "pow5",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "pow5 <constant>",
+      "complexity": 2,
+      "constant_count": 1,
+      "score": 0.419534,
+      "fvu": 2.087054,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "pow4",
+        "x1"
+      ],
+      "raw_beam_decoded": "pow4 x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 0.428424,
+      "fvu": 2.130218,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "div5",
+        "x1"
+      ],
+      "raw_beam_decoded": "div5 x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 0.430388,
+      "fvu": 2.139871,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "div4",
+        "x1"
+      ],
+      "raw_beam_decoded": "div4 x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 0.436376,
+      "fvu": 2.169581,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "div3",
+        "x1"
+      ],
+      "raw_beam_decoded": "div3 x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 0.449038,
+      "fvu": 2.233769,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "div2",
+        "x1"
+      ],
+      "raw_beam_decoded": "div2 x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 0.483306,
+      "fvu": 2.417163,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "tanh",
+        "x1"
+      ],
+      "raw_beam_decoded": "tanh x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 0.536505,
+      "fvu": 2.73215,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "atan",
+        "x1"
+      ],
+      "raw_beam_decoded": "atan x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 0.546753,
+      "fvu": 2.797388,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "sin",
+        "x1"
+      ],
+      "raw_beam_decoded": "sin x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 0.556677,
+      "fvu": 2.862048,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "exp",
+        "x1"
+      ],
+      "raw_beam_decoded": "exp x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 0.567573,
+      "fvu": 2.934761,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "asinh",
+        "x1"
+      ],
+      "raw_beam_decoded": "asinh x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 0.58151,
+      "fvu": 3.03047,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "x1"
+      ],
+      "raw_beam_decoded": "x1",
+      "complexity": 1,
+      "constant_count": 0,
+      "score": 0.582435,
+      "fvu": 3.40749,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "pow1_3",
+        "x1"
+      ],
+      "raw_beam_decoded": "pow1_3 x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 0.622791,
+      "fvu": 3.332659,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "pow1_5",
+        "x1"
+      ],
+      "raw_beam_decoded": "pow1_5 x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 0.630306,
+      "fvu": 3.390826,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "neg",
+        "x1"
+      ],
+      "raw_beam_decoded": "neg x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 0.632435,
+      "fvu": 3.40749,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "sinh",
+        "x1"
+      ],
+      "raw_beam_decoded": "sinh x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 0.733811,
+      "fvu": 4.303396,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "pow3",
+        "x1"
+      ],
+      "raw_beam_decoded": "pow3 x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 0.876522,
+      "fvu": 5.977526,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "mult2",
+        "x1"
+      ],
+      "raw_beam_decoded": "mult2 x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 0.967397,
+      "fvu": 7.3688,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "mult3",
+        "x1"
+      ],
+      "raw_beam_decoded": "mult3 x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 1.245227,
+      "fvu": 13.970982,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "inv",
+        "x1"
+      ],
+      "raw_beam_decoded": "inv x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 1.355387,
+      "fvu": 18.004764,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "pow5",
+        "x1"
+      ],
+      "raw_beam_decoded": "pow5 x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 1.366951,
+      "fvu": 18.490604,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "mult4",
+        "x1"
+      ],
+      "raw_beam_decoded": "mult4 x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 1.465751,
+      "fvu": 23.214038,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "mult5",
+        "x1"
+      ],
+      "raw_beam_decoded": "mult5 x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 1.645282,
+      "fvu": 35.097966,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "tan",
+        "x1"
+      ],
+      "raw_beam_decoded": "tan x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 1.833272,
+      "fvu": 54.109291,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    }
+  ],
+  "lample": [
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "*",
+        "x1",
+        "x1"
+      ],
+      "raw_beam_decoded": "* x1 x1",
+      "complexity": 3,
+      "constant_count": 0,
+      "score": -15.50356,
+      "fvu": 0.0,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "+",
+        "x1",
+        "<constant>"
+      ],
+      "raw_beam_decoded": "+ x1 <constant>",
+      "complexity": 3,
+      "constant_count": 1,
+      "score": 0.499686,
+      "fvu": 2.237103,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "sin",
+        "x1"
+      ],
+      "raw_beam_decoded": "sin x1",
+      "complexity": 2,
+      "constant_count": 0,
+      "score": 0.556677,
+      "fvu": 2.862048,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    },
+    {
+      "keys": [
+        "beam",
+        "complexity",
+        "constant_count",
+        "expression",
+        "fits",
+        "function",
+        "fvu",
+        "log_prob",
+        "prompt_metadata",
+        "raw_beam",
+        "raw_beam_decoded",
+        "refiner",
+        "requested_complexity",
+        "score"
+      ],
+      "expression": [
+        "x1"
+      ],
+      "raw_beam_decoded": "x1",
+      "complexity": 1,
+      "constant_count": 0,
+      "score": 0.582435,
+      "fvu": 3.40749,
+      "n_fits": 1,
+      "function_callable": true,
+      "has_refiner": true
+    }
+  ]
+}

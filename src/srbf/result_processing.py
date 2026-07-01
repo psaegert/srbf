@@ -5,6 +5,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import numpy as np
+import torch
 from editdistance import eval as edit_distance
 
 from srbf.metrics.numeric import (
@@ -318,27 +319,26 @@ def compute_derived_metrics(
                 ]
 
                 # ── Variable-level F1 / precision / recall ────────
-                r['f1_score_unique_variables'] = np.array([
-                    f1_score([puv], [uv])
-                    if puv is not None and uv is not None else None
-                    for puv, uv in zip(
-                        r['predicted_unique_variables'], r['unique_variables'],
-                    )
-                ])
-                r['precision_unique_variables'] = np.array([
-                    precision([puv], [uv])
-                    if puv is not None and uv is not None else None
-                    for puv, uv in zip(
-                        r['predicted_unique_variables'], r['unique_variables'],
-                    )
-                ])
-                r['recall_unique_variables'] = np.array([
-                    recall([puv], [uv])
-                    if puv is not None and uv is not None else None
-                    for puv, uv in zip(
-                        r['predicted_unique_variables'], r['unique_variables'],
-                    )
-                ])
+                # Compute precision & recall ONCE per row and derive F1 from them with the SAME
+                # torch formula (and float32 dtype + NaN->0) that f1_score uses internally, instead
+                # of also calling f1_score (which would recompute precision and recall a second time).
+                f1_uv: list[Any] = []
+                prec_uv: list[Any] = []
+                rec_uv: list[Any] = []
+                for puv, uv in zip(r['predicted_unique_variables'], r['unique_variables']):
+                    if puv is not None and uv is not None:
+                        p = precision([puv], [uv])
+                        rc = recall([puv], [uv])
+                        f1_uv.append(torch.nan_to_num(2 * (p * rc) / (p + rc), nan=0.0))
+                        prec_uv.append(p)
+                        rec_uv.append(rc)
+                    else:
+                        f1_uv.append(None)
+                        prec_uv.append(None)
+                        rec_uv.append(None)
+                r['f1_score_unique_variables'] = np.array(f1_uv)
+                r['precision_unique_variables'] = np.array(prec_uv)
+                r['recall_unique_variables'] = np.array(rec_uv)
 
                 # ── Nestedness ────────────────────────────────────
                 r['total_nestedness'] = np.array([

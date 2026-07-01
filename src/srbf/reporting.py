@@ -47,13 +47,26 @@ def draw_distribution(
     ``group_key`` column exists, each row is its own group (one draw per expression). ``None`` metric
     values are skipped; a group with no finite values is omitted.
     """
+    return _draw_distribution(snapshot, metric_key, _valid_rows(snapshot), group_key=group_key, aggregate=aggregate)
+
+
+def _draw_distribution(
+    snapshot: Mapping[str, Sequence[Any]],
+    metric_key: str,
+    rows: Sequence[int],
+    *,
+    group_key: str,
+    aggregate: Callable[[np.ndarray], float],
+) -> dict[Any, float]:
+    """``draw_distribution`` body over a PRECOMPUTED valid-row index list, so ``bootstrap_report``
+    can share one ``_valid_rows`` scan for both the distribution and its ``n_rows`` count."""
     if metric_key not in snapshot:
         raise KeyError(f"metric '{metric_key}' not in snapshot (columns: {sorted(snapshot.keys())})")
     values = snapshot[metric_key]
     groups = snapshot.get(group_key)
 
     by_group: dict[Any, list[float]] = {}
-    for i in _valid_rows(snapshot):
+    for i in rows:
         value = values[i] if i < len(values) else None
         if value is None:
             continue
@@ -86,9 +99,10 @@ def bootstrap_report(
     ``{metric, n_groups, n_rows, median, ci_lower, ci_upper, interval}``. The bootstrap is UNSEEDED
     (per the no-seeding policy), so CIs vary run-to-run; report the interval, not point bit-equality.
     """
-    dist = draw_distribution(snapshot, metric_key, group_key=group_key, aggregate=aggregate)
+    valid_rows = _valid_rows(snapshot)   # single scan, reused for the distribution and n_rows
+    dist = _draw_distribution(snapshot, metric_key, valid_rows, group_key=group_key, aggregate=aggregate)
     arr = np.asarray(list(dist.values()), dtype=float)
-    n_rows = len(_valid_rows(snapshot))
+    n_rows = len(valid_rows)
     if arr.size == 0:
         return {
             "metric": metric_key, "n_groups": 0, "n_rows": n_rows,

@@ -5,7 +5,19 @@ from simplipy import SimpliPyEngine
 from symbolic_data import LampleChartonCatalog
 from srbf.baselines import BruteForceModel, LampleChartonModel
 from srbf.core import EvaluationSample
-from srbf.model_adapters import BruteForceAdapter, LampleChartonAdapter
+from srbf.model_adapters import BruteForceAdapter, FlashANSRAdapter, LampleChartonAdapter
+
+
+def test_flash_ansr_adapter_rejects_unknown_complexity_string() -> None:
+    # An invalid complexity mode must fail at construction, not lazily on the first problem.
+    with pytest.raises(ValueError, match="complexity"):
+        FlashANSRAdapter(model=object(), complexity="not-a-mode")
+
+
+@pytest.mark.parametrize("complexity", ["none", "ground_truth", 3, 4.0, [7]])
+def test_flash_ansr_adapter_accepts_valid_complexity(complexity) -> None:
+    # The documented modes / numeric / list forms construct without error.
+    FlashANSRAdapter(model=object(), complexity=complexity)
 
 
 @pytest.fixture(scope="module")

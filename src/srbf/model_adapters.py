@@ -57,6 +57,13 @@ class FlashANSRAdapter(EvaluationModelAdapter):
     ) -> None:
         self.model = model
         self.device = device
+        # Fail fast on an unknown mode: a bad string would otherwise only surface on the first problem,
+        # AFTER the (slow) model load. Keep the accepted strings in sync with `_resolve_complexity`.
+        if isinstance(complexity, str) and complexity not in ("none", "ground_truth"):
+            raise ValueError(
+                f"complexity string must be 'none' or 'ground_truth' (or pass an int/float/list); "
+                f"got {complexity!r}"
+            )
         self.complexity = complexity
         self.refiner_workers = refiner_workers
         # Save-all-candidates (thorough-tier quality shards only): when set, every problem's FULL
@@ -558,6 +565,7 @@ class NeSymReSAdapter(EvaluationModelAdapter):
         device: str = "cpu",
         beam_width: int | None = None,
         remove_padding: bool = True,
+        debug: bool = False,
     ) -> None:
         if not _HAVE_NESYMRES:  # pragma: no cover - defensive guard
             raise ImportError("The 'nesymres' package is required for NeSymReSAdapter")
@@ -567,6 +575,7 @@ class NeSymReSAdapter(EvaluationModelAdapter):
         self.device = device
         self.beam_width = beam_width
         self.remove_padding = remove_padding
+        self.debug = debug
         self._fit_cfg_params: Any | None = None
         self._max_variables: int | None = None
         self._warned_feature_mismatch = False
@@ -670,7 +679,8 @@ class NeSymReSAdapter(EvaluationModelAdapter):
                 validation_fvu = _compute_fvu_from_predictions(validation_targets, y_pred_val)
                 record["validation_fvu"] = validation_fvu
 
-            _print_fvu_summary(support_fvu, validation_fvu)
+            if self.debug:
+                _print_fvu_summary(support_fvu, validation_fvu)
         except Exception as exc:  # pragma: no cover - evaluation errors
             record["error"] = f"Failed to evaluate NeSymReS expression: {exc}"
             record["prediction_success"] = False

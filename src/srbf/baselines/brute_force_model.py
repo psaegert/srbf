@@ -1,21 +1,18 @@
-import copy
 from collections import defaultdict
-from typing import Any, Generator, Literal, Sequence
+from typing import Any, Generator, Literal
 
 import numpy as np
 import pandas as pd
 import torch
-from sklearn.base import BaseEstimator
 from simplipy import SimpliPyEngine
 from simplipy.utils import construct_expressions
 
-from symbolic_data import LampleChartonCatalog, build_catalog
-from flash_ansr.refine import Refiner, ConvergenceError
-from flash_ansr.scoring import compute_fvu, count_constants, is_constant_token, normalize_variance, score_from_fvu
-from flash_ansr.utils.paths import substitute_root_path
+from symbolic_data import LampleChartonCatalog
+
+from ._base import _RefiningBaselineModel, RefinerMethod
 
 
-class BruteForceModel(BaseEstimator):
+class BruteForceModel(_RefiningBaselineModel):
     """Exhaustive baseline that enumerates expressions in increasing length.
 
     Expressions are generated shortest-first using ``simplipy.utils.construct_expressions``
@@ -23,8 +20,6 @@ class BruteForceModel(BaseEstimator):
     ``LampleChartonCatalog``. Each candidate is refined with the shared ``Refiner`` to
     fit constants against user-supplied data.
     """
-
-    FLOAT64_EPS: float = float(np.finfo(np.float64).eps)
 
     def __init__(
         self,
@@ -36,15 +31,7 @@ class BruteForceModel(BaseEstimator):
         include_constant_token: bool = True,
         ignore_holdouts: bool = True,
         n_restarts: int = 8,
-        refiner_method: Literal[
-            'curve_fit_lm',
-            'minimize_bfgs',
-            'minimize_lbfgsb',
-            'minimize_neldermead',
-            'minimize_powell',
-            'least_squares_trf',
-            'least_squares_dogbox',
-        ] = 'curve_fit_lm',
+        refiner_method: RefinerMethod = 'curve_fit_lm',
         refiner_p0_noise: Literal['uniform', 'normal'] | None = 'normal',
         refiner_p0_noise_kwargs: dict | Literal['default'] | None = 'default',
         numpy_errors: Literal['ignore', 'warn', 'raise', 'call', 'print', 'log'] | None = 'ignore',
@@ -52,84 +39,22 @@ class BruteForceModel(BaseEstimator):
         constants_penalty: float = 0.0,
         likelihood_penalty: float = 0.0,
     ) -> None:
-        self.simplipy_engine = simplipy_engine
         self.max_expressions = int(max_expressions)
         self.max_length = max_length
         self.include_constant_token = include_constant_token
-        self.ignore_holdouts = ignore_holdouts
-        self.n_restarts = n_restarts
-        self.refiner_method = refiner_method
-        self.refiner_p0_noise = refiner_p0_noise
-        if refiner_p0_noise_kwargs == 'default':
-            refiner_p0_noise_kwargs = {'loc': 0.0, 'scale': 5.0}
-        self.refiner_p0_noise_kwargs = copy.deepcopy(refiner_p0_noise_kwargs) if refiner_p0_noise_kwargs is not None else None
-        self.numpy_errors = numpy_errors
-        self.length_penalty = float(length_penalty)
-        self.constants_penalty = float(constants_penalty)
-        self.likelihood_penalty = float(likelihood_penalty)
-
-        self._pool = self._ensure_pool(catalog)
-        self._results: list[dict[str, Any]] = []
-        self.results: pd.DataFrame = pd.DataFrame()
-        self._input_dim: int | None = None
-
-    @property
-    def n_variables(self) -> int:
-        return self._pool.n_variables
-
-    def _ensure_pool(self, catalog_ref: str | dict[str, Any] | LampleChartonCatalog) -> LampleChartonCatalog:
-        # build_catalog resolves a name[@version] (HF), a local path/file, an inline {type: ...} dict, or
-        # an existing Catalog instance -- uniform with the data_source catalog resolution.
-        ref = substitute_root_path(catalog_ref) if isinstance(catalog_ref, str) else catalog_ref
-        pool = build_catalog(ref)
-        if not isinstance(pool, LampleChartonCatalog):
-            raise TypeError(
-                f"`catalog` must resolve to a generative LampleChartonCatalog (to sample skeletons); "
-                f"got {type(pool).__name__}"
-            )
-        if self.ignore_holdouts:
-            pool.clear_holdouts()
-        return pool
-
-    def _truncate_input(self, X: np.ndarray) -> np.ndarray:
-        n_features = X.shape[-1]
-        if n_features == self.n_variables:
-            return X
-        if n_features < self.n_variables:
-            pad_width = self.n_variables - n_features
-            pad = np.zeros((*X.shape[:-1], pad_width), dtype=X.dtype)
-            return np.concatenate([X, pad], axis=-1)
-
-        return X[..., : self.n_variables]
-
-    @staticmethod
-    def _normalize_variance(variance: float) -> float:
-        return normalize_variance(variance)
-
-    @staticmethod
-    def _compute_fvu(loss: float, sample_count: int, variance: float) -> float:
-        return compute_fvu(loss, sample_count, variance)
-
-    @staticmethod
-    def _is_constant_token(token: str) -> bool:
-        return is_constant_token(token)
-
-    @classmethod
-    def _count_constants(cls, expression: Sequence[str]) -> int:
-        return count_constants(expression)
-
-    @staticmethod
-    def _score_from_fvu(
-            fvu: float,
-            complexity: int,
-            constant_count: int,
-            log_prob: float | None,
-            length_penalty: float,
-            constants_penalty: float,
-            likelihood_penalty: float) -> float:
-        return score_from_fvu(
-            fvu, complexity, constant_count, log_prob,
-            length_penalty, constants_penalty, likelihood_penalty)
+        self._init_refiner_common(
+            simplipy_engine=simplipy_engine,
+            catalog=catalog,
+            ignore_holdouts=ignore_holdouts,
+            n_restarts=n_restarts,
+            refiner_method=refiner_method,
+            refiner_p0_noise=refiner_p0_noise,
+            refiner_p0_noise_kwargs=refiner_p0_noise_kwargs,
+            numpy_errors=numpy_errors,
+            length_penalty=length_penalty,
+            constants_penalty=constants_penalty,
+            likelihood_penalty=likelihood_penalty,
+        )
 
     def _leaf_nodes(self) -> list[str]:
         leaves = list(self._pool.variables)
@@ -179,144 +104,6 @@ class BruteForceModel(BaseEstimator):
             hashes_by_size[target_length].update(new_expressions)
             target_length += 1
 
-    def fit(self, X: np.ndarray | torch.Tensor | pd.DataFrame, y: np.ndarray | torch.Tensor | pd.DataFrame | Sequence[float], *, verbose: bool = False) -> "BruteForceModel":
-        if len(np.shape(y)) == 1:
-            y = np.reshape(y, (-1, 1))
-
-        if isinstance(X, torch.Tensor):
-            X_np = X.detach().cpu().numpy()
-        elif isinstance(X, pd.DataFrame):
-            X_np = X.values
-        else:
-            X_np = np.asarray(X)
-
-        if isinstance(y, torch.Tensor):
-            y_np = y.detach().cpu().numpy()
-        elif isinstance(y, (pd.DataFrame, pd.Series)):
-            y_np = y.values
-        else:
-            y_np = np.asarray(y)
-
-        if y_np.ndim == 1:
-            y_np = y_np.reshape(-1, 1)
-        elif y_np.shape[-1] != 1:
-            raise ValueError("The target data must have a single output dimension.")
-
-        X_np = self._truncate_input(np.asarray(X_np))
-        self._input_dim = X_np.shape[1]
-
-        sample_count = y_np.shape[0]
-        if sample_count <= 1:
-            y_variance = float('nan')
-        else:
-            y_variance = float(np.var(y_np, axis=0, ddof=1).item())
-
-        results: list[dict[str, Any]] = []
-        # np.errstate restores the global error state on exit even if the loop raises a
-        # non-ConvergenceError (is_valid / construct_expressions / Refiner), so 'ignore' never
-        # leaks process-wide and silently suppresses downstream overflow/divide/invalid warnings.
-        with np.errstate(all=self.numpy_errors):
-            for skeleton in self._expression_generator():
-                expression_tokens = list(skeleton)
-
-                try:
-                    refiner = Refiner(self.simplipy_engine, n_variables=self.n_variables).fit(
-                        expression=expression_tokens,
-                        X=X_np,
-                        y=y_np,
-                        n_restarts=self.n_restarts,
-                        method=self.refiner_method,
-                        p0=None,
-                        p0_noise=self.refiner_p0_noise,
-                        p0_noise_kwargs=copy.deepcopy(self.refiner_p0_noise_kwargs) if self.refiner_p0_noise_kwargs is not None else None,
-                        converge_error='ignore',
-                    )
-                except ConvergenceError:
-                    continue
-
-                if len(refiner.all_constants_values) == 0:
-                    continue
-
-                has_constants = len(refiner.constants_symbols) > 0
-                valid_fit = refiner.valid_fit or not has_constants
-                if not valid_fit:
-                    continue
-
-                loss = float(refiner.all_constants_values[0][-1])
-                if not np.isfinite(loss):
-                    continue
-
-                fvu = self._compute_fvu(loss, sample_count, y_variance)
-                if not np.isfinite(fvu):
-                    continue
-
-                constant_count = self._count_constants(expression_tokens)
-                score = self._score_from_fvu(
-                    fvu,
-                    len(expression_tokens),
-                    constant_count,
-                    None,
-                    self.length_penalty,
-                    self.constants_penalty,
-                    self.likelihood_penalty,
-                )
-
-                results.append({
-                    'log_prob': float('nan'),
-                    'fvu': fvu,
-                    'score': score,
-                    'expression': expression_tokens,
-                    'constant_count': constant_count,
-                    'complexity': len(expression_tokens),
-                    'requested_complexity': None,
-                    'raw_beam': expression_tokens,
-                    'beam': expression_tokens,
-                    'raw_beam_decoded': ' '.join(expression_tokens),
-                    'function': refiner.expression_lambda,
-                    'refiner': refiner,
-                    'fits': copy.deepcopy(refiner.all_constants_values),
-                    'prompt_metadata': None,
-                })
-
-                if len(results) >= self.max_expressions:
-                    break
-
-        results.sort(key=lambda item: item['score'])
-
-        self._results = results
-        self.results = pd.DataFrame(results)
+    def fit(self, X: np.ndarray | torch.Tensor | pd.DataFrame, y: np.ndarray | torch.Tensor | pd.DataFrame | Any, *, verbose: bool = False) -> "BruteForceModel":
+        self._run_fit(self._expression_generator(), X, y, max_results=self.max_expressions)
         return self
-
-    def predict(self, X: np.ndarray | torch.Tensor | pd.DataFrame, nth_best: int = 0) -> np.ndarray:
-        if not self._results:
-            raise ValueError("The model has not been fitted yet. Please call `fit` first.")
-
-        if nth_best >= len(self._results):
-            raise IndexError(f"nth_best={nth_best} is out of range for {len(self._results)} results.")
-
-        refiner = self._results[nth_best]['refiner']
-
-        if isinstance(X, torch.Tensor):
-            X_np = X.detach().cpu().numpy()
-        elif isinstance(X, pd.DataFrame):
-            X_np = X.values
-        else:
-            X_np = np.asarray(X)
-
-        X_np = self._truncate_input(np.asarray(X_np))
-        return refiner.predict(X_np)
-
-    def get_expression(self, nth_best: int = 0, *, return_prefix: bool = False, precision: int = 2) -> list[str] | str:
-        if not self._results:
-            raise ValueError("The model has not been fitted yet. Please call `fit` first.")
-
-        if nth_best >= len(self._results):
-            raise IndexError(f"nth_best={nth_best} is out of range for {len(self._results)} results.")
-
-        refiner = self._results[nth_best]['refiner']
-        return refiner.transform(
-            self._results[nth_best]['expression'],
-            nth_best_constants=0,
-            return_prefix=return_prefix,
-            precision=precision,
-        )

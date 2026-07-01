@@ -11,7 +11,7 @@ from srbf.reporting import bootstrap_report, draw_distribution
 # flash_ansr config loader) parses without first needing an explicit register_sweep_yaml() call.
 register_sweep_yaml()
 
-__version__ = "0.5.5"
+__version__ = "0.6.0"
 
 __all__ = [
     "Benchmark",

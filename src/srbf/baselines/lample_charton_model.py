@@ -1,18 +1,14 @@
-import copy
 import math
 import random
 import warnings
-from typing import Any, Literal, Sequence
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
 import torch
-from sklearn.base import BaseEstimator
 from simplipy import SimpliPyEngine
 
-from symbolic_data import LampleChartonCatalog, NoValidSampleFoundError, build_catalog
-from flash_ansr.refine import Refiner, ConvergenceError
-from flash_ansr.scoring import compute_fvu, count_constants, is_constant_token, normalize_variance, score_from_fvu
+from symbolic_data import LampleChartonCatalog, NoValidSampleFoundError
 from flash_ansr.results import (
     RESULTS_FORMAT_VERSION,
     deserialize_results_payload,
@@ -20,10 +16,11 @@ from flash_ansr.results import (
     save_results_payload,
     serialize_results_payload,
 )
-from flash_ansr.utils.paths import substitute_root_path
+
+from ._base import _RefiningBaselineModel, RefinerMethod
 
 
-class LampleChartonModel(BaseEstimator):
+class LampleChartonModel(_RefiningBaselineModel):
     """Baseline model that samples skeletons from a catalog and fits constants.
 
     This model is intended for research/ablation baselines that do **not** use
@@ -31,8 +28,6 @@ class LampleChartonModel(BaseEstimator):
     ``LampleChartonCatalog`` and refines their constants against user-provided data
     using the same `Refiner` used by `flash_ansr.flash_ansr.FlashANSR`.
     """
-
-    FLOAT64_EPS: float = float(np.finfo(np.float64).eps)
 
     def __init__(
         self,
@@ -44,15 +39,7 @@ class LampleChartonModel(BaseEstimator):
         ignore_holdouts: bool = True,
         seed: int | None = None,
         n_restarts: int = 8,
-        refiner_method: Literal[
-            'curve_fit_lm',
-            'minimize_bfgs',
-            'minimize_lbfgsb',
-            'minimize_neldermead',
-            'minimize_powell',
-            'least_squares_trf',
-            'least_squares_dogbox',
-        ] = 'curve_fit_lm',
+        refiner_method: RefinerMethod = 'curve_fit_lm',
         refiner_p0_noise: Literal['uniform', 'normal'] | None = 'normal',
         refiner_p0_noise_kwargs: dict | Literal['default'] | None = 'default',
         numpy_errors: Literal['ignore', 'warn', 'raise', 'call', 'print', 'log'] | None = 'ignore',
@@ -60,85 +47,22 @@ class LampleChartonModel(BaseEstimator):
         constants_penalty: float = 0.0,
         likelihood_penalty: float = 0.0,
     ) -> None:
-        self.simplipy_engine = simplipy_engine
         self.samples = samples
         self.unique = unique
-        self.ignore_holdouts = ignore_holdouts
         self.seed = seed
-        self.n_restarts = n_restarts
-        self.refiner_method = refiner_method
-        self.refiner_p0_noise = refiner_p0_noise
-        if refiner_p0_noise_kwargs == 'default':
-            refiner_p0_noise_kwargs = {'loc': 0.0, 'scale': 5.0}
-        self.refiner_p0_noise_kwargs = copy.deepcopy(refiner_p0_noise_kwargs) if refiner_p0_noise_kwargs is not None else None
-        self.numpy_errors = numpy_errors
-        self.length_penalty = float(length_penalty)
-        self.constants_penalty = float(constants_penalty)
-        self.likelihood_penalty = float(likelihood_penalty)
-
-        self._pool = self._ensure_pool(catalog)
-        self._results: list[dict[str, Any]] = []
-        self.results: pd.DataFrame = pd.DataFrame()
-        self._input_dim: int | None = None
-
-    @property
-    def n_variables(self) -> int:
-        return self._pool.n_variables
-
-    @classmethod
-    def _normalize_variance(cls, variance: float) -> float:
-        return normalize_variance(variance)
-
-    @classmethod
-    def _compute_fvu(cls, loss: float, sample_count: int, variance: float) -> float:
-        return compute_fvu(loss, sample_count, variance)
-
-    @staticmethod
-    def _is_constant_token(token: str) -> bool:
-        return is_constant_token(token)
-
-    @classmethod
-    def _count_constants(cls, expression: Sequence[str]) -> int:
-        return count_constants(expression)
-
-    @classmethod
-    def _score_from_fvu(
-            cls,
-            fvu: float,
-            complexity: int,
-            constant_count: int,
-            log_prob: float | None,
-            length_penalty: float,
-            constants_penalty: float,
-            likelihood_penalty: float) -> float:
-        return score_from_fvu(
-            fvu, complexity, constant_count, log_prob,
-            length_penalty, constants_penalty, likelihood_penalty)
-
-    def _ensure_pool(self, catalog_ref: str | dict[str, Any] | LampleChartonCatalog) -> LampleChartonCatalog:
-        # build_catalog resolves a name[@version] (HF), a local path/file, an inline {type: ...} dict, or
-        # an existing Catalog instance -- uniform with the data_source catalog resolution.
-        ref = substitute_root_path(catalog_ref) if isinstance(catalog_ref, str) else catalog_ref
-        pool = build_catalog(ref)
-        if not isinstance(pool, LampleChartonCatalog):
-            raise TypeError(
-                f"`catalog` must resolve to a generative LampleChartonCatalog (to sample skeletons); "
-                f"got {type(pool).__name__}"
-            )
-        if self.ignore_holdouts:
-            pool.clear_holdouts()
-        return pool
-
-    def _truncate_input(self, X: np.ndarray) -> np.ndarray:
-        n_features = X.shape[-1]
-        if n_features == self.n_variables:
-            return X
-        if n_features < self.n_variables:
-            pad_width = self.n_variables - n_features
-            pad = np.zeros((*X.shape[:-1], pad_width), dtype=X.dtype)
-            return np.concatenate([X, pad], axis=-1)
-
-        return X[..., : self.n_variables]
+        self._init_refiner_common(
+            simplipy_engine=simplipy_engine,
+            catalog=catalog,
+            ignore_holdouts=ignore_holdouts,
+            n_restarts=n_restarts,
+            refiner_method=refiner_method,
+            refiner_p0_noise=refiner_p0_noise,
+            refiner_p0_noise_kwargs=refiner_p0_noise_kwargs,
+            numpy_errors=numpy_errors,
+            length_penalty=length_penalty,
+            constants_penalty=constants_penalty,
+            likelihood_penalty=likelihood_penalty,
+        )
 
     def _sample_skeletons(self) -> list[tuple[str, ...]]:
         if self.samples <= 0:
@@ -192,152 +116,10 @@ class LampleChartonModel(BaseEstimator):
             )
         return selected
 
-    def fit(self, X: np.ndarray | torch.Tensor | pd.DataFrame, y: np.ndarray | torch.Tensor | pd.DataFrame | Sequence[float], *, verbose: bool = False) -> "LampleChartonModel":
-        if len(np.shape(y)) == 1:
-            y = np.reshape(y, (-1, 1))
-
-        if isinstance(X, torch.Tensor):
-            X_np = X.detach().cpu().numpy()
-        elif isinstance(X, pd.DataFrame):
-            X_np = X.values
-        else:
-            X_np = np.asarray(X)
-
-        if isinstance(y, torch.Tensor):
-            y_np = y.detach().cpu().numpy()
-        elif isinstance(y, (pd.DataFrame, pd.Series)):
-            y_np = y.values
-        else:
-            y_np = np.asarray(y)
-
-        if y_np.ndim == 1:
-            y_np = y_np.reshape(-1, 1)
-        elif y_np.shape[-1] != 1:
-            raise ValueError("The target data must have a single output dimension.")
-
-        X_np = self._truncate_input(np.asarray(X_np))
-        self._input_dim = X_np.shape[1]
-
-        sample_count = y_np.shape[0]
-        if sample_count <= 1:
-            y_variance = float('nan')
-        else:
-            y_variance = float(np.var(y_np, axis=0, ddof=1).item())
-
-        skeletons = self._sample_skeletons()
-        if not skeletons:
-            self._results = []
-            self.results = pd.DataFrame()
-            return self
-
-        results: list[dict[str, Any]] = []
-        # np.errstate restores the global error state on exit even if the loop raises a
-        # non-ConvergenceError, so 'ignore' never leaks process-wide and silently suppresses
-        # downstream overflow/divide/invalid warnings.
-        with np.errstate(all=self.numpy_errors):
-            for skeleton in skeletons:
-                expression_tokens = list(skeleton)
-
-                try:
-                    refiner = Refiner(self.simplipy_engine, n_variables=self.n_variables).fit(
-                        expression=expression_tokens,
-                        X=X_np,
-                        y=y_np,
-                        n_restarts=self.n_restarts,
-                        method=self.refiner_method,
-                        p0=None,
-                        p0_noise=self.refiner_p0_noise,
-                        p0_noise_kwargs=copy.deepcopy(self.refiner_p0_noise_kwargs) if self.refiner_p0_noise_kwargs is not None else None,
-                        converge_error='ignore',
-                    )
-                except ConvergenceError:
-                    continue
-
-                # Accept constant-free expressions even though Refiner.valid_fit stays False in that case.
-                if len(refiner.all_constants_values) == 0:
-                    continue
-
-                has_constants = len(refiner.constants_symbols) > 0
-                valid_fit = refiner.valid_fit or not has_constants
-                if not valid_fit:
-                    continue
-
-                loss = float(refiner.all_constants_values[0][-1])
-                if not np.isfinite(loss):
-                    continue
-
-                fvu = self._compute_fvu(loss, sample_count, y_variance)
-                if not np.isfinite(fvu):
-                    continue
-
-                constant_count = self._count_constants(expression_tokens)
-                score = self._score_from_fvu(
-                    fvu,
-                    len(expression_tokens),
-                    constant_count,
-                    None,
-                    self.length_penalty,
-                    self.constants_penalty,
-                    self.likelihood_penalty,
-                )
-
-                results.append({
-                    'log_prob': float('nan'),
-                    'fvu': fvu,
-                    'score': score,
-                    'expression': expression_tokens,
-                    'constant_count': constant_count,
-                    'complexity': len(expression_tokens),
-                    'requested_complexity': None,
-                    'raw_beam': expression_tokens,
-                    'beam': expression_tokens,
-                    'raw_beam_decoded': ' '.join(expression_tokens),
-                    'function': refiner.expression_lambda,
-                    'refiner': refiner,
-                    'fits': copy.deepcopy(refiner.all_constants_values),
-                    'prompt_metadata': None,
-                })
-
-        # Lower scores are better because they combine log-scaled FVU with penalties.
-        results.sort(key=lambda item: item['score'])
-
-        self._results = results
-        self.results = pd.DataFrame(results)
+    def fit(self, X: np.ndarray | torch.Tensor | pd.DataFrame, y: np.ndarray | torch.Tensor | pd.DataFrame | Any, *, verbose: bool = False) -> "LampleChartonModel":
+        # An empty skeleton sample yields an empty (but well-formed) result set via _run_fit.
+        self._run_fit(self._sample_skeletons(), X, y)
         return self
-
-    def predict(self, X: np.ndarray | torch.Tensor | pd.DataFrame, nth_best: int = 0) -> np.ndarray:
-        if not self._results:
-            raise ValueError("The model has not been fitted yet. Please call `fit` first.")
-
-        if nth_best >= len(self._results):
-            raise IndexError(f"nth_best={nth_best} is out of range for {len(self._results)} results.")
-
-        refiner = self._results[nth_best]['refiner']
-
-        if isinstance(X, torch.Tensor):
-            X_np = X.detach().cpu().numpy()
-        elif isinstance(X, pd.DataFrame):
-            X_np = X.values
-        else:
-            X_np = np.asarray(X)
-
-        X_np = self._truncate_input(np.asarray(X_np))
-        return refiner.predict(X_np)
-
-    def get_expression(self, nth_best: int = 0, *, return_prefix: bool = False, precision: int = 2) -> list[str] | str:
-        if not self._results:
-            raise ValueError("The model has not been fitted yet. Please call `fit` first.")
-
-        if nth_best >= len(self._results):
-            raise IndexError(f"nth_best={nth_best} is out of range for {len(self._results)} results.")
-
-        refiner = self._results[nth_best]['refiner']
-        return refiner.transform(
-            self._results[nth_best]['expression'],
-            nth_best_constants=0,
-            return_prefix=return_prefix,
-            precision=precision,
-        )
 
     def save_results(self, path: str) -> None:
         """Persist fitted results (without lambdas) for reuse."""

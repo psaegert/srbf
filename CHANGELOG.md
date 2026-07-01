@@ -4,6 +4,35 @@ All notable changes to srbf are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-07-01
+
+Post-release audit round (deferred tiers C + D): baseline de-duplication, fail-fast adapter
+validation, and reporting/metric performance. Public API unchanged; re-pinned to the coordinated
+`flash-ansr>=0.10` / `symbolic-data>=0.10` release.
+
+### Changed
+- **Baselines de-duplicated onto a shared `_RefiningBaselineModel` base.** `BruteForceModel` and
+  `LampleChartonModel` now share the catalog handling, X/y coercion, per-candidate refine/score/build,
+  and the fit loop (~250 duplicated lines removed); each subclass keeps only its skeleton source
+  (exhaustive generator vs catalog sample) and extra `__init__` knobs. Public classes, constructors,
+  and results are unchanged (golden-verified identical `_results` records + ordering).
+- **`FlashANSRAdapter` validates the `complexity` mode at construction.** An unknown complexity string
+  now raises `ValueError` immediately instead of failing lazily on the first problem (after the slow
+  model load). Valid: `"none"`, `"ground_truth"`, or an int / float / list.
+- **`NeSymReSAdapter` gained a `debug` flag (default `False`); its per-sample support/validation FVU
+  print is now gated by it** (was printed unconditionally for every evaluated problem), matching the
+  `E2EAdapter` convention.
+- Re-pinned `flash-ansr>=0.10,<1.0` and `symbolic-data>=0.10` (coordinated family release).
+
+### Performance
+- **`bootstrapped_metric_ci` vectorizes** reducers that accept an `axis` kwarg (the default `np.nanmean`
+  and friends), reducing all `n` resamples in one call instead of an `n`-iteration Python loop
+  (`np.apply_along_axis`); falls back to the per-resample loop for metrics without `axis` support.
+- **`bootstrap_report` shares a single valid-row scan** for both the distribution and its `n_rows`
+  count (was scanned twice).
+- **Variable-level F1 is derived from one precision + one recall computation** per row (was recomputing
+  both a second time via `f1_score`); bit-identical to the previous values (same torch formula + NaN->0).
+
 ## [0.5.5] - 2026-07-01
 
 ### Changed

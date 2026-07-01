@@ -45,9 +45,22 @@ def bootstrapped_metric_ci(
     indices = np.random.randint(0, len(data), size=(n, len(data)))
     samples = data[indices]
 
+    bootstrapped_metrics: np.ndarray | None = None
     if samples.ndim == 2:
-        bootstrapped_metrics = np.apply_along_axis(metric, axis=1, arr=samples)
-    else:
+        # Fast path: the reducers used here (np.nanmean/np.mean/np.median/...) accept an `axis`
+        # kwarg, so all n resamples reduce in one vectorized call instead of an n-iteration Python
+        # loop (np.apply_along_axis is itself a per-row loop). Fall back below for any metric that
+        # does not support `axis` or does not return one scalar per resample.
+        try:
+            # metric is typed (ndarray)->float, but numpy reducers given axis= return an ndarray;
+            # the ignores cover the extra kwarg and that runtime-vs-annotation return mismatch.
+            vectorized = np.asarray(metric(samples, axis=1), dtype=float)  # type: ignore[call-arg, type-var]
+        except TypeError:
+            vectorized = None
+        if vectorized is not None and vectorized.shape == (samples.shape[0],):
+            bootstrapped_metrics = vectorized
+
+    if bootstrapped_metrics is None:
         bootstrapped_metrics = np.array([metric(sample) for sample in samples])
 
     median = np.nanmedian(bootstrapped_metrics)
