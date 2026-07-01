@@ -1,0 +1,991 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Symbolic Regression Benchmark Framework">
+      
+      
+        <meta name="author" content="Paul Saegert">
+      
+      
+      
+        <link rel="prev" href="../benchmarks/">
+      
+      
+        <link rel="next" href="../adapters/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Models & provisioning - srbf</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/results_explorer.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#models-and-provisioning" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="srbf" class="md-header__button md-logo" aria-label="srbf" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            srbf
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Models & provisioning
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/psaegert/srbf" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    psaegert/srbf
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="srbf" class="md-nav__button md-logo" aria-label="srbf" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    srbf
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/psaegert/srbf" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    psaegert/srbf
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../running/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running evaluations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../results/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Results & analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks & datasets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Models & provisioning
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Models & provisioning
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#asset-root-and-root" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Asset root and {{ROOT}}
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#per-model-environment-isolation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-model environment isolation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-model_adapter-config-block" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The model_adapter config block
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#flashansr-pip" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FlashANSR (pip)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pysr-pip" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PySR (pip)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#nesymres-clone-patch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        NeSymReS (clone + patch)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#e2e-symbolicregression-clone-patch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        E2E / symbolicregression (clone + patch)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#no-provisioning-baselines" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        No-provisioning baselines
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-outputs-land" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where outputs land
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adapters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding your model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#asset-root-and-root" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Asset root and {{ROOT}}
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#per-model-environment-isolation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-model environment isolation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-model_adapter-config-block" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The model_adapter config block
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#flashansr-pip" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FlashANSR (pip)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pysr-pip" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PySR (pip)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#nesymres-clone-patch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        NeSymReS (clone + patch)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#e2e-symbolicregression-clone-patch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        E2E / symbolicregression (clone + patch)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#no-provisioning-baselines" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        No-provisioning baselines
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-outputs-land" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where outputs land
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="models-and-provisioning">Models and provisioning<a class="headerlink" href="#models-and-provisioning" title="Permanent link">&para;</a></h1>
+<p>How to provision the symbolic-regression models that <code>srbf</code> evaluates, and how each is wired into a run config.</p>
+<p><code>srbf</code> does not bundle model weights. Each model is reached through a <strong>model adapter</strong>: a small wrapper, selected by <code>model_adapter.type</code> in the config, that loads a model and turns its predictions into the metrics the benchmark records. The adapters described here are the <strong>built-in reference examples</strong>. They live in a registry (<code>srbf.config._ADAPTER_REGISTRY</code>) with six entries:</p>
+<table>
+<thead>
+<tr>
+<th><code>type</code></th>
+<th>Provisioning</th>
+<th>Section</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>flash_ansr</code></td>
+<td>pip (<code>flash_ansr install &lt;repo&gt;</code>)</td>
+<td><a href="#flashansr-pip">FlashANSR</a></td>
+</tr>
+<tr>
+<td><code>pysr</code></td>
+<td>pip (<code>pip install pysr</code> + Julia)</td>
+<td><a href="#pysr-pip">PySR</a></td>
+</tr>
+<tr>
+<td><code>nesymres</code></td>
+<td>clone + patch (research baseline)</td>
+<td><a href="#nesymres-clone-patch">NeSymReS</a></td>
+</tr>
+<tr>
+<td><code>e2e</code></td>
+<td>clone + patch (research baseline)</td>
+<td><a href="#e2e-symbolicregression-clone-patch">E2E / symbolicregression</a></td>
+</tr>
+<tr>
+<td><code>lample_charton</code></td>
+<td>none (synthetic baseline)</td>
+<td><a href="#no-provisioning-baselines">No-provisioning baselines</a></td>
+</tr>
+<tr>
+<td><code>brute_force</code></td>
+<td>none (synthetic baseline)</td>
+<td><a href="#no-provisioning-baselines">No-provisioning baselines</a></td>
+</tr>
+</tbody>
+</table>
+<p><code>srbf</code> is a community framework: new SR methods are contributed by PR with their own adapter plus install instructions. The built-ins below show the pattern; to add your own model, see <a href="../adapters/">docs/adapters.md</a>.</p>
+<p>See also: <a href="../running/">docs/running.md</a> (running a config), <a href="../benchmarks/">docs/benchmarks.md</a> (the data the models are scored on), and the <a href="https://github.com/psaegert/srbf/blob/main/README.md">project README</a>.</p>
+<h2 id="asset-root-and-root">Asset root and <code>{{ROOT}}</code><a class="headerlink" href="#asset-root-and-root" title="Permanent link">&para;</a></h2>
+<p>Every shipped config references assets with a <code>{{ROOT}}</code> placeholder, for example <code>{{ROOT}}/models/nesymres/100M.ckpt</code>. At load time <code>{{ROOT}}</code> is substituted with the <strong><code>FLASH_ANSR_ROOT</code></strong> environment variable (resolved through <code>flash-ansr</code>, the one-way dependency). Point it at a checkout that holds your <code>configs/</code>, <code>data/</code>, and <code>models/</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">FLASH_ANSR_ROOT</span><span class="o">=</span>/path/to/srbf
+</code></pre></div>
+<p>If <code>FLASH_ANSR_ROOT</code> is unset, <code>flash-ansr</code> falls back to its own source-checkout root, which is rarely what you want for an <code>srbf</code> eval. Set it explicitly.</p>
+<h2 id="per-model-environment-isolation">Per-model environment isolation<a class="headerlink" href="#per-model-environment-isolation" title="Permanent link">&para;</a></h2>
+<p>The four provisioned models have <strong>mutually incompatible runtime dependencies</strong>, and two of them are provisioned by patches that <strong>edit installed packages in place</strong>. Give each its own virtual environment:</p>
+<ul>
+<li><strong>NeSymReS</strong> pins <code>hydra-core&gt;=1.3.2,&lt;1.4</code>, <code>omegaconf&gt;=2.3.0,&lt;2.4</code>, and <code>pytorch-lightning==2.5.6</code>, and <code>scripts/patch_typing_io.py</code> rewrites the installed Hydra / OmegaConf / ANTLR site-packages destructively.</li>
+<li><strong>E2E</strong> drops <code>functorch</code> and rewrites its own <code>requirements.txt</code> / <code>pyproject.toml</code> from <code>environment.yml</code>.</li>
+<li><strong>PySR</strong> pulls in JuliaCall and triggers a Julia precompile.</li>
+</ul>
+<p>Installing these side by side leads to version clashes and a <code>torch was imported before juliacall</code> warning at best, and broken imports at worst. One environment per baseline keeps each reproducible. <code>srbf</code> itself plus <code>flash-ansr</code>, <code>simplipy</code>, and <code>symbolic-data</code> install cleanly into each.</p>
+<blockquote>
+<p><strong>SimpliPy engine.</strong> Every adapter except <code>flash_ansr</code> requires an explicit <code>model_adapter.simplipy_engine</code> (a SimpliPy engine config name or path, e.g. <code>dev_7-3</code>): there is no loaded dataset to borrow an engine from, so the adapter raises if it is omitted. <code>flash_ansr</code> is the exception, it loads its engine from the model.</p>
+</blockquote>
+<h2 id="the-model_adapter-config-block">The <code>model_adapter</code> config block<a class="headerlink" href="#the-model_adapter-config-block" title="Permanent link">&para;</a></h2>
+<p>In a run config, the model is described by a <code>model_adapter</code> block (anchored under <code>defaults:</code> and reused per experiment). Its fields are per-type. The blocks below are adapted from the shipped configs under <code>configs/evaluation/scaling/</code> (the compute-scaling knob is shown as a single value instead of the <code>!sweep</code> tag the shipped configs use); treat them as reference examples and copy the one matching your model.</p>
+<hr />
+<h2 id="flashansr-pip">FlashANSR (pip)<a class="headerlink" href="#flashansr-pip" title="Permanent link">&para;</a></h2>
+<p>The main <code>flash-ansr</code> checkpoints are installed from the Hugging Face Hub with the <code>flash-ansr</code> CLI (installed as a dependency of <code>srbf</code>):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>flash_ansr<span class="w"> </span>install<span class="w"> </span>psaegert/flash-ansr-v23.0-20M
+</code></pre></div>
+<p>This downloads the checkpoint to <code>&lt;FLASH_ANSR_ROOT&gt;/models/&lt;owner&gt;/&lt;name&gt;</code>, that is <code>models/psaegert/flash-ansr-v23.0-20M</code>.</p>
+<blockquote>
+<p>The shipped configs reference a curated path, for example <code>model_path: "{{ROOT}}/models/ansr-models/v23.0-20M"</code>. That is <strong>not</strong> the directory <code>flash_ansr install</code> writes to. After installing, point <code>model_adapter.model_path</code> at wherever the checkpoint actually landed (or symlink / move it under <code>models/ansr-models/</code>). There is no auto-wiring between the install location and the config.</p>
+</blockquote>
+<p><code>model_adapter</code> block (<code>configs/evaluation/scaling/v23.0-20M_fastsrb.yaml</code>):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">model_adapter</span><span class="p">:</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">flash_ansr</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="nt">model_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{ROOT}}/models/ansr-models/v23.0-20M&quot;</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">evaluation_config</span><span class="p">:</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="nt">n_support</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">512</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">    </span><span class="nt">n_restarts</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">    </span><span class="nt">refiner_method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">curve_fit_lm</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">    </span><span class="nt">refiner_p0_noise</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">normal</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">    </span><span class="nt">refiner_p0_noise_kwargs</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">loc</span><span class="p">:</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="nt"> scale</span><span class="p">:</span><span class="w"> </span><span class="nv">5</span><span class="p p-Indicator">}</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">    </span><span class="nt">length_penalty</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.05</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">    </span><span class="nt">constants_penalty</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">    </span><span class="nt">likelihood_penalty</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="w">    </span><span class="nt">generation_config</span><span class="p">:</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="w">      </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">softmax_sampling</span>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="w">      </span><span class="nt">kwargs</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">choices</span><span class="p">:</span><span class="w"> </span><span class="nv">32</span><span class="p p-Indicator">,</span><span class="nt"> top_k</span><span class="p">:</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="nt"> top_p</span><span class="p">:</span><span class="w"> </span><span class="nv">1</span><span class="p p-Indicator">,</span><span class="nt"> max_len</span><span class="p">:</span><span class="w"> </span><span class="nv">64</span><span class="p p-Indicator">,</span><span class="nt"> batch_size</span><span class="p">:</span><span class="w"> </span><span class="nv">128</span><span class="p p-Indicator">,</span><span class="nt"> temperature</span><span class="p">:</span><span class="w"> </span><span class="nv">1</span><span class="p p-Indicator">,</span><span class="nt"> valid_only</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">,</span><span class="nt"> simplify</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">,</span><span class="nt"> unique</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">}</span>
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="w">    </span><span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cuda</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="w">  </span><span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cuda</span>
+</code></pre></div>
+<p>Key fields: <code>model_path</code> (checkpoint directory), <code>evaluation_config</code> (refiner + generation settings, including the nested <code>generation_config</code>), and <code>device</code>. The full block is ~30 lines; read the shipped config rather than retyping it. The compute-scaling knob (the candidate count <code>choices</code>) is swept with <code>generation_overrides</code> (and <code>evaluation_overrides</code> for refiner knobs). The <code>*_val.yaml</code> variants point the same adapter at the <code>v23-val</code> catalog.</p>
+<p><code>flash_ansr</code> is the only adapter where the wheel both ships the adapter and can fetch the model, so no extra <code>srbf</code> extra is needed.</p>
+<h2 id="pysr-pip">PySR (pip)<a class="headerlink" href="#pysr-pip" title="Permanent link">&para;</a></h2>
+<p>The PySR <strong>adapter</strong> ships in the base <code>srbf</code> wheel, but the <code>pysr</code> <strong>package</strong> is not a hard dependency: it is in the <code>baselines</code> extra and needs a Julia precompile at runtime. <code>pip install srbf</code> alone does <strong>not</strong> give you a working PySR baseline. Install PySR and precompile Julia inside the PySR environment:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>pip<span class="w"> </span>install<span class="w"> </span>pysr<span class="w">            </span><span class="c1"># or: pip install &quot;srbf[baselines]&quot;</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;from pysr import PySRRegressor&quot;</span><span class="w">   </span><span class="c1"># triggers Julia precompilation</span>
+</code></pre></div>
+<p>The first import compiles the Julia backend (this can take several minutes). If Julia is not available system-wide, follow the <a href="https://astroautomata.com/PySR/install/">PySR install docs</a> first.</p>
+<p><code>model_adapter</code> block (<code>configs/evaluation/scaling/pysr_fastsrb.yaml</code>):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">model_adapter</span><span class="p">:</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pysr</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span><span class="nt">timeout_in_seconds</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3600</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span><span class="nt">niterations</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span><span class="nt">padding</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">  </span><span class="nt">use_mult_div_operators</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">  </span><span class="nt">simplipy_engine</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;dev_7-3&quot;</span>
+</code></pre></div>
+<p>Key fields: <code>niterations</code> (the compute-scaling axis, swept per run), <code>timeout_in_seconds</code>, and <code>simplipy_engine</code> (the SimpliPy engine name; <code>dev_7-3</code> is installed on demand; required). No model weights to download: PySR fits each problem from scratch.</p>
+<hr />
+<p>The next two are <strong>research baselines</strong>: upstream source trees that are not pip-installable as-is on modern Python. The default recipe is a clone of the upstream repo, a patch with the script under <a href="https://github.com/psaegert/srbf/tree/main/scripts">scripts/</a>, an editable install, and a separate weights download. <strong>These patch scripts are one default recipe, not the only way.</strong> If you maintain a fork that already builds, install that instead.</p>
+<h2 id="nesymres-clone-patch">NeSymReS (clone + patch)<a class="headerlink" href="#nesymres-clone-patch" title="Permanent link">&para;</a></h2>
+<p>Default recipe, in its own Python 3.13 environment:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># 1. srbf + its deps</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[baselines]&quot;</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="c1"># 2. Clone NeSymReS and install it editable</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/SymposiumOrganization/NeuralSymbolicRegressionThatScales<span class="w"> </span>nesymres/NeuralSymbolicRegressionThatScales
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>nesymres/NeuralSymbolicRegressionThatScales/src
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="c1"># 3. Lightning, for the checkpoint loader</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>pip<span class="w"> </span>install<span class="w"> </span>pytorch-lightning<span class="o">==</span><span class="m">2</span>.5.6
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="c1"># 4. Patch for Python 3.13 (rerun after any reinstall of hydra/omegaconf/antlr)</span>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>python<span class="w"> </span>scripts/patch_typing_io.py<span class="w">                                   </span><span class="c1"># patches installed hydra/omegaconf/antlr in place</span>
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>python<span class="w"> </span>scripts/patch_nesymres.py<span class="w"> </span>nesymres/NeuralSymbolicRegressionThatScales<span class="w">   </span><span class="c1"># dclasses + setup.py pins</span>
+</code></pre></div>
+<p>The NeSymReS recipe uses <strong>both</strong> patch scripts:</p>
+<ul>
+<li><code>scripts/patch_typing_io.py</code> rewrites the <strong>installed</strong> Hydra / OmegaConf / ANTLR packages (the removed <code>typing.io</code> import, plus Hydra dataclass <code>default_factory</code> fixes). It takes no arguments and operates on the active environment. Rerun it after every reinstall of those packages.</li>
+<li><code>scripts/patch_nesymres.py &lt;repo&gt;</code> patches the <strong>cloned</strong> repo: it sets <code>bfgs: BFGSParams = field(default_factory=BFGSParams)</code> in <code>dclasses.py</code> and pins <code>hydra-core</code> / <code>omegaconf</code> in <code>setup.py</code>. Pass the path to your NeSymReS clone.</li>
+</ul>
+<p>Then download the 100M checkpoint triplet (<code>eq_setting.json</code>, <code>config.yaml</code>, <code>100M.ckpt</code>) into <code>models/nesymres/</code> separately, as documented upstream.</p>
+<p><code>model_adapter</code> block (<code>configs/evaluation/scaling/nesymres_fastsrb.yaml</code>):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nt">model_adapter</span><span class="p">:</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nesymres</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span><span class="nt">eq_setting_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{ROOT}}/models/nesymres/eq_setting.json&quot;</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">  </span><span class="nt">config_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{ROOT}}/models/nesymres/config.yaml&quot;</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">  </span><span class="nt">weights_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{ROOT}}/models/nesymres/100M.ckpt&quot;</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">  </span><span class="nt">simplipy_engine</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;dev_7-3&quot;</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">  </span><span class="nt">n_restarts</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">  </span><span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cuda</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="w">  </span><span class="nt">remove_padding</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</code></pre></div>
+<p>Required fields: <code>eq_setting_path</code>, <code>config_path</code>, <code>weights_path</code>, and <code>simplipy_engine</code> (the adapter raises if any is missing). <code>beam_width</code> is the compute-scaling axis, swept per run. The <code>nesymres_val.yaml</code> variant points the same adapter at the <code>v23-val</code> catalog.</p>
+<blockquote>
+<p>Lightning warns that the checkpoint was saved with an older release. Inference works regardless; optionally upgrade it in place with <code>python -m pytorch_lightning.utilities.upgrade_checkpoint models/nesymres/100M.ckpt</code>.</p>
+</blockquote>
+<h2 id="e2e-symbolicregression-clone-patch">E2E / symbolicregression (clone + patch)<a class="headerlink" href="#e2e-symbolicregression-clone-patch" title="Permanent link">&para;</a></h2>
+<p>The Meta "End-to-End" model (<code>facebookresearch/symbolicregression</code>). Default recipe, in its own environment:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># 1. srbf + its deps</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[baselines]&quot;</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># 2. Clone the upstream repo</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/facebookresearch/symbolicregression<span class="w"> </span>e2e/symbolicregression
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="c1"># 3. Patch for modern numpy/torch (drops functorch, fixes a rescale loop,</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="c1">#    rewrites requirements.txt + pyproject.toml from environment.yml)</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>python<span class="w"> </span>scripts/patch_symbolicregression.py<span class="w"> </span>e2e/symbolicregression
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="c1"># 4. Editable install of the patched tree</span>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>e2e/symbolicregression
+</code></pre></div>
+<p>The E2E recipe uses <strong>one</strong> patch script, <code>scripts/patch_symbolicregression.py &lt;repo&gt;</code>, which takes the path to the cloned <code>symbolicregression</code> repo (the directory containing the <code>symbolicregression/</code> package). It is independent of the NeSymReS scripts; <code>patch_typing_io.py</code> is not part of this recipe.</p>
+<p>Then download the E2E weights (<code>model1.pt</code>) into <code>models/e2e/</code> separately, per upstream.</p>
+<p><code>model_adapter</code> block (<code>configs/evaluation/scaling/e2e_fastsrb.yaml</code>):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nt">model_adapter</span><span class="p">:</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">e2e</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span><span class="nt">model_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{ROOT}}/models/e2e/model1.pt&quot;</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span><span class="nt">simplipy_engine</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;dev_7-3&quot;</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">  </span><span class="nt">device</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cuda</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">  </span><span class="nt">candidates_per_bag</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">  </span><span class="nt">max_input_points</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200</span>
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">  </span><span class="nt">max_number_bags</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="w">  </span><span class="nt">n_trees_to_refine</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="w">  </span><span class="nt">rescale</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</code></pre></div>
+<p>Required fields: <code>model_path</code> and <code>simplipy_engine</code> (the adapter raises if either is missing). <code>candidates_per_bag</code> is the compute-scaling axis, swept per run (some configs also tune <code>max_generated_output_len</code>). The <code>e2e_val.yaml</code> variant targets the <code>v23-val</code> catalog.</p>
+<hr />
+<h2 id="no-provisioning-baselines">No-provisioning baselines<a class="headerlink" href="#no-provisioning-baselines" title="Permanent link">&para;</a></h2>
+<p><code>lample_charton</code> and <code>brute_force</code> are <strong>synthetic</strong> baselines: they fit candidate expressions drawn from (or enumerated over) a generative <code>symbolic-data</code> catalog rather than calling a trained network, so there are no weights to download. They need a generative <code>catalog</code> to draw candidates from and an explicit <code>simplipy_engine</code>.</p>
+<blockquote>
+<p><strong>Migration note.</strong> The former <code>skeleton_pool</code> adapter is now <code>lample_charton</code>; its <code>skeleton_pool:</code> field is now <code>catalog:</code>, pointing at a generative catalog (e.g. <code>lample-charton-v23</code>).</p>
+</blockquote>
+<p><code>lample_charton</code> block (<code>configs/evaluation/scaling/lample_charton_fastsrb.yaml</code>):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nt">model_adapter</span><span class="p">:</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lample_charton</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span><span class="nt">simplipy_engine</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;dev_7-3&quot;</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">  </span><span class="nt">catalog</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lample-charton-v23</span><span class="w">   </span><span class="c1"># the generative catalog to sample candidate expressions from</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">  </span><span class="nt">samples</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32</span><span class="w">                   </span><span class="c1"># candidate expressions sampled per problem (the compute-scaling axis)</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">  </span><span class="nt">unique</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="w">  </span><span class="nt">ignore_holdouts</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="w">  </span><span class="nt">seed</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">42</span>
+<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="w">  </span><span class="nt">n_restarts</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
+<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="w">  </span><span class="nt">refiner_method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">curve_fit_lm</span>
+<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a><span class="w">  </span><span class="nt">refiner_p0_noise</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">normal</span>
+<a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a><span class="w">  </span><span class="nt">refiner_p0_noise_kwargs</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">loc</span><span class="p">:</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="nt"> scale</span><span class="p">:</span><span class="w"> </span><span class="nv">5</span><span class="p p-Indicator">}</span>
+<a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a><span class="w">  </span><span class="nt">numpy_errors</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ignore</span>
+<a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a><span class="w">  </span><span class="nt">length_penalty</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.05</span>
+<a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a><span class="w">  </span><span class="nt">constants_penalty</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span>
+<a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a><span class="w">  </span><span class="nt">likelihood_penalty</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span>
+</code></pre></div>
+<p>Note the <strong>two</strong> distinct <code>catalog</code> fields when this adapter is used: <code>data_source.catalog</code> is the evaluation set (e.g. <code>fastsrb</code> / <code>v23-val</code>), while <code>model_adapter.catalog</code> is the generative catalog the baseline samples its candidate expressions from (e.g. <code>lample-charton-v23</code>).</p>
+<p><code>brute_force</code> takes the same required <code>catalog</code> and <code>simplipy_engine</code>, plus enumeration limits: <code>max_expressions</code> (default 10000), <code>max_length</code>, <code>include_constant_token</code> (default true), and the same refiner / penalty fields. No shipped scaling config defines a <code>brute_force</code> run; build one by copying the <code>lample_charton</code> block, changing <code>type: brute_force</code>, and adding <code>max_expressions</code>.</p>
+<hr />
+<h2 id="where-outputs-land">Where outputs land<a class="headerlink" href="#where-outputs-land" title="Permanent link">&para;</a></h2>
+<p>Every run writes a pickle under <code>results/evaluation/.../*.pkl</code>, <strong>one row per evaluated problem</strong>, with the raw prediction columns (<code>y_pred</code>, <code>y_pred_val</code>, <code>predicted_*</code>, <code>fit_time</code>, ...); the derived metrics (<code>fvu_fit</code>, <code>fvu_val</code>, <code>numeric_recovery_*</code>, <code>symbolic_recovery</code>, <code>f1_score</code>, ...) are produced by a separate <code>srbf.compute_derived_metrics</code> step, not by the run itself. Rows where a problem could not be produced are written as <code>placeholder</code> rows so counts stay aligned across models; filter them before any fit-based analysis. <code>runner.resume: true</code> (or omitting <code>--no-resume</code>) continues a partial pickle instead of restarting. See <a href="../running/">docs/running.md</a> for the full runner, CLI, output columns, and metric-derivation / reporting behavior, and <a href="../adapters/">docs/adapters.md</a> to add a new model.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.instant", "navigation.path", "navigation.prune", "navigation.indexes", "content.code.copy", "search.suggest", "search.highlight"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+      
+        <script src="../javascripts/results_data.js"></script>
+      
+        <script src="../javascripts/results_explorer.js"></script>
+      
+    
+  </body>
+</html>
