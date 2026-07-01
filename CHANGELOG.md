@@ -4,6 +4,15 @@ All notable changes to srbf are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.4] - 2026-07-01
+
+### Fixed
+- **Run provenance hashes the data catalog.** `provenance._resolve_inputs` now hashes a local catalog
+  artifact (a saved catalog file or directory's `catalog.yaml`/`catalog.npz`), dropping the dead
+  pre-0.5 `benchmark_path`/`dataset`/`skeleton_list` branches; a bare `name[@version]` / HF ref is
+  captured verbatim by `config_sha`. Previously dataset provenance silently recorded nothing about the
+  data source.
+
 ## [0.5.3] - 2026-07-01
 
 Post-release audit cleanup + a robustness fix.

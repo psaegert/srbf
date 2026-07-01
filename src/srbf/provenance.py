@@ -97,15 +97,20 @@ def _resolve_inputs(config_path: str, experiment: str | None) -> dict[str, str]:
             if (mpr / extra).exists():
                 files[f"model/{extra}"] = str(mpr / extra)
     ds = run.get("data_source", {})
-    if ds.get("benchmark_path"):
-        files["benchmark"] = substitute_root_path(str(ds["benchmark_path"]))
-    if ds.get("dataset"):
-        d = ds["dataset"]
-        files["dataset_cfg"] = substitute_root_path(str(d if isinstance(d, str) else (d.get("path") or d.get("config"))))
-    if isinstance(ds.get("skeleton_list"), str):
-        # the pinned eval-set file (e.g. standard-eval val100) -- hashing it records WHICH skeletons
-        # ran, so "val" is provenance-verifiable even though the pool lives under gitignored data/.
-        files["skeleton_list_pin"] = substitute_root_path(str(ds["skeleton_list"]))
+    # Hash the data catalog when it is a LOCAL artifact (a saved catalog file or directory), so a
+    # pinned local catalog's CONTENT is provenance-verifiable. A bare NAME[@version] (an HF ref) or an
+    # inline dict is already captured verbatim by `config_sha` (the whole config -- including
+    # `data_source.catalog` -- is hashed in collect_provenance), and an HF ref's content is externally
+    # pinned by the manifest sha. (The pre-0.5 benchmark_path/dataset/skeleton_list keys are gone.)
+    catalog = ds.get("catalog")
+    if isinstance(catalog, str):
+        catalog_path = Path(substitute_root_path(catalog))
+        if catalog_path.is_file():
+            files["catalog"] = str(catalog_path)
+        elif catalog_path.is_dir():
+            for fname in ("catalog.yaml", "catalog.npz"):
+                if (catalog_path / fname).is_file():
+                    files[f"catalog/{fname}"] = str(catalog_path / fname)
     return files
 
 
