@@ -56,10 +56,35 @@
         <p>
           The <strong>compute</strong> axis is median per-problem <strong>wall-clock fit time</strong>,
           the one budget comparable across methods (Flash-ANSR sweeps <code>choices</code>, PySR
-          iterations, NeSymReS the beam width, E2E the candidate count; time unifies them). Metrics are
-          the strict <code>is_perfect_fit</code> numeric recovery, token-level skeleton F1, and median
-          <code>log10</code> FVU; symbolic recovery is omitted until predictions are normalized to the
-          current <code>simplify</code>.
+          iterations, NeSymReS the beam width, E2E the candidate count; time unifies them).
+        </p>
+        <p>
+          <strong>Metrics.</strong> The two headline metrics are the strict <code>is_perfect_fit</code>
+          numeric recovery (<strong>vNRR</strong>: FVU on the clean validation targets at or below
+          float32 epsilon) and the <strong>expression length ratio</strong> (predicted / ground-truth
+          prefix length; 1 is ideal). The full menu is under <em>More metrics</em>. Rate metrics count a
+          failed prediction as 0 (never conditioned on success); diagnostic metrics (FVU, token overlap,
+          edit distances, lengths) are computed only where a prediction exists. Recovery and FVU always
+          score against the <em>clean</em> targets, including in the noise sweep. Token-overlap and
+          exact-match metrics compare <em>raw</em> prefixes: archived predictions are not re-normalized
+          and the baselines tokenize variables differently, so treat cross-series comparisons of those
+          with care. <code>log-probability</code> and <code>selection score</code> exist only for
+          Flash-ANSR series.
+        </p>
+      </details>
+
+      <details class="provenance privacy">
+        <summary>Privacy &amp; cookies</summary>
+        <p>
+          This site is a static page with no analytics, no tracking, and no third-party cookies. It
+          stores exactly <strong>one first-party cookie</strong> (<code>srbf_colors</code>), and only
+          <strong>after you change a series colour</strong>: it holds your colour overrides so the
+          chart looks the same when you return on this device. It contains no personal data and is
+          never sent anywhere — the page is fully client-side. Use <em>Reset all colours</em> in the
+          explorer to delete it at any time. Because it is set solely to fulfil a preference you
+          explicitly request and carries no tracking, it is a functional/strictly-necessary cookie
+          under the GDPR / ePrivacy Directive and requires no consent banner; this notice is provided
+          for transparency.
         </p>
       </details>
     </section>
