@@ -11,9 +11,13 @@ validation, and reporting/metric performance. Re-pinned to the coordinated `flas
 `symbolic-data>=0.10` release.
 
 ### Added
-- `compute_derived_metrics` is now a public export (`from srbf import compute_derived_metrics`): the
-  standardized second stage that turns a raw `Benchmark.run()` snapshot into the derived metrics
-  (FVU, numeric/symbolic recovery, F1, ...). A run emits raw results only; metrics are a separate step.
+- **`srbf.derive_metrics(snapshot, *, engine=None, operator_arity=None, simplify_fn=None)`** -- the
+  clean standardized second stage. A `Benchmark.run()` emits RAW results only; `derive_metrics`
+  turns one raw snapshot into a NEW snapshot with the derived metric columns (FVU, numeric/symbolic
+  recovery, F1, edit distances, ...) added, without mutating the input, and composes directly with
+  `bootstrap_report` / `draw_distribution`. It hides the nested-dict wrapper that the lower-level
+  `compute_derived_metrics` requires. Metrics are never computed inside the run (two-stage by design).
+- `compute_derived_metrics` is also exported now (the in-place primitive `derive_metrics` wraps).
 
 ### Changed
 - **Baselines de-duplicated onto a shared `_RefiningBaselineModel` base.** `BruteForceModel` and

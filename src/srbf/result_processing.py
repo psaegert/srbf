@@ -349,3 +349,57 @@ def compute_derived_metrics(
                     total_nestedness(ps, operator_arity) if ps is not None else None
                     for ps in pred_skel
                 ])
+
+
+def derive_metrics(
+    snapshot: Mapping[str, Sequence[Any]],
+    *,
+    engine: Any = None,
+    operator_arity: Mapping[str, int] | None = None,
+    simplify_fn: Callable[[list[str]], list[str] | None] | None = None,
+) -> dict[str, Any]:
+    """Compute the standardized derived metrics for one raw ``Benchmark.run()`` snapshot.
+
+    A benchmark run emits RAW results only; this is the standardized second stage. It returns a NEW
+    snapshot -- the raw columns PLUS the derived metric columns (``fvu_fit`` / ``fvu_val``,
+    ``log10_fvu_*``, ``numeric_recovery_*``, ``symbolic_recovery``, ``f1_score``, skeleton lengths,
+    edit distances, unique-variable precision/recall, nestedness, ...) -- WITHOUT mutating the input.
+    Compose the result with :func:`bootstrap_report` / :func:`draw_distribution`, or compute your own
+    metrics over the raw columns instead.
+
+    This is the ergonomic entry point over :func:`compute_derived_metrics` (which mutates a 4-level
+    nested ``results[model]['results'][test_set][scaling_value]`` dict in place): it lifts the flat
+    snapshot into that shape, derives the metrics, and returns the augmented leaf.
+
+    Parameters
+    ----------
+    snapshot : Mapping[str, Sequence]
+        A raw run snapshot (the dict-of-lists a ``Benchmark.run()`` returns).
+    engine : SimpliPyEngine, optional
+        If given, its ``operator_arity`` and ``simplify`` are used unless overridden below. Provide
+        either ``engine`` or ``operator_arity`` (e.g. ``engine=adapter.get_simplipy_engine()``).
+    operator_arity : Mapping[str, int], optional
+        Operator-token -> arity map (needed for tree-edit-distance and nestedness). Used instead of
+        the engine's when given.
+    simplify_fn : callable, optional
+        Skeleton simplifier; defaults to the engine's ``simplify`` when an ``engine`` is given, else
+        ``None`` (simplified skeletons then fall back to the raw skeletons).
+
+    Returns
+    -------
+    dict
+        A NEW snapshot: the raw columns plus the derived metric columns. The input is not modified.
+    """
+    if operator_arity is None:
+        if engine is None:
+            raise ValueError("derive_metrics needs either `engine` or `operator_arity`.")
+        operator_arity = engine.operator_arity
+    if simplify_fn is None and engine is not None:
+        simplify_fn = engine.simplify
+
+    # Shallow-copy the snapshot as the nested leaf: compute_derived_metrics only ADDS derived keys to
+    # the leaf, so the derived columns land in this copy and the caller's snapshot stays untouched.
+    leaf = dict(snapshot)
+    results = {"model": {"results": {"test": {0: leaf}}}}
+    compute_derived_metrics(results, test_sets=["test"], operator_arity=operator_arity, simplify_fn=simplify_fn)
+    return results["model"]["results"]["test"][0]

@@ -253,39 +253,32 @@ The columns a `Benchmark.run()` snapshot actually contains:
 The derived metrics (`fvu_fit`, `fvu_val`, `log10_fvu_*`, `numeric_recovery_fit`,
 `numeric_recovery_val`, `symbolic_recovery`, `f1_score`, `n_constants`,
 `predicted_n_constants`, skeleton lengths, edit distances, unique-variable
-precision/recall, ...) are computed **after** the run by
-`srbf.compute_derived_metrics(results, test_sets, operator_arity, simplify_fn=None)`. It
-reads the raw `y*`/`y_pred*`, `skeleton`, and `predicted_skeleton_prefix` columns and adds
-the metric columns **in place**.
-
-`compute_derived_metrics` operates on a **nested** results dict of the form
-`results[model]['results'][test_set][scaling_value]`, whose leaf is one raw run snapshot
-(the dict-of-lists a run returns). To score a single run, lift its snapshot into that shape:
+precision/recall, ...) are computed **after** the run by `srbf.derive_metrics`. It takes one
+raw run snapshot and returns a **new** snapshot with the metric columns added, without mutating
+the input:
 
 ```python
-from srbf import Benchmark, compute_derived_metrics
+from srbf import Benchmark, derive_metrics, bootstrap_report
 
 (benchmark,) = Benchmark.runs_from_config(single_run_config_path)
-snapshot = benchmark.run()                      # raw dict-of-lists, no derived metrics
+snapshot = benchmark.run()      # raw dict-of-lists, no derived metrics
 
-# Wrap the single snapshot in the nested shape compute_derived_metrics expects:
-results = {"model": {"results": {"test": {0: snapshot}}}}
-compute_derived_metrics(
-    results,
-    test_sets=["test"],
-    operator_arity={"add": 2, "sub": 2, "mul": 2, "div": 2, "pow": 2},  # binary=2, unary=1
-    simplify_fn=benchmark.model_adapter.get_simplipy_engine().simplify,  # optional
-)
-derived = results["model"]["results"]["test"][0]  # now carries fvu_*, numeric_recovery_*, ...
+scored = derive_metrics(snapshot, engine=benchmark.model_adapter.get_simplipy_engine())
+report = bootstrap_report(scored, "numeric_recovery_val")   # composes with the reporting helpers
 ```
 
-`operator_arity` maps each operator token to its arity (needed for tree-edit-distance and
-nestedness); `simplify_fn` is optional (when `None`, simplified skeletons fall back to the
-raw skeletons). You can equally compute your own metrics directly over the raw columns
-instead of calling `compute_derived_metrics`. The full set of derived keys (and the
-placeholder defaults used for failed rows) is documented on `compute_derived_metrics` and in
-the `DEFAULT_NEGATIVES` dict in
-[`src/srbf/result_processing.py`](https://github.com/psaegert/srbf/blob/main/src/srbf/result_processing.py).
+Pass an `engine` (its `operator_arity` + `simplify` are used) **or** an explicit
+`operator_arity` mapping (operator token -> arity, needed for tree-edit-distance and
+nestedness); `simplify_fn` is optional (defaults to the engine's, else simplified skeletons
+fall back to the raw ones). You can equally compute your own metrics directly over the raw
+columns. The full set of derived keys (and the placeholder defaults used for failed rows) is
+documented on `derive_metrics` / `compute_derived_metrics` and in the `DEFAULT_NEGATIVES` dict
+in [`src/srbf/result_processing.py`](https://github.com/psaegert/srbf/blob/main/src/srbf/result_processing.py).
+
+`derive_metrics` is the ergonomic wrapper over the lower-level `srbf.compute_derived_metrics`,
+which mutates a nested `results[model]['results'][test_set][scaling_value]` dict in place (the
+shape the cross-run analysis routine builds); reach for it directly only when you already hold
+that nested structure.
 
 ### Placeholders
 
