@@ -1,14 +1,15 @@
-"""srbf command-line interface: the ``run`` subcommand carved from flash-ansr.
+"""srbf command-line interface: the ``run`` and ``analyze`` subcommands.
 
-flash-ansr keeps the rest of its CLI (train / benchmark / import-data / install / ...); only
-``run`` is evaluation-bound and lives here. The benchmark imports are ``srbf.*``; the
-flash-ansr ``utils`` imports are the cross-repo contract (srbf depends one-way on flash-ansr).
+``run`` executes an evaluation from a unified config (the raw stage); ``analyze`` renders the
+standardized results page from run outputs (the analysis stage). flash-ansr keeps the rest of its
+CLI (train / import-data / install / ...); only these evaluation-bound commands live here. The
+benchmark imports are ``srbf.*``; the flash-ansr ``utils`` imports are the cross-repo contract.
 """
 import argparse
 
 
 def main(argv: list[str] | None = None) -> None:
-    """CLI entry point: parse args and dispatch the ``run`` subcommand (resolve config -> run benchmarks)."""
+    """CLI entry point: parse args and dispatch the ``run`` / ``analyze`` subcommands."""
     parser = argparse.ArgumentParser(description="srbf: symbolic-regression evaluation framework")
     subparsers = parser.add_subparsers(dest="command_name", required=True)
 
@@ -22,6 +23,12 @@ def main(argv: list[str] | None = None) -> None:
     run_parser.add_argument('--sweep-filter', type=str, default=None, metavar='AXIS=VALUE[,AXIS=VALUE]',
                             help='Run only the !sweep runs whose axis labels match (e.g. ladder=256)')
     run_parser.add_argument('-v', '--verbose', action='store_true', help='Print a progress bar')
+
+    analyze_parser = subparsers.add_parser("analyze", help="Render the standardized results page from a run manifest")
+    analyze_parser.add_argument('manifest', type=str, help='Path to the run manifest yaml (runs: [{model, benchmark, scaling?, path}])')
+    analyze_parser.add_argument('-o', '--out-dir', type=str, required=True, help='Output directory for results.md + figures/')
+    analyze_parser.add_argument('--engine', type=str, default='dev_7-3', help='SimpliPy engine used for skeleton simplification + operator arities')
+    analyze_parser.add_argument('--title', type=str, default='Results', help='Title of the rendered results page')
 
     args = parser.parse_args(argv)
 
@@ -71,6 +78,14 @@ def main(argv: list[str] | None = None) -> None:
                     destination = benchmark.output_path or 'memory'
                     print(f"{label}Evaluation finished with {benchmark.result_store.size} samples "
                           f"(saved to {destination}).")
+        case 'analyze':
+            from srbf.analysis import load_runs, build_report
+            from simplipy import SimpliPyEngine
+
+            runs = load_runs(args.manifest)
+            engine = SimpliPyEngine.load(args.engine, install=True)
+            out = build_report(runs, args.out_dir, engine=engine, title=args.title)
+            print(f"Wrote {out}")
         case _:
             parser.print_help()
 

@@ -389,3 +389,34 @@ def build_report(
     with open(out_path, "w", encoding="utf-8") as handle:
         handle.write("\n".join(lines) + "\n")
     return out_path
+
+
+def load_runs(manifest_path: str) -> list[RunResult]:
+    """Load :class:`RunResult`s from a manifest that maps run outputs to their grid coordinates.
+
+    The manifest is a YAML file of the form::
+
+        runs:
+          - {model: flash-ansr-120M, benchmark: fastsrb, scaling: 4096, path: fastsrb_4096.pkl}
+          - {model: brute-force,      benchmark: fastsrb,               path: bf_fastsrb.pkl}
+
+    Each ``path`` (relative to the manifest) is a pickled RAW snapshot -- the dict-of-lists a
+    ``Benchmark.run()`` returns (also what ``ResultStore.snapshot()`` yields). ``scaling`` is optional.
+    """
+    import pickle
+
+    import yaml
+
+    with open(manifest_path, "r", encoding="utf-8") as handle:
+        manifest = yaml.safe_load(handle) or {}
+    base = os.path.dirname(os.path.abspath(manifest_path))
+    runs: list[RunResult] = []
+    for entry in manifest.get("runs", []):
+        path = entry["path"]
+        if not os.path.isabs(path):
+            path = os.path.join(base, path)
+        with open(path, "rb") as handle:
+            snapshot = pickle.load(handle)
+        runs.append(RunResult(model=entry["model"], benchmark=entry["benchmark"],
+                              scaling=entry.get("scaling"), snapshot=snapshot))
+    return runs

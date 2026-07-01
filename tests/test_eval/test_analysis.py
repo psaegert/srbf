@@ -72,3 +72,31 @@ def test_build_report_writes_page_and_figures(tmp_path):
 def test_leaderboard_requires_engine_or_arity():
     with pytest.raises(ValueError):
         leaderboard(_runs(), n_bootstrap=50)
+
+
+def test_load_runs_from_manifest(tmp_path):
+    import pickle
+
+    import yaml
+
+    from srbf.analysis import load_runs
+
+    rng = np.random.default_rng(1)
+    entries = []
+    for i, (model, bench, s, rate) in enumerate([
+        ("strong", "fastsrb", 512, 0.8), ("weak", "fastsrb", 512, 0.2),
+    ]):
+        path = tmp_path / f"run{i}.pkl"
+        with open(path, "wb") as h:
+            pickle.dump(_snapshot(8, 3, rate, rng), h)
+        entries.append({"model": model, "benchmark": bench, "scaling": s, "path": f"run{i}.pkl"})
+    with open(tmp_path / "manifest.yaml", "w") as h:
+        yaml.safe_dump({"runs": entries}, h)
+
+    runs = load_runs(str(tmp_path / "manifest.yaml"))
+    assert len(runs) == 2
+    assert {r.model for r in runs} == {"strong", "weak"}
+    assert all(r.scaling == 512 and "y_pred_val" in r.snapshot for r in runs)
+    # the loaded runs render a report end-to-end
+    out = build_report(runs, str(tmp_path / "out"), operator_arity=ARITY, n_bootstrap=200)
+    assert os.path.isfile(out)
