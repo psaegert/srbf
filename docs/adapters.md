@@ -53,8 +53,10 @@ metadata to seed your result).
 ### What you return: `EvaluationResult`
 
 Return `EvaluationResult(record)`, where `record` is a plain `dict`. Start it from
-`sample.clone_metadata()` so the ground truth travels with the result, then add your outputs. The
-metrics layer (`srbf.result_processing`) reads these keys:
+`sample.clone_metadata()` so the ground truth travels with the result, then add your outputs. A
+run records these keys **raw** (it does not compute metrics); the separate, offline
+`srbf.compute_derived_metrics` step (see [running.md](running.md#deriving-metrics)) later reads
+them to produce FVU / recovery / F1:
 
 | key | type | consumed for |
 |---|---|---|
@@ -67,8 +69,9 @@ metrics layer (`srbf.result_processing`) reads these keys:
 | `error` | `str` | populated on failure |
 | `fit_time` | `float` | wall-clock fit time (timing comparisons) |
 
-You do not compute FVU or recovery yourself: emit predictions + the expression, and srbf's metrics do
-the rest. Prefix/skeleton normalization is available from `simplipy` (`normalize_expression`,
+You do not compute FVU or recovery yourself: emit predictions + the expression, and srbf's derived
+metrics (`compute_derived_metrics`, run as a separate post-processing step) do the rest.
+Prefix/skeleton normalization is available from `simplipy` (`normalize_expression`,
 `normalize_skeleton`); convert an infix string to prefix with the SimpliPy engine
 (`simplipy_engine.infix_to_prefix(expr)`).
 

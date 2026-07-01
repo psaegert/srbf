@@ -41,7 +41,7 @@ Installing these side by side leads to version clashes and a `torch was imported
 
 ## The `model_adapter` config block
 
-In a run config, the model is described by a `model_adapter` block (anchored under `defaults:` and reused per experiment). Its fields are per-type. The blocks below are taken verbatim from the shipped configs under `configs/evaluation/scaling/`; treat them as reference examples and copy the one matching your model.
+In a run config, the model is described by a `model_adapter` block (anchored under `defaults:` and reused per experiment). Its fields are per-type. The blocks below are adapted from the shipped configs under `configs/evaluation/scaling/` (the compute-scaling knob is shown as a single value instead of the `!sweep` tag the shipped configs use); treat them as reference examples and copy the one matching your model.
 
 ---
 
@@ -234,4 +234,4 @@ Note the **two** distinct `catalog` fields when this adapter is used: `data_sour
 
 ## Where outputs land
 
-Every run writes a pickle under `results/evaluation/.../*.pkl`, **one row per evaluated problem**, with flat metric columns (`fvu_fit`, `fvu_val`, `numeric_recovery_*`, `symbolic_recovery`, `f1_score`, ...). Rows where a problem could not be produced are written as `placeholder` rows so counts stay aligned across models; filter them before any fit-based analysis. `runner.resume: true` (or omitting `--no-resume`) continues a partial pickle instead of restarting. See [docs/running.md](./running.md) for the full runner, CLI, and reporting behavior, and [docs/adapters.md](./adapters.md) to add a new model.
+Every run writes a pickle under `results/evaluation/.../*.pkl`, **one row per evaluated problem**, with the raw prediction columns (`y_pred`, `y_pred_val`, `predicted_*`, `fit_time`, ...); the derived metrics (`fvu_fit`, `fvu_val`, `numeric_recovery_*`, `symbolic_recovery`, `f1_score`, ...) are produced by a separate `srbf.compute_derived_metrics` step, not by the run itself. Rows where a problem could not be produced are written as `placeholder` rows so counts stay aligned across models; filter them before any fit-based analysis. `runner.resume: true` (or omitting `--no-resume`) continues a partial pickle instead of restarting. See [docs/running.md](./running.md) for the full runner, CLI, output columns, and metric-derivation / reporting behavior, and [docs/adapters.md](./adapters.md) to add a new model.

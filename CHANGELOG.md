@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.6.0] - 2026-07-01
 
 Post-release audit round (deferred tiers C + D): baseline de-duplication, fail-fast adapter
-validation, and reporting/metric performance. Public API unchanged; re-pinned to the coordinated
-`flash-ansr>=0.10` / `symbolic-data>=0.10` release.
+validation, and reporting/metric performance. Re-pinned to the coordinated `flash-ansr>=0.10` /
+`symbolic-data>=0.10` release.
+
+### Added
+- `compute_derived_metrics` is now a public export (`from srbf import compute_derived_metrics`): the
+  standardized second stage that turns a raw `Benchmark.run()` snapshot into the derived metrics
+  (FVU, numeric/symbolic recovery, F1, ...). A run emits raw results only; metrics are a separate step.
 
 ### Changed
 - **Baselines de-duplicated onto a shared `_RefiningBaselineModel` base.** `BruteForceModel` and

@@ -6,19 +6,22 @@ benchmark framework carved out of [flash-ansr](https://github.com/psaegert/flash
 `flash-ansr` (`srbf` imports `flash-ansr`; `flash-ansr` never imports `srbf`).
 
 **Built for contributions.** Developers of SR methods add their model by opening a pull request with
-an **adapter** (two methods) plus install instructions. The built-in adapters (`flash_ansr`, `pysr`,
+an **adapter** (two methods plus a registered builder) plus install instructions. The built-in adapters (`flash_ansr`, `pysr`,
 `nesymres`, `e2e`, `lample_charton`, `brute_force`) are reference examples, not a closed set. See the
 [adapter contribution guide](adapters.md).
 
 ## Install
 
 ```bash
-pip install srbf                 # benchmark driver + metrics + the pip-installable adapters (flash-ansr, PySR)
-pip install "srbf[baselines]"    # + pip baseline deps (sympy, pysr, omegaconf)
+pip install srbf                 # benchmark driver + metrics + the flash-ansr adapter (usable out of the box)
+pip install "srbf[baselines]"    # + PySR and other pip baseline deps (sympy, pysr, omegaconf)
 ```
 
-`srbf` pulls in `flash-ansr` and `simplipy` automatically. The example configs and benchmarks live in
-the [repository](https://github.com/psaegert/srbf); clone it to run the shipped evaluations.
+`srbf` pulls in `flash-ansr`, `symbolic-data`, and `simplipy` automatically, and requires **Python
+>= 3.12**. The PySR adapter ships in the base wheel, but the `pysr` package (plus a Julia
+precompile) comes with the `[baselines]` extra, so a bare install does not include a runnable PySR
+baseline. The example configs and benchmarks live in the
+[repository](https://github.com/psaegert/srbf); clone it to run the shipped evaluations.
 
 ## Quickstart
 

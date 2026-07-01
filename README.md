@@ -6,11 +6,11 @@ benchmark framework carved out of [flash-ansr](https://github.com/psaegert/flash
 `flash-ansr` (`srbf` imports `flash-ansr`; `flash-ansr` never imports `srbf`).
 
 **Built for contributions.** Developers of SR methods add their model by opening a PR with an
-**adapter** (two methods) plus install instructions. The built-in adapters (`flash_ansr`, `pysr`,
+**adapter** (two methods plus a registered builder) plus install instructions. The built-in adapters (`flash_ansr`, `pysr`,
 `nesymres`, `e2e`, `lample_charton`, `brute_force`) are reference examples, not a closed set. See the
 [adapter contribution guide](docs/adapters.md).
 
-> **Status: 0.5, data-layer redesign.** The benchmark seam (`srbf.core` Protocols + the `Benchmark`
+> **Status: 0.6, data-layer redesign.** The benchmark seam (`srbf.core` Protocols + the `Benchmark`
 > driver) is model-agnostic, the data source is always a `symbolic-data` catalog, and adapters are a
 > thin mapper over each model (flash-ansr via `FlashANSR.infer()`). Inline `!sweep` config
 > cross-products and multi-draw bootstrap reporting (`bootstrap_report` / `draw_distribution`) ship in
@@ -19,12 +19,15 @@ benchmark framework carved out of [flash-ansr](https://github.com/psaegert/flash
 ## Install
 
 ```bash
-pip install srbf                 # benchmark driver + metrics + the pip-installable adapters (flash-ansr, PySR)
-pip install "srbf[baselines]"    # + pip baseline deps (sympy, pysr, omegaconf)
+pip install srbf                 # benchmark driver + metrics + the flash-ansr adapter (usable out of the box)
+pip install "srbf[baselines]"    # + PySR and other pip baseline deps (sympy, pysr, omegaconf)
 ```
 
-`srbf` pulls in `flash-ansr` and `simplipy` automatically. The unpackaged research baselines
-(NeSymReS, E2E) are provisioned out-of-band; see [docs/models.md](docs/models.md).
+`srbf` pulls in `flash-ansr`, `symbolic-data`, and `simplipy` automatically, and requires
+**Python >= 3.12**. The PySR adapter ships in the base wheel but the `pysr` package (plus a
+Julia precompile) comes with the `[baselines]` extra, so a bare install does not include a
+runnable PySR baseline. The unpackaged research baselines (NeSymReS, E2E) are provisioned
+out-of-band; see [docs/models.md](docs/models.md).
 
 ## Quickstart
 
@@ -41,8 +44,9 @@ flash_ansr install psaegert/flash-ansr-v23.0-3M
 srbf run -c configs/evaluation/scaling/v23.0-3M_fastsrb.yaml --sweep-filter ladder=32 --limit 50 -v
 ```
 
-Outputs land under `results/evaluation/.../*.pkl`, one row per evaluated problem with flat metric
-columns. Run programmatically instead:
+Outputs land under `results/evaluation/.../*.pkl`, one row per evaluated problem with the raw
+prediction columns (derive FVU / recovery / F1 in a separate step; see
+[docs/running.md](docs/running.md#deriving-metrics)). Run programmatically instead:
 
 ```python
 from srbf import Benchmark

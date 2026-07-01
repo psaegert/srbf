@@ -221,27 +221,70 @@ df = pd.read_pickle("results/evaluation/scaling/v23.0-3M/fastsrb/choices_00032.p
 print(len(df), df.columns.tolist())
 ```
 
-Alongside metrics, rows carry the raw sampled data (`x`, `y`, `y_pred`, `y_val`, ...) and
-the pickle embeds a `__meta__` provenance entry (config path, git state, sweep labels).
-`srbf` strips `__meta__` automatically on resume.
+A run emits **raw results only**: each row carries the ground-truth metadata, the raw
+sampled arrays (`x`, `y`, `y_noisy`, `x_val`, `y_val`, ...), and the adapter's raw prediction
+(`y_pred`, `y_pred_val`, `predicted_*`, timings). It does **not** compute FVU / recovery /
+F1: those are **derived metrics** produced by a separate step (see [Deriving
+metrics](#deriving-metrics)). The pickle also embeds a `__meta__` provenance entry (config
+path, git state, sweep labels), which `srbf` strips automatically on resume.
 
-### Key metric columns
+### Raw run columns
+
+The columns a `Benchmark.run()` snapshot actually contains:
 
 | Column | Meaning |
 | --- | --- |
-| `fvu_fit`, `fvu_val` | Fraction of variance unexplained on the fit and held-out points. |
-| `log10_fvu_fit`, `log10_fvu_val` | `log10` of the above (the strict-metric distribution form). |
-| `numeric_recovery_fit`, `numeric_recovery_val` | Numeric recovery (FVU below the float-precision threshold). |
-| `symbolic_recovery` | Whether the predicted skeleton matches the ground truth symbolically. |
-| `f1_score` | Token-level F1 between predicted and ground-truth skeleton. |
-| `predicted_skeleton_prefix`, `predicted_expression_prefix` | The normalized prediction (skeleton / full expression). |
-| `n_constants`, `predicted_n_constants` | Constant counts. |
+| `skeleton`, `expression`, `variables`, `variable_names` | Ground-truth skeleton / expression / variables. |
+| `ground_truth_prefix`, `ground_truth_infix` | Ground-truth expression in prefix / infix form. |
+| `x`, `y`, `y_noisy`, `x_val`, `y_val`, `y_noisy_val` | Raw sampled fit / validation arrays. |
+| `n_support`, `complexity`, `noise_level` | Per-problem sampling parameters. |
+| `predicted_expression`, `predicted_expression_prefix`, `predicted_skeleton_prefix` | The normalized prediction (infix / prefix / skeleton). |
+| `predicted_constants`, `predicted_score`, `predicted_log_prob` | The best candidate's fitted constants and scores. |
+| `y_pred`, `y_pred_val` | Model predictions on the fit / held-out points. |
+| `fit_time`, `prediction_success`, `error` | Wall-clock fit time, success flag, error string. |
 | `benchmark_eq_id` | Ground-truth expression id; groups the `problems_per_expression` draws of one expression. |
 | `placeholder`, `placeholder_reason` | Placeholder bookkeeping (see below). |
+| `input_ids`, `labels`, `labels_decoded`, `eval_row_index` | Tokenized skeleton + resume-stable row index. |
 
-This is the load-bearing subset. The complete schema (including `only_approx_fvu_*`,
-skeleton lengths, unique-variable precision/recall, and the raw `x`/`y` arrays) is the keys
-of the `_DEFAULTS` dict in
+(The `flash_ansr` adapter additionally records `generation_time` / `refinement_time`.)
+
+### Deriving metrics
+
+The derived metrics (`fvu_fit`, `fvu_val`, `log10_fvu_*`, `numeric_recovery_fit`,
+`numeric_recovery_val`, `symbolic_recovery`, `f1_score`, `n_constants`,
+`predicted_n_constants`, skeleton lengths, edit distances, unique-variable
+precision/recall, ...) are computed **after** the run by
+`srbf.compute_derived_metrics(results, test_sets, operator_arity, simplify_fn=None)`. It
+reads the raw `y*`/`y_pred*`, `skeleton`, and `predicted_skeleton_prefix` columns and adds
+the metric columns **in place**.
+
+`compute_derived_metrics` operates on a **nested** results dict of the form
+`results[model]['results'][test_set][scaling_value]`, whose leaf is one raw run snapshot
+(the dict-of-lists a run returns). To score a single run, lift its snapshot into that shape:
+
+```python
+from srbf import Benchmark, compute_derived_metrics
+
+(benchmark,) = Benchmark.runs_from_config(single_run_config_path)
+snapshot = benchmark.run()                      # raw dict-of-lists, no derived metrics
+
+# Wrap the single snapshot in the nested shape compute_derived_metrics expects:
+results = {"model": {"results": {"test": {0: snapshot}}}}
+compute_derived_metrics(
+    results,
+    test_sets=["test"],
+    operator_arity={"add": 2, "sub": 2, "mul": 2, "div": 2, "pow": 2},  # binary=2, unary=1
+    simplify_fn=benchmark.model_adapter.get_simplipy_engine().simplify,  # optional
+)
+derived = results["model"]["results"]["test"][0]  # now carries fvu_*, numeric_recovery_*, ...
+```
+
+`operator_arity` maps each operator token to its arity (needed for tree-edit-distance and
+nestedness); `simplify_fn` is optional (when `None`, simplified skeletons fall back to the
+raw skeletons). You can equally compute your own metrics directly over the raw columns
+instead of calling `compute_derived_metrics`. The full set of derived keys (and the
+placeholder defaults used for failed rows) is documented on `compute_derived_metrics` and in
+the `DEFAULT_NEGATIVES` dict in
 [`src/srbf/result_processing.py`](https://github.com/psaegert/srbf/blob/main/src/srbf/result_processing.py).
 
 ### Placeholders
@@ -273,24 +316,38 @@ with a bootstrap confidence interval**, rather than a single point. A run draws
 `benchmark_eq_id`, collapse each group to one value, then bootstrap a statistic over the
 per-expression values:
 
-```python
-from srbf import Benchmark, bootstrap_report, draw_distribution
+A run returns only **raw** columns, so `numeric_recovery_val` (a derived metric) is not in
+the snapshot yet: derive it first (see [Deriving metrics](#deriving-metrics)), then report on
+the derived column.
 
-# A run returns the dict-of-lists snapshot directly:
+```python
+from srbf import Benchmark, compute_derived_metrics, bootstrap_report, draw_distribution
+
+# A run returns the raw dict-of-lists snapshot directly:
 (benchmark,) = Benchmark.runs_from_config(single_run_config_path)
 snapshot = benchmark.run()
 
+# Derive metrics in place (compute_derived_metrics wants the nested shape):
+results = {"model": {"results": {"test": {0: snapshot}}}}
+compute_derived_metrics(
+    results, test_sets=["test"],
+    operator_arity={"add": 2, "sub": 2, "mul": 2, "div": 2, "pow": 2},
+)
+derived = results["model"]["results"]["test"][0]  # now carries numeric_recovery_val, fvu_*, ...
+
 # One value per expression (mean over that expression's draws):
-per_expr = draw_distribution(snapshot, "numeric_recovery_val")
+per_expr = draw_distribution(derived, "numeric_recovery_val")
 
 # Bootstrap the mean recovery across expressions, with a 95% CI:
-report = bootstrap_report(snapshot, "numeric_recovery_val")
+report = bootstrap_report(derived, "numeric_recovery_val")
 print(report)  # {'metric', 'n_groups', 'n_rows', 'median', 'ci_lower', 'ci_upper', 'interval'}
 ```
 
-Both functions operate on the plain dict-of-lists a run returns, drop placeholder rows, and
-group by `benchmark_eq_id` (override with `group_key=`). The bootstrap is unseeded, so report
-the interval rather than a bit-exact point.
+Both functions operate on a plain dict-of-lists, drop placeholder rows, and group by
+`benchmark_eq_id` (override with `group_key=`). They work on **any** column present, so you
+can also point them at a raw column directly (e.g. `bootstrap_report(snapshot, "fit_time")`)
+without deriving metrics first. The bootstrap is unseeded, so report the interval rather than
+a bit-exact point.
 
 ## Programmatic API
 
@@ -319,8 +376,10 @@ config that still contains `!sweep` markers must go through `runs_from_config`.
 
 The built-in adapters (`flash_ansr`, `pysr`, `nesymres`, `e2e`, `lample_charton`,
 `brute_force`) are **reference examples** of the adapter contract. `pip install srbf` ships
-the benchmark driver, metrics, and the pip-installable adapters (`flash_ansr`, `pysr`); `pip
-install "srbf[baselines]"` adds the baseline deps (sympy, pysr, omegaconf).
+the benchmark driver, metrics, and the `flash_ansr` adapter usable out of the box. The
+`pysr` adapter code ships too, but the `pysr` package itself (plus a Julia precompile) comes
+with `pip install "srbf[baselines]"` (which adds sympy, pysr, omegaconf), so a bare install
+does not give a runnable PySR baseline.
 
 The unpackaged research baselines (`nesymres`, `e2e` / `symbolicregression`) are not pip
 dependencies. Their upstream source trees and weights are provisioned out-of-band via a

@@ -41,7 +41,7 @@ data_source:
 
 | field | meaning |
 |---|---|
-| `n_support` | number of points the model fits on. `prior` (generative catalogs only) draws the support size per problem from the catalog's own prior and implies `n_validation: 0`. |
+| `n_support` | number of points the model fits on. `prior` (generative catalogs only) draws the support size per problem from the catalog's own prior; it **requires** `n_validation: 0` and a generative catalog, and raises a `ValueError` otherwise. |
 | `n_validation` | number of held-out validation points; the first `n_support` of each sampled problem are the fit split, the rest the validation split. |
 | `noise` | additive Gaussian noise as a fraction of the target std (`0.0` = clean). |
 | `problems_per_expression` | how many distinct problems to draw per ground-truth expression; multiplies the row count. |
@@ -123,9 +123,11 @@ authoring reference lives in the [`symbolic-data`](https://github.com/psaegert/s
 ## Outputs
 
 Each run writes a pickle under `results/evaluation/.../*.pkl` (the `runner.output` path), with one
-row per evaluated problem and flat metric columns: `fvu_fit` / `fvu_val` (and `log10_fvu_fit` /
-`log10_fvu_val`), `numeric_recovery_fit` / `numeric_recovery_val`, `symbolic_recovery`, `f1_score`,
-and more. When a problem cannot be produced within `max_trials`, a `placeholder` row is written
-instead to keep row counts aligned across runs; filter on the `placeholder` column before any
-fit-based analysis. `runner.resume` continues a partial pickle. See [docs/running.md](running.md)
-for the runner, resume, and reporting details.
+row per evaluated problem and the raw prediction columns (`y_pred`, `y_pred_val`, `predicted_*`,
+`fit_time`, ...). The derived metrics (`fvu_fit` / `fvu_val`, `log10_fvu_*`, `numeric_recovery_*`,
+`symbolic_recovery`, `f1_score`, and more) are computed by a separate `srbf.compute_derived_metrics`
+step, not by the run itself. When a problem cannot be produced within `max_trials`, a `placeholder`
+row is written instead to keep row counts aligned across runs; filter on the `placeholder` column
+before any fit-based analysis. `runner.resume` continues a partial pickle. See
+[docs/running.md](running.md) for the output columns, metric derivation, resume, and reporting
+details.

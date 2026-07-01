@@ -6,6 +6,7 @@ symbolic-data catalogs. Depends one-way on flash-ansr (srbf imports flash-ansr; 
 from srbf.benchmark import Benchmark
 from srbf.sweep import Sweep, register_sweep_yaml, resolve_sweeps
 from srbf.reporting import bootstrap_report, draw_distribution
+from srbf.result_processing import compute_derived_metrics
 
 # Register the `!sweep` YAML tag on import so loading any sweep config (e.g. via the shared
 # flash_ansr config loader) parses without first needing an explicit register_sweep_yaml() call.
@@ -20,4 +21,5 @@ __all__ = [
     "resolve_sweeps",
     "bootstrap_report",
     "draw_distribution",
+    "compute_derived_metrics",
 ]
