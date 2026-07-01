@@ -116,6 +116,51 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
 .provenance summary::marker { color: var(--ink-faint); }
 .provenance p { margin: .2rem 0 1rem; color: var(--ink-soft); font-size: .94rem; max-width: 74ch; }
 
+/* series groups + pills with colour swatch */
+.series-area { display: flex; flex-direction: column; gap: .7rem; margin: 0 0 .5rem; }
+.series-group { display: flex; flex-direction: column; gap: .35rem; }
+.series-group-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .07em; font-weight: 600; color: var(--ink-faint); }
+.series-pill { display: inline-flex; }
+.series-toggle {
+  display: inline-flex; align-items: center; gap: .45rem; cursor: pointer;
+  font-size: .84rem; font-weight: 500; color: var(--ink-soft);
+  padding: .28rem .55rem .28rem .5rem; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface); user-select: none; transition: background .15s, border-color .15s, color .15s;
+}
+.series-toggle:hover { border-color: var(--accent); color: var(--ink); }
+.series-toggle input[type="checkbox"] { accent-color: var(--accent); margin: 0; cursor: pointer; }
+.series-name { white-space: nowrap; }
+.series-swatch {
+  width: 1.05rem; height: 1.05rem; padding: 0; border: 1px solid var(--line); border-radius: 4px;
+  background: none; cursor: pointer; -webkit-appearance: none; appearance: none;
+}
+.series-swatch::-webkit-color-swatch-wrapper { padding: 0; }
+.series-swatch::-webkit-color-swatch { border: none; border-radius: 3px; }
+.series-swatch::-moz-color-swatch { border: none; border-radius: 3px; }
+.series-reset {
+  display: none; align-items: center; justify-content: center;
+  width: 1.05rem; height: 1.05rem; padding: 0; margin-left: -.15rem;
+  border: none; border-radius: 50%; background: var(--accent-soft); color: var(--accent);
+  font-size: .8rem; line-height: 1; cursor: pointer;
+}
+.series-reset:hover { background: var(--accent); color: #fff; }
+
+.ablation-details { border: 1px dashed var(--line); border-radius: 12px; padding: .1rem .8rem .6rem; }
+.ablation-details > summary { cursor: pointer; font-size: .8rem; font-weight: 600; color: var(--ink-soft); padding: .55rem 0; list-style-position: inside; }
+.ablation-details[open] > summary { margin-bottom: .3rem; }
+.ablation-details .series-group { margin-top: .3rem; }
+
+/* colour tools + cookie notice */
+.colour-tools { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem 1rem; margin: 1rem 0 .2rem; }
+.reset-all {
+  font: inherit; font-size: .82rem; font-weight: 500; color: var(--ink-soft);
+  padding: .4rem .8rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+.reset-all:hover { border-color: var(--accent); color: var(--accent); }
+.cookie-notice { display: none; font-size: .78rem; color: var(--ink-faint); max-width: 62ch; }
+.cookie-notice.visible { display: inline; }
+
 /* footer */
 .site-footer { border-top: 1px solid var(--line); background: var(--surface); }
 .footer-inner { display: flex; flex-wrap: wrap; gap: .4rem 2rem; justify-content: space-between; padding: 1.4rem 0; color: var(--ink-faint); font-size: .88rem; }
