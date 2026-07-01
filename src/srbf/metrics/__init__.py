@@ -1,4 +1,4 @@
-"""Evaluation metric helpers for Flash-ANSR."""
+"""Evaluation metric helpers for srbf, carved from flash-ansr."""
 
 from srbf.metrics.bootstrap import bootstrapped_metric_ci
 from srbf.metrics.numeric import (

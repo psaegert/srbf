@@ -79,14 +79,14 @@ def _axis_key(sweep: Sweep, anon_index: int) -> str:
     return sweep.name if sweep.name is not None else f"\x00anon{anon_index}"
 
 
-def _substitute(node: Any, picks: Mapping[int, int], axis_of: Mapping[int, str]) -> Any:
+def _substitute(node: Any, picks: Mapping[int, int]) -> Any:
     """Deep-copy ``node`` replacing each Sweep with its value at the picked index for its axis."""
     if isinstance(node, Sweep):
         return copy.deepcopy(node.values[picks[id(node)]])
     if isinstance(node, Mapping):
-        return {k: _substitute(v, picks, axis_of) for k, v in node.items()}
+        return {k: _substitute(v, picks) for k, v in node.items()}
     if isinstance(node, list):
-        return [_substitute(v, picks, axis_of) for v in node]
+        return [_substitute(v, picks) for v in node]
     return copy.deepcopy(node)
 
 
@@ -129,7 +129,7 @@ def resolve_sweeps(config: Mapping[str, Any]) -> list[tuple[dict[str, Any], dict
     for combo in product(*(range(axis_len[k]) for k in axis_keys)):
         index_by_axis = dict(zip(axis_keys, combo))
         picks = {sid: index_by_axis[axis_of[sid]] for sid in axis_of}
-        resolved = _substitute(config, picks, axis_of)
+        resolved = _substitute(config, picks)
         labels = {
             key: axis_repr[key].values[index_by_axis[key]]
             for key in axis_keys

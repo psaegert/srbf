@@ -4,6 +4,19 @@ All notable changes to srbf are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3] - 2026-07-01
+
+Post-release audit cleanup + a robustness fix.
+
+### Fixed
+- **`LampleChartonModel._sample_skeletons` bounds its sampling loop** (`max(1000, samples*100)`
+  attempts, then returns what it has with a warning) so it can no longer hang when the pool
+  persistently fails to sample or its unique skeletons are exhausted.
+- Baselines call the public `flash_ansr.scoring.compute_fvu` instead of reaching into a private
+  method; `bootstrapped_metric_ci` return annotation + docstring corrected to the `(median, lower,
+  upper)` tuple; clearer errors for missing/mistyped benchmark-config sections; dropped a dead
+  `axis_of` parameter in `_substitute`; banned-term / stale-docstring cleanups.
+
 ## [0.5.2] - 2026-07-01
 
 Post-release audit fixes (no API change).

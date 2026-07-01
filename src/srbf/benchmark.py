@@ -81,10 +81,10 @@ class Benchmark:
 
         data_cfg = run_cfg.get("data_source")
         if not isinstance(data_cfg, Mapping):
-            raise KeyError("run.data_source section is required")
+            raise ValueError("run.data_source section is required")
         model_cfg = run_cfg.get("model_adapter")
         if not isinstance(model_cfg, Mapping):
-            raise KeyError("run.model_adapter section is required")
+            raise ValueError("run.model_adapter section is required")
         runner_cfg = run_cfg.get("runner", {})
 
         save_every = save_every_override if save_every_override is not None else runner_cfg.get("save_every")

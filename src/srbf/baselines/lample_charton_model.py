@@ -24,7 +24,7 @@ from flash_ansr.utils.paths import substitute_root_path
 
 
 class LampleChartonModel(BaseEstimator):
-    """Baseline model that samples skeletons from a pool and fits constants.
+    """Baseline model that samples skeletons from a catalog and fits constants.
 
     This model is intended for research/ablation baselines that do **not** use
     the Flash-ANSR transformer. It samples expression skeletons from a provided
@@ -164,7 +164,12 @@ class LampleChartonModel(BaseEstimator):
 
         selected: list[tuple[str, ...]] = []
         seen: set[tuple[str, ...]] = set()
-        while len(selected) < self.samples:
+        # Bound the draws: a pool that persistently fails to sample, or (with unique=True) that has
+        # fewer distinct valid skeletons than requested, would otherwise loop here forever.
+        max_attempts = max(1000, self.samples * 100)
+        for _ in range(max_attempts):
+            if len(selected) >= self.samples:
+                break
             try:
                 skeleton, _code, _constants = self._pool.sample_skeleton(new=True, decontaminate=not self.ignore_holdouts)
             except NoValidSampleFoundError as exc:
@@ -178,6 +183,13 @@ class LampleChartonModel(BaseEstimator):
             seen.add(skeleton_tuple)
             selected.append(skeleton_tuple)
 
+        if len(selected) < self.samples:
+            warnings.warn(
+                f"Collected only {len(selected)} of {self.samples} requested skeletons within "
+                f"{max_attempts} attempts (pool sampling failed or unique skeletons were exhausted).",
+                RuntimeWarning,
+                stacklevel=2,
+            )
         return selected
 
     def fit(self, X: np.ndarray | torch.Tensor | pd.DataFrame, y: np.ndarray | torch.Tensor | pd.DataFrame | Sequence[float], *, verbose: bool = False) -> "LampleChartonModel":

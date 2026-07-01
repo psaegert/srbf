@@ -8,7 +8,7 @@ ground-truth expression + a resume-stable ``eval_row_index``.
 
 This replaces the old `SkeletonDatasetSource` + `FastSRBSource`. The data layer (symbolic_data) now
 owns ALL sampling -- on-the-fly generation, fixed-set iteration, noise, decontamination, and the
-per-draw placeholder protocol -- so srbf no longer reaches into a skeleton pool, reproduces the
+per-draw placeholder protocol -- so srbf no longer reaches into the data layer's internal sampling state, reproduces the
 support sampler, or carries a pinned-skeleton-list drift guard: the frozen ``v23-val`` catalog
 (deterministic, sha256-pinned on HF) IS the pinned, drift-safe evaluation set.
 """

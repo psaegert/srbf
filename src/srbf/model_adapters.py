@@ -19,6 +19,7 @@ from srbf.core import EvaluationModelAdapter, EvaluationResult, EvaluationSample
 from srbf.candidate_store import CandidateStoreWriter
 from flash_ansr.flash_ansr import FlashANSR
 from flash_ansr.refine import ConvergenceError
+from flash_ansr.scoring import compute_fvu
 
 PySRRegressor: type[Any] | None  # pragma: no cover - assigned lazily
 PySRRegressor = None
@@ -687,7 +688,7 @@ class NeSymReSAdapter(EvaluationModelAdapter):
                 warnings.warn(
                     (
                         "NeSymReS checkpoint supports only %d variables; "
-                        "truncating FastSRB inputs from %d features."
+                        "truncating inputs from %d features."
                     )
                     % (self._max_variables, n_features),
                     RuntimeWarning,
@@ -905,7 +906,7 @@ def _compute_fvu_from_predictions(y_true: np.ndarray, y_pred: np.ndarray) -> flo
         return float("nan")
     loss = float(np.mean((y_true_arr - y_pred_arr) ** 2))
     variance = float(np.var(y_true_arr))
-    return FlashANSR._compute_fvu(loss, y_true_arr.size, variance)
+    return compute_fvu(loss, y_true_arr.size, variance)
 
 
 def _print_fvu_summary(support_fvu: float, validation_fvu: float | None) -> None:
