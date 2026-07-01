@@ -51,14 +51,6 @@ nav:
   - Models & provisioning: models.md
   - Adding your model: adapters.md
 
-extra_javascript:
-  - https://cdn.plot.ly/plotly-2.35.2.min.js
-  - javascripts/results_data.js
-  - javascripts/results_explorer.js
-
-extra_css:
-  - stylesheets/results_explorer.css
-
 plugins:
   - search
   - autorefs
