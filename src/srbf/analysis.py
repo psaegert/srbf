@@ -19,6 +19,7 @@ over expressions with a bootstrap confidence interval, not a single seeded point
 """
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
@@ -70,14 +71,19 @@ DEFAULT_METRICS: tuple[Metric, ...] = (
 class RunResult:
     """One raw ``Benchmark.run()`` snapshot tagged with its coordinates in the results grid.
 
-    ``scaling`` is the value of the scaling axis (e.g. the inference-compute ``choices`` setting) for
-    this run, or ``None`` for a single-point benchmark. ``scored`` caches the derived snapshot.
+    ``scaling`` is the x-value of this run's sweep ``axis`` (e.g. inference-compute time, noise level,
+    or n-support), or ``None`` for a single-point benchmark. ``axis`` names which sweep it belongs to
+    (so one dataset can carry several sweeps -- ``"compute"``, ``"noise"``, ``"n_support"``, ...).
+    ``version`` is a provenance tag carried through to the exported records (so archived and
+    freshly-run series coexist). ``scored`` caches the derived snapshot.
     """
 
     model: str
     benchmark: str
     snapshot: Mapping[str, Sequence[Any]]
     scaling: float | None = None
+    axis: str = "scaling"
+    version: str = "-"
     scored: dict[str, Any] | None = field(default=None, repr=False)
 
 
@@ -420,3 +426,54 @@ def load_runs(manifest_path: str) -> list[RunResult]:
         runs.append(RunResult(model=entry["model"], benchmark=entry["benchmark"],
                               scaling=entry.get("scaling"), snapshot=snapshot))
     return runs
+
+
+def _json_num(x: Any) -> float | None:
+    """A JSON-safe number: non-finite (NaN/inf) -> None."""
+    if x is None:
+        return None
+    fx = float(x)
+    return fx if np.isfinite(fx) else None
+
+
+def export_data(
+    runs: Sequence[RunResult],
+    path: str,
+    *,
+    metrics: Sequence[Metric] = DEFAULT_METRICS,
+    engine: Any = None,
+    operator_arity: Mapping[str, int] | None = None,
+    n_bootstrap: int = 2000,
+    interval: float = 0.95,
+) -> str:
+    """Export tidy aggregated records as JSON for the interactive results explorer.
+
+    One record per run = one ``(series, benchmark, axis, x)`` point, carrying each metric's bootstrap
+    median + CI (over expressions) and the run's ``version`` tag. The interactive page filters these
+    client-side (pick an axis / metric / benchmark / series). Returns the written path. The payload is::
+
+        {"metrics": [{"key", "label", "higher_is_better"}, ...],
+         "axes":    [<axis names present>],
+         "records": [{"series", "version", "benchmark", "axis", "x",
+                      "<metric.key>": {"median", "lo", "hi", "n"}, ...}, ...]}
+    """
+    records: list[dict[str, Any]] = []
+    for run in runs:
+        scored = _score(run, engine=engine, operator_arity=operator_arity)
+        rec: dict[str, Any] = {"series": run.model, "version": run.version,
+                               "benchmark": run.benchmark, "axis": run.axis, "x": _json_num(run.scaling)}
+        for m in metrics:
+            ci = _ci([scored], m.key, n_bootstrap=n_bootstrap, interval=interval)
+            rec[m.key] = {"median": _json_num(ci["median"]), "lo": _json_num(ci["ci_lower"]),
+                          "hi": _json_num(ci["ci_upper"]), "n": int(ci["n_groups"])}
+        records.append(rec)
+
+    payload = {
+        "metrics": [{"key": m.key, "label": m.label, "higher_is_better": m.higher_is_better} for m in metrics],
+        "axes": sorted({r["axis"] for r in records}),
+        "records": records,
+    }
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle)
+    return path

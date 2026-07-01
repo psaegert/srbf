@@ -74,6 +74,34 @@ def test_leaderboard_requires_engine_or_arity():
         leaderboard(_runs(), n_bootstrap=50)
 
 
+def test_export_data_writes_tidy_json(tmp_path):
+    import json
+
+    from srbf.analysis import export_data
+
+    rng = np.random.default_rng(2)
+    runs = [
+        RunResult(model="strong", benchmark="fastsrb", axis="compute", scaling=1.0, version="v23.0",
+                  snapshot=_snapshot(8, 3, 0.8, rng)),
+        RunResult(model="strong", benchmark="fastsrb", axis="compute", scaling=10.0, version="v23.0",
+                  snapshot=_snapshot(8, 3, 0.9, rng)),
+        RunResult(model="pysr", benchmark="fastsrb", axis="compute", scaling=5.0, version="-",
+                  snapshot=_snapshot(8, 3, 0.3, rng)),
+    ]
+    out = export_data(runs, str(tmp_path / "results_data.json"), operator_arity=ARITY, n_bootstrap=200)
+    payload = json.loads(open(out).read())
+    assert payload["axes"] == ["compute"]
+    assert {m["key"] for m in payload["metrics"]} >= {"numeric_recovery_val"}
+    assert len(payload["records"]) == 3
+    rec = payload["records"][0]
+    for key in ("series", "version", "benchmark", "axis", "x"):
+        assert key in rec
+    cell = rec["numeric_recovery_val"]
+    assert set(cell) == {"median", "lo", "hi", "n"}
+    # versions travel through so archived + fresh series coexist
+    assert {r["version"] for r in payload["records"]} == {"v23.0", "-"}
+
+
 def test_load_runs_from_manifest(tmp_path):
     import pickle
 

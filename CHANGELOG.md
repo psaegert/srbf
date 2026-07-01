@@ -25,6 +25,11 @@ validation, and reporting/metric performance. Re-pinned to the coordinated `flas
   renders them to a Markdown page + PNG figures for the docs / github.io site. Figures live behind a
   new optional `[analysis]` extra (`pip install 'srbf[analysis]'`, matplotlib); tables/leaderboards
   need no extra.
+- **`srbf.analysis.export_data(runs, path)`** + `RunResult.axis` / `RunResult.version`: export tidy
+  aggregated records (per `series x benchmark x axis x x-value`, each with a metric's bootstrap
+  median + CI and a provenance `version`) as JSON for the **interactive results page** -- a
+  client-side Plotly explorer (pick x-axis / metric / benchmark / series, with CI bands). One dataset
+  can carry several sweeps (compute / noise / n_support, ...) via the `axis` field.
 
 ### Changed
 - **Baselines de-duplicated onto a shared `_RefiningBaselineModel` base.** `BruteForceModel` and
