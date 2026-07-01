@@ -27,6 +27,7 @@ class ResultStore:
 
     @property
     def size(self) -> int:
+        """Number of records currently held (raises if the columns have diverged in length)."""
         lengths = {len(values) for values in self._store.values()}
         if not lengths:
             return 0
@@ -35,6 +36,7 @@ class ResultStore:
         return lengths.pop()
 
     def extend(self, records: Mapping[str, Iterable[Any]]) -> None:
+        """Append a batch of equal-length column lists, backfilling any missing keys with ``None``."""
         snapshots = {key: list(values) for key, values in records.items()}
         lengths = {len(values) for values in snapshots.values()}
         if lengths and len(lengths) != 1:
@@ -52,6 +54,7 @@ class ResultStore:
         self._validate_lengths()
 
     def append(self, record: Mapping[str, Any]) -> None:
+        """Append one record, backfilling missing keys (in either direction) with ``None``."""
         normalized = self._ensure_record_defaults(dict(record))
         current_size = self.size
         for existing_key in self._store.keys():
@@ -64,6 +67,7 @@ class ResultStore:
         self._validate_lengths()
 
     def snapshot(self) -> Dict[str, list[Any]]:
+        """Return a shallow-copied dict-of-lists of the accumulated records."""
         return {key: list(values) for key, values in self._store.items()}
 
     def save(self, path: str | Path, meta: Mapping[str, Any] | None = None) -> None:

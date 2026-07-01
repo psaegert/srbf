@@ -107,9 +107,11 @@ class CatalogSource(EvaluationDataSource):
 
     # ----------------------------------------------------------------- resume
     def state_dict(self) -> Mapping[str, Any]:
+        """Return the resume state: the absolute row index reached (``skip`` plus rows produced)."""
         return {"type": "catalog_source", "state": {"row_index": self._skip + self._produced}}
 
     def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Advance ``skip`` to the saved ``row_index`` so streaming resumes past processed rows."""
         self._skip = max(self._skip, int(state.get("row_index", 0)))
 
     # ----------------------------------------------------------------- bridge

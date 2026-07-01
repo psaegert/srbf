@@ -175,6 +175,21 @@ class CandidateStoreReader:
 
     @staticmethod
     def candidate_tokens(block: dict, i: int) -> np.ndarray:
+        """Slice the ``i``-th candidate's token ids out of a problem block.
+
+        Parameters
+        ----------
+        block : dict
+            One problem's columns, as yielded by iterating the reader (holds the flat ``tokens``
+            array and its per-candidate ``offsets``).
+        i : int
+            Zero-based candidate index within the block.
+
+        Returns
+        -------
+        np.ndarray
+            The token ids of candidate ``i`` (the ``tokens[offsets[i]:offsets[i + 1]]`` slice).
+        """
         off = block["offsets"]
         return block["tokens"][off[i]:off[i + 1]]
 

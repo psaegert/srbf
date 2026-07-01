@@ -105,5 +105,24 @@ class BruteForceModel(_RefiningBaselineModel):
             target_length += 1
 
     def fit(self, X: np.ndarray | torch.Tensor | pd.DataFrame, y: np.ndarray | torch.Tensor | pd.DataFrame | Any, *, verbose: bool = False) -> "BruteForceModel":
+        """Enumerate expressions shortest-first, refine each against ``(X, y)``, and store the results.
+
+        Candidates are drawn from the exhaustive generator (bounded by ``max_expressions`` /
+        ``max_length``) and sorted by ascending score.
+
+        Parameters
+        ----------
+        X : np.ndarray or torch.Tensor or pd.DataFrame
+            Support inputs; truncated or zero-padded to ``n_variables``.
+        y : np.ndarray or torch.Tensor or pd.DataFrame
+            Support targets (single output dimension).
+        verbose : bool, default False
+            Accepted but currently unused.
+
+        Returns
+        -------
+        BruteForceModel
+            ``self``, with the sorted candidate records available on ``results``.
+        """
         self._run_fit(self._expression_generator(), X, y, max_results=self.max_expressions)
         return self

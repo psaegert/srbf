@@ -89,6 +89,7 @@ AdapterBuilder = Callable[[Mapping[str, Any]], Any]
 
 
 def build_model_adapter(config: Mapping[str, Any]) -> Any:
+    """Build the model adapter for a ``model_adapter`` config, dispatching on its ``type`` field."""
     adapter_type = str(config.get("type", "flash_ansr")).lower()
     builder = _ADAPTER_REGISTRY.get(adapter_type)
     if builder is None:
@@ -339,6 +340,7 @@ _ADAPTER_REGISTRY: dict[str, AdapterBuilder] = {
 # Config parsing utilities
 
 def extract_run_section(config: Mapping[str, Any]) -> MutableMapping[str, Any]:
+    """Return the run section, accepting a top-level ``run``/``evaluation_run`` key or a bare run mapping."""
     if "run" in config:
         return dict(config["run"])
     if "evaluation_run" in config:
@@ -347,6 +349,7 @@ def extract_run_section(config: Mapping[str, Any]) -> MutableMapping[str, Any]:
 
 
 def select_experiment(config: Mapping[str, Any], experiment: str | None) -> MutableMapping[str, Any]:
+    """Return the named (or ``default_experiment``) entry from ``config.experiments``, else the config itself."""
     experiments = config.get("experiments")
     if not experiments:
         return dict(config)
@@ -368,6 +371,7 @@ def select_experiment(config: Mapping[str, Any], experiment: str | None) -> Muta
 
 
 def merge_mappings(base: Mapping[str, Any], overrides: Mapping[str, Any]) -> dict[str, Any]:
+    """Recursively merge ``overrides`` onto a deep copy of ``base`` (nested mappings merge, others replace)."""
     merged: dict[str, Any] = copy.deepcopy(dict(base))
     for key, value in overrides.items():
         current = merged.get(key)
@@ -379,6 +383,7 @@ def merge_mappings(base: Mapping[str, Any], overrides: Mapping[str, Any]) -> dic
 
 
 def coerce_int(value: Any, field_name: str) -> int:
+    """Coerce ``value`` to ``int``, raising ``ValueError`` naming ``field_name`` if it is None or invalid."""
     if value is None:
         raise ValueError(f"{field_name} must be provided")
     try:
@@ -388,6 +393,7 @@ def coerce_int(value: Any, field_name: str) -> int:
 
 
 def coerce_float(value: Any, field_name: str) -> float:
+    """Coerce ``value`` to ``float``, raising ``ValueError`` naming ``field_name`` if it is None or invalid."""
     if value is None:
         raise ValueError(f"{field_name} must be provided")
     try:
@@ -397,6 +403,7 @@ def coerce_float(value: Any, field_name: str) -> float:
 
 
 def coerce_optional_int(value: Any, field_name: str) -> int | None:
+    """Coerce ``value`` to ``int`` or pass ``None`` through, raising ``ValueError`` naming ``field_name`` if invalid."""
     if value is None:
         return None
     try:
@@ -406,6 +413,7 @@ def coerce_optional_int(value: Any, field_name: str) -> int | None:
 
 
 def load_existing_results(path: str) -> Mapping[str, Sequence[Any]] | None:
+    """Load a pickled results mapping for resume (stripping the ``__meta__`` key), or ``None`` if absent."""
     resolved = Path(substitute_root_path(path))
     if not resolved.exists():
         return None

@@ -117,6 +117,25 @@ class LampleChartonModel(_RefiningBaselineModel):
         return selected
 
     def fit(self, X: np.ndarray | torch.Tensor | pd.DataFrame, y: np.ndarray | torch.Tensor | pd.DataFrame | Any, *, verbose: bool = False) -> "LampleChartonModel":
+        """Sample skeletons from the catalog, refine each against ``(X, y)``, and store the results.
+
+        Candidates come from :meth:`_sample_skeletons` (``samples`` draws, optionally ``unique``) and
+        are sorted by ascending score.
+
+        Parameters
+        ----------
+        X : np.ndarray or torch.Tensor or pd.DataFrame
+            Support inputs; truncated or zero-padded to ``n_variables``.
+        y : np.ndarray or torch.Tensor or pd.DataFrame
+            Support targets (single output dimension).
+        verbose : bool, default False
+            Accepted but currently unused.
+
+        Returns
+        -------
+        LampleChartonModel
+            ``self``, with the sorted candidate records available on ``results``.
+        """
         # An empty skeleton sample yields an empty (but well-formed) result set via _run_fit.
         self._run_fit(self._sample_skeletons(), X, y)
         return self

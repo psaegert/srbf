@@ -146,6 +146,7 @@ def env_provenance() -> dict:
 
 
 def collect_provenance(config_path: str | None = None, experiment: str | None = None) -> dict:
+    """Gather the run provenance dict (git, system, env, and hashed config/input files)."""
     prov: dict[str, Any] = {
         "timestamp": datetime.now().isoformat(timespec="seconds"),
         "experiment": experiment,
@@ -163,6 +164,7 @@ def collect_provenance(config_path: str | None = None, experiment: str | None = 
 
 
 def format_provenance(prov: dict) -> str:
+    """Render a provenance dict as the multi-line human-readable banner printed at run start."""
     g, s, e = prov.get("git", {}), prov.get("system", {}), prov.get("env", {})
     lines = ["-" * 78, f"PROVENANCE  {prov.get('timestamp', '')}"]
     git_state = (f"DIRTY tracked_diff={g.get('tracked_diff_sha')} wt_fp={g.get('worktree_fingerprint')} "
@@ -183,6 +185,7 @@ def format_provenance(prov: dict) -> str:
 
 
 def emit_provenance(config_path: str | None = None, experiment: str | None = None) -> dict:
+    """Collect the provenance dict, print its formatted banner, and return it."""
     prov = collect_provenance(config_path, experiment)
     print(format_provenance(prov), flush=True)
     return prov

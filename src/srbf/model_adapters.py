@@ -74,6 +74,7 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         self._candidate_store: Any | None = None
 
     def get_simplipy_engine(self) -> Any:  # pragma: no cover - trivial accessor
+        """Return the SimpliPy engine backing this adapter's model."""
         return self.model.simplipy_engine
 
     def prepare(self, *, data_source: Any | None = None) -> None:  # type: ignore[override]
@@ -262,6 +263,7 @@ class LampleChartonAdapter(EvaluationModelAdapter):
         self.model = model
 
     def get_simplipy_engine(self) -> Any:  # pragma: no cover - trivial accessor
+        """Return the SimpliPy engine backing this adapter's model."""
         return self.model.simplipy_engine
 
     def prepare(self, *, data_source: Any | None = None) -> None:  # noqa: ARG002
@@ -278,6 +280,7 @@ class BruteForceAdapter(EvaluationModelAdapter):
         self.model = model
 
     def get_simplipy_engine(self) -> Any:  # pragma: no cover - trivial accessor
+        """Return the SimpliPy engine backing this adapter's model."""
         return self.model.simplipy_engine
 
     def prepare(self, *, data_source: Any | None = None) -> None:  # noqa: ARG002
@@ -410,6 +413,7 @@ class E2EAdapter(EvaluationModelAdapter):
         self._estimator: Any | None = None
 
     def get_simplipy_engine(self) -> Any:  # pragma: no cover - trivial accessor
+        """Return this adapter's SimpliPy engine."""
         return self.simplipy_engine
 
     def prepare(self, *, data_source: Any | None = None) -> None:  # type: ignore[override]
@@ -581,6 +585,7 @@ class NeSymReSAdapter(EvaluationModelAdapter):
         self._warned_feature_mismatch = False
 
     def get_simplipy_engine(self) -> Any:  # pragma: no cover - trivial accessor
+        """Return this adapter's SimpliPy engine."""
         return self.simplipy_engine
 
     def prepare(self, *, data_source: Any | None = None) -> None:  # type: ignore[override]

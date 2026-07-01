@@ -50,10 +50,14 @@ class EvaluationSample:
 
     @property
     def n_support(self) -> int:
+        """Number of support (fitting) rows in ``x_support``."""
+
         return int(self.x_support.shape[0])
 
     @property
     def n_validation(self) -> int:
+        """Number of validation rows in ``x_validation`` (0 if empty)."""
+
         return int(self.x_validation.shape[0])
 
 
@@ -64,6 +68,8 @@ class EvaluationResult:
     values: MutableMapping[str, Any] = field(default_factory=dict)
 
     def to_mapping(self) -> MutableMapping[str, Any]:
+        """Return the underlying ``values`` mapping of result fields."""
+
         return self.values
 
 

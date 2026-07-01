@@ -77,6 +77,7 @@ class _RefiningBaselineModel(BaseEstimator):
 
     @property
     def n_variables(self) -> int:
+        """Number of input variables of the skeleton pool (the model's fixed input dimension)."""
         return self._pool.n_variables
 
     def _ensure_pool(self, catalog_ref: str | dict[str, Any] | LampleChartonCatalog) -> LampleChartonCatalog:
@@ -260,6 +261,27 @@ class _RefiningBaselineModel(BaseEstimator):
         return self
 
     def predict(self, X: np.ndarray | torch.Tensor | pd.DataFrame, nth_best: int = 0) -> np.ndarray:
+        """Evaluate the ``nth_best`` fitted candidate's refined expression on ``X``.
+
+        Parameters
+        ----------
+        X : np.ndarray or torch.Tensor or pd.DataFrame
+            Input points; truncated or zero-padded to ``n_variables`` like at fit time.
+        nth_best : int, default 0
+            Rank (by ascending score) of the fitted candidate to evaluate; 0 is the best.
+
+        Returns
+        -------
+        np.ndarray
+            Model predictions for ``X``.
+
+        Raises
+        ------
+        ValueError
+            If the model has not been fitted (``fit`` produced no results).
+        IndexError
+            If ``nth_best`` exceeds the number of fitted candidates.
+        """
         if not self._results:
             raise ValueError("The model has not been fitted yet. Please call `fit` first.")
 
@@ -279,6 +301,29 @@ class _RefiningBaselineModel(BaseEstimator):
         return refiner.predict(X_np)
 
     def get_expression(self, nth_best: int = 0, *, return_prefix: bool = False, precision: int = 2) -> list[str] | str:
+        """Return the ``nth_best`` fitted candidate's expression with its refined constants substituted.
+
+        Parameters
+        ----------
+        nth_best : int, default 0
+            Rank (by ascending score) of the fitted candidate to return; 0 is the best.
+        return_prefix : bool, default False
+            If True, return the prefix token list; otherwise return the infix string.
+        precision : int, default 2
+            Number of decimal places used when formatting the substituted constants.
+
+        Returns
+        -------
+        list of str or str
+            The prefix token list (``return_prefix=True``) or the infix expression string.
+
+        Raises
+        ------
+        ValueError
+            If the model has not been fitted (``fit`` produced no results).
+        IndexError
+            If ``nth_best`` exceeds the number of fitted candidates.
+        """
         if not self._results:
             raise ValueError("The model has not been fitted yet. Please call `fit` first.")
 
