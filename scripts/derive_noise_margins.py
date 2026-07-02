@@ -48,7 +48,7 @@ def score_tier1(snapshot: dict) -> dict:
     """Attach per-draw tier-1 metric columns (strict srbf scorers, two-regime failure policy)."""
     n = max((len(v) for v in snapshot.values() if isinstance(v, list)), default=0)
 
-    def row(key: str, i: int):
+    def row(key: str, i: int) -> object:
         col = snapshot.get(key)
         return col[i] if col is not None and i < len(col) else None
 
@@ -134,7 +134,7 @@ def cmd_derive(args: argparse.Namespace) -> None:
     out.write_text(json.dumps(table))
     print(f"\n[out] {out}  ({len(table['cells'])} cells)")
 
-    print(f"\n== noise SD (aggregate delta scale) + q95, split-half [bootstrap agreement ratio] ==")
+    print("\n== noise SD (aggregate delta scale) + q95, split-half [bootstrap agreement ratio] ==")
     for metric in TIER1_METRICS:
         print(f"\n-- {metric}")
         for key, cell in sorted(table["cells"].items()):
