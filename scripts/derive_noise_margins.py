@@ -28,6 +28,7 @@ import json
 import pickle
 import re
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -48,7 +49,7 @@ def score_tier1(snapshot: dict) -> dict:
     """Attach per-draw tier-1 metric columns (strict srbf scorers, two-regime failure policy)."""
     n = max((len(v) for v in snapshot.values() if isinstance(v, list)), default=0)
 
-    def row(key: str, i: int) -> object:
+    def row(key: str, i: int) -> Any:
         col = snapshot.get(key)
         return col[i] if col is not None and i < len(col) else None
 
