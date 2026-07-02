@@ -161,6 +161,102 @@ def paired_expression_deltas(
     }
 
 
+def self_noise(
+    values: Mapping[Any, np.ndarray],
+    *,
+    n_null: int = 1000,
+    reduce: Callable[..., float | np.ndarray] = np.nanmean,
+    method: str = "split-half",
+    rng: np.random.Generator | int | None = None,
+) -> dict[str, Any]:
+    """A series' draw-noise contribution to an aggregate paired delta (its NOISE NULL).
+
+    In a real paired comparison, ``delta_hat = reduce_e(mean(A_e) - mean(B_e))``; under the
+    per-expression null its distribution is that of ``N_A - N_B`` where ``N_X`` is the aggregate
+    draw-noise of series X alone at its OWN per-expression draw counts. This function estimates
+    ``N_X`` from one series' draws; :func:`pair_margin` then combines two such nulls into the
+    measurement-noise margin (MRD) for a specific pair.
+
+    Methods (both scale-exact per expression; they must agree unless draws are not i.i.d.):
+    - ``'split-half'``: for each null sample, randomly split each expression's k draws into
+      halves, take the half-mean difference, and rescale by the exact per-expression factor
+      ``sqrt((1/k) / (1/k1 + 1/k2))`` to the full-k noise scale (``1/2`` for even k).
+    - ``'bootstrap'``: centered draw resampling per expression, rescaled by
+      ``sqrt(k/(k-1))`` to correct the bootstrap's small-k variance deflation.
+
+    Expressions with fewer than 2 draws carry no noise information and are skipped (counted in
+    ``n_skipped``). Returns ``{null, sd, q95, n_expressions, n_skipped, method}`` where ``null``
+    is the ``(n_null,)`` sample of ``N_X`` used by :func:`pair_margin`.
+    """
+    if method not in ("split-half", "bootstrap"):
+        raise ValueError(f"unknown method {method!r}")
+    if not hasattr(rng, "integers"):
+        rng = np.random.default_rng(rng)
+
+    usable = {k: np.asarray(v, dtype=float) for k, v in values.items() if len(v) >= 2}
+    n_skipped = len(values) - len(usable)
+    if not usable:
+        return {"null": np.empty((0,)), "sd": float("nan"), "q95": float("nan"),
+                "n_expressions": 0, "n_skipped": n_skipped, "method": method}
+
+    null = np.empty(n_null, dtype=float)
+    keys = list(usable.keys())
+    for s in range(n_null):
+        contributions = np.empty(len(keys), dtype=float)
+        for j, key in enumerate(keys):
+            draws = usable[key]
+            k = len(draws)
+            if method == "split-half":
+                perm = rng.permutation(k)
+                k1 = k // 2
+                half_delta = float(np.mean(draws[perm[:k1]]) - np.mean(draws[perm[k1:]]))
+                scale = np.sqrt((1.0 / k) / (1.0 / k1 + 1.0 / (k - k1)))
+                contributions[j] = half_delta * scale
+            else:  # bootstrap
+                resampled = draws[rng.integers(0, k, size=k)]
+                centered = float(np.mean(resampled) - np.mean(draws))
+                contributions[j] = centered * np.sqrt(k / (k - 1.0))
+        null[s] = float(reduce(contributions))
+
+    return {
+        "null": null,
+        "sd": float(np.std(null)),
+        "q95": float(np.percentile(np.abs(null), 95)),
+        "n_expressions": len(keys),
+        "n_skipped": n_skipped,
+        "method": method,
+    }
+
+
+def pair_margin(
+    noise_a: Mapping[str, Any],
+    noise_b: Mapping[str, Any],
+    *,
+    level: float = 0.95,
+    n_pairs: int = 100_000,
+    rng: np.random.Generator | int | None = None,
+) -> dict[str, float]:
+    """Measurement-noise margin (MRD) for a SPECIFIC pair of series.
+
+    Convolves the two stored noise nulls by sampling (``N_A - N_B`` with independent draws from
+    each null) and returns the ``level``-quantile of the magnitude: the largest aggregate delta
+    that is indistinguishable from re-running the benchmark on two equally-good models with
+    these two series' noise levels. Pair-specific by construction — a global max-over-models
+    margin either starves quiet pairs of attainable 'equivalent' verdicts or dilutes the
+    regression gate (referee round, 2026-07-02).
+
+    Returns ``{margin, sd}``; ``sd`` is the combined null SD for diagnostics (``margin/sd`` far
+    from ~1.96 signals heavy tails).
+    """
+    a, b = np.asarray(noise_a["null"], dtype=float), np.asarray(noise_b["null"], dtype=float)
+    if a.size == 0 or b.size == 0:
+        return {"margin": float("nan"), "sd": float("nan")}
+    if not hasattr(rng, "integers"):
+        rng = np.random.default_rng(rng)
+    diff = a[rng.integers(0, a.size, size=n_pairs)] - b[rng.integers(0, b.size, size=n_pairs)]
+    return {"margin": float(np.percentile(np.abs(diff), level * 100)), "sd": float(np.std(diff))}
+
+
 def bootstrap_report(
     snapshot: Mapping[str, Sequence[Any]],
     metric_key: str,
@@ -200,4 +296,5 @@ def bootstrap_report(
     }
 
 
-__all__ = ["draw_distribution", "draw_values", "paired_expression_deltas", "bootstrap_report"]
+__all__ = ["draw_distribution", "draw_values", "paired_expression_deltas", "self_noise",
+           "pair_margin", "bootstrap_report"]
