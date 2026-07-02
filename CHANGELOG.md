@@ -4,6 +4,18 @@ All notable changes to srbf are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2026-07-02
+
+### Changed
+- **PySR runs at its upstream default `maxsize` again** (the 0.6.1 override is removed). Policy
+  decision: baselines run at their library defaults — a method's default hyperparameters are part
+  of the method, and a default that limits it is a property of that method, not srbf's to correct.
+  The 0.6.1 audit numbers stand as documentation (at PySR's `maxsize=20`, 23/120 FastSRB and
+  743/1000 v23-val ground truths are not representable; `scripts/audit_pysr_maxsize.py`,
+  docs/models.md). The optional `maxsize` key in the `model_adapter` block remains for side
+  experiments only; it is no longer set by default. The warmup fit and the seedable bootstrap
+  from 0.6.1 are unchanged.
+
 ## [0.6.1] - 2026-07-02
 
 Fairness + reproducibility quick wins (improvement-plan WP0).

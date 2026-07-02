@@ -143,8 +143,7 @@ class _FakePySRModel:
 def _patch_pysr_factory(monkeypatch):
     created: list[_FakePySRModel] = []
 
-    def fake_create(*, timeout_in_seconds, niterations, use_mult_div_operators,
-                    maxsize=model_adapters.PYSR_DEFAULT_MAXSIZE):
+    def fake_create(*, timeout_in_seconds, niterations, use_mult_div_operators, maxsize=None):
         model = _FakePySRModel(niterations, maxsize)
         created.append(model)
         return model
@@ -168,10 +167,9 @@ def test_pysr_adapter_prepare_runs_a_warmup_fit_by_default(monkeypatch):
     assert timed.niterations == 5 and timed.n_fits == 0   # timed model untouched
     assert warmup.niterations == 1 and warmup.n_fits == 1  # warmup fit happened
     assert adapter._model is timed
-    # Both models get the explicit complexity budget (PySR's own default of 20 cannot
-    # express 23/120 FastSRB and 743/1000 v23-val ground truths).
-    assert timed.maxsize == model_adapters.PYSR_DEFAULT_MAXSIZE
-    assert warmup.maxsize == model_adapters.PYSR_DEFAULT_MAXSIZE
+    # Benchmark policy: baselines run at their upstream defaults -- maxsize is NOT overridden.
+    assert timed.maxsize is None
+    assert warmup.maxsize is None
 
 
 def test_pysr_adapter_warmup_can_be_disabled(monkeypatch):

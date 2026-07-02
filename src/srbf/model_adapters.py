@@ -42,13 +42,6 @@ if TYPE_CHECKING:  # pragma: no cover - type checking only
 else:
     NesymresModel = Any
 
-# Explicit PySR complexity budget. PySR's own default (maxsize=20) makes 23/120 FastSRB and
-# 743/1000 v23-val ground truths structurally inexpressible under the adapter vocabulary
-# (largest GT = 40 nodes; see scripts/audit_pysr_maxsize.py), which would measure a
-# representation handicap rather than search quality. 45 covers every GT with headroom.
-PYSR_DEFAULT_MAXSIZE = 45
-
-
 class FlashANSRAdapter(EvaluationModelAdapter):
     """Wrap the `FlashANSR` model with the evaluation adapter protocol."""
 
@@ -318,7 +311,7 @@ class PySRAdapter(EvaluationModelAdapter):
         padding: bool,
         simplipy_engine: Any,
         warmup: bool = True,
-        maxsize: int = PYSR_DEFAULT_MAXSIZE,
+        maxsize: int | None = None,
     ) -> None:
         _require_pysr()  # import lazily to avoid initializing Julia unless needed
 
@@ -328,6 +321,10 @@ class PySRAdapter(EvaluationModelAdapter):
         self.padding = padding
         self.simplipy_engine = simplipy_engine
         self.warmup = warmup
+        # Benchmark policy: baselines run at their upstream defaults. maxsize=None leaves PySR's
+        # own default in place (which cannot represent 23/120 FastSRB / 743/1000 v23-val ground
+        # truths -- a documented property of the method, not ours to fix; see
+        # scripts/audit_pysr_maxsize.py). The knob exists for side experiments only.
         self.maxsize = maxsize
 
         self._model: Optional[Any] = None
@@ -758,7 +755,7 @@ def _create_pysr_model(
     timeout_in_seconds: int,
     niterations: int,
     use_mult_div_operators: bool,
-    maxsize: int = PYSR_DEFAULT_MAXSIZE,
+    maxsize: int | None = None,
 ) -> Any:
     additional_unary_operators: list[str]
     additional_extra_sympy_mappings: dict[str, Any]
@@ -789,12 +786,16 @@ def _create_pysr_model(
 
     PySR = _require_pysr()
 
+    # maxsize is only forwarded when explicitly set; None = PySR's own default (benchmark policy:
+    # baselines run at upstream defaults).
+    maxsize_kwargs = {} if maxsize is None else {"maxsize": maxsize}
+
     return PySR(
         temp_equation_file=True,
         delete_tempfiles=True,
         timeout_in_seconds=timeout_in_seconds,
         niterations=niterations,
-        maxsize=maxsize,
+        **maxsize_kwargs,
         unary_operators=[
             "neg",
             "abs",

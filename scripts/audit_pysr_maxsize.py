@@ -1,10 +1,13 @@
-"""Audit: can PySR express every benchmark ground truth within its ``maxsize``?
+"""Audit: can PySR express every benchmark ground truth within its default ``maxsize``?
 
 PySR's complexity budget (``maxsize``, a node count where every operator/variable/constant
 node costs 1) caps the size of equations the search can represent at all. If a benchmark
 ground truth NEEDS more nodes than ``maxsize`` under the adapter's operator vocabulary,
-PySR is structurally unable to recover that expression, and recovery/timing comparisons on
-those rows measure a representation handicap rather than search quality.
+PySR is structurally unable to recover that expression.
+
+Benchmark policy: baselines run at their upstream defaults, so this audit DOCUMENTS what
+PySR's default budget implies on these benchmarks (the numbers belong next to PySR's
+results); it does not justify overriding the default.
 
 Node counting mirrors ``srbf.model_adapters._create_pysr_model``'s vocabulary: the
 powers/roots ``pow2..pow5`` / ``pow1_2..pow1_5`` are single-node unary operators; the
@@ -82,33 +85,23 @@ def main() -> int:
         for skeleton in sorted(val.skeletons)
     ]
 
-    from srbf.model_adapters import PYSR_DEFAULT_MAXSIZE  # the adapter's explicit budget
-
-    exceeds_adapter_budget = False
     for name, rows in audits.items():
         sizes = sorted(size for _, size in rows)
         n = len(sizes)
-        over_legacy = [(gt, size) for gt, size in rows if size > PYSR_LIBRARY_DEFAULT_MAXSIZE]
-        over_current = [(gt, size) for gt, size in rows if size > PYSR_DEFAULT_MAXSIZE]
-        exceeds_adapter_budget |= bool(over_current)
+        over = [(gt, size) for gt, size in rows if size > PYSR_LIBRARY_DEFAULT_MAXSIZE]
         p95 = sizes[int(0.95 * (n - 1))]
         print(f"== {name}: n={n}  min={sizes[0]}  median={sizes[n // 2]}  p95={p95}  max={sizes[-1]}")
         hist = Counter(size for size in sizes)
         print("   sizes:", dict(sorted(hist.items())))
-        print(f"   > library default ({PYSR_LIBRARY_DEFAULT_MAXSIZE}), i.e. runs before srbf 0.6.1: "
-              f"{len(over_legacy)}/{n} ({100 * len(over_legacy) / n:.1f}%)")
-        print(f"   > adapter budget ({PYSR_DEFAULT_MAXSIZE}): {len(over_current)}/{n}")
-        for gt, size in sorted(over_current, key=lambda t: -t[1])[:10]:
+        print(f"   > PySR default maxsize ({PYSR_LIBRARY_DEFAULT_MAXSIZE}): "
+              f"{len(over)}/{n} ({100 * len(over) / n:.1f}%) not representable")
+        for gt, size in sorted(over, key=lambda t: -t[1])[:10]:
             print(f"     {size:3d}  {gt}")
 
     print()
-    if exceeds_adapter_budget:
-        print(f"VERDICT: ground truths exceed the adapter's maxsize={PYSR_DEFAULT_MAXSIZE} -> raise "
-              f"PYSR_DEFAULT_MAXSIZE (and re-run affected rungs) or document the handicap.")
-    else:
-        print(f"VERDICT: every ground truth fits within the adapter's explicit maxsize="
-              f"{PYSR_DEFAULT_MAXSIZE} (PySR's own default of {PYSR_LIBRARY_DEFAULT_MAXSIZE} did NOT "
-              f"cover the benchmarks; pre-0.6.1 PySR runs carry that handicap).")
+    print("NOTE: benchmark policy is to run baselines at their upstream defaults, so these numbers "
+          "are DOCUMENTATION of what PySR's default complexity budget implies on these benchmarks, "
+          "not a defect to patch. See docs/models.md (PySR section).")
     return 0
 
 

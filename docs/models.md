@@ -108,17 +108,19 @@ model_adapter:
 
 Key fields: `niterations` (the compute-scaling axis, swept per run), `timeout_in_seconds`, and `simplipy_engine` (the SimpliPy engine name; `dev_7-3` is installed on demand; required). No model weights to download: PySR fits each problem from scratch.
 
-Two fairness guards the adapter applies automatically (both introduced in srbf 0.6.1):
+Two properties of the adapter worth knowing:
 
-- **Explicit complexity budget** — `maxsize: 45` by default (overridable in the block). PySR's own
-  default (`maxsize=20`) cannot represent 23/120 FastSRB and 743/1000 v23-val ground truths under
-  the adapter vocabulary (largest ground truth = 40 nodes), so runs at the library default measure
-  a representation handicap rather than search quality. Re-audit with
-  `python scripts/audit_pysr_maxsize.py` whenever the benchmarks or the operator vocabulary change.
-  PySR results produced before 0.6.1 carry this handicap; treat them as lower bounds.
-- **Warmup fit in `prepare()`** (`warmup: true` by default) — the first `fit` in a Julia session
-  pays a one-off precompile cost that is an order-of-magnitude timing outlier; the adapter burns it
-  on a throwaway model before evaluation so problem 0's `fit_time` starts warm.
+- **Complexity budget = PySR's own default.** Benchmark policy: baselines run at their upstream
+  defaults — a method's default hyperparameters are part of the method. Note what that default
+  implies here: at PySR's `maxsize=20`, 23/120 FastSRB and 743/1000 v23-val ground truths are not
+  representable under the adapter vocabulary at all (largest ground truth = 40 nodes; measure it
+  yourself with `python scripts/audit_pysr_maxsize.py`). This is a documented property of running
+  PySR at its defaults on these benchmarks, not something srbf corrects. An optional `maxsize` key
+  exists in the `model_adapter` block for side experiments only; headline results use the default.
+- **Warmup fit in `prepare()`** (`warmup: true` by default, srbf 0.6.1) — the first `fit` in a
+  Julia session pays a one-off precompile cost that is an order-of-magnitude timing outlier; the
+  adapter burns it on a throwaway model before evaluation so problem 0's `fit_time` starts warm.
+  This mirrors the other adapters, which pay their one-time model-load cost in `prepare()` too.
 
 ---
 
