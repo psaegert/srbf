@@ -75,3 +75,57 @@ def bootstrapped_metric_ci(
     upper = np.nanpercentile(bootstrapped_metrics, (1 + interval) / 2 * 100)
 
     return float(median), float(lower), float(upper)
+
+
+def bootstrap_band(
+    data: np.ndarray,
+    reduce: Callable[..., np.ndarray | float] = np.nanmean,
+    *,
+    n: int = 10_000,
+    interval: float = 0.95,
+    rng: np.random.Generator | int | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Bootstrap ``reduce`` over the ROWS of ``data``; shape-agnostic sibling of
+    :func:`bootstrapped_metric_ci`.
+
+    ``data`` has shape ``(n_rows,)`` (scalar per row, e.g. one paired delta per expression) or
+    ``(n_rows, k)`` (a 1-D profile per row, e.g. a recovery profile over k thresholds). Rows are
+    resampled with replacement ``n`` times and ``reduce`` is applied along axis 0, so the scalar
+    case reproduces :func:`bootstrapped_metric_ci` and the profile case yields pointwise bands
+    (label them as such: the band is pointwise, not simultaneous).
+
+    Parameters
+    ----------
+    data : np.ndarray
+        ``(n_rows,)`` or ``(n_rows, k)`` array; rows are the exchangeable units.
+    reduce : Callable, optional
+        Statistic applied along ``axis=0`` of each resample (default ``np.nanmean``).
+    n, interval, rng
+        As in :func:`bootstrapped_metric_ci`.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray, np.ndarray]
+        ``(estimate, lower, upper)``, each of shape ``()`` for scalar rows or ``(k,)`` for
+        profile rows. ``estimate`` is the median of the bootstrap distribution (house
+        convention, matching :func:`bootstrapped_metric_ci`).
+    """
+    if interval > 1 and interval <= 100:
+        interval /= 100
+
+    n = int(n)
+    data = np.asarray(data, dtype=float)
+    n_rows = data.shape[0]
+
+    if not hasattr(rng, "integers"):  # anything Generator-like is used as-is
+        rng = np.random.default_rng(rng)
+    indices = rng.integers(0, n_rows, size=(n, n_rows))
+
+    # (n, n_rows) or (n, n_rows, k) resample stack; reduce along the rows axis.
+    samples = data[indices]
+    reduced = np.asarray(reduce(samples, axis=1), dtype=float)  # (n,) or (n, k)
+
+    estimate = np.nanmedian(reduced, axis=0)
+    lower = np.nanpercentile(reduced, (1 - interval) / 2 * 100, axis=0)
+    upper = np.nanpercentile(reduced, (1 + interval) / 2 * 100, axis=0)
+    return estimate, lower, upper

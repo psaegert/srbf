@@ -59,3 +59,56 @@ def test_draw_distribution_unknown_metric_raises():
     import pytest
     with pytest.raises(KeyError, match="nope"):
         draw_distribution(_snapshot(), "nope")
+
+
+# --- WP1 primitives: draw_values + paired_expression_deltas ---
+
+def test_draw_values_groups_draws_uncollapsed():
+    from srbf.reporting import draw_values
+    dist = draw_values(_snapshot(), "recovery")
+    assert set(dist.keys()) == {"E1", "E2"}
+    np.testing.assert_array_equal(sorted(dist["E1"]), [0.0, 1.0, 1.0])
+    np.testing.assert_array_equal(dist["E2"], [0.0, 0.0, 0.0])
+
+
+def test_draw_values_refuses_row_identity_fallback():
+    import pytest
+    from srbf.reporting import draw_values
+    snap = {"recovery": [1.0, 0.0], "placeholder": [False, False]}  # no benchmark_eq_id column
+    with pytest.raises(KeyError, match="row order"):
+        draw_values(snap, "recovery")
+
+
+def test_paired_deltas_join_by_id_permutation_invariant():
+    from srbf.reporting import draw_values, paired_expression_deltas
+    a = draw_values(_snapshot(), "recovery")
+    # b = row-permuted copy of the same snapshot: deltas must be exactly zero
+    snap = _snapshot()
+    order = [3, 0, 5, 2, 6, 1, 4]
+    permuted = {k: [v[i] for i in order] for k, v in snap.items()}
+    b = draw_values(permuted, "recovery")
+    result = paired_expression_deltas(a, b)
+    assert result["n_pairs"] == 2 and result["n_only_a"] == result["n_only_b"] == 0
+    np.testing.assert_allclose(result["deltas"], 0.0)
+
+
+def test_paired_deltas_reports_one_sided_ids():
+    from srbf.reporting import paired_expression_deltas
+    a = {"E1": np.array([1.0]), "E2": np.array([0.5]), "E3": np.array([0.0])}
+    b = {"E2": np.array([0.25]), "E4": np.array([1.0])}
+    result = paired_expression_deltas(a, b)
+    assert result["keys"] == ["E2"]
+    np.testing.assert_allclose(result["deltas"], [0.25])
+    assert result["only_a"] == ["E1", "E3"] and result["only_b"] == ["E4"]
+    assert result["n_only_a"] == 2 and result["n_only_b"] == 1
+
+
+def test_paired_deltas_profile_values_stack():
+    from srbf.reporting import paired_expression_deltas
+    # aggregate returning a 1-D profile per expression -> (n_common, k) delta matrix
+    a = {"E1": np.array([[1.0, 0.5], [1.0, 0.7]]), "E2": np.array([[0.0, 0.0]])}
+    b = {"E1": np.array([[0.5, 0.5]]), "E2": np.array([[0.0, 0.5]])}
+    result = paired_expression_deltas(a, b, aggregate=lambda v: np.nanmean(v, axis=0))
+    assert result["deltas"].shape == (2, 2)
+    np.testing.assert_allclose(result["deltas"][0], [0.5, 0.1])   # E1
+    np.testing.assert_allclose(result["deltas"][1], [0.0, -0.5])  # E2

@@ -150,3 +150,26 @@ def test_zss_tree_edit_distance_detects_structural_changes() -> None:
     distance = zss_tree_edit_distance(["+", "x", "y"], ["+", "x", "*", "y", "z"], operators)
 
     assert distance > 1.0
+
+
+# --- WP1: bootstrap_band (shape-agnostic sibling of bootstrapped_metric_ci) ---
+
+def test_bootstrap_band_scalar_matches_bootstrapped_metric_ci():
+    from srbf.metrics.bootstrap import bootstrap_band
+    data = np.random.default_rng(5).normal(size=40)
+    rng_a = np.random.default_rng(11)
+    rng_b = np.random.default_rng(11)
+    est, lo, hi = bootstrap_band(data, np.nanmean, n=300, rng=rng_a)
+    m, l, u = bootstrapped_metric_ci(data, np.nanmean, n=300, rng=rng_b)
+    assert (float(est), float(lo), float(hi)) == (m, l, u)
+
+
+def test_bootstrap_band_profile_rows_give_pointwise_bands():
+    from srbf.metrics.bootstrap import bootstrap_band
+    rng = np.random.default_rng(6)
+    # 60 rows x 4-point profiles with column means ~ [0, 1, 2, 3]
+    data = rng.normal(loc=[0.0, 1.0, 2.0, 3.0], scale=0.5, size=(60, 4))
+    est, lo, hi = bootstrap_band(data, np.nanmean, n=500, rng=0)
+    assert est.shape == lo.shape == hi.shape == (4,)
+    assert np.all(lo <= est) and np.all(est <= hi)
+    np.testing.assert_allclose(est, [0.0, 1.0, 2.0, 3.0], atol=0.3)

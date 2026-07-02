@@ -81,6 +81,86 @@ def _draw_distribution(
     return out
 
 
+def draw_values(
+    snapshot: Mapping[str, Sequence[Any]],
+    metric_key: str,
+    *,
+    group_key: str = "benchmark_eq_id",
+) -> dict[Any, np.ndarray]:
+    """Per-expression arrays of PER-DRAW metric values (the uncollapsed sibling of
+    :func:`draw_distribution`).
+
+    Groups non-placeholder rows by ``group_key`` and returns each group's raw draw values as a
+    float array (``None`` values skipped; empty groups omitted). This is the primitive under the
+    paired layer and the noise-margin derivation, both of which need draws, not collapsed means.
+
+    Unlike :func:`draw_distribution`, a MISSING ``group_key`` column raises ``KeyError`` instead
+    of falling back to row identity: pairing joins on these keys, and a row-order join between
+    two snapshots with non-seed-matched draws is meaningless-but-plausible — the exact silent
+    failure the paired design must exclude.
+    """
+    if metric_key not in snapshot:
+        raise KeyError(f"metric '{metric_key}' not in snapshot (columns: {sorted(snapshot.keys())})")
+    if group_key not in snapshot:
+        raise KeyError(
+            f"group key '{group_key}' not in snapshot — refusing the row-identity fallback: "
+            f"paired statistics must join on expression ids, never on row order")
+    values = snapshot[metric_key]
+    groups = snapshot[group_key]
+
+    by_group: dict[Any, list[float]] = {}
+    for i in _valid_rows(snapshot):
+        value = values[i] if i < len(values) else None
+        key = groups[i] if i < len(groups) else None
+        if value is None or key is None:
+            continue
+        by_group.setdefault(key, []).append(float(value))
+    return {key: np.asarray(vals, dtype=float) for key, vals in by_group.items() if vals}
+
+
+def paired_expression_deltas(
+    values_a: Mapping[Any, np.ndarray],
+    values_b: Mapping[Any, np.ndarray],
+    *,
+    aggregate: Callable[[np.ndarray], float | np.ndarray] = np.nanmean,
+) -> dict[str, Any]:
+    """Join two per-expression value dicts on their KEYS and form per-expression deltas.
+
+    For every expression id present in both inputs: ``delta = aggregate(a) - aggregate(b)``.
+    ``aggregate`` collapses that expression's draws; it may return a scalar (the standard paired
+    delta) or a 1-D profile (vector values stack to an ``(n_common, k)`` delta matrix, feeding
+    :func:`srbf.metrics.bootstrap.bootstrap_band` for the WP2 profile difference).
+
+    The join is BY ID — never positional — so a row-permuted snapshot yields identical deltas.
+    Ids present on one side only are returned in the diagnostics, not silently dropped:
+    ``n_only_a`` / ``n_only_b`` are the pairing-transparency counters every report must surface.
+
+    Returns
+    -------
+    dict with keys ``keys`` (sorted common ids), ``deltas`` (``(n,)`` or ``(n, k)`` float array),
+    ``n_pairs``, ``n_only_a``, ``n_only_b``, ``only_a``, ``only_b`` (sorted id lists).
+    """
+    common = sorted(set(values_a) & set(values_b), key=str)
+    only_a = sorted(set(values_a) - set(values_b), key=str)
+    only_b = sorted(set(values_b) - set(values_a), key=str)
+
+    deltas = np.asarray(
+        [np.asarray(aggregate(values_a[k]), dtype=float) - np.asarray(aggregate(values_b[k]), dtype=float)
+         for k in common],
+        dtype=float,
+    ) if common else np.empty((0,), dtype=float)
+
+    return {
+        "keys": common,
+        "deltas": deltas,
+        "n_pairs": len(common),
+        "n_only_a": len(only_a),
+        "n_only_b": len(only_b),
+        "only_a": only_a,
+        "only_b": only_b,
+    }
+
+
 def bootstrap_report(
     snapshot: Mapping[str, Sequence[Any]],
     metric_key: str,
@@ -120,4 +200,4 @@ def bootstrap_report(
     }
 
 
-__all__ = ["draw_distribution", "bootstrap_report"]
+__all__ = ["draw_distribution", "draw_values", "paired_expression_deltas", "bootstrap_report"]
