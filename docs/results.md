@@ -30,6 +30,15 @@ each a raw snapshot tagged with `(model, benchmark, axis, x)` -- into bootstrap-
 Metrics are the strict `is_perfect_fit` numeric recovery, token-level skeleton F1, and the median
 `log10` FVU; sources are unseeded, so we report the distribution (bootstrap CI), not a single point.
 
+**How failed predictions are scored.** A model can fail to produce any prediction for a problem
+(generation or fitting error). Metrics handle this in two regimes: **rate metrics** (numeric/symbolic
+recovery, prediction success rate) count a failed prediction as **0.0 — a miss, not a missing value** —
+so a model is never rewarded for failing on hard problems (conditioning rates on success would inflate
+them, and they would vanish entirely where no prediction succeeds); **diagnostic metrics** that are only
+defined when a prediction exists (FVU, token F1/precision/recall, edit/tree distance, lengths, log-prob,
+fit time) drop failed rows instead. Recovery and FVU always score against the *clean* targets, so noise
+sweeps measure recovery of the true function.
+
 For a static (matplotlib) rendering instead of the interactive explorer, `build_report(runs, out_dir)`
 writes a Markdown page + PNG figures (needs the `srbf[analysis]` extra).
 
