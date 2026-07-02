@@ -47,19 +47,27 @@ def test_fvu_large_magnitude_good_fit_still_recovers() -> None:
     assert bool(is_perfect_fit(y, yp))
 
 
-def test_bootstrap_returns_constant_interval_when_samples_identical(monkeypatch: pytest.MonkeyPatch) -> None:
+class _FixedIndices:
+    """Generator-like stub: returns a fixed index matrix from ``integers`` (duck-typed rng)."""
+
+    def __init__(self, indices: np.ndarray, expected_size: tuple[int, int] | None = None) -> None:
+        self.indices = indices
+        self.expected_size = expected_size
+
+    def integers(self, low: int, high: int, size: tuple[int, int]) -> np.ndarray:
+        if self.expected_size is not None:
+            assert size == self.expected_size
+        return self.indices
+
+
+def test_bootstrap_returns_constant_interval_when_samples_identical() -> None:
     data = np.array([1.0, 2.0, 3.0], dtype=float)
     repeats = 5
     indices = np.tile(np.arange(len(data)), (repeats, 1))
 
-    def fake_randint(low: int, high: int, size: tuple[int, int]) -> np.ndarray:
-        assert (low, high) == (0, len(data))
-        assert size == (repeats, len(data))
-        return indices
-
-    monkeypatch.setattr("numpy.random.randint", fake_randint)
-
-    median, lower, upper = bootstrapped_metric_ci(data, np.mean, n=repeats, interval=0.9)
+    median, lower, upper = bootstrapped_metric_ci(
+        data, np.mean, n=repeats, interval=0.9,
+        rng=_FixedIndices(indices, expected_size=(repeats, len(data))))
     expected_mean = float(np.mean(data))
 
     assert median == pytest.approx(expected_mean)
@@ -67,7 +75,7 @@ def test_bootstrap_returns_constant_interval_when_samples_identical(monkeypatch:
     assert upper == pytest.approx(expected_mean)
 
 
-def test_bootstrap_handles_percentage_interval_and_nd_samples(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_bootstrap_handles_percentage_interval_and_nd_samples() -> None:
     data = np.array([[0.0, 1.0], [2.0, 3.0]], dtype=float)
     n_samples = 4
     indices = np.array([
@@ -77,20 +85,32 @@ def test_bootstrap_handles_percentage_interval_and_nd_samples(monkeypatch: pytes
         [1, 0],
     ])
 
-    def fake_randint(low: int, high: int, size: tuple[int, int]) -> np.ndarray:
-        assert size == (n_samples, len(data))
-        return indices
-
-    monkeypatch.setattr("numpy.random.randint", fake_randint)
-
     def test_metric(sample) -> np.ndarray:
         return float(sample[0, 0])
 
-    median, lower, upper = bootstrapped_metric_ci(data, test_metric, n=n_samples, interval=80)
+    median, lower, upper = bootstrapped_metric_ci(
+        data, test_metric, n=n_samples, interval=80,
+        rng=_FixedIndices(indices, expected_size=(n_samples, len(data))))
 
     assert median == pytest.approx(1.0)
     assert lower == pytest.approx(0.0)
     assert upper == pytest.approx(2.0)
+
+
+def test_bootstrap_is_bit_reproducible_with_int_seed() -> None:
+    data = np.random.default_rng(3).normal(size=50)
+    a = bootstrapped_metric_ci(data, np.mean, n=200, rng=7)
+    b = bootstrapped_metric_ci(data, np.mean, n=200, rng=7)
+    assert a == b
+    c = bootstrapped_metric_ci(data, np.mean, n=200, rng=np.random.default_rng(7))
+    assert a == c
+
+
+def test_bootstrap_unseeded_default_still_estimates() -> None:
+    data = np.random.default_rng(4).normal(loc=2.0, size=200)
+    median, lower, upper = bootstrapped_metric_ci(data, np.mean, n=500)
+    assert lower <= median <= upper
+    assert median == pytest.approx(2.0, abs=0.5)
 
 
 def test_build_tree_converts_prefix_to_expected_structure() -> None:

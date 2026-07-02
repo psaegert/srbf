@@ -90,14 +90,17 @@ def bootstrap_report(
     reduce: Callable[[np.ndarray], float] = np.nanmean,
     n: int = 10_000,
     interval: float = 0.95,
+    rng: np.random.Generator | int | None = 0,
 ) -> dict[str, Any]:
     """Bootstrap ``reduce`` over the per-expression metric distribution; return median + CI.
 
     Pipeline: ``draw_distribution`` (one value per ``group_key``) -> ``bootstrapped_metric_ci`` over
     those values. ``reduce`` is the statistic estimated (default the mean recovery across
     expressions); ``aggregate`` collapses draws within an expression. Returns
-    ``{metric, n_groups, n_rows, median, ci_lower, ci_upper, interval}``. The bootstrap is UNSEEDED
-    (per the no-seeding policy), so CIs vary run-to-run; report the interval, not point bit-equality.
+    ``{metric, n_groups, n_rows, median, ci_lower, ci_upper, interval}``. The bootstrap resampling
+    is SEEDED by default (``rng=0``) so reports are bit-reproducible; pass ``rng=None`` for fresh
+    entropy per call. Either way the estimate is the interval, not the point: interpret results by
+    the CI, never by bit-equality of the point value between configurations.
     """
     valid_rows = _valid_rows(snapshot)   # single scan, reused for the distribution and n_rows
     dist = _draw_distribution(snapshot, metric_key, valid_rows, group_key=group_key, aggregate=aggregate)
@@ -109,7 +112,7 @@ def bootstrap_report(
             "median": float("nan"), "ci_lower": float("nan"), "ci_upper": float("nan"),
             "interval": interval,
         }
-    median, lower, upper = bootstrapped_metric_ci(arr, reduce, n=n, interval=interval)
+    median, lower, upper = bootstrapped_metric_ci(arr, reduce, n=n, interval=interval, rng=rng)
     return {
         "metric": metric_key, "n_groups": int(arr.size), "n_rows": n_rows,
         "median": float(median), "ci_lower": float(lower), "ci_upper": float(upper),

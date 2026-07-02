@@ -9,6 +9,7 @@ def bootstrapped_metric_ci(
     metric: Callable[[np.ndarray], float],
     n: int = 10_000,
     interval: float = 0.95,
+    rng: np.random.Generator | int | None = None,
 ) -> tuple[float, float, float]:
     """Estimate ``metric`` on ``data`` with a bootstrap confidence interval.
 
@@ -29,6 +30,10 @@ def bootstrapped_metric_ci(
         convenience, a value in ``(1, 100]`` is treated as a percentage and
         divided by 100 (e.g. ``95`` becomes ``0.95``); values ``> 100`` are used
         as-is.
+    rng : np.random.Generator or int or None, optional
+        Resampling randomness: a ``Generator`` is used as-is, an int seeds a fresh
+        ``np.random.default_rng(rng)`` (bit-reproducible results), and ``None``
+        (default) draws fresh entropy so repeated calls differ.
 
     Returns
     -------
@@ -42,7 +47,9 @@ def bootstrapped_metric_ci(
 
     n = int(n)
 
-    indices = np.random.randint(0, len(data), size=(n, len(data)))
+    if not hasattr(rng, "integers"):  # anything Generator-like is used as-is
+        rng = np.random.default_rng(rng)
+    indices = rng.integers(0, len(data), size=(n, len(data)))
     samples = data[indices]
 
     bootstrapped_metrics: np.ndarray | None = None

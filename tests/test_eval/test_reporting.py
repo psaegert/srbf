@@ -37,6 +37,18 @@ def test_bootstrap_report_shape_and_bounds():
     assert rep["interval"] == 0.95
 
 
+def test_bootstrap_report_is_bit_reproducible_by_default():
+    # Default rng=0: two identical calls must agree to the bit, and an explicit seed must
+    # reproduce the default. rng=None opts back into fresh entropy per call.
+    a = bootstrap_report(_snapshot(), "recovery", n=500)
+    b = bootstrap_report(_snapshot(), "recovery", n=500)
+    assert a == b
+    c = bootstrap_report(_snapshot(), "recovery", n=500, rng=0)
+    assert a == c
+    d = bootstrap_report(_snapshot(), "recovery", n=500, rng=np.random.default_rng(0))
+    assert a == d
+
+
 def test_bootstrap_report_empty_is_nan_not_crash():
     snap = {"benchmark_eq_id": ["E1"], "recovery": [None], "placeholder": [False]}
     rep = bootstrap_report(snap, "recovery")
