@@ -474,6 +474,197 @@ def pair_margin(
     return {"margin": float(np.percentile(np.abs(diff), level * 100)), "sd": float(np.std(diff))}
 
 
+def series_x_positions(
+    snapshots: Mapping[int, Mapping[str, Sequence[Any]]],
+    *,
+    time_key: str = "fit_time",
+) -> dict[int, float]:
+    """Compute-axis position of every rung of a series: the median wall-clock ``fit_time`` over
+    the rung's valid rows (the site's convention — the axis is a per-rung summary, so a Δ(t)
+    curve compares configurations whose MEDIAN cost is t, not per-expression equal budgets)."""
+    positions: dict[int, float] = {}
+    for rung, snapshot in snapshots.items():
+        times = [
+            float(snapshot[time_key][i])
+            for i in _valid_rows(snapshot)
+            if i < len(snapshot.get(time_key, [])) and snapshot[time_key][i] is not None
+        ]
+        if times:
+            positions[rung] = float(np.median(times))
+    return positions
+
+
+def _expression_matrix(
+    snapshots: Mapping[int, Mapping[str, Sequence[Any]]],
+    metric_key: str,
+    group_key: str,
+    aggregate: Callable[[np.ndarray], float],
+) -> tuple[list[Any], list[int], np.ndarray]:
+    """(expression x rung) matrix of per-expression aggregates for one series; NaN = no value."""
+    per_rung = {rung: draw_values(snap, metric_key, group_key=group_key)
+                for rung, snap in snapshots.items()}
+    keys = sorted({k for values in per_rung.values() for k in values}, key=str)
+    rungs = sorted(per_rung)
+    matrix = np.full((len(keys), len(rungs)), np.nan)
+    for j, rung in enumerate(rungs):
+        values = per_rung[rung]
+        for i, key in enumerate(keys):
+            if key in values:
+                matrix[i, j] = float(aggregate(values[key]))
+    return keys, rungs, matrix
+
+
+def _interpolate_series(
+    matrix: np.ndarray,
+    x_by_rung: list[float],
+    t: float,
+) -> tuple[np.ndarray, tuple[int, int], bool]:
+    """Per-expression values of one series at time t: linear in log10(t) between the bracketing
+    measured rungs. An expression gets a value ONLY if it is valid at BOTH bracketing rungs
+    (composition-drift guard); at a measured rung the bracket is that rung itself. Assumes
+    x_by_rung sorted ascending. Returns (values, (j_lo, j_hi), measured_exactly)."""
+    x = np.asarray(x_by_rung, dtype=float)
+    exact = np.nonzero(np.isclose(x, t, rtol=1e-9))[0]
+    if exact.size:
+        j = int(exact[0])
+        return matrix[:, j], (j, j), True
+    j_hi = int(np.searchsorted(x, t))
+    j_lo = j_hi - 1
+    if j_lo < 0 or j_hi >= len(x):
+        raise ValueError(f"t={t} outside the measured range [{x[0]}, {x[-1]}]")
+    w = (np.log10(t) - np.log10(x[j_lo])) / (np.log10(x[j_hi]) - np.log10(x[j_lo]))
+    values = (1.0 - w) * matrix[:, j_lo] + w * matrix[:, j_hi]  # NaN if either bracket is NaN
+    return values, (j_lo, j_hi), False
+
+
+def paired_delta_curve(
+    series_a: Mapping[int, Mapping[str, Sequence[Any]]],
+    series_b: Mapping[int, Mapping[str, Sequence[Any]]],
+    metric_key: str,
+    *,
+    x_policy: str = "time",
+    group_key: str | None = None,
+    aggregate: Callable[[np.ndarray], float] = np.nanmean,
+    n: int = 10_000,
+    interval: float = 0.95,
+    rng: np.random.Generator | int | None = 0,
+    allow_unverified: bool = False,
+) -> dict[str, Any]:
+    """Paired Δ curve of two series over the compute axis, under a declared ``x_policy``.
+
+    ``series_*`` map rung value -> snapshot (one snapshot per measured rung).
+
+    - ``x_policy='rung'`` (same-method variants): Δ is computed ONLY at shared rung values —
+      exact configuration match, no interpolation. The natural policy when both series ran the
+      same ladder (ablation vs parent, size ladder, version vs predecessor).
+    - ``x_policy='time'`` (any pair): Δ(t) on the union grid of both series' measured median-time
+      positions within the OVERLAP window, with per-expression LINEAR interpolation in log10-time
+      between bracketing rungs. Never extrapolates: grid points outside either series' measured
+      span are returned in ``out_of_range`` (loud), not silently dropped. An expression
+      contributes at t only if valid at both bracketing rungs of BOTH series; per-point ``n_pairs``
+      makes composition drift visible. Bands are POINTWISE ``interval`` bootstrap bands over
+      expressions (label them as such).
+
+    Each point carries ``(rung_a, rung_b, x_a, x_b, measured_a, measured_b)`` — the display marks
+    measured points (dots) vs interpolated segments (line). Statistics are conditional on the
+    measured rung placements (x treated as fixed design points).
+    """
+    first_a = next(iter(series_a.values()))
+    first_b = next(iter(series_b.values()))
+    contract = _verify_pairing(first_a, first_b, allow_unverified=allow_unverified)
+    key = group_key or resolve_group_key(first_a)
+
+    keys_a, rungs_a, matrix_a = _expression_matrix(series_a, metric_key, key, aggregate)
+    keys_b, rungs_b, matrix_b = _expression_matrix(series_b, metric_key, key, aggregate)
+    common = sorted(set(keys_a) & set(keys_b), key=str)
+    index_a = [keys_a.index(k) for k in common]
+    index_b = [keys_b.index(k) for k in common]
+    matrix_a, matrix_b = matrix_a[index_a], matrix_b[index_b]
+
+    if not hasattr(rng, "integers"):
+        rng = np.random.default_rng(rng)
+
+    def point_stats(deltas: np.ndarray) -> tuple[float, float, float, int]:
+        valid = deltas[np.isfinite(deltas)]
+        if valid.size == 0:
+            return float("nan"), float("nan"), float("nan"), 0
+        est, lo, hi = _bootstrap_triple(valid, n=n, interval=interval, rng=rng)
+        return est, lo, hi, int(valid.size)
+
+    points: list[dict[str, Any]] = []
+    out_of_range: dict[str, list[float]] = {"a": [], "b": []}
+
+    if x_policy == "rung":
+        x_a = series_x_positions(series_a)
+        x_b = series_x_positions(series_b)
+        for rung in sorted(set(rungs_a) & set(rungs_b)):
+            j_a, j_b = rungs_a.index(rung), rungs_b.index(rung)
+            deltas = matrix_a[:, j_a] - matrix_b[:, j_b]
+            est, lo, hi, n_pairs = point_stats(deltas)
+            points.append({
+                "x": x_a.get(rung), "rung_a": rung, "rung_b": rung,
+                "x_a": x_a.get(rung), "x_b": x_b.get(rung),
+                "measured_a": True, "measured_b": True,
+                "delta": est, "lo": lo, "hi": hi, "n_pairs": n_pairs,
+            })
+    elif x_policy == "time":
+        pos_a = series_x_positions(series_a)
+        pos_b = series_x_positions(series_b)
+        # sort by x; keep only rungs with a time position; columns follow the sort
+        order_a = sorted((x, rung) for rung, x in pos_a.items())
+        order_b = sorted((x, rung) for rung, x in pos_b.items())
+        xs_a = [x for x, _ in order_a]
+        xs_b = [x for x, _ in order_b]
+        cols_a = matrix_a[:, [rungs_a.index(r) for _, r in order_a]]
+        cols_b = matrix_b[:, [rungs_b.index(r) for _, r in order_b]]
+
+        lo_t, hi_t = max(xs_a[0], xs_b[0]), min(xs_a[-1], xs_b[-1])
+        for t in sorted(set(xs_a) | set(xs_b)):
+            if not (lo_t <= t <= hi_t):
+                side = "a" if (t < xs_a[0] or t > xs_a[-1]) else "b"
+                out_of_range[side].append(t)
+                continue
+            values_a, (a_lo, a_hi), measured_a = _interpolate_series(cols_a, xs_a, t)
+            values_b, (b_lo, b_hi), measured_b = _interpolate_series(cols_b, xs_b, t)
+            deltas = values_a - values_b
+            est, lo, hi, n_pairs = point_stats(deltas)
+            points.append({
+                "x": t,
+                "rung_a": order_a[a_hi][1] if measured_a else (order_a[a_lo][1], order_a[a_hi][1]),
+                "rung_b": order_b[b_hi][1] if measured_b else (order_b[b_lo][1], order_b[b_hi][1]),
+                "x_a": t if measured_a else (xs_a[a_lo], xs_a[a_hi]),
+                "x_b": t if measured_b else (xs_b[b_lo], xs_b[b_hi]),
+                "measured_a": measured_a, "measured_b": measured_b,
+                "delta": est, "lo": lo, "hi": hi, "n_pairs": n_pairs,
+            })
+    else:
+        raise ValueError(f"unknown x_policy {x_policy!r} (use 'time' or 'rung')")
+
+    n_values = [p["n_pairs"] for p in points if p["n_pairs"]]
+    return {
+        "metric": metric_key,
+        "x_policy": x_policy,
+        "group_key": key,
+        "band": "pointwise",
+        "interval": interval,
+        "points": points,
+        "out_of_range": out_of_range,
+        "n_pairs_range": (min(n_values), max(n_values)) if n_values else (0, 0),
+        "pairing": contract,
+    }
+
+
+def _bootstrap_triple(
+    data: np.ndarray, *, n: int, interval: float, rng: np.random.Generator,
+) -> tuple[float, float, float]:
+    """House (estimate, lo, hi) for a 1-D sample: median of bootstrap means + percentile CI."""
+    indices = rng.integers(0, data.size, size=(int(n), data.size))
+    boot = np.nanmean(data[indices], axis=1)
+    return (float(np.nanmedian(boot)),
+            float(np.nanpercentile(boot, (1 - interval) / 2 * 100)),
+            float(np.nanpercentile(boot, (1 + interval) / 2 * 100)))
+
+
 def bootstrap_report(
     snapshot: Mapping[str, Sequence[Any]],
     metric_key: str,
@@ -514,5 +705,5 @@ def bootstrap_report(
 
 
 __all__ = ["draw_distribution", "draw_values", "paired_expression_deltas", "paired_report",
-           "self_noise", "pair_margin", "resolve_group_key", "pairing_fingerprint",
-           "PairingContractError", "bootstrap_report"]
+           "paired_delta_curve", "series_x_positions", "self_noise", "pair_margin",
+           "resolve_group_key", "pairing_fingerprint", "PairingContractError", "bootstrap_report"]

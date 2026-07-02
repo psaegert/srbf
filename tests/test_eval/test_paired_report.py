@@ -148,3 +148,83 @@ def test_mde_and_variance_decomposition_present():
     vd = report["variance_decomposition"]
     # no real shift + shared difficulty cancelled -> delta variance is ~all draw noise
     assert vd["draw_noise_share"] == pytest.approx(1.0, rel=0.35)
+
+
+# --- Section C: paired_delta_curve (x_policy machinery) ---
+
+def _rung_snapshot(values_by_eq: dict[str, list[float]], fit_time: float) -> dict:
+    snap = _snapshot_from(values_by_eq)
+    snap["fit_time"] = [fit_time] * len(snap["m"])
+    return snap
+
+
+def _linear_series(eqs, rung_xs: dict[int, float], slope: float, offset: float) -> dict[int, dict]:
+    """Per-expression metric value = offset + eq_index + slope * log10(x): exactly linear in
+    log-time, so interpolation must be EXACT at any midpoint."""
+    series = {}
+    for rung, x in rung_xs.items():
+        series[rung] = _rung_snapshot(
+            {eq: [offset + i + slope * np.log10(x)] * 2 for i, eq in enumerate(eqs)}, fit_time=x)
+    return series
+
+
+def test_delta_curve_rung_policy_matches_shared_rungs():
+    from srbf.reporting import paired_delta_curve
+    eqs = [f"E{i}" for i in range(20)]
+    a = _linear_series(eqs, {64: 1.0, 1024: 10.0}, slope=0.0, offset=0.5)
+    b = _linear_series(eqs, {64: 2.0, 1024: 20.0, 4096: 50.0}, slope=0.0, offset=0.3)
+    curve = paired_delta_curve(a, b, "m", x_policy="rung", allow_unverified=True)
+    assert [p["rung_a"] for p in curve["points"]] == [64, 1024]
+    for p in curve["points"]:
+        assert p["delta"] == pytest.approx(0.2, abs=1e-9)
+        assert p["measured_a"] and p["measured_b"]
+        assert p["n_pairs"] == 20
+
+
+def test_delta_curve_time_policy_interpolates_exactly_in_log_time():
+    from srbf.reporting import paired_delta_curve
+    eqs = [f"E{i}" for i in range(15)]
+    # A measured at x = 1 and 100; B at x = 10 (the log-midpoint) plus endpoints.
+    a = _linear_series(eqs, {1: 1.0, 100: 100.0}, slope=0.4, offset=1.0)
+    b = _linear_series(eqs, {1: 1.0, 10: 10.0, 100: 100.0}, slope=0.4, offset=0.0)
+    curve = paired_delta_curve(a, b, "m", x_policy="time", allow_unverified=True)
+    # grid = union {1, 10, 100}; at t=10 A is interpolated between 1 and 100 — since the metric
+    # is exactly linear in log10(t), the interpolated delta must equal the true offset 1.0.
+    by_x = {p["x"]: p for p in curve["points"]}
+    assert set(by_x) == {1.0, 10.0, 100.0}
+    for t, p in by_x.items():
+        assert p["delta"] == pytest.approx(1.0, abs=1e-9), f"at t={t}"
+    assert by_x[10.0]["measured_a"] is False and by_x[10.0]["measured_b"] is True
+    assert isinstance(by_x[10.0]["x_a"], tuple)  # bracketing positions recorded
+    assert curve["out_of_range"] == {"a": [], "b": []}
+
+
+def test_delta_curve_out_of_range_is_loud_not_silent():
+    from srbf.reporting import paired_delta_curve
+    eqs = [f"E{i}" for i in range(10)]
+    a = _linear_series(eqs, {64: 1.0, 1024: 10.0}, slope=0.0, offset=0.0)
+    b = _linear_series(eqs, {64: 5.0, 1024: 50.0, 4096: 500.0}, slope=0.0, offset=0.0)
+    curve = paired_delta_curve(a, b, "m", x_policy="time", allow_unverified=True)
+    # overlap window is [5, 10]: b's x=50 and x=500 and a's x=1 fall outside and MUST be reported
+    assert 1.0 in curve["out_of_range"]["a"] or 1.0 in curve["out_of_range"]["b"]
+    assert 50.0 in curve["out_of_range"]["a"]   # beyond a's measured span
+    assert 500.0 in curve["out_of_range"]["a"]
+    assert all(5.0 <= p["x"] <= 10.0 for p in curve["points"])
+
+
+def test_delta_curve_composition_drift_guard():
+    from srbf.reporting import paired_delta_curve
+    eqs = [f"E{i}" for i in range(10)]
+    a = _linear_series(eqs, {1: 1.0, 100: 100.0}, slope=0.0, offset=1.0)
+    # E0 has NO value at b's x=100 rung -> at interpolated t=10 (bracket 1..100) E0 must drop,
+    # so n_pairs at t=10 is 9 while at t=1 it is 10.
+    b_low = {eq: [0.0, 0.0] for eq in eqs}
+    b_high = {eq: [0.0, 0.0] for eq in eqs if eq != "E0"}
+    b = {1: _rung_snapshot(b_low, 1.0), 100: _rung_snapshot(b_high, 100.0),
+         10: _rung_snapshot(b_low, 10.0)}
+    curve = paired_delta_curve(a, b, "m", x_policy="time", allow_unverified=True)
+    by_x = {p["x"]: p for p in curve["points"]}
+    assert by_x[1.0]["n_pairs"] == 10
+    assert by_x[10.0]["n_pairs"] == 10   # measured for B at t=10 (E0 valid there)
+    assert by_x[100.0]["n_pairs"] == 9   # E0 missing at B's 100-rung
+    assert curve["n_pairs_range"] == (9, 10)
