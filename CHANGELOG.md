@@ -4,6 +4,27 @@ All notable changes to srbf are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-07-02
+
+Fairness + reproducibility quick wins (improvement-plan WP0).
+
+### Fixed
+- **PySR gets an explicit complexity budget (`maxsize=45`).** PySR's own default (`maxsize=20`)
+  makes 23/120 FastSRB and 743/1000 v23-val ground truths structurally inexpressible under the
+  adapter vocabulary (largest ground truth = 40 nodes; v23-val median 25), so runs at the library
+  default measured a representation handicap rather than search quality. The audit lives in
+  `scripts/audit_pysr_maxsize.py`; PySR results produced before 0.6.1 should be treated as lower
+  bounds. `maxsize` is overridable per `model_adapter` block.
+- **PySR timing no longer carries the Julia precompile outlier.** `PySRAdapter.prepare()` runs a
+  warmup fit on a throwaway model (`warmup: true` by default), so problem 0's `fit_time` starts
+  warm. The other built-in adapters already load their models in `prepare()`.
+
+### Added
+- **Seedable bootstrap.** `bootstrapped_metric_ci` accepts `rng` (`np.random.Generator` | int
+  seed | `None` for fresh entropy); `bootstrap_report` defaults to `rng=0`, making reports
+  bit-reproducible by default (pass `rng=None` for the previous unseeded behaviour). Interpret
+  results by the confidence interval either way.
+
 ## [0.6.0] - 2026-07-01
 
 Post-release audit round (deferred tiers C + D): baseline de-duplication, fail-fast adapter

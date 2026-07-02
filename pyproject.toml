@@ -7,7 +7,7 @@ description = "srbf: Symbolic Regression Benchmark Framework (Benchmark driver, 
 authors = [{ name = "Paul Saegert" }]
 readme = "README.md"
 requires-python = ">=3.12"
-version = "0.6.0"
+version = "0.6.1"
 license = "MIT"
 license-files = ["LICEN[CS]E*", "THIRD_PARTY_LICENSES*"]
 
