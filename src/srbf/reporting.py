@@ -1,4 +1,4 @@
-"""Multi-draw reporting: group per-problem metrics by expression, bootstrap a CI.
+"""Multi-draw reporting: group per-problem metrics by expression, bootstrap a CI; paired layer.
 
 The 0.5.x reproducibility story for SAMPLING sources (no seeding): a benchmark draws
 ``problems_per_expression`` problems per ground-truth expression, and we report the metric as a
@@ -18,6 +18,7 @@ from typing import Any, Callable, Mapping, Sequence
 import numpy as np
 
 from srbf.metrics.bootstrap import bootstrapped_metric_ci
+from srbf.provenance import META_KEY
 
 
 def _row_count(snapshot: Mapping[str, Sequence[Any]]) -> int:
@@ -161,6 +162,222 @@ def paired_expression_deltas(
     }
 
 
+class PairingContractError(ValueError):
+    """Two snapshots may not be paired: provenance mismatch, missing metadata, or a broken join."""
+
+
+def resolve_group_key(snapshot: Mapping[str, Sequence[Any]]) -> str:
+    """Expression-id column of a snapshot: ``benchmark_eq_id`` (curated benchmarks), falling back
+    to ``skeleton_hash`` for older/generative snapshots (v23-val), where the ground-truth skeleton
+    tuple IS the stable expression identity. Raises if neither exists — never row order."""
+    for key in ("benchmark_eq_id", "skeleton_hash"):
+        column = snapshot.get(key)
+        if column is not None and any(v is not None for v in column):
+            return key
+    raise PairingContractError(
+        "snapshot has neither 'benchmark_eq_id' nor 'skeleton_hash' — cannot pair on expression ids")
+
+
+def pairing_fingerprint(snapshot: Mapping[str, Sequence[Any]]) -> dict[str, Any] | None:
+    """Benchmark-identity fingerprint from a snapshot's embedded ``__meta__`` provenance.
+
+    Returns the sha256 of every provenance INPUT whose name marks it as benchmark/catalog data
+    (model weights legitimately differ between the two sides of a pair; the benchmark inputs
+    must not). ``None`` when the snapshot predates embedded provenance — the caller decides
+    whether unverified pairing is acceptable (``allow_unverified``)."""
+    meta = snapshot.get(META_KEY) if hasattr(snapshot, "get") else None
+    if not isinstance(meta, dict):
+        return None
+    inputs = meta.get("inputs") or {}
+    marks = ("benchmark", "catalog", "dataset", "test_set", "val")
+    data_inputs = {
+        name: (info or {}).get("sha256")
+        for name, info in inputs.items()
+        if any(mark in name.lower() for mark in marks)
+    }
+    return {"data_inputs": data_inputs, "timestamp": meta.get("timestamp")}
+
+
+def _verify_pairing(
+    snapshot_a: Mapping[str, Sequence[Any]],
+    snapshot_b: Mapping[str, Sequence[Any]],
+    *,
+    allow_unverified: bool,
+) -> dict[str, Any]:
+    """Layer 1 of the pairing contract: benchmark-identity provenance must match."""
+    fp_a, fp_b = pairing_fingerprint(snapshot_a), pairing_fingerprint(snapshot_b)
+    if fp_a is None or fp_b is None:
+        if not allow_unverified:
+            raise PairingContractError(
+                "snapshot(s) carry no embedded provenance (__meta__) — pairing cannot be verified. "
+                "Pass allow_unverified=True to pair anyway (archived pre-provenance snapshots).")
+        return {"verified": False, "reason": "missing __meta__ provenance"}
+    shared = set(fp_a["data_inputs"]) & set(fp_b["data_inputs"])
+    mismatched = sorted(name for name in shared if fp_a["data_inputs"][name] != fp_b["data_inputs"][name])
+    if mismatched:
+        raise PairingContractError(
+            f"benchmark data inputs differ between snapshots: {mismatched} — these are not the "
+            f"same benchmark; pairing would compare different populations.")
+    return {"verified": True, "shared_data_inputs": sorted(shared)}
+
+
+def paired_report(
+    snapshot_a: Mapping[str, Sequence[Any]],
+    snapshot_b: Mapping[str, Sequence[Any]],
+    metric_key: str,
+    *,
+    group_key: str | None = None,
+    aggregate: Callable[[np.ndarray], float] = np.nanmean,
+    n: int = 10_000,
+    interval: float = 0.95,
+    rng: np.random.Generator | int | None = 0,
+    higher_is_better: bool = True,
+    margin: float | Mapping[str, float] | None = None,
+    zero_method: str = "pratt",
+    expect_total: bool = False,
+    allow_unverified: bool = False,
+) -> dict[str, Any]:
+    """Paired comparison of two SAME-BENCHMARK snapshots: per-expression deltas, bootstrap CI,
+    effect sizes, power honesty, and (given a measurement-noise ``margin``) a four-state verdict.
+
+    Per expression e (joined on ids, never row order): ``delta_e = aggregate(A_e) - aggregate(B_e)``
+    over each side's draws. All statistics are computed from ONE expression-bootstrap pass.
+    Positive deltas favor A when ``higher_is_better`` (flip labels otherwise). Marginal CIs are
+    never combined or subtracted — that is the point of this function.
+
+    Missing-data semantics follow the metric's two-regime column encoding: RATE metrics carry
+    failures as 0.0 (total columns — pass ``expect_total=True`` to make any one-sided expression
+    id a contract error); DIAGNOSTIC metrics carry failures as ``None`` and pair over the
+    both-have-values intersection — a conditional-on-both-succeed estimand, disclosed via
+    ``n_only_a`` / ``n_only_b`` in the output (never silently).
+
+    ``margin`` is the pair-specific measurement-noise margin m_AB (:func:`pair_margin`; pass the
+    dict or the float). Verdicts: ``better`` = CI entirely beyond +margin (in A's favor),
+    ``worse`` = mirrored, ``equivalent`` = CI entirely inside [-margin, +margin] (a difference
+    smaller than the benchmark can measure), ``undecided`` = anything else.
+    ``equivalence_attainable`` reports whether the CI is even narrow enough for ``equivalent``
+    to be reachable — when False, an 'undecided' is resolution-limited, not evidence of parity.
+    """
+    contract = _verify_pairing(snapshot_a, snapshot_b, allow_unverified=allow_unverified)
+
+    key_a = group_key or resolve_group_key(snapshot_a)
+    key_b = group_key or resolve_group_key(snapshot_b)
+    if key_a != key_b:
+        raise PairingContractError(f"group-key mismatch: {key_a!r} vs {key_b!r}")
+
+    values_a = draw_values(snapshot_a, metric_key, group_key=key_a)
+    values_b = draw_values(snapshot_b, metric_key, group_key=key_b)
+    pairs = paired_expression_deltas(values_a, values_b, aggregate=aggregate)
+    if expect_total and (pairs["n_only_a"] or pairs["n_only_b"]):
+        raise PairingContractError(
+            f"metric '{metric_key}' declared total (rate metric) but the expression-id join is "
+            f"asymmetric: only_a={pairs['only_a'][:5]}..., only_b={pairs['only_b'][:5]}... — "
+            f"a rate metric with missing ids means the snapshots cover different populations.")
+
+    deltas = np.asarray(pairs["deltas"], dtype=float)
+    n_pairs = int(deltas.shape[0])
+    report: dict[str, Any] = {
+        "metric": metric_key,
+        "group_key": key_a,
+        "n_pairs": n_pairs,
+        "n_only_a": pairs["n_only_a"],
+        "n_only_b": pairs["n_only_b"],
+        "only_a": pairs["only_a"],
+        "only_b": pairs["only_b"],
+        "interval": interval,
+        "n_bootstrap": int(n),
+        "higher_is_better": higher_is_better,
+        "pairing": contract,
+    }
+    if n_pairs == 0:
+        report.update({k: float("nan") for k in
+                       ("delta_mean", "ci_lower", "ci_upper", "delta_median", "mde_80")})
+        report.update({"win_rate": None, "prob_superiority": float("nan"), "wilcoxon": None,
+                       "verdict": None, "margin": None, "equivalence_attainable": None,
+                       "variance_decomposition": None})
+        return report
+
+    # One expression-resampling pass serves every bootstrap statistic (house convention:
+    # point estimate = median of the bootstrap distribution; report rounding handles wobble).
+    if not hasattr(rng, "integers"):
+        rng = np.random.default_rng(rng)
+    indices = rng.integers(0, n_pairs, size=(int(n), n_pairs))
+    resampled = deltas[indices]                                   # (n, n_pairs)
+    boot_means = np.nanmean(resampled, axis=1)
+    boot_medians = np.nanmedian(resampled, axis=1)
+    lo_q, hi_q = (1 - interval) / 2 * 100, (1 + interval) / 2 * 100
+
+    report["delta_mean"] = float(np.nanmedian(boot_means))
+    report["ci_lower"] = float(np.nanpercentile(boot_means, lo_q))
+    report["ci_upper"] = float(np.nanpercentile(boot_means, hi_q))
+    report["delta_median"] = float(np.nanmedian(boot_medians))
+    report["median_ci_lower"] = float(np.nanpercentile(boot_medians, lo_q))
+    report["median_ci_upper"] = float(np.nanpercentile(boot_medians, hi_q))
+
+    # Effect sizes: per-expression win/tie/loss and the probability of superiority (ties half).
+    n_a_better = int(np.sum(deltas > 0)) if higher_is_better else int(np.sum(deltas < 0))
+    n_b_better = int(np.sum(deltas < 0)) if higher_is_better else int(np.sum(deltas > 0))
+    n_tied = int(np.sum(deltas == 0))
+    report["win_rate"] = {"a_better": n_a_better, "b_better": n_b_better, "tied": n_tied}
+    signed = deltas if higher_is_better else -deltas
+    report["prob_superiority"] = float((np.sum(signed > 0) + 0.5 * n_tied) / n_pairs)
+
+    # Wilcoxon signed-rank companion, zeros COUNTED (pratt) — scipy's default drops them, which
+    # on rate metrics silently conditions the test on the discordant minority.
+    from scipy.stats import wilcoxon  # scipy is a declared dependency
+    nonzero = int(np.sum(deltas != 0))
+    if nonzero == 0:
+        report["wilcoxon"] = {"statistic": float("nan"), "p": 1.0, "n_zero": n_tied,
+                              "n_nonzero": 0, "zero_method": zero_method}
+    else:
+        w = wilcoxon(deltas, zero_method=zero_method, method="approx")
+        report["wilcoxon"] = {"statistic": float(w.statistic), "p": float(w.pvalue),
+                              "n_zero": n_tied, "n_nonzero": nonzero, "zero_method": zero_method}
+
+    # Power honesty: the mean-delta magnitude detectable at 80% power (two-sided alpha from
+    # `interval`) — printed next to every verdict so "undecided" is never read as "equal".
+    se = float(np.nanstd(deltas, ddof=1) / np.sqrt(n_pairs)) if n_pairs > 1 else float("nan")
+    report["mde_80"] = float((1.959963985 + 0.8416212336) * se)
+
+    # Draws-vs-expressions variance decomposition (WP7's "grow expressions or draws?" observable).
+    within = [
+        float(np.nanvar(values_a[k], ddof=1)) / len(values_a[k])
+        + float(np.nanvar(values_b[k], ddof=1)) / len(values_b[k])
+        for k in pairs["keys"]
+        if len(values_a[k]) >= 2 and len(values_b[k]) >= 2
+    ]
+    between = float(np.nanvar(deltas, ddof=1)) if n_pairs > 1 else float("nan")
+    mean_within = float(np.mean(within)) if within else float("nan")
+    report["variance_decomposition"] = {
+        "between_expression_var": between,
+        "mean_within_expression_var": mean_within,
+        "draw_noise_share": (mean_within / between) if between and np.isfinite(between) and between > 0
+        else float("nan"),
+    }
+
+    # Verdict vs the pair-specific measurement-noise margin.
+    m = margin.get("margin") if isinstance(margin, Mapping) else margin
+    report["margin"] = float(m) if m is not None else None
+    if m is None:
+        report["verdict"] = None
+        report["equivalence_attainable"] = None
+    else:
+        lo, hi = report["ci_lower"], report["ci_upper"]
+        if not higher_is_better:
+            lo, hi = -hi, -lo  # orient so positive favors A
+        if lo > m:
+            verdict = "better"
+        elif hi < -m:
+            verdict = "worse"
+        elif -m <= lo and hi <= m:
+            verdict = "equivalent"
+        else:
+            verdict = "undecided"
+        report["verdict"] = verdict
+        report["equivalence_attainable"] = bool((hi - lo) / 2 <= m)
+    return report
+
+
 def self_noise(
     values: Mapping[Any, np.ndarray],
     *,
@@ -296,5 +513,6 @@ def bootstrap_report(
     }
 
 
-__all__ = ["draw_distribution", "draw_values", "paired_expression_deltas", "self_noise",
-           "pair_margin", "bootstrap_report"]
+__all__ = ["draw_distribution", "draw_values", "paired_expression_deltas", "paired_report",
+           "self_noise", "pair_margin", "resolve_group_key", "pairing_fingerprint",
+           "PairingContractError", "bootstrap_report"]

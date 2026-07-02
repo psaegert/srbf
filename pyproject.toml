@@ -12,6 +12,7 @@ license = "MIT"
 license-files = ["LICEN[CS]E*", "THIRD_PARTY_LICENSES*"]
 
 dependencies = [
+    "scipy>=1.9",        # paired statistics: Wilcoxon signed-rank (zero_method pinned in reporting)
     "flash-ansr>=0.10,<1.0",   # one-way dep; provides FlashANSR.infer() + the CandidateLedger join
     "simplipy>=0.3.1",   # DIRECT: baselines + normalize_* (moved here from flash-ansr)
     "symbolic-data>=0.10", # DIRECT: catalog / ProblemSource data layer (CatalogSource wraps it)
