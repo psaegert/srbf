@@ -3,22 +3,37 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Symbolic Regression Benchmark — Results</title>
-  <meta name="description" content="Interactive results explorer for the srbf symbolic-regression benchmark: Flash-ANSR across model scales versus PySR, NeSymReS, and E2E, over inference compute, noise, and sample-count sweeps." />
+  <title>srbf: Symbolic Regression Benchmark Framework · Results</title>
+  <meta name="description" content="Interactive results explorer of srbf, the Symbolic Regression Benchmark Framework: Flash-ANSR across model scales versus PySR, NeSymReS, and E2E, over inference compute, noise, and sample-count sweeps." />
+  <link rel="icon" type="image/svg+xml" href="srbf-icon.svg" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="srbf: Symbolic Regression Benchmark Framework" />
+  <meta property="og:description" content="Interactive results explorer: Flash-ANSR across model scales versus PySR, NeSymReS, and E2E, over inference compute, noise, and sample-count sweeps." />
+  <meta property="og:url" content="https://psaegert.github.io/srbf/" />
+  <meta property="og:image" content="https://psaegert.github.io/srbf/srbf-social.png" />
+  <meta name="twitter:card" content="summary_large_image" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous" />
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"
+    onload="renderMathInElement(document.body, {delimiters: [{left: '$$', right: '$$', display: true}, {left: '\\(', right: '\\)', display: false}]});"></script>
 </head>
 <body>
   <header class="site-header">
     <div class="wrap header-inner">
       <a class="brand" href="./">
+        <img class="brand-icon" src="srbf-icon.svg" alt="" width="26" height="26" />
         <span class="brand-mark">srbf</span>
-        <span class="brand-sub">Symbolic Regression Benchmark</span>
+        <span class="brand-sub">Symbolic Regression Benchmark Framework</span>
       </a>
       <nav class="site-nav">
+        <a href="#about">About</a>
+        <a href="#metrics">Metrics</a>
         <a href="https://srbf.readthedocs.io/" target="_blank" rel="noopener">Docs</a>
         <a href="https://github.com/psaegert/srbf" target="_blank" rel="noopener">GitHub</a>
         <a href="https://pypi.org/project/srbf/" target="_blank" rel="noopener">PyPI</a>
@@ -28,12 +43,16 @@
 
   <main class="wrap">
     <section class="hero">
-      <h1>Symbolic Regression Benchmark Results</h1>
+      <p class="kicker">Results explorer</p>
+      <h1>Symbolic Regression Benchmark Framework</h1>
       <p class="lede">
-        An interactive explorer of recovery and fit quality across <strong>Flash-ANSR</strong> model
-        scales and the <strong>PySR</strong>, <strong>NeSymReS</strong>, and <strong>E2E</strong>
-        baselines. Choose an axis, a metric, and a benchmark, then toggle series. Lines are bootstrap
-        medians over expressions; shaded bands are 95% confidence intervals.
+        The live results of <strong>srbf</strong>: recovery and fit quality across
+        <strong>Flash-ANSR</strong> model scales and the <strong>PySR</strong>,
+        <strong>NeSymReS</strong>, and <strong>E2E</strong> baselines. Choose an axis, a metric,
+        and a benchmark, then toggle series. Every curve is a bootstrap estimate over benchmark
+        expressions with a 95% confidence band; <a href="#about">About these numbers</a> explains
+        exactly how each point is computed, and <a href="#metrics">Metrics</a> defines every metric
+        in the menu.
       </p>
     </section>
 
@@ -43,36 +62,396 @@
       </div>
     </section>
 
-    <section class="notes">
-      <details class="provenance" open>
-        <summary>About these numbers</summary>
-        <p>
-          These series are re-rendered through <code>srbf.analysis</code> from the archived
-          <strong>Flash-ANSR v23.0</strong> evaluation (the first paper's results), not yet a fresh
-          canonical run. Flash-ANSR series carry version <code>v23.0</code>; symbolic-data, srbf, and
-          the catalog artifacts are <code>-</code> (they did not exist at eval time). The version
-          travels with each series in the legend.
-        </p>
-        <p>
-          The <strong>compute</strong> axis is median per-problem <strong>wall-clock fit time</strong>,
-          the one budget comparable across methods (Flash-ANSR sweeps <code>choices</code>, PySR
-          iterations, NeSymReS the beam width, E2E the candidate count; time unifies them).
-        </p>
-        <p>
-          <strong>Metrics.</strong> The two headline metrics are the strict <code>is_perfect_fit</code>
-          numeric recovery (<strong>vNRR</strong>: FVU on the clean validation targets at or below
-          float32 epsilon) and the <strong>expression length ratio</strong> (predicted / ground-truth
-          prefix length; 1 is ideal). The full menu is under <em>More metrics</em>. Rate metrics count a
-          failed prediction as 0 (never conditioned on success); diagnostic metrics (FVU, token overlap,
-          edit distances, lengths) are computed only where a prediction exists. Recovery and FVU always
-          score against the <em>clean</em> targets, including in the noise sweep. Token-overlap and
-          exact-match metrics compare <em>raw</em> prefixes: archived predictions are not re-normalized
-          and the baselines tokenize variables differently, so treat cross-series comparisons of those
-          with care. <code>log-probability</code> and <code>selection score</code> exist only for
-          Flash-ANSR series.
-        </p>
-      </details>
+    <section id="about" class="prose">
+      <h2>About these numbers</h2>
 
+      <h3>Provenance</h3>
+      <p>
+        The series on this page are re-scored through <a href="https://srbf.readthedocs.io/"
+        rel="noopener" target="_blank"><code>srbf.analysis</code></a> from the archived raw
+        prediction snapshots of the <strong>Flash-ANSR v23.0</strong> evaluation (the experiments
+        behind the paper <a href="https://arxiv.org/abs/2602.08885" target="_blank"
+        rel="noopener"><em>Breaking the Simplification Bottleneck in Amortized Neural Symbolic
+        Regression</em></a>), not yet from a fresh canonical <code>srbf</code> run. Flash-ANSR
+        series carry version <code>v23.0</code> (or <code>v23.3</code> for the KV-cache decode
+        re-evaluation); symbolic-data, srbf, and catalog artifact versions are <code>-</code>
+        because those packages did not exist at evaluation time. The version travels with each
+        series in the legend. The collapsible <em>Ablations</em> group exposes the paper's ablation
+        grid: training-data pipeline and budget (Track A), architecture reverts toward NeSymReS
+        (Track B), the constants prior (C1), and inference-only re-evaluations of the unchanged
+        checkpoint (Track Z). One ablation (B1, post-norm) is absent because its archived snapshots
+        carry no timing information and therefore cannot be placed on the wall-clock compute axis.
+      </p>
+
+      <h3>Benchmarks and sweeps</h3>
+      <p>
+        Two benchmarks are available in the menu. <strong>FastSRB</strong> is a curated suite of
+        textbook and physics expressions evaluated at multiple sampled problem instances per
+        expression. <strong>v23-val</strong> is a held-out validation set of expression skeletons
+        drawn from the training distribution (in-distribution generalization, decontaminated
+        against training data). Three sweeps populate the x-axis choices: <em>inference
+        compute</em>, <em>support size</em> (how many data points the method sees), and
+        <em>noise level</em> (relative noise added to the support targets).
+      </p>
+      <p>
+        The <strong>compute axis</strong> is the median per-problem <strong>wall-clock fit
+        time</strong>: the one budget that is comparable across methods. Each method scales along
+        its own natural knob (Flash-ANSR sweeps the number of sampled candidates, PySR its
+        iterations, NeSymReS the beam width, E2E the candidate count), and plotting against time
+        unifies them into a single fair frontier. Times were measured on the same hardware per
+        sweep.
+      </p>
+
+      <h3>From raw predictions to a point on a curve</h3>
+      <p>
+        Every point on every curve is computed from per-problem raw predictions with the same
+        pipeline:
+      </p>
+      <ol>
+        <li>
+          <strong>Placeholder rows are excluded.</strong> A benchmark draw that could not be
+          realized at all (e.g. no valid problem instance could be sampled for an expression at
+          the requested support size) is a placeholder and never enters any statistic.
+        </li>
+        <li>
+          <strong>Failures count against rate metrics, and only rate metrics.</strong> If a method
+          produced no usable prediction for a problem, the <em>rate</em> metrics (numeric recovery,
+          exact skeleton match, prediction success) score that problem as 0 rather than dropping it;
+          a recovery rate conditioned on success would be inflated and would vanish entirely where
+          success goes to zero (for example at a support size of 1). <em>Diagnostic</em> metrics
+          that are only defined when a prediction exists (FVU, token overlap, edit distances,
+          predicted lengths, timings) are computed over successful predictions only; the one
+          exception is the ground-truth skeleton length, a property of the benchmark itself,
+          which is recorded for every drawn problem.
+        </li>
+        <li>
+          <strong>Rows are grouped by ground-truth expression.</strong> Each benchmark expression
+          may be drawn several times (different sampled constants, support sets, or noise
+          realizations); the per-draw values are averaged into one value per expression, so no
+          expression is over-weighted.
+        </li>
+        <li>
+          <strong>The per-expression values are bootstrapped.</strong> The expressions are
+          resampled with replacement 1,000 times; the mean over expressions is computed for each
+          resample. The plotted point is the median of that bootstrap distribution and the shaded
+          band is its 2.5th–97.5th percentile range (a 95% confidence interval). The
+          <code>n</code> shown on hover is the number of contributing expressions.
+        </li>
+      </ol>
+
+      <h3>Reading the curves</h3>
+      <p>
+        <strong>Recovery and FVU are always scored against clean targets.</strong> In the noise
+        sweep the method fits on noisy support values, but its prediction is evaluated against the
+        noise-free function values: the question is whether the true function was recovered, not
+        whether the noise was reproduced.
+      </p>
+      <p>
+        <strong>Token-level and exact-match metrics compare raw prefix skeletons.</strong> The
+        archived predictions are not re-normalized to a common simplified form, and the baselines
+        tokenize variables differently, so cross-series comparisons of the symbolic-similarity
+        metrics (exact match, F1, edit distances) carry a systematic offset between method
+        families. Within a series, and across x for one series, they are consistent.
+      </p>
+      <p>
+        <strong>Some metrics exist only for Flash-ANSR series.</strong> The log-probability and
+        selection score come from the model's own decoder and candidate-selection stage; the
+        baselines have no equivalent, so their series are empty under those metrics.
+      </p>
+    </section>
+
+    <section id="metrics" class="prose">
+      <h2>Metrics</h2>
+      <p>
+        Definitions for every metric in the menu, following the evaluation protocol of the
+        <a href="https://arxiv.org/abs/2602.08885" target="_blank" rel="noopener">Flash-ANSR
+        paper</a>, extended with a few additional diagnostics. Notation: a benchmark problem consists of a ground-truth expression with
+        prefix-notation skeleton \(\bar{\tau}\) (numeric constants masked to a
+        <code>&lt;constant&gt;</code> token, structure normalized with SimpliPy), a
+        <em>support set</em> \((X, y)\) of \(N\) points given to the method for fitting, and a
+        disjoint, equally sized <em>validation set</em> \((X_{\mathrm{val}}, y_{\mathrm{val}})\)
+        from the same input domain that the method never sees. A method returns a predicted
+        expression with skeleton \(\hat{\tau}\) and fitted constants; \(\hat{y}\) and
+        \(\hat{y}_{\mathrm{val}}\) are its values on the support and validation inputs.
+        \(|\tau|\) denotes the length of a skeleton in prefix tokens. Aggregation across problems
+        works as described in <a href="#about">About these numbers</a>; the arrows note which
+        direction is better.
+      </p>
+
+      <h3>Numeric fit</h3>
+      <p>
+        All numeric metrics build on the <strong>Fraction of Variance Unexplained</strong>, the
+        scale-invariant normalized squared error
+      </p>
+      $$
+        \operatorname{FVU}(y, \hat{y}) \;=\;
+        \frac{\sum_{i=1}^{N} (y_i - \hat{y}_i)^2}{\sum_{i=1}^{N} (y_i - \bar{y})^2},
+        \qquad \bar{y} = \tfrac{1}{N} \textstyle\sum_{i=1}^{N} y_i .
+      $$
+      <p>
+        An FVU of 0 is a perfect fit, an FVU of 1 is no better than predicting the mean, and
+        values above 1 are worse than the mean predictor. Because the denominator is the variance
+        of the targets, the measure is invariant to the output scale of the problem. The
+        implementation guards the numerics: a divergent or non-finite prediction scores
+        \(\infty\), and residuals are rescaled internally to avoid floating-point over- and
+        underflow.
+      </p>
+
+      <article class="metric">
+        <h4>Numeric recovery (vNRR) <span class="dir up">higher is better</span></h4>
+        $$
+          \mathrm{vNRR} \;=\; \frac{1}{K} \sum_{k=1}^{K}
+          \mathbb{1}\!\left[ \operatorname{FVU}\!\big(y_{\mathrm{val}}^{(k)},
+          \hat{y}_{\mathrm{val}}^{(k)}\big) \le \varepsilon_{32} \right],
+          \qquad \varepsilon_{32} = 2^{-23} \approx 1.19 \times 10^{-7}
+        $$
+        <p>
+          The <em>validation Numeric Recovery Rate</em>, the headline metric. A problem counts as
+          recovered only if the predicted expression matches the clean function values on the
+          <em>unseen validation points</em> up to 32-bit floating-point machine precision. This is
+          a deliberately strict, essentially all-or-nothing criterion: an expression either is the
+          (numeric) ground truth on the domain or it is not. Approximate fits, however close, do
+          not count. Failed predictions count as 0.
+        </p>
+      </article>
+
+      <article class="metric">
+        <h4>Numeric recovery on support (fNRR) <span class="dir up">higher is better</span></h4>
+        <p>
+          The same machine-precision indicator evaluated on the support points the method was
+          fitted on, \(\mathbb{1}[\operatorname{FVU}(y, \hat{y}) \le \varepsilon_{32}]\).
+          Comparing fNRR to vNRR separates memorization of the support from generalization to the
+          rest of the domain: an expression that nails the support but misses validation is an
+          overfit, not a recovery.
+        </p>
+      </article>
+
+      <article class="metric">
+        <h4><span>log<sub>10</sub> FVU (validation / support)</span> <span class="dir down">lower is better</span></h4>
+        $$
+          \log_{10} \operatorname{FVU}\big(y_{\mathrm{val}}, \hat{y}_{\mathrm{val}}\big)
+          \quad\text{and}\quad
+          \log_{10} \operatorname{FVU}\big(y, \hat{y}\big)
+        $$
+        <p>
+          The continuous companion to the recovery rate: how close the fits are on a log scale,
+          including approximate fits the strict \(\varepsilon_{32}\) threshold discards. A value
+          of \(-2\) means 99% of the target variance is explained; \(-7\) is at the recovery
+          threshold. Both are diagnostics over successful predictions only, and cover fits with
+          <em>finite, positive</em> FVU: an exact \(\operatorname{FVU} = 0\) maps to \(-\infty\)
+          and drops that expression from this aggregate, and a divergent fit
+          (\(\operatorname{FVU} = \infty\)) likewise drops out. Note that the paper goes further
+          and excludes <em>all</em> numerically perfect fits
+          (\(\operatorname{FVU} \le \varepsilon_{32}\)) from its log-FVU summaries; this page
+          keeps near-perfect fits with tiny positive FVU, so its levels are not directly
+          comparable to the paper's.
+        </p>
+      </article>
+
+      <h3>Success</h3>
+
+      <article class="metric">
+        <h4>Prediction success rate <span class="dir up">higher is better</span></h4>
+        <p>
+          The fraction of problems for which the method produced any usable prediction at all:
+          decoding, parsing, compiling, and constant fitting all completed and returned an
+          evaluable expression. This is the denominator-integrity metric behind the failure
+          convention above: where success dips, the rate metrics absorb the failures as zeros and
+          the diagnostic metrics thin out (visible as shrinking <code>n</code> on hover).
+        </p>
+      </article>
+
+      <h3>Symbolic similarity</h3>
+      <p>
+        These metrics compare the predicted skeleton \(\hat{\tau}\) to the ground-truth skeleton
+        \(\bar{\tau}\) as token sequences and trees. They are computed on <em>raw</em> prefix
+        skeletons (see the caveat in <a href="#about">About these numbers</a>): the predictions
+        are not re-normalized to a common simplified form, so cross-series levels are offset and
+        the interesting signal is the trend within a series.
+      </p>
+
+      <article class="metric">
+        <h4>Exact skeleton match (raw) <span class="dir up">higher is better</span></h4>
+        $$
+          \mathrm{SRR}_{\mathrm{raw}} \;=\; \frac{1}{K} \sum_{k=1}^{K}
+          \mathbb{1}\!\left[ \hat{\tau}^{(k)} = \bar{\tau}^{(k)} \right]
+        $$
+        <p>
+          Token-for-token equality of the two prefix skeletons. This is the most conservative
+          symbolic criterion on this page: a prediction that is mathematically identical but
+          written differently (e.g. re-ordered commutative operands, an unsimplified sub-term)
+          does not count. It is a raw-form variant of the paper's Symbolic Recovery Rate, which
+          re-simplifies both sides before comparing. Failed predictions count as 0.
+        </p>
+      </article>
+
+      <article class="metric">
+        <h4>Skeleton token F1 / precision / recall <span class="dir up">higher is better</span></h4>
+        $$
+          P = \frac{|\mathcal{T}(\hat{\tau}) \cap \mathcal{T}(\bar{\tau})|}{|\mathcal{T}(\hat{\tau})|},
+          \qquad
+          R = \frac{|\mathcal{T}(\hat{\tau}) \cap \mathcal{T}(\bar{\tau})|}{|\mathcal{T}(\bar{\tau})|},
+          \qquad
+          F_1 = \frac{2PR}{P + R}
+        $$
+        <p>
+          Overlap of the <em>sets of unique tokens</em> \(\mathcal{T}(\cdot)\) used by the two
+          skeletons: did the prediction use the right operators, variables, and constants at all?
+          Precision penalizes inventing tokens the ground truth does not use; recall penalizes
+          missing tokens it does use. Being set-based, these ignore token order and multiplicity:
+          they measure vocabulary agreement, not structure. \(F_1\) is defined as 0 when both
+          \(P\) and \(R\) are 0.
+        </p>
+      </article>
+
+      <article class="metric">
+        <h4>Skeleton edit distance (normalized) <span class="dir down">lower is better</span></h4>
+        $$
+          d_{\mathrm{edit}}(\hat{\tau}, \bar{\tau}) \;=\;
+          \frac{\operatorname{Levenshtein}(\hat{\tau}, \bar{\tau})}{\max(|\hat{\tau}|, |\bar{\tau}|)}
+          \;\in\; [0, 1]
+        $$
+        <p>
+          The Levenshtein distance between the two prefix token sequences (minimum number of
+          token insertions, deletions, and substitutions to turn one into the other), normalized
+          by the longer length. Unlike the set-based F1, this is order- and count-sensitive: it
+          measures how much of the sequence structure is wrong, not just the vocabulary.
+        </p>
+      </article>
+
+      <article class="metric">
+        <h4>Tree edit distance (ZSS) <span class="dir down">lower is better</span></h4>
+        <p>
+          The Zhang–Shasha tree edit distance between the expression <em>trees</em> obtained by
+          parsing the two prefix skeletons: the minimum total cost of node insertions, deletions,
+          and relabelings that transforms one tree into the other. In this implementation the
+          operations are weighted by the character-level string distance of the node labels
+          (inserting or deleting a node costs the length of its label; relabeling costs the string
+          edit distance between the two labels), so long-named tokens like
+          <code>arccosh</code> or <code>&lt;constant&gt;</code> weigh more than single-character
+          ones, and the value is unnormalized label-edit cost, not a node count. Because it works
+          on the parsed tree rather than the flat token sequence, it respects the expression
+          structure: swapping a deeply nested operator costs the same as swapping a shallow one,
+          and subtree moves are scored more faithfully than by string edits.
+        </p>
+      </article>
+
+      <h3>Complexity and parsimony</h3>
+
+      <article class="metric">
+        <h4>Expression length ratio (pred/GT) <span class="dir one">1 is ideal</span></h4>
+        $$
+          \rho \;=\; \frac{|\hat{\tau}|}{|\bar{\tau}|}
+        $$
+        <p>
+          The length of the predicted skeleton relative to the ground truth, in prefix tokens.
+          A ratio of 1 means the prediction is exactly as concise as the true expression; values
+          above 1 flag verbose, over-parameterized predictions (a common failure mode: fitting
+          the data with a longer expression than necessary), values below 1 flag predictions that
+          are too simple to be the true law. This is the second headline metric because it tracks
+          <em>interpretability</em>, the point of symbolic regression: a recovered-looking fit
+          made of twice as many terms is a worse scientific answer.
+        </p>
+      </article>
+
+      <article class="metric">
+        <h4><span>Length ratio |log<sub>2</sub>| error</span> <span class="dir down">lower is better</span></h4>
+        $$
+          \left| \log_2 \rho \right| \;=\; \left| \log_2 \tfrac{|\hat{\tau}|}{|\bar{\tau}|} \right|
+        $$
+        <p>
+          The symmetric version of the length ratio: doubling and halving the true length are
+          equally wrong (both give 1), and 0 means exactly matched length. Useful when averaging,
+          where over- and under-shoots of the raw ratio would otherwise partially cancel.
+        </p>
+      </article>
+
+      <article class="metric">
+        <h4>Predicted / GT skeleton length <span class="dir down">lower is more concise</span></h4>
+        <p>
+          The raw prefix-token lengths \(|\hat{\tau}|\) and \(|\bar{\tau}|\) behind the ratio.
+          The ground-truth length is a property of the benchmark (constant per expression, useful
+          as a reference line); the predicted length shows how expression size scales with
+          compute, noise, or data availability.
+        </p>
+      </article>
+
+      <article class="metric">
+        <h4>Constant-count ratio / delta (pred vs GT) <span class="dir one">1 / 0 is ideal</span></h4>
+        $$
+          \frac{c(\hat{\tau})}{c(\bar{\tau})}
+          \qquad\text{and}\qquad
+          c(\hat{\tau}) - c(\bar{\tau}),
+        $$
+        <p>
+          where \(c(\cdot)\) counts the <code>&lt;constant&gt;</code> tokens in a skeleton. A
+          positive delta means the prediction uses <em>excess constants</em>: free parameters
+          that let a structurally wrong expression bend toward the data. The ratio is only
+          defined for ground truths that contain at least one constant; the delta is defined
+          everywhere.
+        </p>
+      </article>
+
+      <article class="metric">
+        <h4>Unary-nestedness delta (pred − GT) <span class="dir down">lower is better</span></h4>
+        <p>
+          Total nestedness counts, over each maximal chain of \(m\) directly nested unary
+          operators, the excess \(m - 1\), summed over the expression:
+          \(\sin(\log(x))\) contributes 1, \(\sin(\log(\operatorname{arccosh}(x)))\) contributes
+          2, and \(\sin(x) + \log(x)\) contributes 0. Deeply nested unary chains
+          (\(\exp(\sin(\exp(\dots)))\)) are a hallmark of unnatural, hard-to-interpret
+          predictions. The reported value is the difference between the predicted and
+          ground-truth nestedness, so 0 means the prediction is as (un)nested as the true
+          expression; this is a delta variant of the paper's Total Nestedness, which reports the
+          predicted expression's absolute count.
+        </p>
+      </article>
+
+      <h3>Model internals (Flash-ANSR series only)</h3>
+
+      <article class="metric">
+        <h4>Predicted log-probability <span class="dir up">higher is better</span></h4>
+        <p>
+          The log-probability \(\log p(\hat{\tau} \mid X, y)\) of the selected candidate's token
+          sequence under the model's decoder, summed over the tokens of the sequence: how likely
+          the model itself considered the expression it ended up returning. Being a sum, its level
+          scales with expression length. Baselines have no decoder likelihood, so their series are
+          empty here.
+        </p>
+      </article>
+
+      <article class="metric">
+        <h4>Predicted selection score <span class="dir down">lower is better</span></h4>
+        $$
+          s(\hat{\tau}) \;=\; \log_{10} \operatorname{FVU}(y, \hat{y})
+          \;+\; \gamma \, |\hat{\tau}|,
+          \qquad \gamma = 0.05
+        $$
+        <p>
+          The parsimony-penalized criterion Flash-ANSR uses to pick its final answer from the
+          sampled candidate set: the best candidate is the one minimizing support-set log-FVU
+          plus a complexity penalty of \(\gamma\) per token (each additional token must be
+          bought with roughly an 11% relative FVU reduction). The value plotted is the score of
+          the selected candidate; it is a model-internal quantity, shown for completeness and
+          for reasoning about the selection stage.
+        </p>
+      </article>
+
+      <h3>Cost</h3>
+
+      <article class="metric">
+        <h4>Per-problem fit time (s) <span class="dir down">lower is better</span></h4>
+        <p>
+          End-to-end wall-clock seconds to solve one problem: for Flash-ANSR that spans encoding
+          the data, decoding candidates, constant fitting, and candidate selection; for the
+          baselines, their full search or inference pipeline. The median fit time of a run is
+          also what defines the compute axis, so this metric makes the x-axis itself inspectable
+          against noise level or support size.
+        </p>
+      </article>
+    </section>
+
+    <section class="notes">
       <details class="provenance privacy">
         <summary>Privacy &amp; cookies</summary>
         <p>
@@ -92,8 +471,13 @@
 
   <footer class="site-footer">
     <div class="wrap footer-inner">
-      <span>Generated by <a href="https://srbf.readthedocs.io/" target="_blank" rel="noopener"><code>srbf.analysis</code></a>.</span>
-      <span>Documentation: <a href="https://srbf.readthedocs.io/" target="_blank" rel="noopener">srbf.readthedocs.io</a></span>
+      <span><span class="brand-mark small">srbf</span> · Symbolic Regression Benchmark Framework</span>
+      <span>
+        Generated by <a href="https://srbf.readthedocs.io/" target="_blank" rel="noopener"><code>srbf.analysis</code></a>
+        · <a href="https://srbf.readthedocs.io/" target="_blank" rel="noopener">Docs</a>
+        · <a href="https://github.com/psaegert/srbf" target="_blank" rel="noopener">GitHub</a>
+        · <a href="https://pypi.org/project/srbf/" target="_blank" rel="noopener">PyPI</a>
+      </span>
     </div>
   </footer>
 
