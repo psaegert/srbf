@@ -228,3 +228,76 @@ def test_delta_curve_composition_drift_guard():
     assert by_x[10.0]["n_pairs"] == 10   # measured for B at t=10 (E0 valid there)
     assert by_x[100.0]["n_pairs"] == 9   # E0 missing at B's 100-rung
     assert curve["n_pairs_range"] == (9, 10)
+
+
+# --- A fast-follows: worst-rank, hierarchical bootstrap, display rounding ---
+
+def test_worst_rank_imputes_one_sided_failures_as_sentinels():
+    from srbf.reporting import paired_report
+    # 20 finite pairs (A slightly better) + 4 expressions where only A produced values
+    values_a = {f"E{i}": [0.5, 0.6] for i in range(20)} | {f"F{i}": [0.9] for i in range(4)}
+    values_b = {f"E{i}": [0.4, 0.5] for i in range(20)}
+    report = paired_report(_snapshot_from(values_a), _snapshot_from(values_b), "m",
+                           allow_unverified=True, worst_rank=True)
+    block = report["worst_rank"]
+    assert block["n_union"] == 24 and block["n_imputed_a"] == 4 and not block["degenerate"]
+    assert block["win_rate"] == {"a_better": 24, "b_better": 0, "tied": 0}
+    assert block["prob_superiority"] == 1.0
+    # median over 20 finite +0.1 deltas and 4 +inf sentinels is finite
+    assert block["median_delta"] == pytest.approx(0.1, abs=1e-9)
+    assert block["wilcoxon"]["p"] < 0.01
+    # and the mean path is untouched by imputation (still both-succeed only)
+    assert report["n_pairs"] == 20
+
+
+def test_worst_rank_degenerate_when_half_imputed():
+    from srbf.reporting import paired_report
+    values_a = {f"E{i}": [0.5] for i in range(4)} | {f"F{i}": [0.9] for i in range(6)}
+    values_b = {f"E{i}": [0.4] for i in range(4)}
+    report = paired_report(_snapshot_from(values_a), _snapshot_from(values_b), "m",
+                           allow_unverified=True, worst_rank=True)
+    block = report["worst_rank"]
+    assert block["degenerate"] is True and block["median_delta"] is None
+    assert "success-rate" in block["note"]
+
+
+def test_worst_rank_flips_sentinels_for_lower_is_better():
+    from srbf.reporting import paired_report
+    # A produced values where B failed -> A better; for a lower-is-better metric the reported
+    # median delta must favor A with NEGATIVE sign (A - B < 0 = A better).
+    values_a = {f"E{i}": [0.5] for i in range(10)} | {f"F{i}": [0.9] for i in range(3)}
+    values_b = {f"E{i}": [0.8] for i in range(10)}
+    report = paired_report(_snapshot_from(values_a), _snapshot_from(values_b), "m",
+                           allow_unverified=True, worst_rank=True, higher_is_better=False)
+    block = report["worst_rank"]
+    assert block["win_rate"]["a_better"] == 13
+    assert block["median_delta"] == pytest.approx(-0.3, abs=1e-9)
+
+
+def test_hierarchical_widens_rank_cis_under_draw_noise():
+    from srbf.reporting import paired_report
+    rng = np.random.default_rng(7)
+    snap_a, snap_b = _shifted_snapshots(rng, n_expr=40, k=4, shift=0.0,
+                                        difficulty_sd=0.05, noise_sd=0.6)
+    flat = paired_report(snap_a, snap_b, "m", allow_unverified=True, rng=1)
+    hier = paired_report(snap_a, snap_b, "m", allow_unverified=True, rng=1, hierarchical=True)
+    width_flat = flat["median_ci_upper"] - flat["median_ci_lower"]
+    width_hier = hier["median_ci_upper"] - hier["median_ci_lower"]
+    assert hier["rank_ci_method"] == "hierarchical"
+    assert width_hier >= width_flat * 0.95  # never meaningfully narrower
+    # P(sup) CI present in both
+    assert len(flat["prob_superiority_ci"]) == 2
+    lo, hi = hier["prob_superiority_ci"]
+    assert 0.0 <= lo <= hi <= 1.0
+
+
+def test_significant_round_matches_ci_width():
+    from srbf.reporting import rounded_triple, significant_round
+    # width ~0.143 -> two significant digits of the width = 2 decimals
+    assert rounded_triple(0.064312, -0.00701, 0.135702) == (0.06, -0.01, 0.14)
+    # width ~0.0143 -> 3 decimals
+    assert rounded_triple(0.064312, 0.057, 0.0713) == (0.064, 0.057, 0.071)
+    assert significant_round(0.123456, 0.5) == 0.12
+    assert significant_round(42.1234, 12.0) == 42.0
+    assert significant_round(float("nan"), 0.1) != significant_round(0.0, 0.1)  # nan passes through
+    assert significant_round(1.234567, 0.0) == 1.234567  # zero width: no information, no rounding

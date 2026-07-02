@@ -236,6 +236,8 @@ def paired_report(
     zero_method: str = "pratt",
     expect_total: bool = False,
     allow_unverified: bool = False,
+    worst_rank: bool = False,
+    hierarchical: bool = False,
 ) -> dict[str, Any]:
     """Paired comparison of two SAME-BENCHMARK snapshots: per-expression deltas, bootstrap CI,
     effect sizes, power honesty, and (given a measurement-noise ``margin``) a four-state verdict.
@@ -257,6 +259,18 @@ def paired_report(
     smaller than the benchmark can measure), ``undecided`` = anything else.
     ``equivalence_attainable`` reports whether the CI is even narrow enough for ``equivalent``
     to be reachable — when False, an 'undecided' is resolution-limited, not evidence of parity.
+
+    ``worst_rank=True`` additionally reports the RANK statistics (median delta, win/tie/loss,
+    prob_superiority, Wilcoxon) over the UNION of expression ids, imputing one-sided failures as
+    sign-only sentinels ("worse than every observed value" — worst-rank composite scoring, cf.
+    Lachin 1999). Sound for ranks only, never applied to the mean. Reported medians/CI bounds
+    may be ±inf when they land on a sentinel; with >= 50% imputed pairs the block is flagged
+    ``degenerate`` and its estimates suppressed (read the success rate instead).
+
+    ``hierarchical=True`` switches the rank statistics' CIs (median, prob_superiority) to a
+    two-stage bootstrap (resample expressions, then draws within each) so draw-level uncertainty
+    is propagated where collapsing attenuates it. The mean-delta CI keeps collapse-first
+    resampling (exactly the cluster bootstrap for the mean).
     """
     contract = _verify_pairing(snapshot_a, snapshot_b, allow_unverified=allow_unverified)
 
@@ -304,15 +318,11 @@ def paired_report(
     indices = rng.integers(0, n_pairs, size=(int(n), n_pairs))
     resampled = deltas[indices]                                   # (n, n_pairs)
     boot_means = np.nanmean(resampled, axis=1)
-    boot_medians = np.nanmedian(resampled, axis=1)
     lo_q, hi_q = (1 - interval) / 2 * 100, (1 + interval) / 2 * 100
 
     report["delta_mean"] = float(np.nanmedian(boot_means))
     report["ci_lower"] = float(np.nanpercentile(boot_means, lo_q))
     report["ci_upper"] = float(np.nanpercentile(boot_means, hi_q))
-    report["delta_median"] = float(np.nanmedian(boot_medians))
-    report["median_ci_lower"] = float(np.nanpercentile(boot_medians, lo_q))
-    report["median_ci_upper"] = float(np.nanpercentile(boot_medians, hi_q))
 
     # Effect sizes: per-expression win/tie/loss and the probability of superiority (ties half).
     n_a_better = int(np.sum(deltas > 0)) if higher_is_better else int(np.sum(deltas < 0))
@@ -321,6 +331,34 @@ def paired_report(
     report["win_rate"] = {"a_better": n_a_better, "b_better": n_b_better, "tied": n_tied}
     signed = deltas if higher_is_better else -deltas
     report["prob_superiority"] = float((np.sum(signed > 0) + 0.5 * n_tied) / n_pairs)
+
+    # P(superiority) CI + median CI: plain expression resampling by default; hierarchical=True
+    # propagates draw-level noise via a two-stage scheme (expressions, then draws within — the
+    # draw stage sampled from a pregenerated per-expression pool, the standard bootstrap-pool
+    # construction) for the rank statistics ONLY (the mean keeps collapse-first: exact).
+    if hierarchical:
+        pool_m = 256
+        pools = np.empty((n_pairs, pool_m))
+        for i, k in enumerate(pairs["keys"]):
+            a_draws, b_draws = values_a[k], values_b[k]
+            a_idx = rng.integers(0, len(a_draws), size=(pool_m, len(a_draws)))
+            b_idx = rng.integers(0, len(b_draws), size=(pool_m, len(b_draws)))
+            pools[i] = (np.asarray([aggregate(a_draws[j]) for j in a_idx])
+                        - np.asarray([aggregate(b_draws[j]) for j in b_idx]))
+        pool_pick = rng.integers(0, pool_m, size=(int(n), n_pairs))
+        rank_resampled = pools[indices, pool_pick]           # (n, n_pairs), two-stage
+    else:
+        rank_resampled = resampled
+    signed_resampled = rank_resampled if higher_is_better else -rank_resampled
+    psup_boot = (np.sum(signed_resampled > 0, axis=1)
+                 + 0.5 * np.sum(signed_resampled == 0, axis=1)) / n_pairs
+    report["prob_superiority_ci"] = (float(np.nanpercentile(psup_boot, lo_q)),
+                                     float(np.nanpercentile(psup_boot, hi_q)))
+    rank_medians = np.nanmedian(rank_resampled, axis=1)
+    report["delta_median"] = float(np.nanmedian(rank_medians))
+    report["median_ci_lower"] = float(np.nanpercentile(rank_medians, lo_q))
+    report["median_ci_upper"] = float(np.nanpercentile(rank_medians, hi_q))
+    report["rank_ci_method"] = "hierarchical" if hierarchical else "expression-bootstrap"
 
     # Wilcoxon signed-rank companion, zeros COUNTED (pratt) — scipy's default drops them, which
     # on rate metrics silently conditions the test on the discordant minority.
@@ -333,6 +371,56 @@ def paired_report(
         w = wilcoxon(deltas, zero_method=zero_method, method="approx")
         report["wilcoxon"] = {"statistic": float(w.statistic), "p": float(w.pvalue),
                               "n_zero": n_tied, "n_nonzero": nonzero, "zero_method": zero_method}
+
+    # Worst-rank composite scoring over the UNION of ids: one-sided failures become sign-only
+    # sentinels ("worse than every observed value"). Rank statistics only — never the mean.
+    if worst_rank:
+        n_imputed = pairs["n_only_a"] + pairs["n_only_b"]
+        n_union = n_pairs + n_imputed
+        # signed space: positive favors A; a side that produced values beats a side that failed
+        signed_union = np.concatenate([
+            signed,
+            np.full(pairs["n_only_a"], np.inf),
+            np.full(pairs["n_only_b"], -np.inf),
+        ])
+        degenerate = n_union == 0 or (n_imputed / n_union) >= 0.5
+        block: dict[str, Any] = {
+            "n_imputed_a": pairs["n_only_a"], "n_imputed_b": pairs["n_only_b"],
+            "n_union": n_union, "degenerate": bool(degenerate),
+        }
+        if degenerate:
+            block.update({"median_delta": None, "median_ci": None, "win_rate": None,
+                          "prob_superiority": None, "wilcoxon": None,
+                          "note": ">=50% imputed pairs — rank statistics are the sentinel; "
+                                  "read the success-rate metric instead"})
+        else:
+            u_idx = rng.integers(0, n_union, size=(int(n), n_union))
+            u_medians = np.median(signed_union[u_idx], axis=1)  # ±inf-tolerant
+            sign = 1.0 if higher_is_better else -1.0
+            block["median_delta"] = float(sign * np.median(u_medians))
+            m_lo, m_hi = np.percentile(u_medians, [lo_q, hi_q])
+            block["median_ci"] = tuple(sorted((float(sign * m_lo), float(sign * m_hi))))
+            block["win_rate"] = {
+                "a_better": int(np.sum(signed_union > 0)),
+                "b_better": int(np.sum(signed_union < 0)),
+                "tied": int(np.sum(signed_union == 0)),
+            }
+            block["prob_superiority"] = float(
+                (np.sum(signed_union > 0) + 0.5 * np.sum(signed_union == 0)) / n_union)
+            finite = np.abs(signed_union[np.isfinite(signed_union)])
+            top = float(finite.max()) * 1.000001 + 1.0 if finite.size else 1.0
+            ranked = np.clip(signed_union, -top, top)  # sentinels tie at the top |delta| rank
+            if np.any(ranked != 0):
+                w = wilcoxon(ranked, zero_method=zero_method, method="approx")
+                block["wilcoxon"] = {"statistic": float(w.statistic), "p": float(w.pvalue),
+                                     "n_zero": int(np.sum(ranked == 0)),
+                                     "n_nonzero": int(np.sum(ranked != 0)),
+                                     "zero_method": zero_method}
+            else:
+                block["wilcoxon"] = {"statistic": float("nan"), "p": 1.0,
+                                     "n_zero": n_union, "n_nonzero": 0,
+                                     "zero_method": zero_method}
+        report["worst_rank"] = block
 
     # Power honesty: the mean-delta magnitude detectable at 80% power (two-sided alpha from
     # `interval`) — printed next to every verdict so "undecided" is never read as "equal".
@@ -665,6 +753,26 @@ def _bootstrap_triple(
             float(np.nanpercentile(boot, (1 + interval) / 2 * 100)))
 
 
+def significant_round(value: float, ci_width: float) -> float:
+    """Round ``value`` to the decimals justified by its CI width (two significant digits of the
+    width): a number with a ±0.03 interval has no business displaying five decimals, and the
+    rounding hides bootstrap recomputation wobble at the display layer (WP1 ✓dec: no fixed-seed
+    requirement — precision limited to what the uncertainty supports instead)."""
+    if not np.isfinite(value):
+        return value
+    if not np.isfinite(ci_width) or ci_width <= 0:
+        return value
+    decimals = max(0, 1 - int(np.floor(np.log10(ci_width))))
+    return round(value, decimals)
+
+
+def rounded_triple(value: float, lo: float, hi: float) -> tuple[float, float, float]:
+    """(value, lo, hi) display-rounded to the precision the interval width justifies."""
+    width = hi - lo
+    return (significant_round(value, width), significant_round(lo, width),
+            significant_round(hi, width))
+
+
 def bootstrap_report(
     snapshot: Mapping[str, Sequence[Any]],
     metric_key: str,
@@ -706,4 +814,5 @@ def bootstrap_report(
 
 __all__ = ["draw_distribution", "draw_values", "paired_expression_deltas", "paired_report",
            "paired_delta_curve", "series_x_positions", "self_noise", "pair_margin",
-           "resolve_group_key", "pairing_fingerprint", "PairingContractError", "bootstrap_report"]
+           "resolve_group_key", "pairing_fingerprint", "PairingContractError",
+           "significant_round", "rounded_triple", "bootstrap_report"]
