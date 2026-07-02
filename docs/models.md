@@ -108,6 +108,18 @@ model_adapter:
 
 Key fields: `niterations` (the compute-scaling axis, swept per run), `timeout_in_seconds`, and `simplipy_engine` (the SimpliPy engine name; `dev_7-3` is installed on demand; required). No model weights to download: PySR fits each problem from scratch.
 
+Two fairness guards the adapter applies automatically (both introduced in srbf 0.6.1):
+
+- **Explicit complexity budget** — `maxsize: 45` by default (overridable in the block). PySR's own
+  default (`maxsize=20`) cannot represent 23/120 FastSRB and 743/1000 v23-val ground truths under
+  the adapter vocabulary (largest ground truth = 40 nodes), so runs at the library default measure
+  a representation handicap rather than search quality. Re-audit with
+  `python scripts/audit_pysr_maxsize.py` whenever the benchmarks or the operator vocabulary change.
+  PySR results produced before 0.6.1 carry this handicap; treat them as lower bounds.
+- **Warmup fit in `prepare()`** (`warmup: true` by default) — the first `fit` in a Julia session
+  pays a one-off precompile cost that is an order-of-magnitude timing outlier; the adapter burns it
+  on a throwaway model before evaluation so problem 0's `fit_time` starts warm.
+
 ---
 
 The next two are **research baselines**: upstream source trees that are not pip-installable as-is on modern Python. The default recipe is a clone of the upstream repo, a patch with the script under [scripts/](https://github.com/psaegert/srbf/tree/main/scripts), an editable install, and a separate weights download. **These patch scripts are one default recipe, not the only way.** If you maintain a fork that already builds, install that instead.

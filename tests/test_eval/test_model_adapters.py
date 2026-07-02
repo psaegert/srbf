@@ -128,3 +128,58 @@ def test_nesymres_adapter_padding_can_be_disabled(monkeypatch):
 
     assert "support" in captured
     np.testing.assert_array_equal(captured["support"], sample.x_support[:, :3])
+
+
+class _FakePySRModel:
+    def __init__(self, niterations: int, maxsize: int) -> None:
+        self.niterations = niterations
+        self.maxsize = maxsize
+        self.n_fits = 0
+
+    def fit(self, X, y, variable_names=None):  # noqa: D401 - simple stub
+        self.n_fits += 1
+
+
+def _patch_pysr_factory(monkeypatch):
+    created: list[_FakePySRModel] = []
+
+    def fake_create(*, timeout_in_seconds, niterations, use_mult_div_operators,
+                    maxsize=model_adapters.PYSR_DEFAULT_MAXSIZE):
+        model = _FakePySRModel(niterations, maxsize)
+        created.append(model)
+        return model
+
+    monkeypatch.setattr(model_adapters, "_require_pysr", lambda: object)
+    monkeypatch.setattr(model_adapters, "_create_pysr_model", fake_create)
+    return created
+
+
+def test_pysr_adapter_prepare_runs_a_warmup_fit_by_default(monkeypatch):
+    # Julia precompile makes the first fit an order-of-magnitude timing outlier; prepare()
+    # must pay it on a THROWAWAY model so problem 0's fit_time starts warm.
+    created = _patch_pysr_factory(monkeypatch)
+    adapter = model_adapters.PySRAdapter(
+        timeout_in_seconds=10, niterations=5, use_mult_div_operators=False,
+        padding=True, simplipy_engine=_DummyEngine())
+    adapter.prepare()
+
+    assert len(created) == 2                      # the timed model + the warmup model
+    timed, warmup = created
+    assert timed.niterations == 5 and timed.n_fits == 0   # timed model untouched
+    assert warmup.niterations == 1 and warmup.n_fits == 1  # warmup fit happened
+    assert adapter._model is timed
+    # Both models get the explicit complexity budget (PySR's own default of 20 cannot
+    # express 23/120 FastSRB and 743/1000 v23-val ground truths).
+    assert timed.maxsize == model_adapters.PYSR_DEFAULT_MAXSIZE
+    assert warmup.maxsize == model_adapters.PYSR_DEFAULT_MAXSIZE
+
+
+def test_pysr_adapter_warmup_can_be_disabled(monkeypatch):
+    created = _patch_pysr_factory(monkeypatch)
+    adapter = model_adapters.PySRAdapter(
+        timeout_in_seconds=10, niterations=5, use_mult_div_operators=False,
+        padding=True, simplipy_engine=_DummyEngine(), warmup=False)
+    adapter.prepare()
+
+    assert len(created) == 1
+    assert created[0].n_fits == 0

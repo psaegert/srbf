@@ -42,6 +42,12 @@ if TYPE_CHECKING:  # pragma: no cover - type checking only
 else:
     NesymresModel = Any
 
+# Explicit PySR complexity budget. PySR's own default (maxsize=20) makes 23/120 FastSRB and
+# 743/1000 v23-val ground truths structurally inexpressible under the adapter vocabulary
+# (largest GT = 40 nodes; see scripts/audit_pysr_maxsize.py), which would measure a
+# representation handicap rather than search quality. 45 covers every GT with headroom.
+PYSR_DEFAULT_MAXSIZE = 45
+
 
 class FlashANSRAdapter(EvaluationModelAdapter):
     """Wrap the `FlashANSR` model with the evaluation adapter protocol."""
@@ -311,6 +317,8 @@ class PySRAdapter(EvaluationModelAdapter):
         use_mult_div_operators: bool,
         padding: bool,
         simplipy_engine: Any,
+        warmup: bool = True,
+        maxsize: int = PYSR_DEFAULT_MAXSIZE,
     ) -> None:
         _require_pysr()  # import lazily to avoid initializing Julia unless needed
 
@@ -319,6 +327,8 @@ class PySRAdapter(EvaluationModelAdapter):
         self.use_mult_div_operators = use_mult_div_operators
         self.padding = padding
         self.simplipy_engine = simplipy_engine
+        self.warmup = warmup
+        self.maxsize = maxsize
 
         self._model: Optional[Any] = None
 
@@ -327,7 +337,32 @@ class PySRAdapter(EvaluationModelAdapter):
             timeout_in_seconds=self.timeout_in_seconds,
             niterations=self.niterations,
             use_mult_div_operators=self.use_mult_div_operators,
+            maxsize=self.maxsize,
         )
+        if self.warmup:
+            self._run_warmup_fit()
+
+    def _run_warmup_fit(self) -> None:
+        """Pay the one-off Julia startup + SymbolicRegression.jl compile cost OUTSIDE timing.
+
+        The first ``fit`` in a Julia session is an order-of-magnitude outlier (precompile),
+        which would otherwise land in problem 0's ``fit_time`` and skew per-problem timing.
+        The compile cost is per-process, so fitting a THROWAWAY minimal model here leaves
+        ``self._model``'s timed fits warm and its search state untouched. Best-effort: a
+        failing warmup only forfeits the warmup; real fits surface real errors.
+        """
+        warmup_model = _create_pysr_model(
+            timeout_in_seconds=self.timeout_in_seconds,
+            niterations=1,
+            use_mult_div_operators=self.use_mult_div_operators,
+            maxsize=self.maxsize,
+        )
+        x = np.linspace(-1.0, 1.0, 32).reshape(-1, 1)
+        y = 2.0 * x[:, 0] + 1.0
+        try:
+            warmup_model.fit(x, y, variable_names=["x0"])
+        except Exception:  # pragma: no cover - warmup must never block evaluation
+            pass
 
     def evaluate_sample(self, sample: EvaluationSample) -> EvaluationResult:
         if self._model is None:
@@ -723,6 +758,7 @@ def _create_pysr_model(
     timeout_in_seconds: int,
     niterations: int,
     use_mult_div_operators: bool,
+    maxsize: int = PYSR_DEFAULT_MAXSIZE,
 ) -> Any:
     additional_unary_operators: list[str]
     additional_extra_sympy_mappings: dict[str, Any]
@@ -758,6 +794,7 @@ def _create_pysr_model(
         delete_tempfiles=True,
         timeout_in_seconds=timeout_in_seconds,
         niterations=niterations,
+        maxsize=maxsize,
         unary_operators=[
             "neg",
             "abs",
