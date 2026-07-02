@@ -42,6 +42,7 @@ if TYPE_CHECKING:  # pragma: no cover - type checking only
 else:
     NesymresModel = Any
 
+
 class FlashANSRAdapter(EvaluationModelAdapter):
     """Wrap the `FlashANSR` model with the evaluation adapter protocol."""
 
