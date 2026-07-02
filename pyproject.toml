@@ -1,9 +1,9 @@
-# srbf: the symbolic-regression evaluation framework, carved from flash-ansr.
+# srbf: Symbolic Regression Benchmark Framework, carved from flash-ansr.
 # Internal self-imports are srbf.* ; the §5 contract imports stay flash_ansr.* (one-way dependency;
 # flash-ansr must NEVER import srbf).
 [project]
 name = "srbf"
-description = "srbf: the symbolic-regression benchmark framework (Benchmark driver, model adapters, metrics) over symbolic-data catalogs and flash-ansr."
+description = "srbf: Symbolic Regression Benchmark Framework (Benchmark driver, model adapters, metrics) over symbolic-data catalogs and flash-ansr."
 authors = [{ name = "Paul Saegert" }]
 readme = "README.md"
 requires-python = ">=3.12"

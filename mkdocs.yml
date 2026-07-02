@@ -9,6 +9,8 @@ edit_uri: blob/main/docs/
 # Theme configuration
 theme:
   name: material
+  logo: assets/srbf-icon.svg
+  favicon: assets/srbf-icon.svg
   palette:
     # Light mode
     - scheme: default

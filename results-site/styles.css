@@ -49,19 +49,26 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
   border-bottom: 1px solid var(--line);
 }
 .header-inner { display: flex; align-items: center; justify-content: space-between; height: 60px; }
-.brand { display: flex; align-items: baseline; gap: .6rem; }
+.brand { display: flex; align-items: center; gap: .6rem; }
 .brand:hover { text-decoration: none; }
+.brand-icon { width: 26px; height: 26px; border-radius: 7px; display: block; }
 .brand-mark { font-family: var(--mono); font-weight: 600; font-size: 1.2rem; color: var(--accent); letter-spacing: -.02em; }
+.brand-mark.small { font-size: 1rem; }
 .brand-sub { color: var(--ink-soft); font-weight: 500; font-size: .92rem; }
 .site-nav { display: flex; gap: 1.4rem; }
 .site-nav a { color: var(--ink-soft); font-weight: 500; font-size: .92rem; }
 .site-nav a:hover { color: var(--accent); text-decoration: none; }
-@media (max-width: 560px) { .brand-sub { display: none; } }
+@media (max-width: 680px) { .brand-sub { display: none; } }
+@media (max-width: 560px) { .site-nav { gap: .9rem; } }
 
 /* hero */
 .hero { padding: 3rem 0 1.5rem; }
+.kicker {
+  margin: 0 0 .5rem; font-size: .78rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .12em; color: var(--accent);
+}
 .hero h1 { margin: 0 0 .6rem; font-size: clamp(1.7rem, 4vw, 2.5rem); font-weight: 800; letter-spacing: -.03em; }
-.lede { margin: 0; max-width: 62ch; color: var(--ink-soft); font-size: 1.05rem; }
+.lede { margin: 0; max-width: 68ch; color: var(--ink-soft); font-size: 1.05rem; }
 .lede strong { color: var(--ink); font-weight: 600; }
 
 /* explorer panel */
@@ -161,6 +168,47 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
 .cookie-notice { display: none; font-size: .78rem; color: var(--ink-faint); max-width: 62ch; }
 .cookie-notice.visible { display: inline; }
 
+/* prose sections: About these numbers + Metrics */
+.prose { margin: 0 0 3rem; scroll-margin-top: 76px; }
+.prose h2 {
+  margin: 0 0 1rem; font-size: clamp(1.35rem, 3vw, 1.8rem); font-weight: 800;
+  letter-spacing: -.02em;
+}
+.prose h3 {
+  margin: 2rem 0 .6rem; font-size: 1.08rem; font-weight: 700; letter-spacing: -.01em;
+}
+.prose > p, .prose > ol { margin: 0 0 1rem; color: var(--ink-soft); font-size: .96rem; max-width: 78ch; }
+.prose > ol { padding-left: 1.3rem; }
+.prose > ol li { margin: 0 0 .7rem; }
+.prose strong, .prose li strong { color: var(--ink); font-weight: 600; }
+
+.metric {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: var(--shadow); padding: 1rem 1.3rem 1.05rem; margin: 0 0 .9rem;
+}
+.metric h4 {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .6rem;
+  margin: 0 0 .4rem; font-size: 1rem; font-weight: 700; letter-spacing: -.01em;
+}
+.metric p { margin: .4rem 0 0; color: var(--ink-soft); font-size: .93rem; max-width: 78ch; }
+.dir {
+  font-size: .68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .07em;
+  padding: .18rem .55rem; border-radius: 999px; border: 1px solid var(--line);
+  color: var(--ink-faint); white-space: nowrap;
+}
+.dir.up { color: #0f7b45; border-color: color-mix(in srgb, #0f7b45 35%, var(--line)); background: color-mix(in srgb, #0f7b45 7%, var(--surface)); }
+.dir.down { color: #9a4f0b; border-color: color-mix(in srgb, #9a4f0b 35%, var(--line)); background: color-mix(in srgb, #9a4f0b 7%, var(--surface)); }
+.dir.one { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); background: var(--accent-soft); }
+@media (prefers-color-scheme: dark) {
+  .dir.up { color: #4ade80; }
+  .dir.down { color: #fbbf24; }
+}
+
+/* KaTeX display blocks: card-friendly and scrollable on narrow screens */
+.prose .katex-display { margin: .7rem 0; overflow-x: auto; overflow-y: hidden; padding: .2rem 0; }
+.prose .katex { font-size: 1.02em; }
+
 /* footer */
 .site-footer { border-top: 1px solid var(--line); background: var(--surface); }
 .footer-inner { display: flex; flex-wrap: wrap; gap: .4rem 2rem; justify-content: space-between; padding: 1.4rem 0; color: var(--ink-faint); font-size: .88rem; }
+.footer-inner .brand-mark.small { vertical-align: baseline; }

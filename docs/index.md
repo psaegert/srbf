@@ -1,7 +1,8 @@
 # srbf: Symbolic Regression Benchmark Framework
 
 `srbf` evaluates symbolic-regression models on shared benchmarks with shared metrics. It is the
-benchmark framework carved out of [flash-ansr](https://github.com/psaegert/flash-ansr): the
+Symbolic Regression Benchmark Framework carved out of
+[flash-ansr](https://github.com/psaegert/flash-ansr): the
 `Benchmark` driver, model adapters, and metrics, over `symbolic-data` catalogs. It depends one-way on
 `flash-ansr` (`srbf` imports `flash-ansr`; `flash-ansr` never imports `srbf`).
 

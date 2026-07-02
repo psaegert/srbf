@@ -184,7 +184,7 @@ flash-ansr 0.9's public inference API, and the `eval/` engine layer collapses in
 
 ## [0.1.0] - 2026-06-26
 
-Initial release: the symbolic-regression evaluation framework carved out of
+Initial release: the Symbolic Regression Benchmark Framework carved out of
 [flash-ansr](https://github.com/psaegert/flash-ansr) (flash-ansr 0.6 split).
 
 ### Added

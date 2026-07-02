@@ -1,9 +1,23 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/psaegert/srbf/main/assets/brand/srbf-wordmark-dark.svg">
+    <img alt="srbf" src="https://raw.githubusercontent.com/psaegert/srbf/main/assets/brand/srbf-wordmark.svg" width="200">
+  </picture>
+</p>
+<h3 align="center">Symbolic Regression Benchmark Framework</h3>
+<p align="center">
+  <a href="https://pypi.org/project/srbf/">PyPI</a> ·
+  <a href="https://srbf.readthedocs.io/">Docs</a> ·
+  <a href="https://psaegert.github.io/srbf/">Interactive results</a>
+</p>
+
 # srbf: Symbolic Regression Benchmark Framework
 
 `srbf` evaluates symbolic-regression models on shared benchmarks with shared metrics. It is the
-benchmark framework carved out of [flash-ansr](https://github.com/psaegert/flash-ansr): the
-`Benchmark` driver, model adapters, and metrics, over `symbolic-data` catalogs. It depends one-way on
-`flash-ansr` (`srbf` imports `flash-ansr`; `flash-ansr` never imports `srbf`).
+Symbolic Regression Benchmark Framework carved out of
+[flash-ansr](https://github.com/psaegert/flash-ansr): the `Benchmark` driver, model adapters, and
+metrics, over `symbolic-data` catalogs. It depends one-way on `flash-ansr` (`srbf` imports
+`flash-ansr`; `flash-ansr` never imports `srbf`).
 
 **Built for contributions.** Developers of SR methods add their model by opening a PR with an
 **adapter** (two methods plus a registered builder) plus install instructions. The built-in adapters (`flash_ansr`, `pysr`,

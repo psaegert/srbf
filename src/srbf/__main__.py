@@ -10,7 +10,7 @@ import argparse
 
 def main(argv: list[str] | None = None) -> None:
     """CLI entry point: parse args and dispatch the ``run`` / ``analyze`` subcommands."""
-    parser = argparse.ArgumentParser(description="srbf: symbolic-regression evaluation framework")
+    parser = argparse.ArgumentParser(description="srbf: Symbolic Regression Benchmark Framework")
     subparsers = parser.add_subparsers(dest="command_name", required=True)
 
     run_parser = subparsers.add_parser("run", help="Run an evaluation from a unified config")
