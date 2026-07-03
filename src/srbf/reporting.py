@@ -323,6 +323,12 @@ def paired_report(
     report["delta_mean"] = float(np.nanmedian(boot_means))
     report["ci_lower"] = float(np.nanpercentile(boot_means, lo_q))
     report["ci_upper"] = float(np.nanpercentile(boot_means, hi_q))
+    # The gate's p: two-sided bootstrap percentile-inversion test on the MEAN delta (the
+    # estimand-matched primary procedure; Wilcoxon below is the robustness companion, never
+    # the gate). Floored at 1/(n+1): a bootstrap cannot certify smaller p than its resolution.
+    p_low = float(np.mean(boot_means <= 0.0))
+    p_high = float(np.mean(boot_means >= 0.0))
+    report["p_value"] = float(max(2.0 * min(p_low, p_high), 1.0 / (int(n) + 1)))
 
     # Effect sizes: per-expression win/tie/loss and the probability of superiority (ties half).
     n_a_better = int(np.sum(deltas > 0)) if higher_is_better else int(np.sum(deltas < 0))

@@ -301,3 +301,16 @@ def test_significant_round_matches_ci_width():
     assert significant_round(42.1234, 12.0) == 42.0
     assert significant_round(float("nan"), 0.1) != significant_round(0.0, 0.1)  # nan passes through
     assert significant_round(1.234567, 0.0) == 1.234567  # zero width: no information, no rounding
+
+
+def test_p_value_matches_ci_semantics():
+    from srbf.reporting import paired_report
+    rng = np.random.default_rng(9)
+    shifted_a, shifted_b = _shifted_snapshots(rng, shift=0.15, noise_sd=0.05)
+    strong = paired_report(shifted_a, shifted_b, "m", allow_unverified=True, rng=1)
+    assert strong["p_value"] <= 2e-4  # floored at 1/(n+1)
+    null_a, null_b = _shifted_snapshots(rng, shift=0.0, noise_sd=0.3)
+    null = paired_report(null_a, null_b, "m", allow_unverified=True, rng=2)
+    assert null["p_value"] > 0.05
+    # CI excludes zero  <=>  p < alpha (percentile duality, same resamples)
+    assert (strong["ci_lower"] > 0) == (strong["p_value"] < 0.05)
