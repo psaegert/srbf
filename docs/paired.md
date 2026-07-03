@@ -33,9 +33,10 @@ silently changes the test), the two-sided bootstrap `p_value` on the mean delta 
 inference), `mde_80`, a `variance_decomposition`, pairing diagnostics, and — given a `margin` —
 a four-state `verdict`.
 
-## Verdicts and the measurement-noise margin (MRD)
+## Verdicts and the measurement-noise margin
 
-A verdict compares the CI against a **measurement-noise margin**: the largest aggregate
+A verdict compares the CI against a **measurement-noise margin** (the minimum resolvable
+difference): the largest aggregate
 difference that could plausibly appear when comparing two *equally good* models with the two
 series' own draw-to-draw noise. Margins are **derived, not hand-picked**
 (`scripts/derive_noise_margins.py`): each series' noise null comes from comparing the series to
@@ -45,24 +46,28 @@ convolves the two nulls — margins are **pair-specific** by construction.
 
 | verdict | meaning |
 |---|---|
-| `better` / `worse` | CI entirely beyond the margin: a real difference, larger than benchmark noise explains |
+| `better` / `worse` | CI entirely above +margin (better) or entirely below −margin (worse): a difference larger than benchmark noise explains |
 | `equivalent` | CI entirely inside ±margin: any residual difference is smaller than the benchmark can measure (**measurement**-equivalence, not proof of identity) |
-| `undecided` | neither: not enough data — read `mde_80`, the smallest effect that was detectable at all |
+| `undecided` | neither: not enough data — read `mde_80`, the smallest true effect the test would detect with 80% power at this sample size ((z₀.₉₇₅ + z₀.₈₀)·SE) |
 
 `equivalence_attainable` reports whether `equivalent` was even reachable at this sample size;
 when it is `False`, an `undecided` is resolution-limited, not evidence of parity. Validation:
-the near-replicate pair v23.0-120M vs v23.3-120M (identical weights, different decode path)
-reads `equivalent` on every metric × benchmark cell.
+the near-replicate pair v23.0-120M vs its KV-cache decode re-evaluation (identical weights,
+different decode path) reads `equivalent` on both FastSRB cells; on the smaller v23-val
+benchmark the same pair reads `undecided` with `equivalence_attainable=False` — v23-val's
+paired sample is too small for `equivalent` to be reachable at all there, which is exactly what
+the flag reports, and the point estimates sit well inside the margin, consistent with no real
+difference.
 
 ## Missing data, honestly
 
 Metric columns carry srbf's two-regime failure encoding, and pairing follows it: **rate**
 metrics score failures as 0.0 and pair over (almost) all expressions; **diagnostic** metrics
 drop failures, so their deltas pair over the both-models-succeeded intersection — a conditional
-estimand that every report disclosed via `n_only_a` / `n_only_b` (never silently).
+estimand that every report discloses via `n_only_a` / `n_only_b` (never silently).
 `worst_rank=True` additionally reports the rank statistics over the *union* of expressions with
 one-sided failures imputed as sign-only sentinels (worst-rank composite scoring, cf. Lachin
-1999) — sound for ranks, never applied to the mean; degenerate (≥ 50 % imputed) blocks
+1999) — sound for ranks, never applied to the mean; degenerate (≥50% imputed) blocks
 suppress themselves and point to the success rate instead.
 
 ## The pairing contract
@@ -74,6 +79,12 @@ mismatch); snapshots without provenance require an explicit `allow_unverified=Tr
 **strictly per benchmark** — there is deliberately no combined cross-benchmark number.
 
 ## Δ over the compute axis
+
+On the results site, verdicts are issued at **standardized compute budgets** (≤1, 10, 100,
+1000 s per expression, median; user-selectable): within the budget, each method's best measured
+configuration, with same-method pairs additionally on the same configuration (one factor
+varies). Correction families are per budget (`family_id` carries `t`), so the budget grid is
+pre-declared, not cherry-picked.
 
 `paired_delta_curve(series_a, series_b, metric, x_policy=...)` compares two rung ladders:
 `'rung'` matches identical configurations (same-method variants — ablation vs parent, size
