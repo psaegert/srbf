@@ -3,11 +3,13 @@
  * Reads window.RESULTS_DATA (emitted by srbf.analysis.export_data + augmented by
  * build_results_data.py): { metrics:[{key,label,higher_is_better,tier}], axes:[...],
  * colors:{series:hex}, series_meta:{series:{group,default_on,is_ablation,parent,predecessor}},
- * records:[...] }. Three views (registry): Curves (marginal line + CI band), Paired (Δ-vs-baseline
- * curves with pointwise bands + verdict), Matrix (k×k four-state verdict cells). Paired/Matrix data
- * comes from paired_data.json (lazy-fetched; ALL statistics precomputed in Python by srbf's paired
- * layer — this file only renders). Per-series colour customisation persists in a single functional
- * cookie; two-tier metric menu; theme-aware (light/dark).
+ * records:[...] }. Views form a 2×2 (registry): {Display: Curves|Table} × {Values: Absolute|Paired}
+ * — curves×absolute (marginal line + CI band), curves×paired (Δ-vs-baseline curves with pointwise
+ * bands + verdict), table×absolute (leaderboard: each series' best configuration within the budget,
+ * marginal value + CI), table×paired (k×k four-state verdict matrix). Everything except
+ * curves×absolute reads paired_data.json (lazy-fetched; ALL statistics precomputed in Python by
+ * srbf's paired layer — this file only renders). Per-series colour customisation persists in a
+ * single functional cookie; two-tier metric menu; theme-aware (light/dark).
  */
 (function () {
   "use strict";
@@ -71,12 +73,19 @@
     var axisSel = selectFrom(axes.map(function (a) { return [a, (AXIS_META[a] || {}).label || a]; }));
     var benchSel = selectFrom(benches.map(function (b) { return [b, b]; }));
 
-    // --- view registry: Curves | Paired | Matrix ---------------------------------------------
+    // --- view registry: a 2×2 — {Display: Curves|Table} × {Values: Absolute|Paired} ----------
+    // Legacy deep-link keys (curves/paired/matrix) stay stable; 'table' is the fourth quadrant.
     var VIEWS = {
-      curves: { label: "Curves", usesAxis: true, usesBaseline: false, usesCorrection: false },
-      paired: { label: "Paired Δ", usesAxis: false, usesBaseline: true, usesCorrection: true, usesBudget: true },
-      matrix: { label: "Matrix", usesAxis: false, usesBaseline: false, usesCorrection: true, usesBudget: true }
+      curves: { display: "curves", values: "absolute", usesAxis: true },
+      paired: { display: "curves", values: "paired", usesBaseline: true, usesCorrection: true, usesBudget: true },
+      table:  { display: "table",  values: "absolute", usesBudget: true },
+      matrix: { display: "table",  values: "paired", usesCorrection: true, usesBudget: true }
     };
+    function viewFor(display, values) {
+      return Object.keys(VIEWS).filter(function (v) {
+        return VIEWS[v].display === display && VIEWS[v].values === values;
+      })[0];
+    }
     var currentView = "curves";
     var pairedData = null, pairedLoading = false;
 
@@ -120,14 +129,28 @@
     budgetSel.addEventListener("change", render);
     function selectedBudget() { return parseFloat(budgetSel.value); }
 
+    // two segmented toggles exposing the 2×2: what to draw × what the numbers mean
     var tabs = document.createElement("div"); tabs.className = "view-tabs";
-    Object.keys(VIEWS).forEach(function (v) {
-      var b = document.createElement("button"); b.type = "button"; b.className = "view-tab";
-      b.textContent = VIEWS[v].label; b.dataset.view = v;
-      if (v === currentView) { b.classList.add("active"); }
-      b.addEventListener("click", function () { switchView(v); });
-      tabs.appendChild(b);
-    });
+    function segmented(labelText, axis, options) {
+      var field = document.createElement("div"); field.className = "view-toggle";
+      var lab = document.createElement("span"); lab.className = "results-field-label";
+      lab.textContent = labelText; field.appendChild(lab);
+      var group = document.createElement("div"); group.className = "view-toggle-group";
+      options.forEach(function (opt) {
+        var b = document.createElement("button"); b.type = "button"; b.className = "view-tab";
+        b.textContent = opt[1]; b.dataset.axis = axis; b.dataset.value = opt[0];
+        b.addEventListener("click", function () {
+          var vm = VIEWS[currentView];
+          var next = axis === "display" ? viewFor(opt[0], vm.values) : viewFor(vm.display, opt[0]);
+          switchView(next);
+        });
+        group.appendChild(b);
+      });
+      field.appendChild(group);
+      return field;
+    }
+    tabs.appendChild(segmented("Display", "display", [["curves", "Curves"], ["table", "Table"]]));
+    tabs.appendChild(segmented("Values", "values", [["absolute", "Absolute"], ["paired", "Paired Δ"]]));
 
     var controls = document.createElement("div");
     controls.className = "results-controls";
@@ -153,10 +176,10 @@
 
     function switchView(v) {
       currentView = v;
-      tabs.querySelectorAll(".view-tab").forEach(function (b) {
-        b.classList.toggle("active", b.dataset.view === v);
-      });
       var vm = VIEWS[v];
+      tabs.querySelectorAll(".view-tab").forEach(function (b) {
+        b.classList.toggle("active", vm[b.dataset.axis] === b.dataset.value);
+      });
       axisField.style.display = vm.usesAxis ? "" : "none";
       baselineField.style.display = vm.usesBaseline ? "" : "none";
       budgetField.style.display = vm.usesBudget ? "" : "none";
@@ -296,6 +319,7 @@
       pairedFoot.innerHTML = "";
       if (currentView === "paired") { return renderPaired(); }
       if (currentView === "matrix") { return renderMatrix(); }
+      if (currentView === "table") { return renderTable(); }
       plot.style.display = "";
       return renderCurves();
     }
@@ -332,6 +356,7 @@
 
     // payload numbers are pre-rounded to the precision their CI justifies — render them verbatim
     function fmt(v) { if (v === null || v === undefined || v !== v) { return "–"; } var x = (v === 0 ? 0 : v); return (x > 0 ? "+" : "") + String(x); }
+    function fmtAbs(v) { return (v === null || v === undefined || v !== v) ? "–" : String(v); }
     function fmtP(p) { return (p === null || p === undefined) ? "–" : Number(p).toPrecision(2); }
     var VERDICT_GLYPHS = { better: "▲", worse: "▼", equivalent: "≈", undecided: "?" };
     function setName(key) { return ({ ablations: "ablation vs parent", size_ladder: "adjacent model sizes", baselines: "model sizes vs baselines" })[key] || key; }
@@ -588,11 +613,80 @@
         "<span class='v-equivalent'>equivalent ≈</span> (CI inside the margin: any difference is smaller than the benchmark can measure) · " +
         "<span class='v-undecided'>undecided ?</span> (hatched fill; not enough data — the full record shows the smallest detectable difference) · " +
         "<i>n/a</i> = this pair was not evaluated on this benchmark. " +
-        "<b>C</b> (blue outline) = confirmatory cell: one of the comparisons declared in advance (each ablation vs its parent, adjacent model sizes, " +
+        "A small <b>C</b> marks a confirmatory cell: one of the comparisons declared in advance (each ablation vs its parent, adjacent model sizes, " +
         "and each model size vs each baseline), held to the stricter Holm correction — every other cell is exploratory screening " +
         "with the lenient Benjamini–Hochberg correction; see <a href='#paired'>Paired comparisons</a>. " +
         "Cells read row − column at the selected compute budget; tap or hover any cell to pin its full record below the table. Release " +
         (pairedData.results_release_id || "?") + ".</div>");
+      pairedFoot.innerHTML = html.join("");
+    }
+
+    function renderTable() {
+      if (!pairedReady()) { return; }
+      var metricKey = metricSel.value, bench = benchSel.value;
+      if (!pairedMetricGuard(metricKey)) { return; }
+      plot.style.display = "none";
+      var mi = metricInfo(metricKey);
+      var hib = !(mi && mi.higher_is_better === false);
+      if (!pairedData.leaderboard) {
+        pairedFoot.innerHTML = "<div class='matrix-warning'>This paired payload predates the " +
+          "Table view (no leaderboard block) — re-run build_paired_data.py.</div>";
+        return;
+      }
+      var byMetricSeries = {};
+      pairedData.leaderboard.forEach(function (r) {
+        if (r.benchmark === bench && r.metric === metricKey && r.budget === selectedBudget()) {
+          byMetricSeries[r.series] = r;
+        }
+      });
+      var active = series.filter(function (s) { return seriesChecks[s].checked; });
+      var rows = active.map(function (s) { return { s: s, e: byMetricSeries[s] || null }; });
+      rows.sort(function (a, b) {
+        if (!a.e && !b.e) { return 0; }
+        if (!a.e) { return 1; }               // unmeasured rows sink to the bottom
+        if (!b.e) { return -1; }
+        return hib ? b.e.value - a.e.value : a.e.value - b.e.value;
+      });
+      var noteIndex = {};                      // note text -> footnote number
+      var html = [];
+      html.push("<div class='matrix-wrap'>");
+      html.push("<table class='paired-matrix abs-table'><thead><tr>" +
+        "<th>series</th><th>" + (mi ? mi.label : metricKey) + " [95% CI]</th>" +
+        "<th>best config ≤ " + selectedBudget() + " s</th><th>n</th></tr></thead><tbody>");
+      rows.forEach(function (row) {
+        var col = colorOf(row.s, idx[row.s]);
+        var marks = "";
+        (row.e && row.e.notes ? row.e.notes : []).forEach(function (note) {
+          if (!(note in noteIndex)) { noteIndex[note] = Object.keys(noteIndex).length + 1; }
+          marks += "<sup>" + noteIndex[note] + "</sup>";
+        });
+        html.push("<tr><th><span class='lb-swatch' style='background:" + col + "'></span>" +
+          row.s + marks + "</th>");
+        if (!row.e) {
+          html.push("<td class='missing' colspan='3'>n/a — no usable configuration within ≤ " +
+            selectedBudget() + " s per expression on this benchmark</td></tr>");
+          return;
+        }
+        html.push("<td class='lb-value'><b>" + fmtAbs(row.e.value) + "</b> [" + fmtAbs(row.e.lo) +
+          ", " + fmtAbs(row.e.hi) + "]</td>" +
+          "<td class='lb-x'>≈" + row.e.x + " s/expr</td>" +
+          "<td class='lb-n'>" + row.e.n + "</td></tr>");
+      });
+      html.push("</tbody></table></div>");
+      var notes = Object.keys(noteIndex).map(function (note) {
+        return "<div class='fam'><sup>" + noteIndex[note] + "</sup> " + note + "</div>";
+      }).join("");
+      html.push("<div class='matrix-legend'>" +
+        "Each row: the series' best measured configuration within the selected budget (the most " +
+        "expensive one whose median fit time per expression stays under it), with the SAME value " +
+        "and 95% CI as that configuration's point on the Curves view — " +
+        (hib ? "higher" : "lower") + " is better, best first. " +
+        "<b>These are marginal numbers: never read a difference between two rows off their " +
+        "CIs</b> — shared expression difficulty makes marginal intervals overlap even when one " +
+        "method is reliably better. Head-to-head questions belong to the Paired Δ views " +
+        "(<a href='#paired'>why</a>). Rankings are per benchmark only — there is deliberately " +
+        "no combined number. Release " + (pairedData.results_release_id || "?") + ".</div>" +
+        (notes ? "<div class='matrix-legend'>" + notes + "</div>" : ""));
       pairedFoot.innerHTML = html.join("");
     }
 

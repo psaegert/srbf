@@ -214,7 +214,7 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
 .footer-inner .brand-mark.small { vertical-align: baseline; }
 
 /* --- Paired views (WP1.D): tabs, Δ verdicts, matrix ------------------------------------ */
-.view-tabs { display: flex; gap: .4rem; margin: 0 0 1rem; flex-wrap: wrap; }
+.view-tabs { display: flex; gap: 1.4rem; margin: 0 0 1rem; flex-wrap: wrap; align-items: flex-start; }
 .view-tab {
   border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft);
   padding: .45rem .95rem; border-radius: 999px; font: inherit; font-size: .92rem; cursor: pointer;
@@ -247,7 +247,7 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
 .paired-matrix td { cursor: help; position: relative; min-width: 4.2rem; }
 .paired-matrix td[data-cell] { cursor: pointer; }
 .paired-matrix td[data-cell]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-/* pinned cell: inset ink ring — coexists with the confirmatory accent outline */
+/* pinned cell: inset ink ring */
 .paired-matrix td.selected { box-shadow: inset 0 0 0 2.5px var(--ink); }
 .paired-matrix td.diag { color: var(--ink-faint); background: var(--bg); cursor: default; }
 .paired-matrix td.missing { color: var(--ink-faint); background: var(--bg); font-style: italic; }
@@ -259,9 +259,11 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
   background: repeating-linear-gradient(45deg, transparent 0 4px, rgba(134, 140, 156, .12) 4px 8px);
   color: var(--ink-faint);
 }
-.paired-matrix td.confirmatory { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* confirmatory cells carry only the small C badge (user decision 2026-07-03: the earlier
+   accent outline + badge read as clutter); the pinned detail panel spells the status out */
 .cell-badge {
-  font-size: .68em; font-weight: 700; color: var(--accent); vertical-align: super; margin-left: .2em;
+  font-size: .62em; font-weight: 600; color: var(--accent); opacity: .75;
+  vertical-align: super; margin-left: .2em;
 }
 /* tap/click-pinned full record of one matrix cell (hover titles are unreachable on touch) */
 .matrix-detail {
@@ -282,4 +284,18 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
 .matrix-legend .v-undecided { color: var(--ink-faint); font-weight: 600; }
 
 .results-field-hint { display: block; font-size: .72rem; color: var(--ink-faint); max-width: 15rem; line-height: 1.35; margin-top: .3rem; }
-.cell-verdict { font-size: .7em; margin-left: .3em; color: var(--ink-soft); }
+.cell-verdict { font-size: .7em; margin-left: .3em; color: var(--ink-faint); }
+
+/* 2×2 view toggles */
+.view-toggle { display: flex; flex-direction: column; gap: .3rem; }
+.view-toggle-group { display: flex; gap: .35rem; }
+
+/* Table × Absolute leaderboard */
+.abs-table th, .abs-table td { text-align: left; white-space: nowrap; }
+.abs-table tbody th { font-weight: 500; }
+.abs-table .lb-value b { font-weight: 600; }
+.abs-table .lb-x, .abs-table .lb-n { color: var(--ink-soft); }
+.lb-swatch {
+  display: inline-block; width: .7em; height: .7em; border-radius: 50%;
+  margin-right: .45em; vertical-align: baseline;
+}
