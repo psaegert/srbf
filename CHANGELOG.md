@@ -4,6 +4,40 @@ All notable changes to srbf are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-07-03
+
+The paired-statistics layer (improvement-plan WP1): compare models on the SAME expressions
+instead of subtracting marginal averages.
+
+### Added
+- **`srbf.reporting.paired_report(snapshot_a, snapshot_b, metric_key, ...)`** — per-expression
+  deltas joined on ids (never row order), one expression-bootstrap pass serving mean/median CIs,
+  win/tie/loss, probability of superiority (+ CI), a Wilcoxon signed-rank companion with
+  `zero_method='pratt'` (zeros counted), the two-sided bootstrap `p_value` on the mean delta,
+  `mde_80` (minimum detectable effect), and a draws-vs-expressions variance decomposition.
+  Optional `worst_rank=True` (union-of-ids rank statistics with sign-only sentinels for
+  one-sided failures; degenerate at >= 50% imputed) and `hierarchical=True` (two-stage bootstrap
+  for rank statistics).
+- **Four-state verdicts vs pair-specific measurement-noise margins (MRD):**
+  `self_noise` (split-half noise null of a series against itself, exact per-expression
+  rescaling, bootstrap cross-check) + `pair_margin` (convolution of two nulls) →
+  `better / equivalent / worse / undecided` with an `equivalence_attainable` diagnostic.
+  Margins are derived from the data, never hand-picked (`scripts/derive_noise_margins.py`).
+- **Pairing contract:** `pairing_fingerprint` / `PairingContractError` — benchmark-data
+  provenance must match where available (`allow_unverified=True` for archived snapshots);
+  id-set join diagnostics (`n_only_a/b`) disclosed in every report; strictly per-benchmark.
+- **`paired_delta_curve`** — Δ over the compute axis: `x_policy='rung'` (exact configuration
+  match) or `'time'` (per-expression linear interpolation in log wall-clock time between
+  measured rungs; never extrapolates — out-of-range points are returned loudly; composition
+  guard with per-point `n_pairs`; pointwise bands).
+- **`bootstrap_band`** — shape-agnostic row bootstrap ((n,) or (n, k) profiles) whose scalar
+  case reproduces `bootstrapped_metric_ci` exactly; `draw_values` / `paired_expression_deltas`
+  primitives; `significant_round` / `rounded_triple` display rounding (precision limited to
+  what the CI width justifies).
+- **Docs:** a "Paired comparisons" page (statistical model, verdict semantics, contract,
+  worked example). The interactive Paired Δ / Matrix views are live on the results explorer.
+- `scipy>=1.9` is now a declared dependency.
+
 ## [0.6.2] - 2026-07-02
 
 ### Changed

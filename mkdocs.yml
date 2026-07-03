@@ -49,6 +49,7 @@ nav:
   - Home: index.md
   - Running evaluations: running.md
   - Results & analysis: results.md
+  - Paired comparisons: paired.md
   - Benchmarks & datasets: benchmarks.md
   - Models & provisioning: models.md
   - Adding your model: adapters.md

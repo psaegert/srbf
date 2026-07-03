@@ -314,3 +314,31 @@ def test_p_value_matches_ci_semantics():
     assert null["p_value"] > 0.05
     # CI excludes zero  <=>  p < alpha (percentile duality, same resamples)
     assert (strong["ci_lower"] > 0) == (strong["p_value"] < 0.05)
+
+
+def test_ci_empirical_coverage_discrete_and_heavy_tailed():
+    # Percentile-CI coverage check on the two regimes the referees flagged: discrete
+    # rate-metric deltas (0/1 draws, large atom at 0) and heavy-tailed diagnostic deltas.
+    # Loose binomial tolerance: nominal 95%, accept >= 85% over 40 replications each.
+    from srbf.reporting import paired_report
+
+    def coverage(make_pair, true_delta, reps=40):
+        hits = 0
+        for seed in range(reps):
+            snap_a, snap_b = make_pair(np.random.default_rng(1000 + seed))
+            r = paired_report(snap_a, snap_b, "m", allow_unverified=True, n=1000, rng=seed)
+            hits += r["ci_lower"] <= true_delta <= r["ci_upper"]
+        return hits / reps
+
+    def rate_pair(rng, p_a=0.45, p_b=0.35, n_expr=60, k=6):
+        a = {f"E{i}": list((rng.random(k) < p_a).astype(float)) for i in range(n_expr)}
+        b = {f"E{i}": list((rng.random(k) < p_b).astype(float)) for i in range(n_expr)}
+        return _snapshot_from(a), _snapshot_from(b)
+
+    def heavy_pair(rng, shift=0.3, n_expr=60, k=6):
+        a = {f"E{i}": list(rng.standard_t(3, size=k) + shift) for i in range(n_expr)}
+        b = {f"E{i}": list(rng.standard_t(3, size=k)) for i in range(n_expr)}
+        return _snapshot_from(a), _snapshot_from(b)
+
+    assert coverage(rate_pair, 0.10) >= 0.85
+    assert coverage(heavy_pair, 0.30) >= 0.85
