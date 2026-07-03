@@ -52,9 +52,10 @@
         <strong>NeSymReS</strong>, and <strong>E2E</strong> baselines (plus <strong>Prior</strong>,
         a reference that samples candidate skeletons from the training prior without any model).
         Views are organized on two axes: <strong>Display</strong> &mdash; Curves over the whole
-        compute sweep, or a Table at one chosen compute budget &mdash; &times;
-        <strong>Values</strong> &mdash; Absolute numbers per series, or Paired head-to-head
-        differences. Absolute views show each series on its own, with 95% bootstrap confidence
+        compute sweep, a Table at one chosen compute budget, or Ranks, a critical-difference
+        league of all methods at once &mdash; &times; <strong>Values</strong> &mdash; Absolute
+        numbers per series, or Paired head-to-head differences (Ranks is inherently
+        many-method, so the Values axis does not apply to it). Absolute views show each series on its own, with 95% bootstrap confidence
         bands; Paired views answer head-to-head questions &mdash; is A better than B, beyond what
         benchmark noise can explain? &mdash; with <a href="#paired">pre-declared, corrected
         verdicts</a>. <a href="#about">About these numbers</a> explains how each point is

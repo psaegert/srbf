@@ -317,6 +317,17 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
 /* 2×2 view toggles */
 .view-toggle { display: flex; flex-direction: column; gap: .3rem; }
 .view-toggle-group { display: flex; gap: .35rem; }
+.view-tab.disabled { opacity: .35; pointer-events: none; }
+
+/* rank-league chips */
+.rank-primary {
+  font-size: .78em; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--accent); border: 1px solid var(--accent); border-radius: 6px; padding: .05em .45em;
+}
+.rank-exploratory {
+  font-size: .78em; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--ink-faint); border: 1px solid var(--line); border-radius: 6px; padding: .05em .45em;
+}
 
 /* Table × Absolute leaderboard */
 .abs-table th, .abs-table td { text-align: left; white-space: nowrap; }

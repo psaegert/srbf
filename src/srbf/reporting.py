@@ -803,6 +803,122 @@ def _sorted_time_columns(
     return matrix[:, cols], xs, [r for _, r in order], keys
 
 
+def series_values_at_time(
+    series: Mapping[int, Mapping[str, Sequence[Any]]],
+    metric_key: str,
+    t: float,
+    *,
+    group_key: str | None = None,
+    aggregate: Callable[[np.ndarray], float] = np.nanmean,
+    ladder_policy: str = "plateau",
+) -> dict[str, Any] | None:
+    """PER-PROBLEM values of one series at time ``t`` — the vector behind
+    :func:`series_report_at_time`, exposed for cross-method constructions (rank leagues).
+
+    Same interpolation model and boundary policy as the other at-time reports (linear in
+    log10-time between bracketing configurations; ``'plateau'`` carries the last measured
+    values forward, flagged). Returns ``{'values': {problem_id: value}, status fields...}``
+    or ``None`` when the series cannot run within ``t``. Only finite per-problem values are
+    returned (a problem missing at either bracketing configuration is absent)."""
+    key = group_key or resolve_group_key(next(iter(series.values())))
+    matrix, xs, rungs, keys = _sorted_time_columns(series, metric_key, key, aggregate)
+    if not xs:
+        return None
+    side = _side_at_time(matrix, xs, rungs, t, ladder_policy)
+    if side is None:
+        return None
+    values, status = side
+    out = {"values": {k: float(v) for k, v in zip(keys, values) if np.isfinite(v)}}
+    out.update(status)
+    return out
+
+
+def rank_league(
+    values_by_method: Mapping[str, Mapping[Any, float]],
+    *,
+    higher_is_better: bool = True,
+    mode: str = "worst-rank",
+    alpha: float = 0.05,
+) -> dict[str, Any] | None:
+    """k-method rank league over shared problems: tie-corrected Friedman omnibus + Nemenyi
+    critical difference + indistinguishability cliques (the CD-diagram statistics, Demšar 2006).
+
+    ``values_by_method`` maps method name -> {problem_id: value} (e.g. from
+    :func:`series_values_at_time`). Within each problem, methods are ranked 1 (best) .. k,
+    ties averaged. ``mode='worst-rank'`` keeps every problem where at least one method has a
+    value and ranks MISSING methods strictly worst in that problem (ties among them averaged)
+    — sound for quality-to-GT axes, where "no usable prediction" is worse than any observed
+    value; ``mode='all-present'`` keeps only problems where every method has a value (the
+    conditional league for output-property metrics — a different estimand, label it).
+
+    Returns ``None`` when fewer than 2 problems or 2 methods survive. The Friedman statistic
+    uses the tie-corrected form (Conover); ``cd`` is the Nemenyi critical difference at
+    ``alpha``; ``cliques`` are the maximal groups of methods whose mean ranks span <= cd
+    (report them only when the omnibus rejects — that discipline is the caller's job)."""
+    from scipy.stats import chi2, rankdata, studentized_range
+
+    methods = list(values_by_method)
+    k = len(methods)
+    if k < 2:
+        return None
+    if mode == "all-present":
+        ids = sorted(set.intersection(*(set(values_by_method[m]) for m in methods)), key=str)
+    elif mode == "worst-rank":
+        ids = sorted(set.union(*(set(values_by_method[m]) for m in methods)), key=str)
+    else:
+        raise ValueError(f"unknown mode {mode!r} (use 'worst-rank' or 'all-present')")
+    n = len(ids)
+    if n < 2:
+        return None
+
+    oriented = np.full((n, k), -np.inf)   # missing = strictly worst in the oriented score
+    n_missing = np.zeros(k, dtype=int)
+    for j, m in enumerate(methods):
+        col = values_by_method[m]
+        for i, pid in enumerate(ids):
+            if pid in col:
+                v = float(col[pid])
+                oriented[i, j] = v if higher_is_better else -v
+            else:
+                n_missing[j] += 1
+    ranks = np.vstack([rankdata(-oriented[i], method="average") for i in range(n)])
+
+    mean_ranks = ranks.mean(axis=0)
+    # tie-corrected Friedman (Conover): chi2 = (k-1) * sum_j (R_j - n(k+1)/2)^2 / (A1 - C1)
+    column_sums = ranks.sum(axis=0)
+    a1 = float(np.sum(ranks ** 2))
+    c1 = n * k * (k + 1) ** 2 / 4.0
+    if a1 <= c1:                          # every problem fully tied — no information
+        chi2_stat, p_value = 0.0, 1.0
+    else:
+        chi2_stat = float((k - 1) * np.sum((column_sums - n * (k + 1) / 2.0) ** 2) / (a1 - c1))
+        p_value = float(chi2.sf(chi2_stat, k - 1))
+    cd = float(studentized_range.ppf(1 - alpha, k, np.inf) / np.sqrt(2.0)
+               * np.sqrt(k * (k + 1) / (6.0 * n)))
+
+    order = np.argsort(mean_ranks)
+    clique_indices: list[list[int]] = []
+    for i in range(k):
+        group = [int(j) for j in order if 0 <= mean_ranks[j] - mean_ranks[order[i]] <= cd]
+        if len(group) > 1 and not any(set(group) <= set(g) for g in clique_indices):
+            clique_indices.append(group)
+    tie_share = float(np.mean([1.0 - len(set(row)) / k for row in ranks]))
+
+    return {
+        "methods": methods,
+        "n_problems": n,
+        "mean_ranks": {m: float(mean_ranks[j]) for j, m in enumerate(methods)},
+        "n_missing": {m: int(n_missing[j]) for j, m in enumerate(methods)},
+        "friedman_chi2": chi2_stat,
+        "friedman_p": p_value,
+        "cd": cd,
+        "alpha": alpha,
+        "mode": mode,
+        "tie_share": tie_share,
+        "cliques": [[methods[j] for j in group] for group in clique_indices],
+    }
+
+
 def series_report_at_time(
     series: Mapping[int, Mapping[str, Sequence[Any]]],
     metric_key: str,
@@ -1072,7 +1188,8 @@ def bootstrap_report(
 
 
 __all__ = ["draw_distribution", "draw_values", "paired_expression_deltas", "paired_report",
-           "paired_report_at_time", "series_report_at_time",
+           "paired_report_at_time", "series_report_at_time", "series_values_at_time",
+           "rank_league",
            "paired_delta_curve", "series_x_positions", "self_noise", "pair_margin",
            "resolve_group_key", "pairing_fingerprint", "PairingContractError",
            "significant_round", "rounded_triple", "bootstrap_report"]

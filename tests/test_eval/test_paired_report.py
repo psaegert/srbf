@@ -447,3 +447,86 @@ def test_series_report_at_time_matches_marginal_interpolation():
     assert series_report_at_time(series, "m", 0.01) is None
     plateau = series_report_at_time(series, "m", 5000.0)
     assert plateau["status"] == "plateau" and plateau["x_effective"] == 100.0
+
+
+# --- rank leagues: tie-corrected Friedman + Nemenyi CD (the CD-diagram statistics) ---------
+
+def test_rank_league_hand_computed():
+    from srbf.reporting import rank_league
+    # 4 problems x 3 methods, no ties, A always best, C always worst
+    vals = {
+        "A": {f"P{i}": 3.0 for i in range(4)},
+        "B": {f"P{i}": 2.0 for i in range(4)},
+        "C": {f"P{i}": 1.0 for i in range(4)},
+    }
+    league = rank_league(vals, higher_is_better=True)
+    assert league["mean_ranks"] == {"A": 1.0, "B": 2.0, "C": 3.0}
+    # classic Friedman with perfect separation: chi2 = 12n/(k(k+1)) * sum (Rbar - (k+1)/2)^2 = n*(k-1) for k=3
+    assert league["friedman_chi2"] == pytest.approx(8.0)
+    assert league["tie_share"] == 0.0
+    assert league["n_problems"] == 4
+
+
+def test_rank_league_orientation_and_ties():
+    from srbf.reporting import rank_league
+    # lower-is-better metric; B and C tie on every problem -> averaged rank 2.5
+    vals = {
+        "A": {"P0": 0.1, "P1": 0.2},
+        "B": {"P0": 1.0, "P1": 2.0},
+        "C": {"P0": 1.0, "P1": 2.0},
+    }
+    league = rank_league(vals, higher_is_better=False)
+    assert league["mean_ranks"]["A"] == 1.0
+    assert league["mean_ranks"]["B"] == league["mean_ranks"]["C"] == 2.5
+    assert league["tie_share"] > 0
+
+
+def test_rank_league_worst_rank_vs_all_present():
+    from srbf.reporting import rank_league
+    vals = {
+        "A": {"P0": 3.0, "P1": 3.0, "P2": 3.0},
+        "B": {"P0": 2.0, "P1": 2.0},              # missing P2
+        "C": {"P0": 1.0, "P1": 1.0, "P2": 1.0},
+    }
+    worst = rank_league(vals, higher_is_better=True, mode="worst-rank")
+    assert worst["n_problems"] == 3 and worst["n_missing"]["B"] == 1
+    # on P2, B ranks strictly worst (rank 3) despite C having the lowest observed value
+    assert worst["mean_ranks"]["B"] == pytest.approx((2 + 2 + 3) / 3)
+    cond = rank_league(vals, higher_is_better=True, mode="all-present")
+    assert cond["n_problems"] == 2 and cond["mean_ranks"]["B"] == 2.0
+
+
+def test_rank_league_cd_shrinks_with_n_and_cliques():
+    from srbf.reporting import rank_league
+    import numpy as np
+    rng = np.random.default_rng(0)
+
+    def league_of(n):
+        vals = {m: {} for m in ("A", "B", "C", "D")}
+        for i in range(n):
+            base = rng.normal(0, 1)
+            vals["A"][i] = base + 1.0 + rng.normal(0, .2)
+            vals["B"][i] = base + 0.9 + rng.normal(0, .2)   # close to A
+            vals["C"][i] = base + rng.normal(0, .2)
+            vals["D"][i] = base - 0.1 + rng.normal(0, .2)   # close to C
+        return rank_league(vals, higher_is_better=True)
+    small, big = league_of(10), league_of(200)
+    assert big["cd"] < small["cd"]                    # more problems -> finer resolution
+    assert big["friedman_p"] < 0.001                  # omnibus clearly rejects
+    named = big["cliques"]
+    assert any(set(c) == {"A", "B"} for c in named)   # top pair indistinguishable
+    assert any(set(c) == {"C", "D"} for c in named)   # bottom pair indistinguishable
+    assert not any({"B", "C"} <= set(c) for c in named)  # the gap separates the pairs
+
+
+def test_series_values_at_time_matches_interpolation():
+    from srbf.reporting import series_values_at_time
+    eqs = [f"E{i}" for i in range(6)]
+    series = _linear_series(eqs, {1: 1.0, 100: 100.0}, slope=0.8, offset=0.0)
+    out = series_values_at_time(series, "m", 10.0)
+    assert out["status"] == "interpolated"
+    for i, eq in enumerate(eqs):   # exactly linear in log10 t -> exact at the midpoint
+        assert out["values"][eq] == pytest.approx(i + 0.8, abs=1e-9)
+    assert series_values_at_time(series, "m", 0.01) is None
+    plateau = series_values_at_time(series, "m", 1e5)
+    assert plateau["status"] == "plateau" and plateau["x_effective"] == 100.0

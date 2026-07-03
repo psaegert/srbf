@@ -76,17 +76,20 @@
     // --- view registry: a 2×2 — {Display: Curves|Table} × {Values: Absolute|Paired} ----------
     // Legacy deep-link keys (curves/paired/matrix) stay stable; 'table' is the fourth quadrant.
     var VIEWS = {
-      curves: { display: "curves", values: "absolute", usesAxis: true },
-      paired: { display: "curves", values: "paired", usesBaseline: true, usesCorrection: true, usesBudget: true },
-      table:  { display: "table",  values: "absolute", usesBudget: true },
-      matrix: { display: "table",  values: "paired", usesCorrection: true, usesBudget: true }
+      curves: { display: "curves", values: "absolute", usesAxis: true, usesSeries: true },
+      paired: { display: "curves", values: "paired", usesBaseline: true, usesCorrection: true, usesBudget: true, usesSeries: true },
+      table:  { display: "table",  values: "absolute", usesBudget: true, usesSeries: true },
+      matrix: { display: "table",  values: "paired", usesCorrection: true, usesBudget: true, usesSeries: true },
+      ranks:  { display: "ranks",  values: null, usesBudget: true, usesSeries: false }   // k-model view: fixed roster
     };
     function viewFor(display, values) {
+      if (display === "ranks") { return "ranks"; }
       return Object.keys(VIEWS).filter(function (v) {
         return VIEWS[v].display === display && VIEWS[v].values === values;
       })[0];
     }
     var currentView = "curves";
+    var lastValues = "absolute";   // restored when leaving the Ranks display
     var pairedData = null, pairedLoading = false;
 
     // baseline select grouped like the pills: Models, Baselines, then ablation groups
@@ -205,15 +208,17 @@
         b.textContent = opt[1]; b.dataset.axis = axis; b.dataset.value = opt[0];
         b.addEventListener("click", function () {
           var vm = VIEWS[currentView];
-          var next = axis === "display" ? viewFor(opt[0], vm.values) : viewFor(vm.display, opt[0]);
-          switchView(next);
+          var next = axis === "display"
+            ? viewFor(opt[0], vm.values || lastValues)
+            : viewFor(vm.display, opt[0]);
+          if (next) { switchView(next); }
         });
         group.appendChild(b);
       });
       field.appendChild(group);
       return field;
     }
-    tabs.appendChild(segmented("Display", "display", [["curves", "Curves"], ["table", "Table"]]));
+    tabs.appendChild(segmented("Display", "display", [["curves", "Curves"], ["table", "Table"], ["ranks", "Ranks"]]));
     tabs.appendChild(segmented("Values", "values", [["absolute", "Absolute"], ["paired", "Paired Δ"]]));
 
     var controls = document.createElement("div");
@@ -241,13 +246,18 @@
     function switchView(v) {
       currentView = v;
       var vm = VIEWS[v];
+      if (vm.values) { lastValues = vm.values; }
       tabs.querySelectorAll(".view-tab").forEach(function (b) {
         b.classList.toggle("active", vm[b.dataset.axis] === b.dataset.value);
+        if (b.dataset.axis === "values") { b.classList.toggle("disabled", vm.display === "ranks"); }
       });
       axisField.style.display = vm.usesAxis ? "" : "none";
       baselineField.style.display = vm.usesBaseline ? "" : "none";
       budgetField.style.display = vm.usesBudget ? "" : "none";
       correctionField.style.display = vm.usesCorrection ? "" : "none";
+      seriesArea.style.display = vm.usesSeries === false ? "none" : "";
+      tools.style.display = vm.usesSeries === false ? "none" : "";
+      if (v === "ranks") { ranksAutoPicked = false; }
       if (v !== "curves" && !pairedData && !pairedLoading) { loadPaired(); }
       render();
     }
@@ -384,6 +394,7 @@
       if (currentView === "paired") { return renderPaired(); }
       if (currentView === "matrix") { return renderMatrix(); }
       if (currentView === "table") { return renderTable(); }
+      if (currentView === "ranks") { return renderRanks(); }
       plot.style.display = "";
       return renderCurves();
     }
@@ -930,6 +941,145 @@
         "no combined number. Release " + (pairedData.results_release_id || "?") + ".</div>" +
         (notes ? "<div class='matrix-legend'>" + notes + "</div>" : ""));
       pairedFoot.innerHTML = html.join("");
+    }
+
+    var ranksAutoPicked = false;
+    function rankMetricInfo(key) {
+      if (!pairedData || pairedData.error) { return null; }
+      return (pairedData.rank_metrics || []).filter(function (m) { return m.key === key; })[0] || null;
+    }
+
+    function renderRanks() {
+      if (!pairedReady()) { return; }
+      var bench = benchSel.value, metricKey = metricSel.value;
+      if (!pairedData.ranks) {
+        plot.style.display = "none";
+        pairedFoot.innerHTML = "<div class='matrix-warning'>This paired payload predates the " +
+          "Ranks view — re-run build_paired_data.py.</div>";
+        return;
+      }
+      var rmi = rankMetricInfo(metricKey);
+      if (!rmi && !ranksAutoPicked) {
+        // entering the view with a non-league metric (e.g. the default vNRR): jump to the
+        // primary league once; a deliberate ineligible pick afterwards shows the guard
+        ranksAutoPicked = true;
+        var prim = ((pairedData.rank_metrics || []).filter(function (m) { return m.primary; })[0] || {}).key;
+        if (prim) { metricSel.value = prim; return renderRanks(); }
+      }
+      if (!rmi) {
+        plot.style.display = "none";
+        pairedFoot.innerHTML = "<div class='matrix-warning'>Rank leagues exist for the " +
+          "continuous metrics only — the near-binary rate metrics tie on most problems " +
+          "(rank tests degenerate under mass ties), and model-internal metrics do not exist " +
+          "for the baselines. Pick one of: " + (pairedData.rank_metrics || [])
+            .map(function (m) { return m.label; }).join(" · ") + ".</div>";
+        return;
+      }
+      if (!budgetIsSnapped()) {
+        plot.style.display = "none";
+        pairedFoot.innerHTML = "<div class='desc-banner'>Rank leagues are computed at the " +
+          "marked budgets only (the per-problem cross-method ranks live in Python, not in the " +
+          "browser) — snap the slider to a mark.</div>";
+        return;
+      }
+      var league = (pairedData.ranks || []).filter(function (r) {
+        return r.benchmark === bench && r.metric === metricKey && r.budget === selectedBudget();
+      })[0];
+      if (!league) {
+        plot.style.display = "none";
+        pairedFoot.innerHTML = "<div class='matrix-warning'>No league for this metric at this " +
+          "budget — fewer than two methods can run within it, or too few problems survive " +
+          "the block design.</div>";
+        return;
+      }
+      plot.style.display = "";
+      var t = theme();
+      var order = Object.keys(league.mean_ranks).sort(function (a, b) {
+        return league.mean_ranks[a] - league.mean_ranks[b];
+      });
+      var k = order.length;
+      var reject = league.friedman_p < league.alpha;
+      var shapes = [];
+      if (reject) {
+        league.cliques.forEach(function (clique) {
+          var rs = clique.map(function (m) { return league.mean_ranks[m]; });
+          var ys = clique.map(function (m) { return order.indexOf(m); });
+          shapes.push({ type: "rect",
+            x0: Math.min.apply(null, rs) - 0.06, x1: Math.max.apply(null, rs) + 0.06,
+            y0: Math.min.apply(null, ys) - 0.38, y1: Math.max.apply(null, ys) + 0.38,
+            fillcolor: hexA(t.ink, 0.06), line: { width: 1, color: hexA(t.ink, 0.25) } });
+        });
+      }
+      // CD ruler above the plot area
+      shapes.push({ type: "line", x0: 1, x1: 1 + league.cd, yref: "paper", y0: 1.04, y1: 1.04,
+                    line: { color: t.ink, width: 2 } });
+      var traces = [{
+        x: order.map(function (m) { return league.mean_ranks[m]; }),
+        y: order.map(function (m, i) { return i; }),
+        type: "scatter", mode: "markers",
+        marker: { size: 13,
+                  color: order.map(function (m) { return colorOf(m, idx[m] || 0); }),
+                  symbol: order.map(function (m) {
+                    return league.ladder_limited.indexOf(m) >= 0 ? "circle-open" : "circle"; }),
+                  line: { width: 2,
+                          color: order.map(function (m) { return colorOf(m, idx[m] || 0); }) } },
+        customdata: order.map(function (m) {
+          return [league.n_missing[m] || 0,
+                  league.ladder_limited.indexOf(m) >= 0 ? " · ladder-limited (worst-case position)" : ""];
+        }),
+        hovertemplate: "<b>%{text}</b><br>mean rank %{x:.2f} of " + k +
+          "<br>%{customdata[0]} failures ranked worst%{customdata[1]}<extra></extra>",
+        text: order,
+        showlegend: false
+      }];
+      var layout = {
+        font: { family: "Inter, system-ui, sans-serif", color: t.ink, size: 13 },
+        margin: { l: 130, r: 30, t: 46, b: 52 },
+        xaxis: { title: "mean rank (1 = best of " + k + " methods)",
+                 range: [0.7, k + 0.3], gridcolor: t.grid, ticks: "outside", tickcolor: t.grid },
+        yaxis: { tickvals: order.map(function (m, i) { return i; }), ticktext: order,
+                 autorange: "reversed", gridcolor: t.grid, zeroline: false },
+        shapes: shapes,
+        annotations: [{ text: "CD = " + league.cd, xref: "x", x: 1 + league.cd / 2,
+                        yref: "paper", y: 1.055, yanchor: "bottom", showarrow: false,
+                        font: { size: 12, color: t.ink } }],
+        paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", hovermode: "closest"
+      };
+      Plotly.react(plot, traces, layout, { responsive: true, displayModeBar: false });
+      var missing = order.filter(function (m) { return (league.n_missing[m] || 0) > 0; })
+        .map(function (m) { return m + " (" + league.n_missing[m] + ")"; });
+      pairedFoot.innerHTML = "<div class='matrix-legend'>" +
+        "<span class='" + (league.primary ? "rank-primary" : "rank-exploratory") + "'>" +
+        (league.primary ? "PRIMARY league" : "exploratory league") + "</span> — " +
+        (league.primary
+          ? "the one pre-declared rank claim per benchmark and budget. "
+          : "browse freely, quote only the primary (log10 FVU, validation) league. ") +
+        "Within each problem, the " + k + " methods are ranked 1 (best) to " + k +
+        " on <b>" + rmi.label + "</b> at exactly ≤ " + selectedBudget() + " s per problem; " +
+        "shared difficulty cancels because every problem hands out the same placings. " +
+        (league.mode === "worst-rank"
+          ? "Failures rank strictly worst in their problem" +
+            (missing.length ? " (" + missing.join(", ") + " of " + league.n_problems + " problems)" : "") + "."
+          : "<b>Conditional league</b>: only the " + league.n_problems + " problems where every " +
+            "method produced an expression — a different, easier population; the property being " +
+            "ranked is undefined for failures.") + " " +
+        "Friedman omnibus (tie-corrected): χ² = " + league.friedman_chi2 + ", p = " +
+        fmtP(league.friedman_p) + " over n = " + league.n_problems + " problems. " +
+        (reject
+          ? "Shaded bands are Nemenyi cliques: methods whose mean-rank gap is below the " +
+            "critical difference (CD = " + league.cd + ", corrected for all " +
+            (k * (k - 1) / 2) + " pairwise comparisons) are statistically indistinguishable " +
+            "in rank."
+          : "<b>The omnibus does not reject</b> — no rank separations to report; the positions " +
+            "are shown without cliques.") + " " +
+        "Hollow dots are ladder-limited (their value is a plateau lower bound, so their true " +
+        "position could only improve). " +
+        (league.excluded.length
+          ? league.excluded.join(", ") + " cannot run within this budget and sit out this league. "
+          : "") +
+        "Ranks measure <i>consistency across problems</i>, not magnitude — a hair's win counts " +
+        "like a mile's; magnitudes live in the Paired views. Release " +
+        (pairedData.results_release_id || "?") + ".</div>";
     }
 
     function renderCurves() {

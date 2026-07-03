@@ -113,6 +113,23 @@ both series) and per-point `n_pairs`. Bands are pointwise; x positions are serie
 treated as fixed design points. The estimand of Δ(t) is "configurations whose median cost is
 t", not per-expression equal budgets.
 
+## Rank leagues (the critical-difference view)
+
+The Ranks view answers the league question — all methods at once. Within each problem, the
+pre-declared roster (the flagship size ladder + every baseline) is ranked 1 (best) to k on the
+per-problem at-time values via `srbf.reporting.rank_league`; shared problem difficulty cancels
+because every problem hands out the same placings. Eligibility is a declared, property-based
+rule: continuous metrics only (the near-binary rate metrics tie on most problems and rank tests
+degenerate), defined for every roster method (excludes model-internal columns),
+method-dependent, and not the budget axis itself. Quality-to-GT metrics rank failures strictly
+worst (worst-rank, full problem set); output-property metrics use the all-methods-succeeded
+subset (a conditional league, labeled, with n disclosed). The tie-corrected **Friedman**
+omnibus gates everything; the **Nemenyi critical difference** (Demšar 2006) corrects the
+all-pairs comparisons, and cliques of mean ranks within one CD are drawn as
+statistically-indistinguishable groups. Only the primary league (held-out log₁₀ FVU) is
+quotable as a claim; the others are exploratory. Ranks measure consistency across problems,
+never magnitude — magnitudes live in the paired reports.
+
 ## Statistical model (why no further corrections)
 
 The exchangeable unit is the **expression**; the ~10 draws inside an expression are

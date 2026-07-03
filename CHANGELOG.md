@@ -4,6 +4,20 @@ All notable changes to srbf are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-07-04
+
+### Added
+- **Rank leagues:** `srbf.reporting.rank_league` (tie-corrected Friedman omnibus + Nemenyi
+  critical difference + indistinguishability cliques — the CD-diagram statistics, Demšar 2006)
+  and `srbf.reporting.series_values_at_time` (the per-problem value vector of one series at
+  exactly a wall-clock time t, exposing the at-time interpolation for cross-method
+  constructions). Two block designs: `worst-rank` (missing methods rank strictly worst per
+  problem — quality-to-GT axes over the full problem set) and `all-present` (the conditional
+  all-methods-succeeded league for output-property metrics). Powers the results explorer's new
+  **Ranks** display: a critical-difference league of the pre-declared roster at the marked
+  budgets, with a declared property-based metric-eligibility rule and held-out log10 FVU as the
+  single primary (quotable) league.
+
 ## [0.8.0] - 2026-07-03
 
 ### Added
