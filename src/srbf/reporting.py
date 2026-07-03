@@ -758,6 +758,249 @@ def paired_delta_curve(
     }
 
 
+def _side_at_time(
+    matrix: np.ndarray,
+    xs: list[float],
+    rungs: list[int],
+    t: float,
+    ladder_policy: str,
+) -> tuple[np.ndarray, dict[str, Any]] | None:
+    """One series' per-expression values at time ``t`` + a status block, or ``None`` when the
+    series cannot run within ``t`` (t below its cheapest measured configuration).
+
+    ``ladder_policy='plateau'``: for t beyond the most expensive measured configuration the LAST
+    measured values are carried forward with ``status='plateau'`` — never a trend extrapolation.
+    The carried value is a LOWER bound on the series' value at t under the monotone
+    quality-in-compute assumption; callers must guard verdicts accordingly.
+    ``ladder_policy='strict'``: beyond-ladder returns ``None`` (the point does not exist).
+    Columns of ``matrix`` follow ``xs``/``rungs`` (ascending in x)."""
+    if t < xs[0] * (1 - 1e-9):
+        return None
+    if t > xs[-1] * (1 + 1e-9):
+        if ladder_policy != "plateau":
+            return None
+        j = len(xs) - 1
+        return matrix[:, j], {"status": "plateau", "rung_lo": rungs[j], "rung_hi": rungs[j],
+                              "x_lo": xs[j], "x_hi": xs[j], "x_effective": xs[j]}
+    values, (j_lo, j_hi), measured = _interpolate_series(matrix, xs, t)
+    return values, {"status": "measured" if measured else "interpolated",
+                    "rung_lo": rungs[j_lo], "rung_hi": rungs[j_hi],
+                    "x_lo": xs[j_lo], "x_hi": xs[j_hi], "x_effective": t}
+
+
+def _sorted_time_columns(
+    series: Mapping[int, Mapping[str, Sequence[Any]]],
+    metric_key: str,
+    key: str,
+    aggregate: Callable[[np.ndarray], float],
+) -> tuple[np.ndarray, list[float], list[int], list[Any]]:
+    """(matrix, xs, rungs, keys) for one series, columns sorted ascending by median time."""
+    keys, rungs, matrix = _expression_matrix(series, metric_key, key, aggregate)
+    pos = series_x_positions(series)
+    order = sorted((x, rung) for rung, x in pos.items() if rung in rungs)
+    xs = [x for x, _ in order]
+    cols = [rungs.index(r) for _, r in order]
+    return matrix[:, cols], xs, [r for _, r in order], keys
+
+
+def series_report_at_time(
+    series: Mapping[int, Mapping[str, Sequence[Any]]],
+    metric_key: str,
+    t: float,
+    *,
+    group_key: str | None = None,
+    aggregate: Callable[[np.ndarray], float] = np.nanmean,
+    n: int = 10_000,
+    interval: float = 0.95,
+    rng: np.random.Generator | int | None = 0,
+    ladder_policy: str = "plateau",
+) -> dict[str, Any] | None:
+    """MARGINAL value of one series at time ``t``: per-expression linear interpolation in
+    log10-time between the bracketing measured configurations (the same model as
+    :func:`paired_delta_curve`), then the house bootstrap triple over expressions.
+
+    Returns ``None`` when the series cannot run within ``t``. ``status`` is ``'measured'`` /
+    ``'interpolated'`` / ``'plateau'`` (see ``ladder_policy``); a plateau value is a lower bound
+    under the monotone quality-in-compute assumption and must be displayed flagged. Marginal
+    numbers: never difference two of these — that comparison belongs to
+    :func:`paired_report_at_time`."""
+    key = group_key or resolve_group_key(next(iter(series.values())))
+    matrix, xs, rungs, _ = _sorted_time_columns(series, metric_key, key, aggregate)
+    if not xs:
+        return None
+    side = _side_at_time(matrix, xs, rungs, t, ladder_policy)
+    if side is None:
+        return None
+    values, status = side
+    valid = values[np.isfinite(values)]
+    if valid.size == 0:
+        return None
+    if not hasattr(rng, "integers"):
+        rng = np.random.default_rng(rng)
+    est, lo, hi = _bootstrap_triple(valid, n=n, interval=interval, rng=rng)
+    report = {"metric": metric_key, "t": float(t), "value": est, "ci_lower": lo, "ci_upper": hi,
+              "n_groups": int(valid.size), "interval": interval, "group_key": key}
+    report.update(status)
+    return report
+
+
+def paired_report_at_time(
+    series_a: Mapping[int, Mapping[str, Sequence[Any]]],
+    series_b: Mapping[int, Mapping[str, Sequence[Any]]],
+    metric_key: str,
+    t: float,
+    *,
+    higher_is_better: bool = True,
+    margin: float | Mapping[str, Any] | None = None,
+    group_key: str | None = None,
+    aggregate: Callable[[np.ndarray], float] = np.nanmean,
+    n: int = 10_000,
+    interval: float = 0.95,
+    rng: np.random.Generator | int | None = 0,
+    zero_method: str = "pratt",
+    allow_unverified: bool = False,
+    ladder_policy: str = "plateau",
+) -> dict[str, Any] | None:
+    """Paired comparison of two series AT THE SAME wall-clock time ``t`` per problem.
+
+    Each side is brought to exactly ``t`` by per-expression linear interpolation in log10-time
+    between its bracketing measured configurations (never extrapolated); an expression
+    contributes only if valid at both bracketing rungs of BOTH sides. Statistics follow
+    :func:`paired_report`'s conventions (expression bootstrap of the mean delta, median of the
+    bootstrap distribution, floored two-sided p, win/tie/loss, probability of superiority,
+    Wilcoxon-pratt companion, MDE₈₀, four-state verdict vs ``margin``).
+
+    Ladder boundaries (``ladder_policy='plateau'``): a side whose ladder ends below ``t``
+    carries its last measured values forward (``status='plateau'`` — a LOWER bound under the
+    monotone quality-in-compute assumption, never a trend extrapolation). A verdict stands only
+    if no plateau side could overturn it by improving: 'better'/'worse' in favor of a
+    non-plateau side over a plateau side, and 'equivalent' involving any plateau side, are
+    downgraded to 'undecided' with ``verdict_note='ladder-limited'``. Returns ``None`` when
+    either side cannot run within ``t`` at all. Draw-level extras (variance decomposition,
+    hierarchical rank CIs, worst-rank) are undefined for interpolated values and not reported."""
+    first_a = next(iter(series_a.values()))
+    first_b = next(iter(series_b.values()))
+    contract = _verify_pairing(first_a, first_b, allow_unverified=allow_unverified)
+    key = group_key or resolve_group_key(first_a)
+
+    matrix_a, xs_a, rungs_a, keys_a = _sorted_time_columns(series_a, metric_key, key, aggregate)
+    matrix_b, xs_b, rungs_b, keys_b = _sorted_time_columns(series_b, metric_key, key, aggregate)
+    if not xs_a or not xs_b:
+        return None
+    common = sorted(set(keys_a) & set(keys_b), key=str)
+    matrix_a = matrix_a[[keys_a.index(k) for k in common]]
+    matrix_b = matrix_b[[keys_b.index(k) for k in common]]
+
+    side_a = _side_at_time(matrix_a, xs_a, rungs_a, t, ladder_policy)
+    side_b = _side_at_time(matrix_b, xs_b, rungs_b, t, ladder_policy)
+    if side_a is None or side_b is None:
+        return None
+    values_a, status_a = side_a
+    values_b, status_b = side_b
+
+    finite_a, finite_b = np.isfinite(values_a), np.isfinite(values_b)
+    both = finite_a & finite_b
+    deltas = (values_a - values_b)[both]
+    n_pairs = int(deltas.size)
+    only_a = [common[i] for i in np.nonzero(finite_a & ~finite_b)[0]]
+    only_b = [common[i] for i in np.nonzero(finite_b & ~finite_a)[0]]
+
+    report: dict[str, Any] = {
+        "metric": metric_key, "group_key": key, "t": float(t),
+        "n_pairs": n_pairs, "n_only_a": len(only_a), "n_only_b": len(only_b),
+        "only_a": only_a, "only_b": only_b,
+        "interval": interval, "n_bootstrap": int(n),
+        "higher_is_better": higher_is_better, "pairing": contract,
+        "side_a": status_a, "side_b": status_b,
+    }
+    if n_pairs == 0:
+        report.update({k: float("nan") for k in
+                       ("delta_mean", "ci_lower", "ci_upper", "delta_median",
+                        "median_ci_lower", "median_ci_upper", "mde_80", "p_value")})
+        report.update({"win_rate": None, "prob_superiority": float("nan"),
+                       "prob_superiority_ci": None, "wilcoxon": None, "verdict": None,
+                       "verdict_note": None, "margin": None, "equivalence_attainable": None})
+        return report
+
+    if not hasattr(rng, "integers"):
+        rng = np.random.default_rng(rng)
+    indices = rng.integers(0, n_pairs, size=(int(n), n_pairs))
+    resampled = deltas[indices]
+    boot_means = np.nanmean(resampled, axis=1)
+    lo_q, hi_q = (1 - interval) / 2 * 100, (1 + interval) / 2 * 100
+    report["delta_mean"] = float(np.nanmedian(boot_means))
+    report["ci_lower"] = float(np.nanpercentile(boot_means, lo_q))
+    report["ci_upper"] = float(np.nanpercentile(boot_means, hi_q))
+    p_low = float(np.mean(boot_means <= 0.0))
+    p_high = float(np.mean(boot_means >= 0.0))
+    report["p_value"] = float(max(2.0 * min(p_low, p_high), 1.0 / (int(n) + 1)))
+
+    n_tied = int(np.sum(deltas == 0))
+    report["win_rate"] = {
+        "a_better": int(np.sum(deltas > 0)) if higher_is_better else int(np.sum(deltas < 0)),
+        "b_better": int(np.sum(deltas < 0)) if higher_is_better else int(np.sum(deltas > 0)),
+        "tied": n_tied,
+    }
+    signed = deltas if higher_is_better else -deltas
+    report["prob_superiority"] = float((np.sum(signed > 0) + 0.5 * n_tied) / n_pairs)
+    signed_resampled = resampled if higher_is_better else -resampled
+    psup_boot = (np.sum(signed_resampled > 0, axis=1)
+                 + 0.5 * np.sum(signed_resampled == 0, axis=1)) / n_pairs
+    report["prob_superiority_ci"] = (float(np.nanpercentile(psup_boot, lo_q)),
+                                     float(np.nanpercentile(psup_boot, hi_q)))
+    rank_medians = np.nanmedian(resampled, axis=1)
+    report["delta_median"] = float(np.nanmedian(rank_medians))
+    report["median_ci_lower"] = float(np.nanpercentile(rank_medians, lo_q))
+    report["median_ci_upper"] = float(np.nanpercentile(rank_medians, hi_q))
+
+    from scipy.stats import wilcoxon
+    nonzero = int(np.sum(deltas != 0))
+    if nonzero == 0:
+        report["wilcoxon"] = {"statistic": float("nan"), "p": 1.0, "n_zero": n_tied,
+                              "n_nonzero": 0, "zero_method": zero_method}
+    else:
+        w = wilcoxon(deltas, zero_method=zero_method, method="approx")
+        report["wilcoxon"] = {"statistic": float(w.statistic), "p": float(w.pvalue),
+                              "n_zero": n_tied, "n_nonzero": nonzero, "zero_method": zero_method}
+
+    se = float(np.nanstd(deltas, ddof=1) / np.sqrt(n_pairs)) if n_pairs > 1 else float("nan")
+    report["mde_80"] = float((1.959963985 + 0.8416212336) * se)
+
+    m = margin.get("margin") if isinstance(margin, Mapping) else margin
+    report["margin"] = float(m) if m is not None else None
+    report["verdict_note"] = None
+    if m is None:
+        report["verdict"] = None
+        report["equivalence_attainable"] = None
+    else:
+        lo, hi = report["ci_lower"], report["ci_upper"]
+        if not higher_is_better:
+            lo, hi = -hi, -lo  # orient so positive favors A
+        if lo > m:
+            verdict = "better"
+        elif hi < -m:
+            verdict = "worse"
+        elif -m <= lo and hi <= m:
+            verdict = "equivalent"
+        else:
+            verdict = "undecided"
+        # Ladder guard: a plateau side's true value at t is >= its carried value, so any verdict
+        # a plateau side could overturn by improving is not an at-t claim — downgrade it.
+        limited_a = status_a["status"] == "plateau"
+        limited_b = status_b["status"] == "plateau"
+        overturnable = ((verdict == "better" and limited_b)
+                        or (verdict == "worse" and limited_a)
+                        or (verdict == "equivalent" and (limited_a or limited_b)))
+        if overturnable:
+            verdict = "undecided"
+            report["verdict_note"] = "ladder-limited"
+        elif verdict == "undecided" and (limited_a or limited_b):
+            report["verdict_note"] = "ladder-limited"
+        report["verdict"] = verdict
+        report["equivalence_attainable"] = bool((hi - lo) / 2 <= m)
+    return report
+
+
 def _bootstrap_triple(
     data: np.ndarray, *, n: int, interval: float, rng: np.random.Generator,
 ) -> tuple[float, float, float]:
@@ -829,6 +1072,7 @@ def bootstrap_report(
 
 
 __all__ = ["draw_distribution", "draw_values", "paired_expression_deltas", "paired_report",
+           "paired_report_at_time", "series_report_at_time",
            "paired_delta_curve", "series_x_positions", "self_noise", "pair_margin",
            "resolve_group_key", "pairing_fingerprint", "PairingContractError",
            "significant_round", "rounded_triple", "bootstrap_report"]

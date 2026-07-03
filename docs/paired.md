@@ -81,17 +81,25 @@ mismatch); snapshots without provenance require an explicit `allow_unverified=Tr
 ## Δ over the compute axis
 
 On the results site, verdicts are issued at **standardized compute budgets** (≤1, 10, 100,
-1000 s per problem, median; user-selectable): within the budget, each method's best measured
-configuration, with same-method pairs additionally on the same configuration (one factor
-varies). Correction families are per budget (`family_id` carries `t`), so the budget grid is
-pre-declared, not cherry-picked. The **Table view** (Table × Absolute) runs on the same budget
-grid and the same best-within-budget selection — per benchmark, each series' most expensive
-usable configuration whose *median* fit time is ≤ t (the budget caps a configuration's median
-cost, never per-expression equal budgets) — and shows that configuration's *marginal* value and
-95% CI, numerically identical to its point on the Curves view (an exporter self-check enforces
-this). Those rows are marginal: never difference two of them and never subtract their CIs —
-that is exactly the anti-pattern from the top of this page; head-to-head questions belong to
-the Paired views.
+1000 s per problem, median; user-selectable), and cross-method comparisons are evaluated **at
+exactly t**: each side is brought to the budget by `paired_report_at_time` — per-problem linear
+interpolation in log10-time between its two bracketing measured configurations, the same model
+as the Δ(t) curves — so a method is never under-credited because its configuration ladder
+happens to land far below the budget (the budget caps a configuration's *median* cost, never
+per-expression equal budgets). Boundaries are explicit, never extrapolated: below its cheapest
+configuration a method is n/a; beyond its most expensive one the last measured value is carried
+forward with `status='plateau'` — a lower bound under the monotone quality-in-compute
+assumption — and a verdict stands only if no plateau side could overturn it by improving
+(otherwise it downgrades to *undecided* with `verdict_note='ladder-limited'`). The margin for an
+interpolated point is the most conservative pair margin over the bracketing configurations.
+Same-method pairs (ablation vs parent, size ladder, versions) instead keep the **same measured
+configuration** on both sides — equal time would vary two factors at once. Correction families
+are per budget (`family_id` carries `t`), so the budget grid is pre-declared, not
+cherry-picked. The **Table view** (Table × Absolute) shows each series at exactly the same
+budgets via `series_report_at_time` (measured and plateau rows keep the exact Curves-view value;
+an exporter self-check enforces consistency). Those rows are marginal: never difference two of
+them and never subtract their CIs — that is exactly the anti-pattern from the top of this page;
+head-to-head questions belong to the Paired views.
 
 `paired_delta_curve(series_a, series_b, metric, x_policy=...)` compares two rung ladders:
 `'rung'` matches identical configurations (same-method variants — ablation vs parent, size

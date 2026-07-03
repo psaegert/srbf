@@ -164,7 +164,7 @@
     var budgetField = labelled("Compute budget (verdicts)", budgetSel);
     var budgetHint = document.createElement("span");
     budgetHint.className = "results-field-hint";
-    budgetHint.textContent = "Each method's best measured configuration within this time (median per problem).";
+    budgetHint.textContent = "Every series evaluated at exactly this time per problem (median); ladders ending below it are flagged.";
     budgetField.appendChild(budgetHint);
     controls.appendChild(axisField);
     controls.appendChild(labelled("Metric", metricSel));
@@ -424,7 +424,7 @@
           var pLabel = corrected ? (rec.p_adj !== undefined ? "Holm-corrected p = " : "BH-corrected q = ") : "raw p = ";
           var onlySided = (rec.n_only_a || 0) + (rec.n_only_b || 0);
           notes.push("<b>" + s + "</b> vs " + baseline + ": " +
-            "<span style='color:" + (VERDICT_COLORS[verdict] || "#888") + "'><b>" + verdict + "</b></span> — " +
+            "<span style='color:" + (VERDICT_COLORS[verdict] || "#888") + "'><b>" + verdictLabel(rec, verdict) + "</b></span> — " +
             "Δ = " + fmt(rSign * rec.delta) + " [" + fmt(rSign > 0 ? rec.lo : -rec.hi) + ", " +
             fmt(rSign > 0 ? rec.hi : -rec.lo) + "] vs noise margin ±" + rec.margin +
             (verdict === "undecided" && rec.equivalence_attainable === false
@@ -482,8 +482,22 @@
         hi: sign > 0 ? rec.hi : -rec.lo,
         psup: sign > 0 ? rec.prob_superiority : flipPsup(rec.prob_superiority),
         xRow: sign > 0 ? rec.x_a : rec.x_b,
-        xCol: sign > 0 ? rec.x_b : rec.x_a
+        xCol: sign > 0 ? rec.x_b : rec.x_a,
+        statusRow: sign > 0 ? rec.status_a : rec.status_b,
+        statusCol: sign > 0 ? rec.status_b : rec.status_a,
+        bracketRow: sign > 0 ? rec.bracket_a : rec.bracket_b,
+        bracketCol: sign > 0 ? rec.bracket_b : rec.bracket_a
       };
+    }
+
+    // one side's basis at the budget, for titles/detail panels ("interpolated", "plateau"...)
+    function sideBasis(name, status, x, bracket) {
+      if (status === "plateau") { return name + ": ladder ends at ≈" + x + " s (value carried forward — a lower bound)"; }
+      if (status === "interpolated") { return name + ": interpolated at " + x + " s (between ≈" + bracket[0] + " and ≈" + bracket[1] + " s)"; }
+      return name + ": measured at ≈" + x + " s";
+    }
+    function verdictLabel(rec, verdict) {
+      return verdict + (rec.verdict_note ? " (" + rec.verdict_note + ")" : "");
     }
 
     var matrixCells = [], matrixSelectedKey = null;
@@ -502,7 +516,7 @@
       var pLabel = corrected ? (rec.family_id ? "Holm-corrected p = " : "BH-corrected q = ") : "raw p = ";
       var onlySided = (rec.n_only_a || 0) + (rec.n_only_b || 0);
       return head +
-        "<div><span style='color:" + (VERDICT_COLORS[o.verdict] || "#888") + "'><b>" + o.verdict +
+        "<div><span style='color:" + (VERDICT_COLORS[o.verdict] || "#888") + "'><b>" + verdictLabel(rec, o.verdict) +
         "</b></span> — Δ = " + fmt(o.delta) + " [" + fmt(o.lo) + ", " + fmt(o.hi) +
         "] vs noise margin ±" + rec.margin +
         (o.verdict === "undecided" && rec.equivalence_attainable === false
@@ -518,8 +532,8 @@
         " · P(" + cell.rowS + " better on a random expression) = " + o.psup + "</div>" +
         "<div class='fam'>" + (rec.same_configuration
           ? "same configuration on both sides (≈" + o.xRow + " s / ≈" + o.xCol + " s per problem)"
-          : "each side’s best configuration within the budget (" + cell.rowS + " ≈" + o.xRow +
-            " s · " + cell.colS + " ≈" + o.xCol + " s per problem)") + "</div>" +
+          : "both sides at the budget — " + sideBasis(cell.rowS, o.statusRow, o.xRow, o.bracketRow) +
+            " · " + sideBasis(cell.colS, o.statusCol, o.xCol, o.bracketCol)) + "</div>" +
         (rec.notes && rec.notes.length ? "<div class='fam'><i>" + rec.notes.join(" ") + "</i></div>" : "");
     }
 
@@ -584,7 +598,7 @@
           var onlySided = (rec.n_only_a || 0) + (rec.n_only_b || 0);
           var title = rowS + " − " + colS + " [" + bench + "]\n" +
             "Δ = " + fmt(delta) + "   95% CI [" + fmt(o.lo) + ", " + fmt(o.hi) + "]\n" +
-            "noise margin ±" + rec.margin + "  →  " + verdict + "\n" +
+            "noise margin ±" + rec.margin + "  →  " + verdictLabel(rec, verdict) + "\n" +
             pLabel + fmtP(p) + "  (uncorrected p = " + fmtP(rec.p_raw) + ")\n" +
             (rec.family_id ? "confirmatory: pre-declared " + setName(rec.confirmatory_set) + " set, Holm-corrected over " + rec.family_size + " comparisons"
                            : "exploratory: BH-corrected over the " + rec.exploratory_family_size + "-cell matrix") +
@@ -594,7 +608,8 @@
             "  ·  P(row better on a random expression) = " + o.psup +
             "\nbudget \u2264 " + rec.budget + "s: " + (rec.same_configuration
               ? "same configuration on both sides (\u2248" + o.xRow + "s / \u2248" + o.xCol + "s)"
-              : "each side\u2019s best within budget (row \u2248" + o.xRow + "s \u00b7 column \u2248" + o.xCol + "s)") +
+              : sideBasis("row", o.statusRow, o.xRow, o.bracketRow) + " \u00b7 " +
+                sideBasis("column", o.statusCol, o.xCol, o.bracketCol)) +
             (rec.notes && rec.notes.length ? "\n" + rec.notes.join("\n") : "");
           html.push("<td class='v-" + verdict + (rec.family_id ? " confirmatory" : "") + (isSel ? " selected" : "") +
             "'" + tap + " title='" + title.replace(/'/g, "&#39;") + "'>" +
@@ -652,7 +667,7 @@
       html.push("<div class='matrix-wrap'>");
       html.push("<table class='paired-matrix abs-table'><thead><tr>" +
         "<th>series</th><th>" + (mi ? mi.label : metricKey) + " [95% CI]</th>" +
-        "<th>best config ≤ " + selectedBudget() + " s</th><th>n</th></tr></thead><tbody>");
+        "<th>at ≤ " + selectedBudget() + " s per problem</th><th>n</th></tr></thead><tbody>");
       rows.forEach(function (row) {
         var col = colorOf(row.s, idx[row.s]);
         var marks = "";
@@ -663,13 +678,18 @@
         html.push("<tr><th><span class='lb-swatch' style='background:" + col + "'></span>" +
           row.s + marks + "</th>");
         if (!row.e) {
-          html.push("<td class='missing' colspan='3'>n/a — no usable configuration within ≤ " +
+          html.push("<td class='missing' colspan='3'>n/a — cannot run within ≤ " +
             selectedBudget() + " s per problem on this benchmark</td></tr>");
           return;
         }
+        var basis = row.e.status === "plateau"
+          ? "ladder ends ≈" + row.e.x + " s <span class='lb-flag'>plateau</span>"
+          : row.e.status === "interpolated"
+            ? "= " + row.e.x + " s (interpolated)"
+            : "measured ≈" + row.e.x + " s";
         html.push("<td class='lb-value'><b>" + fmtAbs(row.e.value) + "</b> [" + fmtAbs(row.e.lo) +
           ", " + fmtAbs(row.e.hi) + "]</td>" +
-          "<td class='lb-x'>≈" + row.e.x + " s/problem</td>" +
+          "<td class='lb-x'>" + basis + "</td>" +
           "<td class='lb-n'>" + row.e.n + "</td></tr>");
       });
       html.push("</tbody></table></div>");
@@ -677,10 +697,13 @@
         return "<div class='fam'><sup>" + noteIndex[note] + "</sup> " + note + "</div>";
       }).join("");
       html.push("<div class='matrix-legend'>" +
-        "Each row: the series' best measured configuration within the selected budget (the most " +
-        "expensive one whose median fit time per problem stays under it), with the SAME value " +
-        "and 95% CI as that configuration's point on the Curves view — " +
-        (hib ? "higher" : "lower") + " is better, best first. " +
+        "Each row: the series AT EXACTLY the selected budget — interpolated per problem, " +
+        "linearly in log-time, between its two bracketing measured configurations (the same " +
+        "model as the Δ(t) curves, so the value sits on the plotted segment; measured points " +
+        "keep the exact Curves-view value). Never extrapolated: a series whose ladder ends " +
+        "below the budget shows its last measured value flagged <i>plateau</i> — a lower " +
+        "bound, since more compute could only help it. " +
+        (hib ? "Higher" : "Lower") + " is better, best first. " +
         "<b>These are marginal numbers: never read a difference between two rows off their " +
         "CIs</b> — shared expression difficulty makes marginal intervals overlap even when one " +
         "method is reliably better. Head-to-head questions belong to the Paired Δ views " +

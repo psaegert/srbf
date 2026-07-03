@@ -342,3 +342,108 @@ def test_ci_empirical_coverage_discrete_and_heavy_tailed():
 
     assert coverage(rate_pair, 0.10) >= 0.85
     assert coverage(heavy_pair, 0.30) >= 0.85
+
+
+# --- exact-t reports: paired_report_at_time / series_report_at_time (budget semantics) ---
+
+def test_at_time_interpolates_exactly_in_log_time():
+    from srbf.reporting import paired_report_at_time
+    eqs = [f"E{i}" for i in range(15)]
+    a = _linear_series(eqs, {1: 1.0, 100: 100.0}, slope=0.4, offset=1.0)
+    b = _linear_series(eqs, {1: 1.0, 10: 10.0, 100: 100.0}, slope=0.4, offset=0.0)
+    report = paired_report_at_time(a, b, "m", 10.0, allow_unverified=True)
+    # metric exactly linear in log10(t): the interpolated delta must equal the true offset
+    assert report["delta_mean"] == pytest.approx(1.0, abs=1e-9)
+    assert report["side_a"]["status"] == "interpolated"
+    assert report["side_b"]["status"] == "measured"
+    assert (report["side_a"]["rung_lo"], report["side_a"]["rung_hi"]) == (1, 100)
+    assert report["side_a"]["x_effective"] == 10.0
+    assert report["n_pairs"] == 15
+
+
+def test_at_time_measured_rung_matches_paired_report():
+    from srbf.reporting import paired_report_at_time
+    rng = np.random.default_rng(7)
+    snap_a, snap_b = _shifted_snapshots(rng, n_expr=40, shift=0.1)
+    a = {64: dict(snap_a, fit_time=[5.0] * len(snap_a["m"]))}
+    b = {64: dict(snap_b, fit_time=[5.0] * len(snap_b["m"]))}
+    at_t = paired_report_at_time(a, b, "m", 5.0, allow_unverified=True, rng=0)
+    plain = paired_report(a[64], b[64], "m", allow_unverified=True, rng=0)
+    assert at_t["side_a"]["status"] == "measured"
+    # same per-expression deltas, same seeded stream -> identical core statistics
+    assert at_t["delta_mean"] == pytest.approx(plain["delta_mean"], abs=1e-12)
+    assert at_t["ci_lower"] == pytest.approx(plain["ci_lower"], abs=1e-12)
+    assert at_t["p_value"] == pytest.approx(plain["p_value"], abs=1e-12)
+    assert at_t["prob_superiority"] == pytest.approx(plain["prob_superiority"], abs=1e-12)
+
+
+def test_at_time_below_ladder_is_none_and_plateau_carries_forward():
+    from srbf.reporting import paired_report_at_time
+    eqs = [f"E{i}" for i in range(12)]
+    a = _linear_series(eqs, {1: 1.0, 100: 100.0}, slope=0.0, offset=1.0)
+    b = _linear_series(eqs, {1: 0.5, 4: 20.0}, slope=0.0, offset=0.0)  # ladder ends at 20 s
+    assert paired_report_at_time(a, b, "m", 0.1, allow_unverified=True) is None
+    report = paired_report_at_time(a, b, "m", 100.0, allow_unverified=True)
+    assert report["side_b"]["status"] == "plateau"
+    assert report["side_b"]["x_effective"] == 20.0     # carried, never extrapolated
+    assert report["side_a"]["status"] == "measured"
+    assert report["delta_mean"] == pytest.approx(1.0, abs=1e-9)
+    strict = paired_report_at_time(a, b, "m", 100.0, allow_unverified=True,
+                                   ladder_policy="strict")
+    assert strict is None
+
+
+def test_at_time_ladder_guard_downgrades_overturnable_verdicts():
+    from srbf.reporting import paired_report_at_time
+    eqs = [f"E{i}" for i in range(30)]
+    strong = _linear_series(eqs, {1: 1.0, 100: 100.0}, slope=0.0, offset=1.0)
+    weak_short = _linear_series(eqs, {1: 0.5, 4: 20.0}, slope=0.0, offset=0.0)
+    # plateau side LOSES -> its true value at t could be higher -> downgraded, note attached
+    report = paired_report_at_time(strong, weak_short, "m", 100.0,
+                                   margin=0.05, allow_unverified=True)
+    assert report["verdict"] == "undecided" and report["verdict_note"] == "ladder-limited"
+    # plateau side WINS -> more compute could only strengthen the verdict -> it stands
+    strong_short = _linear_series(eqs, {1: 0.5, 4: 20.0}, slope=0.0, offset=2.0)
+    report = paired_report_at_time(strong_short, strong, "m", 100.0,
+                                   margin=0.05, allow_unverified=True)
+    assert report["verdict"] == "better" and report["verdict_note"] is None
+    # ... and with sides swapped the measured loser still reads 'worse' (only the plateau
+    # side could improve, and it is already the winner)
+    report = paired_report_at_time(strong, strong_short, "m", 100.0,
+                                   margin=0.05, allow_unverified=True)
+    assert report["verdict"] == "worse" and report["verdict_note"] is None
+    # equivalent involving a plateau side is overturnable too
+    tied_short = _linear_series(eqs, {1: 0.5, 4: 20.0}, slope=0.0, offset=1.0)
+    report = paired_report_at_time(strong, tied_short, "m", 100.0,
+                                   margin=0.5, allow_unverified=True)
+    assert report["verdict"] == "undecided" and report["verdict_note"] == "ladder-limited"
+    # no plateau side: the same comparison inside both ladders keeps its verdict
+    report = paired_report_at_time(strong, weak_short, "m", 10.0,
+                                   margin=0.05, allow_unverified=True)
+    assert report["verdict"] == "better" and report["verdict_note"] is None
+
+
+def test_at_time_composition_guard_drops_missing_bracket_expressions():
+    from srbf.reporting import paired_report_at_time
+    eqs = [f"E{i}" for i in range(10)]
+    a = _linear_series(eqs, {1: 1.0, 100: 100.0}, slope=0.0, offset=1.0)
+    b_low = {eq: [0.0, 0.0] for eq in eqs}
+    b_high = {eq: [0.0, 0.0] for eq in eqs if eq != "E0"}   # E0 missing at the top rung
+    b = {1: _rung_snapshot(b_low, 1.0), 100: _rung_snapshot(b_high, 100.0)}
+    report = paired_report_at_time(a, b, "m", 10.0, allow_unverified=True)
+    assert report["n_pairs"] == 9 and report["n_only_a"] == 1
+
+
+def test_series_report_at_time_matches_marginal_interpolation():
+    from srbf.reporting import series_report_at_time
+    eqs = [f"E{i}" for i in range(20)]
+    series = _linear_series(eqs, {1: 1.0, 100: 100.0}, slope=0.6, offset=0.0)
+    report = series_report_at_time(series, "m", 10.0, n=4000)
+    # exactly linear in log-time -> marginal mean at the log-midpoint is the midpoint mean
+    true_mean = np.mean([i + 0.6 * 1.0 for i in range(20)])
+    assert report["status"] == "interpolated"
+    assert report["value"] == pytest.approx(true_mean, abs=0.05)
+    assert report["n_groups"] == 20
+    assert series_report_at_time(series, "m", 0.01) is None
+    plateau = series_report_at_time(series, "m", 5000.0)
+    assert plateau["status"] == "plateau" and plateau["x_effective"] == 100.0
