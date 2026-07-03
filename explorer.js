@@ -258,6 +258,17 @@
     var plot = document.createElement("div"); plot.id = "results-plot";
     plot.style.width = "100%"; plot.style.height = "500px";
     var pairedFoot = document.createElement("div"); pairedFoot.className = "paired-foot";
+    // matrix cells: tap/click (and Enter/Space) pins the cell's full record below the table —
+    // hover titles are invisible on touch devices, so this is the primary affordance on mobile
+    pairedFoot.addEventListener("click", function (e) {
+      var td = e.target.closest ? e.target.closest("td[data-cell]") : null;
+      if (td) { selectMatrixCell(parseInt(td.dataset.cell, 10)); }
+    });
+    pairedFoot.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter" && e.key !== " ") { return; }
+      var td = e.target.closest ? e.target.closest("td[data-cell]") : null;
+      if (td) { e.preventDefault(); selectMatrixCell(parseInt(td.dataset.cell, 10)); }
+    });
 
     root.appendChild(tabs);
     root.appendChild(controls);
@@ -308,6 +319,13 @@
       return 0;
     }
     function flipVerdict(v) { return v === "better" ? "worse" : v === "worse" ? "better" : v; }
+    // prob_superiority is stored as P(a better) + 0.5·P(tie), so the row-oriented flip is exactly
+    // 1 − value; re-round to the payload's own display precision
+    function flipPsup(v) {
+      if (v === null || v === undefined || v !== v) { return v; }
+      var d = (String(v).split(".")[1] || "").length;
+      return Number((1 - v).toFixed(Math.max(d, 1)));
+    }
     var VERDICT_COLORS = { better: "#16a34a", worse: "#dc2626", equivalent: "#2563eb", undecided: "#8a8f9e" };
 
     function metricInfo(key) { return (pairedData.metrics || []).filter(function (m) { return m.key === key; })[0]; }
@@ -398,12 +416,11 @@
       var layout = {
         font: { family: "Inter, system-ui, sans-serif", color: t.ink, size: 13 },
         margin: { l: 62, r: 20, t: 16, b: 58 },
-        xaxis: { title: "Compute budget t (s, log scale) — each series' median time per expression · solid = measured, hollow = interpolated",
+        xaxis: { title: "Compute budget t (s, log scale)",
                  type: "log", gridcolor: t.grid, zerolinecolor: t.zero, ticks: "outside", tickcolor: t.grid },
-        yaxis: { title: "Δ " + (mi ? mi.label : metricKey) + "  (selected − baseline; " +
-                 (mi && mi.higher_is_better === false ? "below" : "above") + " 0 favors selected)",
+        yaxis: { title: "Δ " + (mi ? mi.label : metricKey),
                  gridcolor: t.grid, zerolinewidth: 2, zerolinecolor: t.ink, ticks: "outside", tickcolor: t.grid },
-        legend: { orientation: "h", y: -0.22, font: { size: 12 } },
+        legend: { orientation: "h", y: -0.28, yanchor: "top", font: { size: 12 } },
         hovermode: "closest", paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
         shapes: traces.length ? [{ type: "line", x0: selectedBudget(), x1: selectedBudget(),
           yref: "paper", y0: 0, y1: 1, line: { color: t.ink, width: 1, dash: "dot" } }] : [],
@@ -413,14 +430,86 @@
           showarrow: false, font: { size: 14, color: t.ink } }]
       };
       Plotly.react(plot, traces, layout, { responsive: true, displayModeBar: false });
+      // axis titles stay short (they clip on narrow screens); the reading guide lives here instead
+      var caption = traces.length
+        ? "<div class='plot-caption'>Δ = selected − baseline; " +
+          (mi && mi.higher_is_better === false ? "below" : "above") + " 0 favors the selected series. " +
+          "x: each series' median wall-clock time per expression — solid markers are measured configurations, " +
+          "hollow are interpolated between them; the dotted line marks the selected budget.</div>" : "";
       var rawWarn = correctionSel.value !== "corrected"
         ? "<div class='matrix-warning'>⚠ Uncorrected p-values — exploratory browsing only; never quote these as claims. Switch back to “corrected”.</div>" : "";
       pairedFoot.innerHTML = notes.length
-        ? rawWarn + "<div class='paired-verdicts'><div class='paired-verdicts-title'>Verdicts at the standardized budget of ≤ " + selectedBudget() + " s per expression (dotted line) — " +
+        ? caption + rawWarn + "<div class='paired-verdicts'><div class='paired-verdicts-title'>Verdicts at the standardized budget of ≤ " + selectedBudget() + " s per expression (dotted line) — " +
           "each method's best measured configuration within it (95% CIs · release " +
           (pairedData.results_release_id || "?") + " · α = " + (pairedData.alpha || 0.05) + ")</div>" +
           notes.map(function (n) { return "<div class='paired-verdict-row'>" + n + "</div>"; }).join("") + "</div>"
-        : rawWarn;
+        : caption + rawWarn;
+    }
+
+    // row-oriented view of a canonical (a, b) record: everything a cell or detail panel displays
+    function orientRecord(rec, rowS) {
+      var sign = rec.a === rowS ? 1 : -1;
+      return {
+        sign: sign,
+        verdict: sign > 0 ? rec.verdict : flipVerdict(rec.verdict),
+        delta: sign * rec.delta,
+        lo: sign > 0 ? rec.lo : -rec.hi,
+        hi: sign > 0 ? rec.hi : -rec.lo,
+        psup: sign > 0 ? rec.prob_superiority : flipPsup(rec.prob_superiority),
+        xRow: sign > 0 ? rec.x_a : rec.x_b,
+        xCol: sign > 0 ? rec.x_b : rec.x_a
+      };
+    }
+
+    var matrixCells = [], matrixSelectedKey = null;
+
+    function matrixDetailHtml(cell) {
+      var head = "<div class='matrix-detail-title'><b>" + cell.rowS + "</b> − <b>" + cell.colS +
+        "</b> · " + benchSel.value + " · budget ≤ " + selectedBudget() + " s per expression</div>";
+      var rec = cell.rec;
+      if (!rec) {
+        return head + "<div class='fam'>n/a — this pair was not measurable within this budget, " +
+          "or was not evaluated on this benchmark.</div>";
+      }
+      var o = orientRecord(rec, cell.rowS);
+      var corrected = correctionSel.value === "corrected";
+      var p = corrected ? (rec.family_id ? rec.p_adj : rec.q_bh) : rec.p_raw;
+      var pLabel = corrected ? (rec.family_id ? "Holm-corrected p = " : "BH-corrected q = ") : "raw p = ";
+      var onlySided = (rec.n_only_a || 0) + (rec.n_only_b || 0);
+      return head +
+        "<div><span style='color:" + (VERDICT_COLORS[o.verdict] || "#888") + "'><b>" + o.verdict +
+        "</b></span> — Δ = " + fmt(o.delta) + " [" + fmt(o.lo) + ", " + fmt(o.hi) +
+        "] vs noise margin ±" + rec.margin +
+        (o.verdict === "undecided" && rec.equivalence_attainable === false
+          ? " — <i>too few paired expressions to ever certify “equivalent” at this margin; limited resolution, not evidence of parity</i>" : "") +
+        "</div>" +
+        "<div class='fam'>" + pLabel + fmtP(p) + " (uncorrected p = " + fmtP(rec.p_raw) + ")" +
+        (rec.family_id
+          ? " · confirmatory — pre-declared " + setName(rec.confirmatory_set) + " set, Holm-corrected over " + rec.family_size + " comparisons"
+          : " · exploratory — BH-corrected over the " + rec.exploratory_family_size + "-cell matrix") + "</div>" +
+        "<div class='fam'>n = " + rec.n_pairs + " paired expressions" +
+        (onlySided ? " (+" + onlySided + " solved by one side only)" : "") +
+        " · smallest reliably detectable Δ (MDE₈₀) ≈ " + rec.mde_80 +
+        " · P(" + cell.rowS + " better on a random expression) = " + o.psup + "</div>" +
+        "<div class='fam'>" + (rec.same_configuration
+          ? "same configuration on both sides (≈" + o.xRow + " s / ≈" + o.xCol + " s per expression)"
+          : "each side’s best configuration within the budget (" + cell.rowS + " ≈" + o.xRow +
+            " s · " + cell.colS + " ≈" + o.xCol + " s per expression)") + "</div>" +
+        (rec.notes && rec.notes.length ? "<div class='fam'><i>" + rec.notes.join(" ") + "</i></div>" : "");
+    }
+
+    function selectMatrixCell(i) {
+      var cell = matrixCells[i];
+      if (!cell) { return; }
+      var key = cell.rowS + "|" + cell.colS;
+      matrixSelectedKey = (matrixSelectedKey === key) ? null : key;   // tap again to unpin
+      var detail = pairedFoot.querySelector(".matrix-detail");
+      pairedFoot.querySelectorAll("td.selected").forEach(function (td) { td.classList.remove("selected"); });
+      if (!detail) { return; }
+      if (matrixSelectedKey === null) { detail.innerHTML = ""; return; }
+      var td = pairedFoot.querySelector("td[data-cell='" + i + "']");
+      if (td) { td.classList.add("selected"); }
+      detail.innerHTML = matrixDetailHtml(cell);
     }
 
     function renderMatrix() {
@@ -436,6 +525,8 @@
           recFor[r.a + "|" + r.b] = r;
         }
       });
+      matrixCells = [];
+      var selectedIdx = -1;
       var html = [];
       if (!corrected) {
         html.push("<div class='matrix-warning'>⚠ Uncorrected p-values — exploratory browsing only; " +
@@ -449,17 +540,25 @@
         html.push("<tr><th>" + rowS + "</th>");
         active.forEach(function (colS) {
           if (rowS === colS) { html.push("<td class='diag'>—</td>"); return; }
-          var rec = recFor[rowS + "|" + colS] || recFor[colS + "|" + rowS];
-          if (!rec) { html.push("<td class='missing' title='not measurable within this budget, or not evaluated on this benchmark'>n/a</td>"); return; }
-          var sign = rec.a === rowS ? 1 : -1;
-          var verdict = sign > 0 ? rec.verdict : flipVerdict(rec.verdict);
-          var delta = (sign * rec.delta);
+          var rec = recFor[rowS + "|" + colS] || recFor[colS + "|" + rowS] || null;
+          var cellIdx = matrixCells.length;
+          matrixCells.push({ rec: rec, rowS: rowS, colS: colS });
+          var isSel = matrixSelectedKey === rowS + "|" + colS;
+          if (isSel) { selectedIdx = cellIdx; }
+          var tap = " data-cell='" + cellIdx + "' tabindex='0' role='button' aria-expanded='" + isSel + "'";
+          if (!rec) {
+            html.push("<td class='missing" + (isSel ? " selected" : "") + "'" + tap +
+              " title='not measurable within this budget, or not evaluated on this benchmark'>n/a</td>");
+            return;
+          }
+          var o = orientRecord(rec, rowS);
+          var verdict = o.verdict;
+          var delta = o.delta;
           var p = corrected ? (rec.family_id ? rec.p_adj : rec.q_bh) : rec.p_raw;
           var pLabel = corrected ? (rec.family_id ? "Holm p" : "BH q") : "raw p";
           var onlySided = (rec.n_only_a || 0) + (rec.n_only_b || 0);
           var title = rowS + " − " + colS + " [" + bench + "]\n" +
-            "Δ = " + fmt(delta) + "   95% CI [" + fmt(sign > 0 ? rec.lo : -rec.hi) + ", " +
-            fmt(sign > 0 ? rec.hi : -rec.lo) + "]\n" +
+            "Δ = " + fmt(delta) + "   95% CI [" + fmt(o.lo) + ", " + fmt(o.hi) + "]\n" +
             "noise margin ±" + rec.margin + "  →  " + verdict + "\n" +
             pLabel + fmtP(p) + "  (uncorrected p = " + fmtP(rec.p_raw) + ")\n" +
             (rec.family_id ? "confirmatory: pre-declared " + setName(rec.confirmatory_set) + " set, Holm-corrected over " + rec.family_size + " comparisons"
@@ -467,13 +566,13 @@
             "\nn = " + rec.n_pairs + " paired expressions" +
             (onlySided ? " (+" + onlySided + " solved by one side only)" : "") +
             "\nsmallest reliably detectable Δ (MDE₈₀) ≈ " + rec.mde_80 +
-            "  ·  P(row better on a random expression) = " + rec.prob_superiority +
+            "  ·  P(row better on a random expression) = " + o.psup +
             "\nbudget \u2264 " + rec.budget + "s: " + (rec.same_configuration
-              ? "same configuration on both sides (\u2248" + rec.x_a + "s / \u2248" + rec.x_b + "s)"
-              : "each side\u2019s best within budget (row \u2248" + rec.x_a + "s \u00b7 column \u2248" + rec.x_b + "s)") +
+              ? "same configuration on both sides (\u2248" + o.xRow + "s / \u2248" + o.xCol + "s)"
+              : "each side\u2019s best within budget (row \u2248" + o.xRow + "s \u00b7 column \u2248" + o.xCol + "s)") +
             (rec.notes && rec.notes.length ? "\n" + rec.notes.join("\n") : "");
-          html.push("<td class='v-" + verdict + (rec.family_id ? " confirmatory" : "") +
-            "' title='" + title.replace(/'/g, "&#39;") + "'>" +
+          html.push("<td class='v-" + verdict + (rec.family_id ? " confirmatory" : "") + (isSel ? " selected" : "") +
+            "'" + tap + " title='" + title.replace(/'/g, "&#39;") + "'>" +
             "<span class='cell-delta'>" + fmt(delta) + "</span>" +
             "<span class='cell-verdict' aria-label='" + verdict + "'>" + (VERDICT_GLYPHS[verdict] || "") + "</span>" +
             (rec.family_id ? "<span class='cell-badge'>C</span>" : "") + "</td>");
@@ -481,15 +580,18 @@
         html.push("</tr>");
       });
       html.push("</tbody></table></div>");
+      if (selectedIdx < 0) { matrixSelectedKey = null; }   // selected pair no longer on screen
+      html.push("<div class='matrix-detail'>" +
+        (selectedIdx >= 0 ? matrixDetailHtml(matrixCells[selectedIdx]) : "") + "</div>");
       html.push("<div class='matrix-legend'>" +
         "<span class='v-better'>better ▲</span> / <span class='v-worse'>worse ▼</span> (CI clear of the noise margin) · " +
         "<span class='v-equivalent'>equivalent ≈</span> (CI inside the margin: any difference is smaller than the benchmark can measure) · " +
-        "<span class='v-undecided'>undecided ?</span> (hatched fill; not enough data — hover for the smallest detectable difference) · " +
+        "<span class='v-undecided'>undecided ?</span> (hatched fill; not enough data — the full record shows the smallest detectable difference) · " +
         "<i>n/a</i> = this pair was not evaluated on this benchmark. " +
         "<b>C</b> (blue outline) = confirmatory cell: one of the comparisons declared in advance (each ablation vs its parent, adjacent model sizes, " +
         "and each model size vs each baseline), held to the stricter Holm correction — every other cell is exploratory screening " +
         "with the lenient Benjamini–Hochberg correction; see <a href='#paired'>Paired comparisons</a>. " +
-        "Cells read row − column at the selected compute budget; hover any cell for its full record. Release " +
+        "Cells read row − column at the selected compute budget; tap or hover any cell to pin its full record below the table. Release " +
         (pairedData.results_release_id || "?") + ".</div>");
       pairedFoot.innerHTML = html.join("");
     }
