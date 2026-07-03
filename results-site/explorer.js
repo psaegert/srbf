@@ -121,7 +121,7 @@
       if (!pairedData || pairedData.error || !pairedData.budgets || budgetSel.options.length) { return; }
       pairedData.budgets.forEach(function (b) {
         var o = document.createElement("option"); o.value = String(b);
-        o.textContent = "≤ " + b + " s per expression";
+        o.textContent = "≤ " + b + " s per problem";
         budgetSel.appendChild(o);
       });
       budgetSel.value = String(pairedData.budgets[pairedData.budgets.length - 1]);
@@ -164,7 +164,7 @@
     var budgetField = labelled("Compute budget (verdicts)", budgetSel);
     var budgetHint = document.createElement("span");
     budgetHint.className = "results-field-hint";
-    budgetHint.textContent = "Each method's best measured configuration within this time (median per expression).";
+    budgetHint.textContent = "Each method's best measured configuration within this time (median per problem).";
     budgetField.appendChild(budgetHint);
     controls.appendChild(axisField);
     controls.appendChild(labelled("Metric", metricSel));
@@ -459,12 +459,12 @@
       var caption = traces.length
         ? "<div class='plot-caption'>Δ = selected − baseline; " +
           (mi && mi.higher_is_better === false ? "below" : "above") + " 0 favors the selected series. " +
-          "x: each series' median wall-clock time per expression — solid markers are measured configurations, " +
+          "x: each series' median wall-clock time per problem — solid markers are measured configurations, " +
           "hollow are interpolated between them; the dotted line marks the selected budget.</div>" : "";
       var rawWarn = correctionSel.value !== "corrected"
         ? "<div class='matrix-warning'>⚠ Uncorrected p-values — exploratory browsing only; never quote these as claims. Switch back to “corrected”.</div>" : "";
       pairedFoot.innerHTML = notes.length
-        ? caption + rawWarn + "<div class='paired-verdicts'><div class='paired-verdicts-title'>Verdicts at the standardized budget of ≤ " + selectedBudget() + " s per expression (dotted line) — " +
+        ? caption + rawWarn + "<div class='paired-verdicts'><div class='paired-verdicts-title'>Verdicts at the standardized budget of ≤ " + selectedBudget() + " s per problem (dotted line) — " +
           "each method's best measured configuration within it (95% CIs · release " +
           (pairedData.results_release_id || "?") + " · α = " + (pairedData.alpha || 0.05) + ")</div>" +
           notes.map(function (n) { return "<div class='paired-verdict-row'>" + n + "</div>"; }).join("") + "</div>"
@@ -490,7 +490,7 @@
 
     function matrixDetailHtml(cell) {
       var head = "<div class='matrix-detail-title'><b>" + cell.rowS + "</b> − <b>" + cell.colS +
-        "</b> · " + benchSel.value + " · budget ≤ " + selectedBudget() + " s per expression</div>";
+        "</b> · " + benchSel.value + " · budget ≤ " + selectedBudget() + " s per problem</div>";
       var rec = cell.rec;
       if (!rec) {
         return head + "<div class='fam'>n/a — this pair was not measurable within this budget, " +
@@ -517,9 +517,9 @@
         " · smallest reliably detectable Δ (MDE₈₀) ≈ " + rec.mde_80 +
         " · P(" + cell.rowS + " better on a random expression) = " + o.psup + "</div>" +
         "<div class='fam'>" + (rec.same_configuration
-          ? "same configuration on both sides (≈" + o.xRow + " s / ≈" + o.xCol + " s per expression)"
+          ? "same configuration on both sides (≈" + o.xRow + " s / ≈" + o.xCol + " s per problem)"
           : "each side’s best configuration within the budget (" + cell.rowS + " ≈" + o.xRow +
-            " s · " + cell.colS + " ≈" + o.xCol + " s per expression)") + "</div>" +
+            " s · " + cell.colS + " ≈" + o.xCol + " s per problem)") + "</div>" +
         (rec.notes && rec.notes.length ? "<div class='fam'><i>" + rec.notes.join(" ") + "</i></div>" : "");
     }
 
@@ -664,12 +664,12 @@
           row.s + marks + "</th>");
         if (!row.e) {
           html.push("<td class='missing' colspan='3'>n/a — no usable configuration within ≤ " +
-            selectedBudget() + " s per expression on this benchmark</td></tr>");
+            selectedBudget() + " s per problem on this benchmark</td></tr>");
           return;
         }
         html.push("<td class='lb-value'><b>" + fmtAbs(row.e.value) + "</b> [" + fmtAbs(row.e.lo) +
           ", " + fmtAbs(row.e.hi) + "]</td>" +
-          "<td class='lb-x'>≈" + row.e.x + " s/expr</td>" +
+          "<td class='lb-x'>≈" + row.e.x + " s/problem</td>" +
           "<td class='lb-n'>" + row.e.n + "</td></tr>");
       });
       html.push("</tbody></table></div>");
@@ -678,7 +678,7 @@
       }).join("");
       html.push("<div class='matrix-legend'>" +
         "Each row: the series' best measured configuration within the selected budget (the most " +
-        "expensive one whose median fit time per expression stays under it), with the SAME value " +
+        "expensive one whose median fit time per problem stays under it), with the SAME value " +
         "and 95% CI as that configuration's point on the Curves view — " +
         (hib ? "higher" : "lower") + " is better, best first. " +
         "<b>These are marginal numbers: never read a difference between two rows off their " +

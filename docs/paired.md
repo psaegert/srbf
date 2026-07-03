@@ -81,7 +81,7 @@ mismatch); snapshots without provenance require an explicit `allow_unverified=Tr
 ## Δ over the compute axis
 
 On the results site, verdicts are issued at **standardized compute budgets** (≤1, 10, 100,
-1000 s per expression, median; user-selectable): within the budget, each method's best measured
+1000 s per problem, median; user-selectable): within the budget, each method's best measured
 configuration, with same-method pairs additionally on the same configuration (one factor
 varies). Correction families are per budget (`family_id` carries `t`), so the budget grid is
 pre-declared, not cherry-picked. The **Table view** (Table × Absolute) runs on the same budget
