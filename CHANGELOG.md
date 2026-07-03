@@ -4,7 +4,21 @@ All notable changes to srbf are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.0] - 2026-07-03
+
+### Added
+- **Exact-t reports:** `srbf.reporting.paired_report_at_time` and
+  `srbf.reporting.series_report_at_time` evaluate a pair (or one series) AT EXACTLY a wall-clock
+  time t per problem, by per-problem linear interpolation in log10-time between the bracketing
+  measured configurations (the same model as `paired_delta_curve`), with explicit, never-
+  extrapolated boundaries: below-ladder → `None`; beyond-ladder carries the last measured value
+  forward (`status='plateau'`, a lower bound under the monotone quality-in-compute assumption),
+  and a verdict stands only if no plateau side could overturn it by improving (else `undecided`
+  with `verdict_note='ladder-limited'`). These functions power the results site's standardized
+  budget grid: cross-method verdicts and the Table view are now issued at exactly t, so a
+  method's ladder phase (where its power-of-two configurations happen to land relative to the
+  budget) no longer skews comparisons; same-knob pairs (ablations, size ladder, versions) keep
+  the same measured configuration on both sides (one-factor principle).
 
 ### Changed
 - **The results explorer's three tabs (Curves | Paired Δ | Matrix) generalize to a 2×2 view
