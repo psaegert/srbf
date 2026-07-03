@@ -38,3 +38,5 @@ site/
 # Local planning notes (synced via Proton Drive, not part of the repo)
 /srbf_improvement_plan.md
 /srbf_improvement_plan_wp1_review.md
+/noise_margins.json
+/noise_margins_2026-07-02.log
