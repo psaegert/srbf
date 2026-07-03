@@ -68,7 +68,7 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
   letter-spacing: .12em; color: var(--accent);
 }
 .hero h1 { margin: 0 0 .6rem; font-size: clamp(1.7rem, 4vw, 2.5rem); font-weight: 800; letter-spacing: -.03em; }
-.lede { margin: 0; max-width: 68ch; color: var(--ink-soft); font-size: 1.05rem; }
+.lede { margin: 0; color: var(--ink-soft); font-size: 1.05rem; }
 .lede strong { color: var(--ink); font-weight: 600; }
 
 /* explorer panel */
@@ -83,7 +83,7 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
 .explorer .loading { color: var(--ink-faint); padding: 5rem 0; text-align: center; }
 
 /* controls emitted by explorer.js */
-.results-controls { display: flex; flex-wrap: wrap; gap: 1rem 1.4rem; align-items: flex-end; margin: 0 0 1.1rem; }
+.results-controls { display: flex; flex-wrap: wrap; gap: 1rem 1.4rem; align-items: flex-start; margin: 0 0 1.1rem; }
 .results-field { display: flex; flex-direction: column; gap: .35rem; }
 .results-field-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .07em; font-weight: 600; color: var(--ink-faint); }
 .results-controls select {
@@ -121,7 +121,7 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
 }
 .provenance summary { cursor: pointer; font-weight: 600; padding: .8rem 0; color: var(--ink); }
 .provenance summary::marker { color: var(--ink-faint); }
-.provenance p { margin: .2rem 0 1rem; color: var(--ink-soft); font-size: .94rem; max-width: 92ch; }
+.provenance p { margin: .2rem 0 1rem; color: var(--ink-soft); font-size: .94rem; }
 
 /* series groups + pills with colour swatch */
 .series-area { display: flex; flex-direction: column; gap: .7rem; margin: 0 0 .5rem; }
@@ -177,7 +177,7 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
 .prose h3 {
   margin: 2rem 0 .6rem; font-size: 1.08rem; font-weight: 700; letter-spacing: -.01em;
 }
-.prose > p, .prose > ol, .prose > ul { margin: 0 0 1rem; color: var(--ink-soft); font-size: .96rem; max-width: 92ch; }
+.prose > p, .prose > ol, .prose > ul { margin: 0 0 1rem; color: var(--ink-soft); font-size: .96rem; }
 .prose > ol { padding-left: 1.3rem; }
 .prose > ol li { margin: 0 0 .7rem; }
 .prose strong, .prose li strong { color: var(--ink); font-weight: 600; }
@@ -190,7 +190,7 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
   display: flex; flex-wrap: wrap; align-items: center; gap: .6rem;
   margin: 0 0 .4rem; font-size: 1rem; font-weight: 700; letter-spacing: -.01em;
 }
-.metric p { margin: .4rem 0 0; color: var(--ink-soft); font-size: .93rem; max-width: 92ch; }
+.metric p { margin: .4rem 0 0; color: var(--ink-soft); font-size: .93rem; }
 .dir {
   font-size: .68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .07em;
   padding: .18rem .55rem; border-radius: 999px; border: 1px solid var(--line);
@@ -265,5 +265,5 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
 .matrix-legend .v-equivalent { color: #2563eb; font-weight: 600; }
 .matrix-legend .v-undecided { color: var(--ink-faint); font-weight: 600; }
 
-.results-field-hint { display: block; font-size: .72rem; color: var(--ink-faint); max-width: 21rem; line-height: 1.4; margin-top: .3rem; }
+.results-field-hint { display: block; font-size: .72rem; color: var(--ink-faint); max-width: 15rem; line-height: 1.35; margin-top: .3rem; }
 .cell-verdict { font-size: .7em; margin-left: .3em; color: var(--ink-soft); }

@@ -135,19 +135,19 @@
     var baselineField = labelled("Baseline — every checked series is compared against it", baselineSel);
     var baselineHint = document.createElement("span");
     baselineHint.className = "results-field-hint";
-    baselineHint.textContent = "The baseline is the flat zero line. It does not have to be checked above — any series can serve, including hidden and ablation series.";
+    baselineHint.textContent = "The zero line. Any series can serve — it does not have to be checked above.";
     baselineField.appendChild(baselineHint);
     var correctionField = labelled("Multiple-comparison correction", correctionSel);
     var budgetField = labelled("Compute budget (verdicts)", budgetSel);
     var budgetHint = document.createElement("span");
     budgetHint.className = "results-field-hint";
-    budgetHint.textContent = "Verdicts compare each method's best measured configuration within this budget (median time per expression).";
+    budgetHint.textContent = "Each method's best measured configuration within this time (median per expression).";
     budgetField.appendChild(budgetHint);
     controls.appendChild(axisField);
     controls.appendChild(labelled("Metric", metricSel));
     controls.appendChild(labelled("Benchmark", benchSel));
-    controls.appendChild(baselineField);
     controls.appendChild(budgetField);
+    controls.appendChild(baselineField);
     controls.appendChild(correctionField);
     [axisSel, metricSel, benchSel, baselineSel, correctionSel].forEach(function (s) { s.addEventListener("change", render); });
 
@@ -436,11 +436,12 @@
           recFor[r.a + "|" + r.b] = r;
         }
       });
-      var html = ["<div class='matrix-wrap'>"];
+      var html = [];
       if (!corrected) {
         html.push("<div class='matrix-warning'>⚠ Uncorrected p-values — exploratory browsing only; " +
           "never quote these as claims. Switch back to “corrected”.</div>");
       }
+      html.push("<div class='matrix-wrap'>");
       html.push("<table class='paired-matrix'><thead><tr><th>row − column</th>");
       active.forEach(function (s) { html.push("<th>" + s + "</th>"); });
       html.push("</tr></thead><tbody>");
@@ -479,7 +480,7 @@
         });
         html.push("</tr>");
       });
-      html.push("</tbody></table>");
+      html.push("</tbody></table></div>");
       html.push("<div class='matrix-legend'>" +
         "<span class='v-better'>better ▲</span> / <span class='v-worse'>worse ▼</span> (CI clear of the noise margin) · " +
         "<span class='v-equivalent'>equivalent ≈</span> (CI inside the margin: any difference is smaller than the benchmark can measure) · " +
@@ -490,7 +491,6 @@
         "with the lenient Benjamini–Hochberg correction; see <a href='#paired'>Paired comparisons</a>. " +
         "Cells read row − column at the selected compute budget; hover any cell for its full record. Release " +
         (pairedData.results_release_id || "?") + ".</div>");
-      html.push("</div>");
       pairedFoot.innerHTML = html.join("");
     }
 
