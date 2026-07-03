@@ -115,51 +115,85 @@
 
     var correctionSel = selectFrom([["corrected", "corrected (default)"], ["raw", "raw p — exploratory only"]]);
 
-    // standardized compute budgets: a slider over the PRE-DECLARED grid (log-spaced decades) —
-    // snap points only, never free values (every budget's statistics, families and corrections
-    // are precomputed in Python; an arbitrary t would have none). Ticks come from the payload.
+    // compute-budget slider: CONTINUOUS in log-time over the measured span, with magnetic
+    // snap points at the PRE-DECLARED budget grid. Only the marks carry precomputed verdicts,
+    // margins and corrected p-values (computed in Python, pre-registered); any position
+    // between them renders a DESCRIPTIVE read of the plotted curves at t — value/Δ + CI
+    // interpolated along the drawn segments, never a verdict (free-t verdicts would be an
+    // uncorrectable infinite family: "slide until significant").
     var budgetWrap = document.createElement("div"); budgetWrap.className = "budget-slider";
     var budgetValue = document.createElement("span"); budgetValue.className = "budget-value";
     var budgetRange = document.createElement("input");
-    budgetRange.type = "range"; budgetRange.min = "0"; budgetRange.max = "0";
-    budgetRange.step = "1"; budgetRange.value = "0";
+    budgetRange.type = "range"; budgetRange.min = "0"; budgetRange.max = "1000";
+    budgetRange.step = "1"; budgetRange.value = "1000";
     budgetRange.setAttribute("aria-label", "Compute budget");
     var budgetTicks = document.createElement("div"); budgetTicks.className = "budget-ticks";
     budgetWrap.appendChild(budgetValue);
     budgetWrap.appendChild(budgetRange);
     budgetWrap.appendChild(budgetTicks);
+
+    // log-t domain from the measured data (compute-axis records), fixed at init
+    var budgetLog = (function () {
+      var xs = records.filter(function (r) { return r.axis === "compute" && r.x !== null && r.x > 0; })
+                      .map(function (r) { return r.x; });
+      var lo = Math.log10(Math.min.apply(null, xs));
+      var hi = Math.log10(Math.max.apply(null, xs));
+      return { lo: lo, span: hi - lo };
+    })();
+    var SNAP_FRACTION = 0.015;                      // snap radius as a fraction of the log span
+    var currentBudget = null, budgetSnapped = false;
+    function positionOf(t) { return (Math.log10(t) - budgetLog.lo) / budgetLog.span; }
+    function tOf(position) { return Math.pow(10, budgetLog.lo + position * budgetLog.span); }
+    function selectedBudget() { return currentBudget; }
+    function budgetIsSnapped() { return budgetSnapped; }
+
     function syncBudget() {
       var budgets = (pairedData && pairedData.budgets) || [];
-      var b = budgets[parseInt(budgetRange.value, 10)];
-      budgetValue.textContent = b !== undefined ? "≤ " + b + " s per problem" : "…";
+      var t = tOf(parseInt(budgetRange.value, 10) / 1000);
+      budgetSnapped = false;
+      for (var i = 0; i < budgets.length; i++) {
+        if (Math.abs(Math.log10(t) - Math.log10(budgets[i])) <= SNAP_FRACTION * budgetLog.span) {
+          t = budgets[i]; budgetSnapped = true;     // magnetic snap near a mark
+          budgetRange.value = String(Math.round(positionOf(t) * 1000));
+          break;
+        }
+      }
+      currentBudget = t;
+      budgetValue.innerHTML = budgetSnapped
+        ? "≤ " + t + " s per problem"
+        : "t ≈ " + Number(t.toPrecision(3)) + " s per problem <span class='budget-desc-tag'>descriptive</span>";
       budgetTicks.querySelectorAll(".budget-tick").forEach(function (el, i) {
-        el.classList.toggle("active", String(i) === budgetRange.value);
+        el.classList.toggle("active", budgetSnapped && budgets[i] === currentBudget);
       });
     }
     function fillBudgets() {
       if (!pairedData || pairedData.error || !pairedData.budgets || budgetTicks.childNodes.length) { return; }
       var budgets = pairedData.budgets;
-      budgetRange.max = String(budgets.length - 1);
-      budgetRange.value = String(budgets.length - 1);
       budgets.forEach(function (b, i) {
         var tick = document.createElement("button");
         tick.type = "button"; tick.className = "budget-tick";
-        tick.textContent = b + " s";
-        tick.style.left = (budgets.length > 1 ? (i / (budgets.length - 1)) * 100 : 0) + "%";
-        if (i === 0) { tick.classList.add("first"); }
-        if (i === budgets.length - 1) { tick.classList.add("last"); }
+        tick.textContent = String(b);   // unit lives in the readout
+        var frac = Math.min(1, Math.max(0, positionOf(b)));
+        tick.style.left = (frac * 100) + "%";
+        if (frac < 0.06) { tick.classList.add("first"); }
+        if (frac > 0.94) { tick.classList.add("last"); }
         tick.addEventListener("click", function () {
-          budgetRange.value = String(i); syncBudget(); render();
+          budgetRange.value = String(Math.round(positionOf(b) * 1000));
+          syncBudget(); render();
         });
         budgetTicks.appendChild(tick);
       });
+      budgetRange.value = String(Math.round(positionOf(budgets[budgets.length - 1]) * 1000));
       syncBudget();
     }
-    budgetRange.addEventListener("input", function () { syncBudget(); render(); });
-    function selectedBudget() {
-      var budgets = (pairedData && pairedData.budgets) || [];
-      return budgets[parseInt(budgetRange.value, 10)];
-    }
+    var budgetRenderPending = false;
+    budgetRange.addEventListener("input", function () {
+      syncBudget();
+      if (!budgetRenderPending) {                    // one render per frame while dragging
+        budgetRenderPending = true;
+        window.requestAnimationFrame(function () { budgetRenderPending = false; render(); });
+      }
+    });
 
     // two segmented toggles exposing the 2×2: what to draw × what the numbers mean
     var tabs = document.createElement("div"); tabs.className = "view-tabs";
@@ -196,7 +230,7 @@
     var budgetField = labelled("Compute budget (verdicts)", budgetWrap);
     var budgetHint = document.createElement("span");
     budgetHint.className = "results-field-hint";
-    budgetHint.textContent = "Every series evaluated at exactly this time per problem (median); ladders ending below it are flagged.";
+    budgetHint.textContent = "Drag freely for a descriptive read of the curves; verdicts and release-grade numbers live at the marks (it snaps nearby).";
     budgetField.appendChild(budgetHint);
     controls.appendChild(axisField);
     controls.appendChild(labelled("Metric", metricSel));
@@ -384,6 +418,69 @@
     }
     var VERDICT_COLORS = { better: "#16a34a", worse: "#dc2626", equivalent: "#2563eb", undecided: "#8a8f9e" };
 
+    // --- descriptive reads at free slider positions: the plotted curves, quantified ---------
+    // Linear interpolation in log10-time along the DRAWN segments (curves are piecewise-linear
+    // in log-t by construction), so a free-t number is exactly what a ruler on the figure gives.
+    // Never a verdict: margins and corrections exist only at the pre-declared marks.
+    function fmtDesc(v) { return (v === null || v === undefined || v !== v) ? "–" : String(Number(Number(v).toPrecision(3))); }
+    function logW(xLo, xHi, t) { return (Math.log10(t) - Math.log10(xLo)) / (Math.log10(xHi) - Math.log10(xLo)); }
+
+    function marginalReadAt(s, bench, metricKey, t) {
+      var pts = records.filter(function (r) {
+        return r.series === s && r.axis === "compute" && r.benchmark === bench &&
+               r[metricKey] && r[metricKey].median !== null && r.x !== null;
+      }).sort(function (a, b) { return a.x - b.x; });
+      if (!pts.length) { return null; }
+      if (t < pts[0].x * (1 - 1e-9)) { return { status: "below" }; }
+      var last = pts[pts.length - 1];
+      if (t > last.x * (1 + 1e-9)) {
+        var lm = last[metricKey];
+        return { status: "plateau", x: last.x, value: lm.median, lo: lm.lo, hi: lm.hi, n: lm.n };
+      }
+      var j = 0;
+      while (j < pts.length - 1 && pts[j].x < t) { j++; }
+      if (Math.abs(Math.log10(pts[j].x) - Math.log10(t)) < 1e-9) {
+        var em = pts[j][metricKey];
+        return { status: "measured", x: pts[j].x, value: em.median, lo: em.lo, hi: em.hi, n: em.n };
+      }
+      var a = pts[j - 1][metricKey], b = pts[j][metricKey];
+      var w = logW(pts[j - 1].x, pts[j].x, t);
+      return { status: "interpolated", x: t,
+               value: (1 - w) * a.median + w * b.median,
+               lo: (1 - w) * a.lo + w * b.lo, hi: (1 - w) * a.hi + w * b.hi,
+               n: Math.min(a.n, b.n) };
+    }
+
+    function pairedReadAt(curve, sign, t) {
+      var pts = curve.points.filter(function (p) { return p.delta !== null; });
+      if (!pts.length) { return null; }
+      if (t < pts[0].x * (1 - 1e-9) || t > pts[pts.length - 1].x * (1 + 1e-9)) {
+        return { status: "outside" };
+      }
+      var j = 0;
+      while (j < pts.length - 1 && pts[j].x < t) { j++; }
+      var pLo = pts[Math.max(0, j - 1)], pHi = pts[j];
+      var w = pHi.x === pLo.x ? 1 : logW(pLo.x, pHi.x, t);
+      var d = (1 - w) * pLo.delta + w * pHi.delta;
+      var lo = (1 - w) * pLo.lo + w * pHi.lo;
+      var hi = (1 - w) * pLo.hi + w * pHi.hi;
+      return { status: "in",
+               delta: sign * d,
+               lo: sign > 0 ? lo : -hi, hi: sign > 0 ? hi : -lo,
+               n: Math.min(pLo.n, pHi.n) };
+    }
+
+    function descBanner() {
+      var t = Number(selectedBudget().toPrecision(3));
+      return "<div class='desc-banner'>Descriptive slice at t ≈ " + t + " s per problem — " +
+        "values are read off the plotted curves (interpolated along the drawn segments). " +
+        "There are <b>no verdicts, margins or corrected p-values between the marked budgets</b> (" +
+        ((pairedData && pairedData.budgets) || []).join(", ") + " s, the pre-declared grid): " +
+        "sliding until a difference looks convincing and quoting it is exactly the " +
+        "multiple-comparisons trap the marks prevent. Snap to a mark for release-grade " +
+        "numbers.</div>";
+    }
+
     function metricInfo(key) { return (pairedData.metrics || []).filter(function (m) { return m.key === key; })[0]; }
 
     // payload numbers are pre-rounded to the precision their CI justifies — render them verbatim
@@ -444,10 +541,19 @@
           hovertemplate: "<b>" + s + " − " + baseline + "</b><br>t: %{x:.3g}s (%{customdata[3]})<br>" +
             "Δ: %{y:.3f} [%{customdata[0]:.3f}, %{customdata[1]:.3f}] — point estimate favors %{customdata[4]}" +
             "<br>n=%{customdata[2]} expressions<extra></extra>" });
-        var rec = (pairedData.records || []).filter(function (r) {
+        if (!budgetIsSnapped()) {
+          var read = pairedReadAt(curve, sign, selectedBudget());
+          if (read) {
+            notes.push("<b>" + s + "</b> vs " + baseline + ": " + (read.status === "outside"
+              ? "<i>t is outside this pair's measured overlap — no read</i>"
+              : "Δ ≈ " + fmtDesc(read.delta) + " [" + fmtDesc(read.lo) + ", " + fmtDesc(read.hi) +
+                "] <span class='fam'>(descriptive curve read · n ≈ " + read.n + " expressions)</span>"));
+          }
+        }
+        var rec = budgetIsSnapped() ? (pairedData.records || []).filter(function (r) {
           return r.benchmark === bench && r.metric === metricKey && r.budget === selectedBudget() &&
                  orient(r, s, baseline) !== 0;
-        })[0];
+        })[0] : null;
         if (rec) {
           var rSign = orient(rec, s, baseline);
           var verdict = rSign > 0 ? rec.verdict : flipVerdict(rec.verdict);
@@ -495,12 +601,16 @@
           "hollow are interpolated between them; the dotted line marks the selected budget.</div>" : "";
       var rawWarn = correctionSel.value !== "corrected"
         ? "<div class='matrix-warning'>⚠ Uncorrected p-values — exploratory browsing only; never quote these as claims. Switch back to “corrected”.</div>" : "";
+      var panelTitle = budgetIsSnapped()
+        ? "Verdicts at the standardized budget of ≤ " + selectedBudget() + " s per problem (dotted line) — " +
+          "every series at exactly t, plateaus flagged (95% CIs · release " +
+          (pairedData.results_release_id || "?") + " · α = " + (pairedData.alpha || 0.05) + ")"
+        : "Curve reads at t ≈ " + Number(selectedBudget().toPrecision(3)) + " s per problem (dotted line)";
       pairedFoot.innerHTML = notes.length
-        ? caption + rawWarn + "<div class='paired-verdicts'><div class='paired-verdicts-title'>Verdicts at the standardized budget of ≤ " + selectedBudget() + " s per problem (dotted line) — " +
-          "each method's best measured configuration within it (95% CIs · release " +
-          (pairedData.results_release_id || "?") + " · α = " + (pairedData.alpha || 0.05) + ")</div>" +
+        ? caption + (budgetIsSnapped() ? rawWarn : descBanner()) +
+          "<div class='paired-verdicts'><div class='paired-verdicts-title'>" + panelTitle + "</div>" +
           notes.map(function (n) { return "<div class='paired-verdict-row'>" + n + "</div>"; }).join("") + "</div>"
-        : caption + rawWarn;
+        : caption + (budgetIsSnapped() ? rawWarn : descBanner());
     }
 
     // row-oriented view of a canonical (a, b) record: everything a cell or detail panel displays
@@ -535,6 +645,19 @@
     var matrixCells = [], matrixSelectedKey = null;
 
     function matrixDetailHtml(cell) {
+      if (cell.desc) {
+        var dHead = "<div class='matrix-detail-title'><b>" + cell.rowS + "</b> − <b>" + cell.colS +
+          "</b> · " + benchSel.value + " · t ≈ " + Number(selectedBudget().toPrecision(3)) +
+          " s per problem</div>";
+        if (cell.desc.status !== "in") {
+          return dHead + "<div class='fam'>t is outside this pair's measured overlap — no read.</div>";
+        }
+        return dHead + "<div>Δ ≈ " + fmtDesc(cell.desc.delta) + " [" + fmtDesc(cell.desc.lo) +
+          ", " + fmtDesc(cell.desc.hi) + "] <span class='fam'>(descriptive curve read · n ≈ " +
+          cell.desc.n + " expressions)</span></div>" +
+          "<div class='fam'>No verdict at unmarked times — noise margins and corrections exist " +
+          "only at the pre-declared budgets; snap the slider to a mark.</div>";
+      }
       var head = "<div class='matrix-detail-title'><b>" + cell.rowS + "</b> − <b>" + cell.colS +
         "</b> · " + benchSel.value + " · budget ≤ " + selectedBudget() + " s per problem</div>";
       var rec = cell.rec;
@@ -583,11 +706,60 @@
       detail.innerHTML = matrixDetailHtml(cell);
     }
 
+    function renderMatrixDescriptive() {
+      var metricKey = metricSel.value, bench = benchSel.value;
+      var t = selectedBudget();
+      var active = series.filter(function (s) { return seriesChecks[s].checked; });
+      var curveFor = {};
+      (pairedData.curves || []).forEach(function (c) {
+        if (c.benchmark === bench && c.metric === metricKey) { curveFor[c.a + "|" + c.b] = c; }
+      });
+      matrixCells = [];
+      var selectedIdx = -1;
+      var html = [descBanner()];
+      html.push("<div class='matrix-wrap'>");
+      html.push("<table class='paired-matrix'><thead><tr><th>row − column</th>");
+      active.forEach(function (s) { html.push("<th>" + s + "</th>"); });
+      html.push("</tr></thead><tbody>");
+      active.forEach(function (rowS) {
+        html.push("<tr><th>" + rowS + "</th>");
+        active.forEach(function (colS) {
+          if (rowS === colS) { html.push("<td class='diag'>—</td>"); return; }
+          var curve = curveFor[rowS + "|" + colS] || curveFor[colS + "|" + rowS] || null;
+          var sign = curve ? (curve.a === rowS ? 1 : -1) : 0;
+          var read = curve ? pairedReadAt(curve, sign, t) : null;
+          var cellIdx = matrixCells.length;
+          var isSel = matrixSelectedKey === rowS + "|" + colS;
+          if (isSel) { selectedIdx = cellIdx; }
+          matrixCells.push({ desc: read || { status: "none" }, rowS: rowS, colS: colS });
+          var tap = " data-cell='" + cellIdx + "' tabindex='0' role='button' aria-expanded='" + isSel + "'";
+          if (!read || read.status !== "in") {
+            html.push("<td class='missing" + (isSel ? " selected" : "") + "'" + tap + ">n/a</td>");
+            return;
+          }
+          html.push("<td class='desc" + (isSel ? " selected" : "") + "'" + tap + ">" +
+            "<span class='cell-delta'>" + fmtDesc(read.delta) + "</span></td>");
+        });
+        html.push("</tr>");
+      });
+      html.push("</tbody></table></div>");
+      if (selectedIdx < 0) { matrixSelectedKey = null; }
+      html.push("<div class='matrix-detail'>" +
+        (selectedIdx >= 0 ? matrixDetailHtml(matrixCells[selectedIdx]) : "") + "</div>");
+      html.push("<div class='matrix-legend'>Cells read row − column: Δ read off the paired " +
+        "Δ(t) curve at t ≈ " + Number(t.toPrecision(3)) + " s per problem — descriptive only, " +
+        "no verdict colours or confirmatory badges at unmarked times. <i>n/a</i> = t outside " +
+        "the pair's measured overlap. Tap a cell for its interval; snap the slider to a mark " +
+        "for the verdict matrix.</div>");
+      pairedFoot.innerHTML = html.join("");
+    }
+
     function renderMatrix() {
       if (!pairedReady()) { return; }
       var metricKey = metricSel.value, bench = benchSel.value;
       if (!pairedMetricGuard(metricKey)) { return; }
       plot.style.display = "none";
+      if (!budgetIsSnapped()) { return renderMatrixDescriptive(); }
       var corrected = correctionSel.value === "corrected";
       var active = series.filter(function (s) { return seriesChecks[s].checked; });
       var recFor = {};
@@ -680,6 +852,7 @@
           "Table view (no leaderboard block) — re-run build_paired_data.py.</div>";
         return;
       }
+      var snapped = budgetIsSnapped();
       var byMetricSeries = {};
       pairedData.leaderboard.forEach(function (r) {
         if (r.benchmark === bench && r.metric === metricKey && r.budget === selectedBudget()) {
@@ -687,7 +860,11 @@
         }
       });
       var active = series.filter(function (s) { return seriesChecks[s].checked; });
-      var rows = active.map(function (s) { return { s: s, e: byMetricSeries[s] || null }; });
+      var rows = active.map(function (s) {
+        if (snapped) { return { s: s, e: byMetricSeries[s] || null }; }
+        var r = marginalReadAt(s, bench, metricKey, selectedBudget());
+        return { s: s, e: (r && r.status !== "below") ? r : null };
+      });
       rows.sort(function (a, b) {
         if (!a.e && !b.e) { return 0; }
         if (!a.e) { return 1; }               // unmeasured rows sink to the bottom
@@ -699,7 +876,8 @@
       html.push("<div class='matrix-wrap'>");
       html.push("<table class='paired-matrix abs-table'><thead><tr>" +
         "<th>series</th><th>" + (mi ? mi.label : metricKey) + " [95% CI]</th>" +
-        "<th>at ≤ " + selectedBudget() + " s per problem</th><th>n</th></tr></thead><tbody>");
+        "<th>at " + (snapped ? "≤ " + selectedBudget() : "t ≈ " + Number(selectedBudget().toPrecision(3))) +
+        " s per problem</th><th>n</th></tr></thead><tbody>");
       rows.forEach(function (row) {
         var col = colorOf(row.s, idx[row.s]);
         var marks = "";
@@ -714,13 +892,15 @@
             selectedBudget() + " s per problem on this benchmark</td></tr>");
           return;
         }
+        var fv = snapped ? fmtAbs : fmtDesc;
         var basis = row.e.status === "plateau"
-          ? "ladder ends ≈" + row.e.x + " s <span class='lb-flag'>plateau</span>"
+          ? "ladder ends ≈" + fmtDesc(row.e.x) + " s <span class='lb-flag'>plateau</span>"
           : row.e.status === "interpolated"
-            ? "= " + row.e.x + " s (interpolated)"
-            : "measured ≈" + row.e.x + " s";
-        html.push("<td class='lb-value'><b>" + fmtAbs(row.e.value) + "</b> [" + fmtAbs(row.e.lo) +
-          ", " + fmtAbs(row.e.hi) + "]</td>" +
+            ? (snapped ? "= " + row.e.x + " s (interpolated)"
+                       : "≈ " + Number(selectedBudget().toPrecision(3)) + " s (curve read)")
+            : "measured ≈" + fmtDesc(row.e.x) + " s";
+        html.push("<td class='lb-value'><b>" + fv(row.e.value) + "</b> [" + fv(row.e.lo) +
+          ", " + fv(row.e.hi) + "]</td>" +
           "<td class='lb-x'>" + basis + "</td>" +
           "<td class='lb-n'>" + row.e.n + "</td></tr>");
       });
@@ -728,6 +908,15 @@
       var notes = Object.keys(noteIndex).map(function (note) {
         return "<div class='fam'><sup>" + noteIndex[note] + "</sup> " + note + "</div>";
       }).join("");
+      if (!snapped) {
+        html.push(descBanner() +
+          "<div class='matrix-legend'>" + (hib ? "Higher" : "Lower") + " is better, best first. " +
+          "<b>These are marginal numbers: never read a difference between two rows off their " +
+          "CIs</b> — head-to-head questions belong to the Paired Δ views (<a href='#paired'>why</a>). " +
+          "Rankings are per benchmark only.</div>");
+        pairedFoot.innerHTML = html.join("");
+        return;
+      }
       html.push("<div class='matrix-legend'>" +
         "Each row: the series AT EXACTLY the selected budget — interpolated per problem, " +
         "linearly in log-time, between its two bracketing measured configurations (the same " +

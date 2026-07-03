@@ -95,9 +95,12 @@ interpolated point is the most conservative pair margin over the bracketing conf
 Same-method pairs (ablation vs parent, size ladder, versions) instead keep the **same measured
 configuration** on both sides — equal time would vary two factors at once. Correction families
 are per budget (`family_id` carries `t`), so the budget grid is pre-declared, not
-cherry-picked. The **Table view** (Table × Absolute) shows each series at exactly the same
-budgets via `series_report_at_time` (measured and plateau rows keep the exact Curves-view value;
-an exporter self-check enforces consistency). Those rows are marginal: never difference two of
+cherry-picked. On the site the budget slider is continuous for exploration: it snaps to the
+marked budgets, and free positions between them render descriptive reads of the plotted curves
+only (no verdicts, margins or corrections exist at unmarked times — an infinite verdict family
+would be uncorrectable). The **Table view** (Table × Absolute) shows each series at exactly the
+same budgets via `series_report_at_time` (measured and plateau rows keep the exact Curves-view
+value; an exporter self-check enforces consistency). Those rows are marginal: never difference two of
 them and never subtract their CIs — that is exactly the anti-pattern from the top of this page;
 head-to-head questions belong to the Paired views.
 
