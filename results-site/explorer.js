@@ -132,14 +132,9 @@
     budgetWrap.appendChild(budgetRange);
     budgetWrap.appendChild(budgetTicks);
 
-    // log-t domain from the measured data (compute-axis records), fixed at init
-    var budgetLog = (function () {
-      var xs = records.filter(function (r) { return r.axis === "compute" && r.x !== null && r.x > 0; })
-                      .map(function (r) { return r.x; });
-      var lo = Math.log10(Math.min.apply(null, xs));
-      var hi = Math.log10(Math.max.apply(null, xs));
-      return { lo: lo, span: hi - lo };
-    })();
+    // log-t domain = exactly the marked grid (payload budgets), so the 10^k marks sit
+    // equally spaced with no dead track outside them; set once the payload arrives
+    var budgetLog = null;
     var SNAP_FRACTION = 0.015;                      // snap radius as a fraction of the log span
     var currentBudget = null, budgetSnapped = false;
     function positionOf(t) { return (Math.log10(t) - budgetLog.lo) / budgetLog.span; }
@@ -149,6 +144,7 @@
 
     function syncBudget() {
       var budgets = (pairedData && pairedData.budgets) || [];
+      if (!budgetLog) { budgetValue.textContent = "…"; return; }
       var t = tOf(parseInt(budgetRange.value, 10) / 1000);
       budgetSnapped = false;
       for (var i = 0; i < budgets.length; i++) {
@@ -169,6 +165,8 @@
     function fillBudgets() {
       if (!pairedData || pairedData.error || !pairedData.budgets || budgetTicks.childNodes.length) { return; }
       var budgets = pairedData.budgets;
+      budgetLog = { lo: Math.log10(budgets[0]),
+                    span: Math.log10(budgets[budgets.length - 1]) - Math.log10(budgets[0]) };
       budgets.forEach(function (b, i) {
         var tick = document.createElement("button");
         tick.type = "button"; tick.className = "budget-tick";
