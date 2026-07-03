@@ -74,16 +74,51 @@
     // --- view registry: Curves | Paired | Matrix ---------------------------------------------
     var VIEWS = {
       curves: { label: "Curves", usesAxis: true, usesBaseline: false, usesCorrection: false },
-      paired: { label: "Paired Δ", usesAxis: false, usesBaseline: true, usesCorrection: true },
-      matrix: { label: "Matrix (exploratory)", usesAxis: false, usesBaseline: false, usesCorrection: true }
+      paired: { label: "Paired Δ", usesAxis: false, usesBaseline: true, usesCorrection: true, usesBudget: true },
+      matrix: { label: "Matrix", usesAxis: false, usesBaseline: false, usesCorrection: true, usesBudget: true }
     };
     var currentView = "curves";
     var pairedData = null, pairedLoading = false;
 
-    var baselineSel = selectFrom(series.map(function (s) { return [s, s]; }));
+    // baseline select grouped like the pills: Models, Baselines, then ablation groups
+    var baselineSel = document.createElement("select");
+    (function () {
+      var groups = [];
+      series.forEach(function (s) {
+        var g = (meta[s] || {}).group || "Other";
+        if (groups.indexOf(g) < 0) { groups.push(g); }
+      });
+      groups.sort(function (a, b) {
+        var ia = GROUP_ORDER.indexOf(a), ib = GROUP_ORDER.indexOf(b);
+        return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+      });
+      groups.forEach(function (g) {
+        var og = document.createElement("optgroup"); og.label = g;
+        series.forEach(function (s) {
+          if (((meta[s] || {}).group || "Other") !== g) { return; }
+          var o = document.createElement("option"); o.value = s; o.textContent = s;
+          og.appendChild(o);
+        });
+        baselineSel.appendChild(og);
+      });
+    })();
     if (series.indexOf("v23.0-120M") >= 0) { baselineSel.value = "v23.0-120M"; }
 
     var correctionSel = selectFrom([["corrected", "corrected (default)"], ["raw", "raw p — exploratory only"]]);
+
+    // standardized compute budgets (populated from the paired payload on first load)
+    var budgetSel = document.createElement("select");
+    function fillBudgets() {
+      if (!pairedData || pairedData.error || !pairedData.budgets || budgetSel.options.length) { return; }
+      pairedData.budgets.forEach(function (b) {
+        var o = document.createElement("option"); o.value = String(b);
+        o.textContent = "≤ " + b + " s per expression";
+        budgetSel.appendChild(o);
+      });
+      budgetSel.value = String(pairedData.budgets[pairedData.budgets.length - 1]);
+    }
+    budgetSel.addEventListener("change", render);
+    function selectedBudget() { return parseFloat(budgetSel.value); }
 
     var tabs = document.createElement("div"); tabs.className = "view-tabs";
     Object.keys(VIEWS).forEach(function (v) {
@@ -97,12 +132,22 @@
     var controls = document.createElement("div");
     controls.className = "results-controls";
     var axisField = labelled("X-axis", axisSel);
-    var baselineField = labelled("Baseline (Δ = selected − baseline)", baselineSel);
+    var baselineField = labelled("Baseline — every checked series is compared against it", baselineSel);
+    var baselineHint = document.createElement("span");
+    baselineHint.className = "results-field-hint";
+    baselineHint.textContent = "The baseline is the flat zero line. It does not have to be checked above — any series can serve, including hidden and ablation series.";
+    baselineField.appendChild(baselineHint);
     var correctionField = labelled("Multiple-comparison correction", correctionSel);
+    var budgetField = labelled("Compute budget (verdicts)", budgetSel);
+    var budgetHint = document.createElement("span");
+    budgetHint.className = "results-field-hint";
+    budgetHint.textContent = "Verdicts compare each method's best measured configuration within this budget (median time per expression).";
+    budgetField.appendChild(budgetHint);
     controls.appendChild(axisField);
     controls.appendChild(labelled("Metric", metricSel));
     controls.appendChild(labelled("Benchmark", benchSel));
     controls.appendChild(baselineField);
+    controls.appendChild(budgetField);
     controls.appendChild(correctionField);
     [axisSel, metricSel, benchSel, baselineSel, correctionSel].forEach(function (s) { s.addEventListener("change", render); });
 
@@ -114,6 +159,7 @@
       var vm = VIEWS[v];
       axisField.style.display = vm.usesAxis ? "" : "none";
       baselineField.style.display = vm.usesBaseline ? "" : "none";
+      budgetField.style.display = vm.usesBudget ? "" : "none";
       correctionField.style.display = vm.usesCorrection ? "" : "none";
       if (v !== "curves" && !pairedData && !pairedLoading) { loadPaired(); }
       render();
@@ -122,7 +168,7 @@
     function loadPaired() {
       pairedLoading = true;
       fetch("paired_data.json").then(function (r) { return r.json(); }).then(function (d) {
-        pairedData = d; pairedLoading = false; render();
+        pairedData = d; pairedLoading = false; fillBudgets(); render();
       }).catch(function () {
         pairedLoading = false; pairedData = { error: true }; render();
       });
@@ -266,11 +312,17 @@
 
     function metricInfo(key) { return (pairedData.metrics || []).filter(function (m) { return m.key === key; })[0]; }
 
+    // payload numbers are pre-rounded to the precision their CI justifies — render them verbatim
+    function fmt(v) { if (v === null || v === undefined || v !== v) { return "–"; } var x = (v === 0 ? 0 : v); return (x > 0 ? "+" : "") + String(x); }
+    function fmtP(p) { return (p === null || p === undefined) ? "–" : Number(p).toPrecision(2); }
+    var VERDICT_GLYPHS = { better: "▲", worse: "▼", equivalent: "≈", undecided: "?" };
+    function setName(key) { return ({ ablations: "ablation vs parent", size_ladder: "adjacent model sizes", baselines: "model sizes vs baselines" })[key] || key; }
+
     function pairedMetricGuard(metricKey) {
       if (metricInfo(metricKey)) { return true; }
       plot.style.display = "";
       Plotly.react(plot, [], {
-        annotations: [{ text: "Paired data ships for the main-tier metrics — pick one in the Metric menu.",
+        annotations: [{ text: "Paired data is available for the Main metrics — pick one from the “Main metrics” group in the Metric menu.",
           showarrow: false, font: { size: 14, color: theme().ink } }],
         paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)"
       }, { responsive: true, displayModeBar: false });
@@ -309,52 +361,66 @@
                     symbol: pts.map(function (p) { return (p.mA && p.mB) ? "circle" : "circle-open"; }) },
           type: "scatter", mode: "lines+markers",
           customdata: pts.map(function (p) {
-            var favors = (sign * p.delta > 0) === (mi.higher_is_better !== false) ? s : baseline;
+            var favors = p.delta === 0 ? "neither (tie)"
+              : ((sign * p.delta > 0) === (mi.higher_is_better !== false) ? s : baseline);
             return [sign > 0 ? p.lo : -p.hi, sign > 0 ? p.hi : -p.lo, p.n,
                     (p.mA && p.mB) ? "measured" : "interpolated", favors];
           }),
           hovertemplate: "<b>" + s + " − " + baseline + "</b><br>t: %{x:.3g}s (%{customdata[3]})<br>" +
-            "Δ: %{y:.3f} [%{customdata[0]:.3f}, %{customdata[1]:.3f}] — favors %{customdata[4]}" +
+            "Δ: %{y:.3f} [%{customdata[0]:.3f}, %{customdata[1]:.3f}] — point estimate favors %{customdata[4]}" +
             "<br>n=%{customdata[2]} expressions<extra></extra>" });
         var rec = (pairedData.records || []).filter(function (r) {
-          return r.benchmark === bench && r.metric === metricKey && orient(r, s, baseline) !== 0;
+          return r.benchmark === bench && r.metric === metricKey && r.budget === selectedBudget() &&
+                 orient(r, s, baseline) !== 0;
         })[0];
         if (rec) {
           var rSign = orient(rec, s, baseline);
           var verdict = rSign > 0 ? rec.verdict : flipVerdict(rec.verdict);
           var corrected = correctionSel.value === "corrected";
           var p = corrected ? (rec.p_adj !== undefined ? rec.p_adj : rec.q_bh) : rec.p_raw;
-          var pLabel = corrected ? (rec.p_adj !== undefined ? "Holm p=" : "BH q=") : "raw p=";
-          notes.push("<b>" + s + "</b> vs " + baseline + " at the declared comparison point (" + rec.x_rule +
-            "): <span style='color:" + (VERDICT_COLORS[verdict] || "#888") + "'><b>" + verdict + "</b></span>, " +
-            "Δ=" + (rSign * rec.delta).toFixed(3) + " [" +
-            (rSign > 0 ? rec.lo : -rec.hi).toFixed(3) + ", " + (rSign > 0 ? rec.hi : -rec.lo).toFixed(3) + "], " +
-            "noise margin ±" + rec.margin + ", " + pLabel + (p !== undefined ? Number(p).toPrecision(2) : "–") +
-            (rec.family_id ? " <span class='fam'>(confirmatory family " + rec.family_id + ", m=" + rec.family_size + ")</span>"
-                           : " <span class='fam'>(exploratory)</span>") +
-            ", n=" + rec.n_pairs + ", MDE₈₀=" + rec.mde_80 +
-            (rec.equivalence_attainable === false ? " — <i>equivalence not attainable at this n (resolution-limited)</i>" : "") +
+          var pLabel = corrected ? (rec.p_adj !== undefined ? "Holm-corrected p = " : "BH-corrected q = ") : "raw p = ";
+          var onlySided = (rec.n_only_a || 0) + (rec.n_only_b || 0);
+          notes.push("<b>" + s + "</b> vs " + baseline + ": " +
+            "<span style='color:" + (VERDICT_COLORS[verdict] || "#888") + "'><b>" + verdict + "</b></span> — " +
+            "Δ = " + fmt(rSign * rec.delta) + " [" + fmt(rSign > 0 ? rec.lo : -rec.hi) + ", " +
+            fmt(rSign > 0 ? rec.hi : -rec.lo) + "] vs noise margin ±" + rec.margin +
+            (verdict === "undecided" && rec.equivalence_attainable === false
+              ? " — <i>too few paired expressions to ever certify “equivalent” at this margin; limited resolution, not evidence of parity</i>" : "") +
+            "<br><span class='fam'>" + pLabel + fmtP(p) +
+            (rec.family_id ? " · confirmatory — pre-declared " + setName(rec.confirmatory_set) + " set, Holm-corrected over " + rec.family_size + " comparisons"
+                           : " · exploratory (BH-corrected)") +
+            " · n = " + rec.n_pairs + " paired expressions" +
+            (onlySided ? " (+" + onlySided + " solved by one side only)" : "") +
+            " · smallest reliably detectable Δ (MDE₈₀) ≈ " + rec.mde_80 + "</span>" +
             (rec.notes && rec.notes.length ? "<br><i>" + rec.notes.join(" ") + "</i>" : ""));
         }
       });
       var layout = {
         font: { family: "Inter, system-ui, sans-serif", color: t.ink, size: 13 },
         margin: { l: 62, r: 20, t: 16, b: 58 },
-        xaxis: { title: "Inference compute budget t (s) — series-median cost, interpolated in log t",
+        xaxis: { title: "Compute budget t (s, log scale) — each series' median time per expression · solid = measured, hollow = interpolated",
                  type: "log", gridcolor: t.grid, zerolinecolor: t.zero, ticks: "outside", tickcolor: t.grid },
-        yaxis: { title: "Δ " + (mi ? mi.label : metricKey) + "  (selected − baseline)",
+        yaxis: { title: "Δ " + (mi ? mi.label : metricKey) + "  (selected − baseline; " +
+                 (mi && mi.higher_is_better === false ? "below" : "above") + " 0 favors selected)",
                  gridcolor: t.grid, zerolinewidth: 2, zerolinecolor: t.ink, ticks: "outside", tickcolor: t.grid },
         legend: { orientation: "h", y: -0.22, font: { size: 12 } },
         hovermode: "closest", paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
-        annotations: traces.length ? [] : [{ text: "No paired curves for this selection (pick series above; the baseline itself is the zero line).",
+        shapes: traces.length ? [{ type: "line", x0: selectedBudget(), x1: selectedBudget(),
+          yref: "paper", y0: 0, y1: 1, line: { color: t.ink, width: 1, dash: "dot" } }] : [],
+        annotations: traces.length ? [] : [{ text: (pairedData.records || []).some(function (r) { return r.benchmark === bench && (r.a === baseline || r.b === baseline); })
+          ? "No paired curves for this selection — toggle series above (the baseline itself is the zero line)."
+          : "No precomputed pairs for baseline " + baseline + " on " + bench + " — pick another baseline or benchmark.",
           showarrow: false, font: { size: 14, color: t.ink } }]
       };
       Plotly.react(plot, traces, layout, { responsive: true, displayModeBar: false });
+      var rawWarn = correctionSel.value !== "corrected"
+        ? "<div class='matrix-warning'>⚠ Uncorrected p-values — exploratory browsing only; never quote these as claims. Switch back to “corrected”.</div>" : "";
       pairedFoot.innerHTML = notes.length
-        ? "<div class='paired-verdicts'><div class='paired-verdicts-title'>Verdicts at the declared comparison point (" +
-          "release " + (pairedData.results_release_id || "?") + ", α=" + (pairedData.alpha || 0.05) + ")</div>" +
+        ? rawWarn + "<div class='paired-verdicts'><div class='paired-verdicts-title'>Verdicts at the standardized budget of ≤ " + selectedBudget() + " s per expression (dotted line) — " +
+          "each method's best measured configuration within it (95% CIs · release " +
+          (pairedData.results_release_id || "?") + " · α = " + (pairedData.alpha || 0.05) + ")</div>" +
           notes.map(function (n) { return "<div class='paired-verdict-row'>" + n + "</div>"; }).join("") + "</div>"
-        : "";
+        : rawWarn;
     }
 
     function renderMatrix() {
@@ -366,7 +432,7 @@
       var active = series.filter(function (s) { return seriesChecks[s].checked; });
       var recFor = {};
       (pairedData.records || []).forEach(function (r) {
-        if (r.benchmark === bench && r.metric === metricKey) {
+        if (r.benchmark === bench && r.metric === metricKey && r.budget === selectedBudget()) {
           recFor[r.a + "|" + r.b] = r;
         }
       });
@@ -383,37 +449,46 @@
         active.forEach(function (colS) {
           if (rowS === colS) { html.push("<td class='diag'>—</td>"); return; }
           var rec = recFor[rowS + "|" + colS] || recFor[colS + "|" + rowS];
-          if (!rec) { html.push("<td class='missing' title='not evaluated on this benchmark'>n/a</td>"); return; }
+          if (!rec) { html.push("<td class='missing' title='not measurable within this budget, or not evaluated on this benchmark'>n/a</td>"); return; }
           var sign = rec.a === rowS ? 1 : -1;
           var verdict = sign > 0 ? rec.verdict : flipVerdict(rec.verdict);
           var delta = (sign * rec.delta);
           var p = corrected ? (rec.family_id ? rec.p_adj : rec.q_bh) : rec.p_raw;
           var pLabel = corrected ? (rec.family_id ? "Holm p" : "BH q") : "raw p";
+          var onlySided = (rec.n_only_a || 0) + (rec.n_only_b || 0);
           var title = rowS + " − " + colS + " [" + bench + "]\n" +
-            "Δ=" + delta.toFixed(4) + "  CI=[" + (sign > 0 ? rec.lo : -rec.hi).toFixed(4) + ", " +
-            (sign > 0 ? rec.hi : -rec.lo).toFixed(4) + "]\n" +
-            "noise margin ±" + rec.margin + "  → " + verdict + "\n" +
-            pLabel + "=" + (p !== undefined ? Number(p).toPrecision(3) : "–") +
-            "  (raw p=" + Number(rec.p_raw).toPrecision(3) + ")\n" +
-            (rec.family_id ? "confirmatory family: " + rec.family_id + " (m=" + rec.family_size + ")"
-                           : "exploratory (BH within " + bench + "×metric, m=" + rec.exploratory_family_size + ")") +
-            "\nn=" + rec.n_pairs + "  MDE₈₀=" + rec.mde_80 + "  P(sup)=" + rec.prob_superiority +
-            "\nx: " + rec.x_rule + " (rungs " + rec.rung_a + "/" + rec.rung_b + ")" +
+            "Δ = " + fmt(delta) + "   95% CI [" + fmt(sign > 0 ? rec.lo : -rec.hi) + ", " +
+            fmt(sign > 0 ? rec.hi : -rec.lo) + "]\n" +
+            "noise margin ±" + rec.margin + "  →  " + verdict + "\n" +
+            pLabel + fmtP(p) + "  (uncorrected p = " + fmtP(rec.p_raw) + ")\n" +
+            (rec.family_id ? "confirmatory: pre-declared " + setName(rec.confirmatory_set) + " set, Holm-corrected over " + rec.family_size + " comparisons"
+                           : "exploratory: BH-corrected over the " + rec.exploratory_family_size + "-cell matrix") +
+            "\nn = " + rec.n_pairs + " paired expressions" +
+            (onlySided ? " (+" + onlySided + " solved by one side only)" : "") +
+            "\nsmallest reliably detectable Δ (MDE₈₀) ≈ " + rec.mde_80 +
+            "  ·  P(row better on a random expression) = " + rec.prob_superiority +
+            "\nbudget \u2264 " + rec.budget + "s: " + (rec.same_configuration
+              ? "same configuration on both sides (\u2248" + rec.x_a + "s / \u2248" + rec.x_b + "s)"
+              : "each side\u2019s best within budget (row \u2248" + rec.x_a + "s \u00b7 column \u2248" + rec.x_b + "s)") +
             (rec.notes && rec.notes.length ? "\n" + rec.notes.join("\n") : "");
           html.push("<td class='v-" + verdict + (rec.family_id ? " confirmatory" : "") +
             "' title='" + title.replace(/'/g, "&#39;") + "'>" +
-            "<span class='cell-delta'>" + (delta >= 0 ? "+" : "") + delta.toFixed(2) + "</span>" +
+            "<span class='cell-delta'>" + fmt(delta) + "</span>" +
+            "<span class='cell-verdict' aria-label='" + verdict + "'>" + (VERDICT_GLYPHS[verdict] || "") + "</span>" +
             (rec.family_id ? "<span class='cell-badge'>C</span>" : "") + "</td>");
         });
         html.push("</tr>");
       });
       html.push("</tbody></table>");
       html.push("<div class='matrix-legend'>" +
-        "<span class='v-better'>better</span> / <span class='v-worse'>worse</span> (CI clear of the noise margin) · " +
-        "<span class='v-equivalent'>equivalent</span> (CI inside the margin: smaller than the benchmark can measure) · " +
-        "<span class='v-undecided'>undecided</span> (not enough data) · " +
-        "<b>C</b> = confirmatory-registry cell (Holm); all others exploratory (BH). " +
-        "Cells read row − column; hover any cell for the full record. Release " +
+        "<span class='v-better'>better ▲</span> / <span class='v-worse'>worse ▼</span> (CI clear of the noise margin) · " +
+        "<span class='v-equivalent'>equivalent ≈</span> (CI inside the margin: any difference is smaller than the benchmark can measure) · " +
+        "<span class='v-undecided'>undecided ?</span> (hatched fill; not enough data — hover for the smallest detectable difference) · " +
+        "<i>n/a</i> = this pair was not evaluated on this benchmark. " +
+        "<b>C</b> (blue outline) = confirmatory cell: one of the comparisons declared in advance (each ablation vs its parent, adjacent model sizes, " +
+        "and each model size vs each baseline), held to the stricter Holm correction — every other cell is exploratory screening " +
+        "with the lenient Benjamini–Hochberg correction; see <a href='#paired'>Paired comparisons</a>. " +
+        "Cells read row − column at the selected compute budget; hover any cell for its full record. Release " +
         (pairedData.results_release_id || "?") + ".</div>");
       html.push("</div>");
       pairedFoot.innerHTML = html.join("");
