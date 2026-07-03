@@ -305,10 +305,20 @@ def paired_report(
     }
     if n_pairs == 0:
         report.update({k: float("nan") for k in
-                       ("delta_mean", "ci_lower", "ci_upper", "delta_median", "mde_80")})
-        report.update({"win_rate": None, "prob_superiority": float("nan"), "wilcoxon": None,
-                       "verdict": None, "margin": None, "equivalence_attainable": None,
-                       "variance_decomposition": None})
+                       ("delta_mean", "ci_lower", "ci_upper", "delta_median",
+                        "median_ci_lower", "median_ci_upper", "mde_80", "p_value")})
+        report.update({"win_rate": None, "prob_superiority": float("nan"),
+                       "prob_superiority_ci": None, "wilcoxon": None, "verdict": None,
+                       "margin": None, "equivalence_attainable": None,
+                       "variance_decomposition": None,
+                       "rank_ci_method": "hierarchical" if hierarchical else "expression-bootstrap"})
+        if worst_rank:
+            report["worst_rank"] = {"n_imputed_a": pairs["n_only_a"],
+                                    "n_imputed_b": pairs["n_only_b"],
+                                    "n_union": pairs["n_only_a"] + pairs["n_only_b"],
+                                    "degenerate": True, "median_delta": None, "median_ci": None,
+                                    "win_rate": None, "prob_superiority": None, "wilcoxon": None,
+                                    "note": "no common expressions — nothing to pair"}
         return report
 
     # One expression-resampling pass serves every bootstrap statistic (house convention:
