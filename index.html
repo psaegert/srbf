@@ -192,12 +192,21 @@
         halves, the halves are compared against each other, and the margin is the 95th percentile
         of those null differences, combined for the specific pair at hand. Verdicts are issued at
         <em>standardized compute budgets</em> (&le;1, 10, 100, or 1000 seconds per problem,
-        median &mdash; selectable in the view): within the chosen budget, each method's best
-        <em>measured</em> configuration is used, and same-method comparisons additionally use the
-        same configuration on both sides. No verdict ever rests on interpolated values. Every
-        cell in the Matrix answers <em>who is better, given at most t seconds?</em> &mdash; and
-        every row of the Absolute Table answers <em>what does this method achieve, given at most
-        t seconds?</em> at the very same budget and configuration. Four
+        median &mdash; selectable in the view), and every method is evaluated <em>at exactly</em>
+        that time: interpolated per problem, linearly in log-time, between its two bracketing
+        measured configurations &mdash; the same model that draws the &Delta;(t) curves, so no
+        method is under- or over-credited just because its configuration ladder happens to land
+        near or far from the budget. Two honest boundaries: a method whose cheapest configuration
+        already exceeds the budget is <em>n/a</em> (it cannot run within t), and a method whose
+        ladder <em>ends below</em> the budget is never extrapolated &mdash; its last measured
+        value is carried forward, visibly flagged <em>plateau</em>, and treated as a lower bound
+        (more compute could only help it). A verdict stands only if no plateau side could
+        overturn it by improving; otherwise it is downgraded to <em>undecided
+        (ladder-limited)</em>. Same-method comparisons (ablations, the size ladder) instead keep
+        the <em>same measured configuration</em> on both sides: comparing them at equal time
+        would let two factors vary at once. Every cell in the Matrix answers <em>who is better,
+        at exactly t seconds?</em> &mdash; and every row of the Absolute Table answers <em>what
+        does this method achieve, at exactly t seconds?</em> Four
         outcomes (all intervals are 95% confidence intervals):
       </p>
       <ul>

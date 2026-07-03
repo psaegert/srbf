@@ -295,6 +295,11 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
 .abs-table tbody th { font-weight: 500; }
 .abs-table .lb-value b { font-weight: 600; }
 .abs-table .lb-x, .abs-table .lb-n { color: var(--ink-soft); }
+.lb-flag {
+  font-size: .68em; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--ink-faint); border: 1px solid var(--line); border-radius: 6px;
+  padding: .05em .4em; margin-left: .4em; vertical-align: middle;
+}
 .lb-swatch {
   display: inline-block; width: .7em; height: .7em; border-radius: 50%;
   margin-right: .45em; vertical-align: baseline;
