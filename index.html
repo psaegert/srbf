@@ -191,7 +191,7 @@
         is derived from the data, never hand-picked: each model's repeated draws are split into
         halves, the halves are compared against each other, and the margin is the 95th percentile
         of those null differences, combined for the specific pair at hand. Verdicts are issued at
-        <em>standardized compute budgets</em> (&le;1, 10, 100, or 1000 seconds per expression,
+        <em>standardized compute budgets</em> (&le;1, 10, 100, or 1000 seconds per problem,
         median &mdash; selectable in the view): within the chosen budget, each method's best
         <em>measured</em> configuration is used, and same-method comparisons additionally use the
         same configuration on both sides. No verdict ever rests on interpolated values. Every
@@ -236,10 +236,7 @@
         opponent solved, rate metrics count the failure as 0 while diagnostic (quality-of-fit) metrics compare
         only expressions both models solved &mdash; each record discloses those counts. On
         v23-val, cross-method cells carry an <em>in-distribution</em> note: that benchmark is
-        drawn from flash-ansr's own training distribution. PySR cells carry the representability
-        note from the
-        <a href="https://github.com/psaegert/srbf/blob/main/scripts/audit_pysr_maxsize.py"
-           target="_blank" rel="noopener">maxsize audit</a>. Bands on &Delta;-curves are
+        drawn from flash-ansr's own training distribution. Bands on &Delta;-curves are
         pointwise: each budget's band stands on its own, not as a statement about the whole curve. Displayed numbers are rounded to the precision their uncertainty justifies,
         and each paired payload carries a release id &mdash; cite numbers together with it.</p>
     </section>
