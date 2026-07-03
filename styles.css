@@ -284,6 +284,21 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
 .matrix-legend .v-undecided { color: var(--ink-faint); font-weight: 600; }
 
 .results-field-hint { display: block; font-size: .72rem; color: var(--ink-faint); max-width: 15rem; line-height: 1.35; margin-top: .3rem; }
+
+/* budget slider: the pre-declared grid on a log axis — snap points only */
+.budget-slider { display: flex; flex-direction: column; min-width: 14rem; }
+.budget-value { font-size: .92rem; color: var(--ink); padding: .15rem 0 .05rem; }
+.budget-slider input[type="range"] { width: 100%; margin: .3rem 0 .2rem; accent-color: var(--accent); cursor: pointer; }
+.budget-ticks { position: relative; height: 1.05rem; }
+.budget-tick {
+  position: absolute; top: 0; transform: translateX(-50%);
+  background: none; border: none; padding: 0 .15rem; font: inherit; font-size: .72rem;
+  color: var(--ink-faint); cursor: pointer; line-height: 1.2; white-space: nowrap;
+}
+.budget-tick.first { transform: none; }
+.budget-tick.last { transform: translateX(-100%); }
+.budget-tick:hover { color: var(--ink); }
+.budget-tick.active { color: var(--accent); font-weight: 600; }
 .cell-verdict { font-size: .7em; margin-left: .3em; color: var(--ink-faint); }
 
 /* 2×2 view toggles */

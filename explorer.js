@@ -115,19 +115,51 @@
 
     var correctionSel = selectFrom([["corrected", "corrected (default)"], ["raw", "raw p — exploratory only"]]);
 
-    // standardized compute budgets (populated from the paired payload on first load)
-    var budgetSel = document.createElement("select");
-    function fillBudgets() {
-      if (!pairedData || pairedData.error || !pairedData.budgets || budgetSel.options.length) { return; }
-      pairedData.budgets.forEach(function (b) {
-        var o = document.createElement("option"); o.value = String(b);
-        o.textContent = "≤ " + b + " s per problem";
-        budgetSel.appendChild(o);
+    // standardized compute budgets: a slider over the PRE-DECLARED grid (log-spaced decades) —
+    // snap points only, never free values (every budget's statistics, families and corrections
+    // are precomputed in Python; an arbitrary t would have none). Ticks come from the payload.
+    var budgetWrap = document.createElement("div"); budgetWrap.className = "budget-slider";
+    var budgetValue = document.createElement("span"); budgetValue.className = "budget-value";
+    var budgetRange = document.createElement("input");
+    budgetRange.type = "range"; budgetRange.min = "0"; budgetRange.max = "0";
+    budgetRange.step = "1"; budgetRange.value = "0";
+    budgetRange.setAttribute("aria-label", "Compute budget");
+    var budgetTicks = document.createElement("div"); budgetTicks.className = "budget-ticks";
+    budgetWrap.appendChild(budgetValue);
+    budgetWrap.appendChild(budgetRange);
+    budgetWrap.appendChild(budgetTicks);
+    function syncBudget() {
+      var budgets = (pairedData && pairedData.budgets) || [];
+      var b = budgets[parseInt(budgetRange.value, 10)];
+      budgetValue.textContent = b !== undefined ? "≤ " + b + " s per problem" : "…";
+      budgetTicks.querySelectorAll(".budget-tick").forEach(function (el, i) {
+        el.classList.toggle("active", String(i) === budgetRange.value);
       });
-      budgetSel.value = String(pairedData.budgets[pairedData.budgets.length - 1]);
     }
-    budgetSel.addEventListener("change", render);
-    function selectedBudget() { return parseFloat(budgetSel.value); }
+    function fillBudgets() {
+      if (!pairedData || pairedData.error || !pairedData.budgets || budgetTicks.childNodes.length) { return; }
+      var budgets = pairedData.budgets;
+      budgetRange.max = String(budgets.length - 1);
+      budgetRange.value = String(budgets.length - 1);
+      budgets.forEach(function (b, i) {
+        var tick = document.createElement("button");
+        tick.type = "button"; tick.className = "budget-tick";
+        tick.textContent = b + " s";
+        tick.style.left = (budgets.length > 1 ? (i / (budgets.length - 1)) * 100 : 0) + "%";
+        if (i === 0) { tick.classList.add("first"); }
+        if (i === budgets.length - 1) { tick.classList.add("last"); }
+        tick.addEventListener("click", function () {
+          budgetRange.value = String(i); syncBudget(); render();
+        });
+        budgetTicks.appendChild(tick);
+      });
+      syncBudget();
+    }
+    budgetRange.addEventListener("input", function () { syncBudget(); render(); });
+    function selectedBudget() {
+      var budgets = (pairedData && pairedData.budgets) || [];
+      return budgets[parseInt(budgetRange.value, 10)];
+    }
 
     // two segmented toggles exposing the 2×2: what to draw × what the numbers mean
     var tabs = document.createElement("div"); tabs.className = "view-tabs";
@@ -161,7 +193,7 @@
     baselineHint.textContent = "The zero line. Any series can serve — it does not have to be checked above.";
     baselineField.appendChild(baselineHint);
     var correctionField = labelled("Multiple-comparison correction", correctionSel);
-    var budgetField = labelled("Compute budget (verdicts)", budgetSel);
+    var budgetField = labelled("Compute budget (verdicts)", budgetWrap);
     var budgetHint = document.createElement("span");
     budgetHint.className = "results-field-hint";
     budgetHint.textContent = "Every series evaluated at exactly this time per problem (median); ladders ending below it are flagged.";
