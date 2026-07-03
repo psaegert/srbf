@@ -45,10 +45,11 @@ so regenerate `results_data.js` first.
 
 ## Deploying
 
-The site is pushed to the `gh-pages` branch (GitHub Pages serves it):
+Deploys are automatic: pushing to `main` with changes under `results-site/` triggers
+`.github/workflows/pages.yaml`, which uploads this directory as the Pages artifact and deploys
+it (Pages `build_type` is `workflow`). Manual redeploy: `gh workflow run pages.yaml`.
 
-```bash
-ghp-import -n -p -f -m "deploy results site" results-site
-```
-
-(`-n` writes `.nojekyll`.) There is no CI job for this yet; deploy is manual.
+The old flow (ghp-import to a `gh-pages` branch built by the legacy Pages builder) was retired
+2026-07-03 after the legacy builder repeatedly hung >20 minutes per deploy; the `gh-pages`
+branch is no longer consumed. Always verify the SERVED site after deploying, at desktop AND
+mobile widths.
