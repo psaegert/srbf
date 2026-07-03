@@ -212,3 +212,54 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
 .site-footer { border-top: 1px solid var(--line); background: var(--surface); }
 .footer-inner { display: flex; flex-wrap: wrap; gap: .4rem 2rem; justify-content: space-between; padding: 1.4rem 0; color: var(--ink-faint); font-size: .88rem; }
 .footer-inner .brand-mark.small { vertical-align: baseline; }
+
+/* --- Paired views (WP1.D): tabs, Δ verdicts, matrix ------------------------------------ */
+.view-tabs { display: flex; gap: .4rem; margin: 0 0 1rem; flex-wrap: wrap; }
+.view-tab {
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft);
+  padding: .45rem .95rem; border-radius: 999px; font: inherit; font-size: .92rem; cursor: pointer;
+}
+.view-tab:hover { border-color: var(--accent); color: var(--ink); }
+.view-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.paired-foot { margin-top: 1rem; }
+.paired-verdicts {
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+  padding: 1rem 1.2rem; font-size: .92rem; color: var(--ink-soft);
+}
+.paired-verdicts-title { font-weight: 600; color: var(--ink); margin-bottom: .5rem; }
+.paired-verdict-row { padding: .3rem 0; border-top: 1px dashed var(--line); line-height: 1.5; }
+.paired-verdict-row:first-of-type { border-top: none; }
+.paired-verdict-row .fam { color: var(--ink-faint); font-size: .85em; }
+
+.matrix-wrap { overflow-x: auto; }
+.matrix-warning {
+  border: 1px solid #eab308; background: rgba(234, 179, 8, .12); color: var(--ink);
+  border-radius: 10px; padding: .55rem .9rem; margin-bottom: .8rem; font-size: .92rem;
+}
+.paired-matrix { border-collapse: collapse; font-size: .82rem; }
+.paired-matrix th, .paired-matrix td {
+  border: 1px solid var(--line); padding: .3rem .5rem; text-align: center; white-space: nowrap;
+}
+.paired-matrix thead th { position: sticky; top: 0; background: var(--surface); font-weight: 600; }
+.paired-matrix tbody th { text-align: left; background: var(--surface); font-weight: 600; }
+.paired-matrix td { cursor: help; position: relative; min-width: 4.2rem; }
+.paired-matrix td.diag { color: var(--ink-faint); background: var(--bg); cursor: default; }
+.paired-matrix td.missing { color: var(--ink-faint); background: var(--bg); font-style: italic; }
+/* four verdict states — equivalent and undecided must NEVER share a look */
+.paired-matrix td.v-better { background: rgba(22, 163, 74, .18); }
+.paired-matrix td.v-worse { background: rgba(220, 38, 38, .18); }
+.paired-matrix td.v-equivalent { background: rgba(37, 99, 235, .16); }
+.paired-matrix td.v-undecided {
+  background: repeating-linear-gradient(45deg, transparent 0 4px, rgba(134, 140, 156, .12) 4px 8px);
+  color: var(--ink-faint);
+}
+.paired-matrix td.confirmatory { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cell-badge {
+  font-size: .68em; font-weight: 700; color: var(--accent); vertical-align: super; margin-left: .2em;
+}
+.matrix-legend { margin-top: .7rem; font-size: .85rem; color: var(--ink-soft); line-height: 1.6; }
+.matrix-legend .v-better { color: #16a34a; font-weight: 600; }
+.matrix-legend .v-worse { color: #dc2626; font-weight: 600; }
+.matrix-legend .v-equivalent { color: #2563eb; font-weight: 600; }
+.matrix-legend .v-undecided { color: var(--ink-faint); font-weight: 600; }

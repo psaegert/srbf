@@ -2,10 +2,12 @@
  *
  * Reads window.RESULTS_DATA (emitted by srbf.analysis.export_data + augmented by
  * build_results_data.py): { metrics:[{key,label,higher_is_better,tier}], axes:[...],
- * colors:{series:hex}, series_meta:{series:{group,default_on,is_ablation}}, records:[...] }.
- * Renders a Plotly line + CI-band chart with axis / metric / benchmark / series controls, per-series
- * colour customisation (persisted in a single functional cookie, resettable), and a two-tier metric
- * menu. No server, no PNGs; theme-aware (light/dark).
+ * colors:{series:hex}, series_meta:{series:{group,default_on,is_ablation,parent,predecessor}},
+ * records:[...] }. Three views (registry): Curves (marginal line + CI band), Paired (Δ-vs-baseline
+ * curves with pointwise bands + verdict), Matrix (k×k four-state verdict cells). Paired/Matrix data
+ * comes from paired_data.json (lazy-fetched; ALL statistics precomputed in Python by srbf's paired
+ * layer — this file only renders). Per-series colour customisation persists in a single functional
+ * cookie; two-tier metric menu; theme-aware (light/dark).
  */
 (function () {
   "use strict";
@@ -69,12 +71,62 @@
     var axisSel = selectFrom(axes.map(function (a) { return [a, (AXIS_META[a] || {}).label || a]; }));
     var benchSel = selectFrom(benches.map(function (b) { return [b, b]; }));
 
+    // --- view registry: Curves | Paired | Matrix ---------------------------------------------
+    var VIEWS = {
+      curves: { label: "Curves", usesAxis: true, usesBaseline: false, usesCorrection: false },
+      paired: { label: "Paired Δ", usesAxis: false, usesBaseline: true, usesCorrection: true },
+      matrix: { label: "Matrix (exploratory)", usesAxis: false, usesBaseline: false, usesCorrection: true }
+    };
+    var currentView = "curves";
+    var pairedData = null, pairedLoading = false;
+
+    var baselineSel = selectFrom(series.map(function (s) { return [s, s]; }));
+    if (series.indexOf("v23.0-120M") >= 0) { baselineSel.value = "v23.0-120M"; }
+
+    var correctionSel = selectFrom([["corrected", "corrected (default)"], ["raw", "raw p — exploratory only"]]);
+
+    var tabs = document.createElement("div"); tabs.className = "view-tabs";
+    Object.keys(VIEWS).forEach(function (v) {
+      var b = document.createElement("button"); b.type = "button"; b.className = "view-tab";
+      b.textContent = VIEWS[v].label; b.dataset.view = v;
+      if (v === currentView) { b.classList.add("active"); }
+      b.addEventListener("click", function () { switchView(v); });
+      tabs.appendChild(b);
+    });
+
     var controls = document.createElement("div");
     controls.className = "results-controls";
-    controls.appendChild(labelled("X-axis", axisSel));
+    var axisField = labelled("X-axis", axisSel);
+    var baselineField = labelled("Baseline (Δ = selected − baseline)", baselineSel);
+    var correctionField = labelled("Multiple-comparison correction", correctionSel);
+    controls.appendChild(axisField);
     controls.appendChild(labelled("Metric", metricSel));
     controls.appendChild(labelled("Benchmark", benchSel));
-    [axisSel, metricSel, benchSel].forEach(function (s) { s.addEventListener("change", render); });
+    controls.appendChild(baselineField);
+    controls.appendChild(correctionField);
+    [axisSel, metricSel, benchSel, baselineSel, correctionSel].forEach(function (s) { s.addEventListener("change", render); });
+
+    function switchView(v) {
+      currentView = v;
+      tabs.querySelectorAll(".view-tab").forEach(function (b) {
+        b.classList.toggle("active", b.dataset.view === v);
+      });
+      var vm = VIEWS[v];
+      axisField.style.display = vm.usesAxis ? "" : "none";
+      baselineField.style.display = vm.usesBaseline ? "" : "none";
+      correctionField.style.display = vm.usesCorrection ? "" : "none";
+      if (v !== "curves" && !pairedData && !pairedLoading) { loadPaired(); }
+      render();
+    }
+
+    function loadPaired() {
+      pairedLoading = true;
+      fetch("paired_data.json").then(function (r) { return r.json(); }).then(function (d) {
+        pairedData = d; pairedLoading = false; render();
+      }).catch(function () {
+        pairedLoading = false; pairedData = { error: true }; render();
+      });
+    }
 
     // --- series pills, grouped; primary groups visible, ablations collapsed ---
     var seriesChecks = {};
@@ -159,11 +211,24 @@
 
     var plot = document.createElement("div"); plot.id = "results-plot";
     plot.style.width = "100%"; plot.style.height = "500px";
+    var pairedFoot = document.createElement("div"); pairedFoot.className = "paired-foot";
 
+    root.appendChild(tabs);
     root.appendChild(controls);
     root.appendChild(seriesArea);
     root.appendChild(tools);
     root.appendChild(plot);
+    root.appendChild(pairedFoot);
+
+    // deep links: ?view=paired&baseline=PySR&bench=FastSRB&metric=numeric_recovery_val
+    try {
+      var params = new URLSearchParams(window.location.search);
+      if (params.get("metric")) { metricSel.value = params.get("metric"); }
+      if (params.get("bench")) { benchSel.value = params.get("bench"); }
+      if (params.get("baseline")) { baselineSel.value = params.get("baseline"); }
+      if (params.get("view") && VIEWS[params.get("view")]) { currentView = params.get("view"); }
+    } catch (e) { /* older browsers: defaults */ }
+    switchView(currentView);
 
     function theme() {
       var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -171,6 +236,190 @@
     }
 
     function render() {
+      pairedFoot.innerHTML = "";
+      if (currentView === "paired") { return renderPaired(); }
+      if (currentView === "matrix") { return renderMatrix(); }
+      plot.style.display = "";
+      return renderCurves();
+    }
+
+    function pairedReady() {
+      if (pairedData && !pairedData.error) { return true; }
+      plot.style.display = "";
+      Plotly.react(plot, [], {
+        annotations: [{ text: pairedLoading ? "Loading paired data…" :
+          (pairedData && pairedData.error ? "paired_data.json failed to load." : "Loading paired data…"),
+          showarrow: false, font: { size: 15, color: theme().ink } }],
+        paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)"
+      }, { responsive: true, displayModeBar: false });
+      return false;
+    }
+
+    // orientation helper: paired records/curves are stored canonically (a, b); flip for display
+    function orient(entry, selected, baseline) {
+      if (entry.a === selected && entry.b === baseline) { return 1; }
+      if (entry.a === baseline && entry.b === selected) { return -1; }
+      return 0;
+    }
+    function flipVerdict(v) { return v === "better" ? "worse" : v === "worse" ? "better" : v; }
+    var VERDICT_COLORS = { better: "#16a34a", worse: "#dc2626", equivalent: "#2563eb", undecided: "#8a8f9e" };
+
+    function metricInfo(key) { return (pairedData.metrics || []).filter(function (m) { return m.key === key; })[0]; }
+
+    function pairedMetricGuard(metricKey) {
+      if (metricInfo(metricKey)) { return true; }
+      plot.style.display = "";
+      Plotly.react(plot, [], {
+        annotations: [{ text: "Paired data ships for the main-tier metrics — pick one in the Metric menu.",
+          showarrow: false, font: { size: 14, color: theme().ink } }],
+        paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)"
+      }, { responsive: true, displayModeBar: false });
+      return false;
+    }
+
+    function renderPaired() {
+      if (!pairedReady()) { return; }
+      var metricKey = metricSel.value, bench = benchSel.value, baseline = baselineSel.value;
+      if (!pairedMetricGuard(metricKey)) { return; }
+      plot.style.display = "";
+      var t = theme();
+      var mi = metricInfo(metricKey);
+      var traces = [];
+      var notes = [];
+      series.forEach(function (s) {
+        if (!seriesChecks[s].checked || s === baseline) { return; }
+        var col = colorOf(s, idx[s]);
+        var curve = (pairedData.curves || []).filter(function (c) {
+          return c.benchmark === bench && c.metric === metricKey && orient(c, s, baseline) !== 0;
+        })[0];
+        if (!curve) { return; }
+        var sign = orient(curve, s, baseline);
+        var pts = curve.points.filter(function (p) { return p.delta !== null; });
+        if (!pts.length) { return; }
+        var xs = pts.map(function (p) { return p.x; });
+        var d = pts.map(function (p) { return sign * p.delta; });
+        var lo = pts.map(function (p) { return sign > 0 ? p.lo : -p.hi; });
+        var hi = pts.map(function (p) { return sign > 0 ? p.hi : -p.lo; });
+        traces.push({ x: xs.concat(xs.slice().reverse()), y: hi.concat(lo.slice().reverse()),
+          fill: "toself", fillcolor: hexA(col, 0.13), line: { width: 0 },
+          hoverinfo: "skip", showlegend: false, legendgroup: s, type: "scatter", mode: "lines" });
+        traces.push({ x: xs, y: d, name: s, legendgroup: s,
+          line: { color: col, width: 2.5 },
+          marker: { color: col, size: pts.map(function (p) { return (p.mA && p.mB) ? 8 : 4; }),
+                    symbol: pts.map(function (p) { return (p.mA && p.mB) ? "circle" : "circle-open"; }) },
+          type: "scatter", mode: "lines+markers",
+          customdata: pts.map(function (p) {
+            var favors = (sign * p.delta > 0) === (mi.higher_is_better !== false) ? s : baseline;
+            return [sign > 0 ? p.lo : -p.hi, sign > 0 ? p.hi : -p.lo, p.n,
+                    (p.mA && p.mB) ? "measured" : "interpolated", favors];
+          }),
+          hovertemplate: "<b>" + s + " − " + baseline + "</b><br>t: %{x:.3g}s (%{customdata[3]})<br>" +
+            "Δ: %{y:.3f} [%{customdata[0]:.3f}, %{customdata[1]:.3f}] — favors %{customdata[4]}" +
+            "<br>n=%{customdata[2]} expressions<extra></extra>" });
+        var rec = (pairedData.records || []).filter(function (r) {
+          return r.benchmark === bench && r.metric === metricKey && orient(r, s, baseline) !== 0;
+        })[0];
+        if (rec) {
+          var rSign = orient(rec, s, baseline);
+          var verdict = rSign > 0 ? rec.verdict : flipVerdict(rec.verdict);
+          var corrected = correctionSel.value === "corrected";
+          var p = corrected ? (rec.p_adj !== undefined ? rec.p_adj : rec.q_bh) : rec.p_raw;
+          var pLabel = corrected ? (rec.p_adj !== undefined ? "Holm p=" : "BH q=") : "raw p=";
+          notes.push("<b>" + s + "</b> vs " + baseline + " at the declared comparison point (" + rec.x_rule +
+            "): <span style='color:" + (VERDICT_COLORS[verdict] || "#888") + "'><b>" + verdict + "</b></span>, " +
+            "Δ=" + (rSign * rec.delta).toFixed(3) + " [" +
+            (rSign > 0 ? rec.lo : -rec.hi).toFixed(3) + ", " + (rSign > 0 ? rec.hi : -rec.lo).toFixed(3) + "], " +
+            "noise margin ±" + rec.margin + ", " + pLabel + (p !== undefined ? Number(p).toPrecision(2) : "–") +
+            (rec.family_id ? " <span class='fam'>(confirmatory family " + rec.family_id + ", m=" + rec.family_size + ")</span>"
+                           : " <span class='fam'>(exploratory)</span>") +
+            ", n=" + rec.n_pairs + ", MDE₈₀=" + rec.mde_80 +
+            (rec.equivalence_attainable === false ? " — <i>equivalence not attainable at this n (resolution-limited)</i>" : "") +
+            (rec.notes && rec.notes.length ? "<br><i>" + rec.notes.join(" ") + "</i>" : ""));
+        }
+      });
+      var layout = {
+        font: { family: "Inter, system-ui, sans-serif", color: t.ink, size: 13 },
+        margin: { l: 62, r: 20, t: 16, b: 58 },
+        xaxis: { title: "Inference compute budget t (s) — series-median cost, interpolated in log t",
+                 type: "log", gridcolor: t.grid, zerolinecolor: t.zero, ticks: "outside", tickcolor: t.grid },
+        yaxis: { title: "Δ " + (mi ? mi.label : metricKey) + "  (selected − baseline)",
+                 gridcolor: t.grid, zerolinewidth: 2, zerolinecolor: t.ink, ticks: "outside", tickcolor: t.grid },
+        legend: { orientation: "h", y: -0.22, font: { size: 12 } },
+        hovermode: "closest", paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+        annotations: traces.length ? [] : [{ text: "No paired curves for this selection (pick series above; the baseline itself is the zero line).",
+          showarrow: false, font: { size: 14, color: t.ink } }]
+      };
+      Plotly.react(plot, traces, layout, { responsive: true, displayModeBar: false });
+      pairedFoot.innerHTML = notes.length
+        ? "<div class='paired-verdicts'><div class='paired-verdicts-title'>Verdicts at the declared comparison point (" +
+          "release " + (pairedData.results_release_id || "?") + ", α=" + (pairedData.alpha || 0.05) + ")</div>" +
+          notes.map(function (n) { return "<div class='paired-verdict-row'>" + n + "</div>"; }).join("") + "</div>"
+        : "";
+    }
+
+    function renderMatrix() {
+      if (!pairedReady()) { return; }
+      var metricKey = metricSel.value, bench = benchSel.value;
+      if (!pairedMetricGuard(metricKey)) { return; }
+      plot.style.display = "none";
+      var corrected = correctionSel.value === "corrected";
+      var active = series.filter(function (s) { return seriesChecks[s].checked; });
+      var recFor = {};
+      (pairedData.records || []).forEach(function (r) {
+        if (r.benchmark === bench && r.metric === metricKey) {
+          recFor[r.a + "|" + r.b] = r;
+        }
+      });
+      var html = ["<div class='matrix-wrap'>"];
+      if (!corrected) {
+        html.push("<div class='matrix-warning'>⚠ Uncorrected p-values — exploratory browsing only; " +
+          "never quote these as claims. Switch back to “corrected”.</div>");
+      }
+      html.push("<table class='paired-matrix'><thead><tr><th>row − column</th>");
+      active.forEach(function (s) { html.push("<th>" + s + "</th>"); });
+      html.push("</tr></thead><tbody>");
+      active.forEach(function (rowS) {
+        html.push("<tr><th>" + rowS + "</th>");
+        active.forEach(function (colS) {
+          if (rowS === colS) { html.push("<td class='diag'>—</td>"); return; }
+          var rec = recFor[rowS + "|" + colS] || recFor[colS + "|" + rowS];
+          if (!rec) { html.push("<td class='missing' title='not evaluated on this benchmark'>n/a</td>"); return; }
+          var sign = rec.a === rowS ? 1 : -1;
+          var verdict = sign > 0 ? rec.verdict : flipVerdict(rec.verdict);
+          var delta = (sign * rec.delta);
+          var p = corrected ? (rec.family_id ? rec.p_adj : rec.q_bh) : rec.p_raw;
+          var pLabel = corrected ? (rec.family_id ? "Holm p" : "BH q") : "raw p";
+          var title = rowS + " − " + colS + " [" + bench + "]\n" +
+            "Δ=" + delta.toFixed(4) + "  CI=[" + (sign > 0 ? rec.lo : -rec.hi).toFixed(4) + ", " +
+            (sign > 0 ? rec.hi : -rec.lo).toFixed(4) + "]\n" +
+            "noise margin ±" + rec.margin + "  → " + verdict + "\n" +
+            pLabel + "=" + (p !== undefined ? Number(p).toPrecision(3) : "–") +
+            "  (raw p=" + Number(rec.p_raw).toPrecision(3) + ")\n" +
+            (rec.family_id ? "confirmatory family: " + rec.family_id + " (m=" + rec.family_size + ")"
+                           : "exploratory (BH within " + bench + "×metric, m=" + rec.exploratory_family_size + ")") +
+            "\nn=" + rec.n_pairs + "  MDE₈₀=" + rec.mde_80 + "  P(sup)=" + rec.prob_superiority +
+            "\nx: " + rec.x_rule + " (rungs " + rec.rung_a + "/" + rec.rung_b + ")" +
+            (rec.notes && rec.notes.length ? "\n" + rec.notes.join("\n") : "");
+          html.push("<td class='v-" + verdict + (rec.family_id ? " confirmatory" : "") +
+            "' title='" + title.replace(/'/g, "&#39;") + "'>" +
+            "<span class='cell-delta'>" + (delta >= 0 ? "+" : "") + delta.toFixed(2) + "</span>" +
+            (rec.family_id ? "<span class='cell-badge'>C</span>" : "") + "</td>");
+        });
+        html.push("</tr>");
+      });
+      html.push("</tbody></table>");
+      html.push("<div class='matrix-legend'>" +
+        "<span class='v-better'>better</span> / <span class='v-worse'>worse</span> (CI clear of the noise margin) · " +
+        "<span class='v-equivalent'>equivalent</span> (CI inside the margin: smaller than the benchmark can measure) · " +
+        "<span class='v-undecided'>undecided</span> (not enough data) · " +
+        "<b>C</b> = confirmatory-registry cell (Holm); all others exploratory (BH). " +
+        "Cells read row − column; hover any cell for the full record. Release " +
+        (pairedData.results_release_id || "?") + ".</div>");
+      html.push("</div>");
+      pairedFoot.innerHTML = html.join("");
+    }
+
+    function renderCurves() {
       var t = theme();
       var axis = axisSel.value, metricKey = metricSel.value, bench = benchSel.value;
       var metric = metrics.filter(function (m) { return m.key === metricKey; })[0];
