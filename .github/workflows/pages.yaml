@@ -1,0 +1,35 @@
+name: deploy-results-site
+
+# Deploys results-site/ to GitHub Pages via the workflow builder. Replaces the legacy
+# gh-pages-branch builder (2026-07-03: it hung >20 min on 4 consecutive deploys while the
+# status page read "operational"; ghp-import + build kicks were needed every time). Push to
+# main touching results-site/ deploys automatically; workflow_dispatch for manual redeploys.
+on:
+  push:
+    branches: [main]
+    paths: ["results-site/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: results-site
+      - id: deployment
+        uses: actions/deploy-pages@v4
