@@ -49,11 +49,14 @@
       <p class="lede">
         The live results of <strong>srbf</strong>: recovery and fit quality across
         <strong>Flash-ANSR</strong> model scales and the <strong>PySR</strong>,
-        <strong>NeSymReS</strong>, and <strong>E2E</strong> baselines. Choose an axis, a metric,
-        and a benchmark, then toggle series. Every curve is a bootstrap estimate over benchmark
-        expressions with a 95% confidence band; <a href="#about">About these numbers</a> explains
-        exactly how each point is computed, and <a href="#metrics">Metrics</a> defines every metric
-        in the menu.
+        <strong>NeSymReS</strong>, and <strong>E2E</strong> baselines (plus <strong>Prior</strong>,
+        a reference that samples candidate skeletons from the training prior without any model).
+        <strong>Curves</strong> shows each series on its own, with 95% bootstrap confidence bands.
+        <strong>Paired &Delta;</strong> and <strong>Matrix</strong> answer head-to-head questions
+        &mdash; is A better than B, beyond what benchmark noise can explain? &mdash; with
+        <a href="#paired">pre-declared, corrected verdicts</a>. <a href="#about">About these
+        numbers</a> explains how each point is computed, and <a href="#metrics">Metrics</a>
+        defines every metric in the menu.
       </p>
     </section>
 
@@ -169,19 +172,27 @@
         comparing two models' separate averages (whose uncertainty bands are inflated by shared
         expression difficulty &mdash; hard expressions are hard for everyone), they compute the
         difference <em>per expression</em> and ask whether those per-expression differences are
-        consistently positive. The convention everywhere is
-        <strong>&Delta;&nbsp;=&nbsp;selected&nbsp;&minus;&nbsp;baseline</strong>, and hover text always
-        says which model a value favors. All statistics are precomputed in Python by
+        consistently one-sided. The convention is
+        <strong>&Delta;&nbsp;=&nbsp;selected&nbsp;&minus;&nbsp;baseline</strong> (in the Matrix, cells
+        read row&nbsp;&minus;&nbsp;column), and hover text says which model a value favors. All statistics are precomputed in Python by
         <a href="https://github.com/psaegert/srbf" target="_blank" rel="noopener">srbf</a>'s paired
         layer; this page only renders them. Every claim is <strong>per benchmark</strong> &mdash;
         there is deliberately no combined number, because the two benchmarks measure different
         populations.
       </p>
       <p><strong>How to read a verdict.</strong> Each comparison is judged against a
-        <em>measurement-noise margin</em>: the largest difference that could plausibly appear if you
-        compared two <em>equally good</em> models with these two series' run-to-run noise (derived by
-        splitting each model's own repeated draws against themselves &mdash; no hand-picked
-        thresholds, and the margin is specific to the pair being compared). Four outcomes:
+        <em>measurement-noise margin</em>: the largest difference you would expect between two
+        <em>equally good</em> models, given these two series' own draw-to-draw noise. The margin
+        is derived from the data, never hand-picked: each model's repeated draws are split into
+        halves, the halves are compared against each other, and the margin is the 95th percentile
+        of those null differences, combined for the specific pair at hand. Verdicts are issued at
+        <em>standardized compute budgets</em> (&le;1, 10, 100, or 1000 seconds per expression,
+        median &mdash; selectable in the view): within the chosen budget, each method's best
+        <em>measured</em> configuration is used, and same-method comparisons additionally use the
+        same configuration on both sides. No verdict ever rests on interpolated values, and every
+        cell in the Matrix answers the same question: <em>who is better, given at most t
+        seconds?</em> Four
+        outcomes (all intervals are 95% confidence intervals):
       </p>
       <ul>
         <li><strong style="color:#16a34a">better</strong> / <strong style="color:#dc2626">worse</strong> &mdash;
@@ -191,31 +202,39 @@
           <em>inside</em> the margin: any remaining difference is smaller than this benchmark can
           measure. (This is measurement-equivalence, not proof the models are identical.)</li>
         <li><strong>undecided</strong> &mdash; neither of the above: not enough data to call it.
-          Each record reports its <em>minimum detectable effect</em> (MDEMDE&#8320;&#8080;#8328;MDE&#8320;&#8080;#8320;): differences
-          smaller than that number were invisible at this benchmark size, so "undecided" never
-          means "equal".</li>
+          Each record reports its <em>minimum detectable effect</em> (MDE₈₀): the smallest
+          true difference this comparison would have caught reliably &mdash; 80% of the time,
+          hence the subscript. Smaller differences could easily have been missed, so "undecided"
+          never means "equal".</li>
       </ul>
       <p><strong>Corrected vs raw p-values.</strong> Checking many comparisons at once produces
         false positives by luck alone, so displayed significance is corrected by default &mdash;
-        Holm (strict) within the small set of <em>confirmatory</em> comparisons the benchmark
-        actually certifies (ablation-vs-parent, the size ladder, baselines-vs-flagship; marked
-        <strong>C</strong> in the matrix), Benjamini&ndash;Hochberg (screening) for everything
-        else, which stays labeled <em>exploratory</em>. The correction toggle can show raw
-        p-values for browsing, behind a warning &mdash; never quote those. Every cell records
-        which family and method produced its correction, so numbers remain auditable as the model
-        roster grows.</p>
+        Holm (strict) within the small <em>pre-declared</em> set of confirmatory comparisons
+        &mdash; each ablation vs its parent model, adjacent steps of the model-size ladder, and
+        each model size vs each baseline (marked <strong>C</strong> in the matrix; the common
+        thread is that every confirmatory pair varies <em>exactly one factor</em>: a design
+        choice, one scale step, or the method itself) &mdash; and
+        Benjamini&ndash;Hochberg (screening) for everything else, which stays labeled
+        <em>exploratory</em>. The p-value and the verdict answer different questions: the p-value
+        asks whether &Delta; is exactly zero, while the verdict asks whether the confidence
+        interval clears the pair's noise margin &mdash; so a comparison can be significant yet
+        <em>undecided</em>: a real-looking difference that is not provably larger than benchmark
+        noise. Verdicts are interval-based and do not change with the correction toggle, which
+        can show raw p-values for browsing, behind a warning &mdash; never quote those. Every
+        cell records which family and method produced its correction, so numbers remain auditable
+        as the model roster grows.</p>
       <p><strong>Small print, honestly stated.</strong> The compute axis pairs configurations
         whose <em>median</em> cost is <em>t</em> &mdash; not per-expression equal budgets; solid
         dots are measured configurations, hollow dots are interpolated between neighboring
         measured ones (never extrapolated). Where a model failed on an expression that its
-        opponent solved, rate metrics count the failure as 0 while quality-of-fit metrics compare
+        opponent solved, rate metrics count the failure as 0 while diagnostic (quality-of-fit) metrics compare
         only expressions both models solved &mdash; each record discloses those counts. On
         v23-val, cross-method cells carry an <em>in-distribution</em> note: that benchmark is
         drawn from flash-ansr's own training distribution. PySR cells carry the representability
         note from the
         <a href="https://github.com/psaegert/srbf/blob/main/scripts/audit_pysr_maxsize.py"
            target="_blank" rel="noopener">maxsize audit</a>. Bands on &Delta;-curves are
-        pointwise. Displayed numbers are rounded to the precision their uncertainty justifies,
+        pointwise: each budget's band stands on its own, not as a statement about the whole curve. Displayed numbers are rounded to the precision their uncertainty justifies,
         and each paired payload carries a release id &mdash; cite numbers together with it.</p>
     </section>
 
