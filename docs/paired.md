@@ -84,7 +84,14 @@ On the results site, verdicts are issued at **standardized compute budgets** (�
 1000 s per expression, median; user-selectable): within the budget, each method's best measured
 configuration, with same-method pairs additionally on the same configuration (one factor
 varies). Correction families are per budget (`family_id` carries `t`), so the budget grid is
-pre-declared, not cherry-picked.
+pre-declared, not cherry-picked. The **Table view** (Table × Absolute) runs on the same budget
+grid and the same best-within-budget selection — per benchmark, each series' most expensive
+usable configuration whose *median* fit time is ≤ t (the budget caps a configuration's median
+cost, never per-expression equal budgets) — and shows that configuration's *marginal* value and
+95% CI, numerically identical to its point on the Curves view (an exporter self-check enforces
+this). Those rows are marginal: never difference two of them and never subtract their CIs —
+that is exactly the anti-pattern from the top of this page; head-to-head questions belong to
+the Paired views.
 
 `paired_delta_curve(series_a, series_b, metric, x_policy=...)` compares two rung ladders:
 `'rung'` matches identical configurations (same-method variants — ablation vs parent, size
@@ -109,6 +116,9 @@ with its `family_id`, family size, and method, so corrections remain auditable a
 when the model roster changes.
 
 The interactive rendering of all of this lives on the
-[results explorer](https://psaegert.github.io/srbf/) (Paired Δ and Matrix views); its
-[Paired comparisons](https://psaegert.github.io/srbf/#paired) section explains the same ideas
-for readers without a statistics background.
+[results explorer](https://psaegert.github.io/srbf/), whose views form a 2×2 grid — Display
+(Curves | Table) × Values (Absolute | Paired). The Paired values render in both displays: Δ(t)
+curves over the compute axis and the verdict matrix at a chosen budget; the Absolute Table
+shares the budget machinery but shows marginal per-series values, never to be differenced. The
+explorer's [Paired comparisons](https://psaegert.github.io/srbf/#paired) section explains the
+same ideas for readers without a statistics background.

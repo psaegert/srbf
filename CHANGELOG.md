@@ -4,6 +4,24 @@ All notable changes to srbf are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **The results explorer's three tabs (Curves | Paired Δ | Matrix) generalize to a 2×2 view
+  grid** — Display (Curves = the whole compute sweep | Table = one selected compute budget) ×
+  Values (Absolute = each series' own value, marginal bootstrap CI | Paired = per-expression
+  head-to-head differences with four-state verdicts) — adding the fourth quadrant, the
+  **Table × Absolute view** (`?view=table`; the curves/paired/matrix deep links are unchanged):
+  per benchmark, each series' best measured configuration within the selected budget (the same
+  best-within-budget selection the matrix uses for its sides), with its marginal value + 95% CI,
+  numerically identical to that configuration's point on the Curves view (enforced by an
+  exporter self-check). The marginal-CI warning is built into the view: rows are never to be
+  differenced — head-to-head questions belong to the Paired views.
+- **Subtler confirmatory marking in the Matrix view:** confirmatory cells now carry only a small
+  faint superscript C (the earlier accent outline + badge read as clutter); tapping/clicking a
+  cell pins its full record — confirmatory status spelled out — below the table, so the detail
+  stays reachable on mobile.
+
 ## [0.7.0] - 2026-07-03
 
 The paired-statistics layer (improvement-plan WP1): compare models on the SAME expressions

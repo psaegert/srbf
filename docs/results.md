@@ -8,9 +8,27 @@ The **interactive results explorer** lives on the project's results site, separa
   </a>
 </p>
 
-There you can pick an x-axis (inference compute as wall-clock time, measurement noise, or number of
-samples), a metric, and a benchmark, then toggle series on and off, with bootstrap medians and 95%
-confidence bands. This page documents **how those numbers are produced** and **how to reproduce them**.
+The explorer is a 2×2 view grid selected by two toggles: **Display** — *Curves* (a metric over the
+whole compute sweep) or *Table* (a snapshot at one selected compute budget) — × **Values** —
+*Absolute* (each series' own value, with a marginal bootstrap CI) or *Paired* (per-expression
+head-to-head differences with four-state verdicts). The four quadrants:
+
+- **Curves × Absolute** — the sweep chart: per-series bootstrap medians with 95% confidence bands.
+- **Curves × Paired** — Δ(t) curves: one series minus a chosen baseline, paired per expression.
+- **Table × Absolute** — the Table view: per benchmark, each series' best measured configuration
+  within the selected budget, with its marginal value + 95% CI (numerically identical to that
+  configuration's point on the curves).
+- **Table × Paired** — the verdict matrix: four-state verdicts for every pair at the selected budget.
+
+Curves × Absolute is where you pick the x-axis (inference compute as wall-clock time, measurement
+noise, or number of samples), a metric, and a benchmark, and toggle series on and off; the other
+three quadrants live on the compute axis at standardized budgets (≤1, 10, 100, 1000 s per
+expression — budgets cap a configuration's *median* cost, not each expression's). Everything is
+strictly per benchmark; there is deliberately no combined cross-benchmark number. And the Table
+view's numbers are marginal: never difference two rows and never subtract two CIs — head-to-head
+questions belong to the Paired views. The statistics behind all of this are documented in
+[Paired comparisons](paired.md). This page documents **how those numbers are produced** and **how
+to reproduce them**.
 
 ## How the numbers are computed
 
@@ -26,7 +44,12 @@ export_data      ->  the JSON the results explorer reads
 
 `srbf.analysis` (leaderboard / scaling / per-benchmark / distribution helpers) turns a set of runs --
 each a raw snapshot tagged with `(model, benchmark, axis, x)` -- into bootstrap-CI'd aggregates.
+(The Python `leaderboard` helper is a static report table, unrelated to the explorer's Table view.)
 `export_data(runs, "results_data.json")` writes the tidy records the explorer loads client-side.
+The Paired and Table quadrants read a second payload, `paired_data.json`, built by the
+flash-ansr-side exporter (`experimental/eval/build_paired_data.py`) on top of `srbf.reporting`, with
+every statistic (paired deltas, CIs, verdicts, the Table block) precomputed in Python -- the site
+only renders.
 Metrics are the strict `is_perfect_fit` numeric recovery, token-level skeleton F1, and the median
 `log10` FVU; sources are unseeded, so we report the distribution (bootstrap CI), not a single point.
 
