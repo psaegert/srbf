@@ -526,6 +526,16 @@
     var VERDICT_GLYPHS = { better: "▲", worse: "▼", equivalent: "≈", undecided: "?" };
     function setName(key) { return ({ ablations: "ablation vs parent", size_ladder: "adjacent model sizes", baselines: "model sizes vs baselines" })[key] || key; }
 
+    function pairedMetricGuardHtml(metricKey) {
+      if (metricInfo(metricKey)) { return true; }
+      plot.style.display = "none";
+      var label = (metrics.filter(function (m) { return m.key === metricKey; })[0] || {}).label || metricKey;
+      pairedFoot.innerHTML = "<div class='matrix-warning'>" + label + " has no paired " +
+        "comparisons — this view covers the Main metrics. Pick one from the “Main metrics” " +
+        "group in the Metric menu.</div>";
+      return false;
+    }
+
     function pairedMetricGuard(metricKey) {
       if (metricInfo(metricKey)) { return true; }
       plot.style.display = "";
@@ -802,7 +812,7 @@
     function renderMatrix() {
       if (!pairedReady()) { return; }
       var metricKey = metricSel.value, bench = benchSel.value;
-      if (!pairedMetricGuard(metricKey)) { return; }
+      if (!pairedMetricGuardHtml(metricKey)) { return; }
       plot.style.display = "none";
       if (!budgetIsSnapped()) { return renderMatrixDescriptive(); }
       var corrected = correctionSel.value === "corrected";
@@ -889,7 +899,7 @@
     function renderTable() {
       if (!pairedReady()) { return; }
       var metricKey = metricSel.value, bench = benchSel.value;
-      if (!pairedMetricGuard(metricKey)) { return; }
+      if (!pairedMetricGuardHtml(metricKey)) { return; }
       plot.style.display = "none";
       var mi = metricInfo(metricKey);
       var hib = !(mi && mi.higher_is_better === false);
