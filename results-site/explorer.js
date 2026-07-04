@@ -318,7 +318,7 @@
     var baselineField = labelled("Baseline: every checked series is compared against it", baselineSel);
     var baselineHint = document.createElement("span");
     baselineHint.className = "results-field-hint";
-    baselineHint.textContent = "The zero line. Any series can serve; it does not have to be checked above.";
+    baselineHint.textContent = "The zero line, drawn in this series' colour. Its own pill is parked below: compared to itself it would be a flat 0.";
     baselineField.appendChild(baselineHint);
     var correctionField = labelled("Multiple-comparison correction", correctionSel);
     correctionField.querySelector(".results-field-label")
@@ -358,6 +358,7 @@
     controls.appendChild(baselineField);
     controls.appendChild(correctionField);
     [axisSel, metricSel, benchSel, baselineSel, correctionSel].forEach(function (s) { s.addEventListener("change", render); });
+    baselineSel.addEventListener("change", syncBaselinePills);
     metricSel.addEventListener("change", function () {
       ranksSwitchedFrom = null; ranksRestoreKey = null; ranksAutoKey = null;
     });
@@ -382,6 +383,7 @@
       seriesArea.style.display = vm.usesSeries === false ? "none" : "";
       tools.style.display = vm.usesSeries === false ? "none" : "";
       if (v === "ranks") { ranksAutoPicked = false; syncBudget(); }
+      syncBaselinePills();
       applyMetricEligibility();
       rosterNote.style.display = vm.display === "ranks" ? "" : "none";
       if (v !== "curves" && !pairedData && !pairedLoading) { loadPaired(); }
@@ -414,10 +416,13 @@
     // --- series pills, grouped; primary groups visible, ablations collapsed ---
     var seriesChecks = {};
     var swatchInputs = {};
+    var pillWraps = {};
+    var baselineTags = {};
 
     function pill(s) {
       var i = idx[s];
       var wrap = document.createElement("span"); wrap.className = "series-pill";
+      pillWraps[s] = wrap;
       var lbl = document.createElement("label"); lbl.className = "series-toggle";
       var cb = document.createElement("input"); cb.type = "checkbox";
       cb.checked = metaOf(s).default_on === true;
@@ -430,17 +435,36 @@
       });
       swatchInputs[s] = color;
       var name = document.createElement("span"); name.className = "series-name"; name.textContent = s;
+      var tag = document.createElement("span"); tag.className = "baseline-tag";
+      tag.textContent = "baseline"; tag.style.display = "none";
+      baselineTags[s] = tag;
       var reset = document.createElement("button"); reset.type = "button"; reset.className = "series-reset";
       reset.textContent = "↺"; reset.title = "Reset colour to default";
       reset.addEventListener("click", function () {
         delete userColors[s]; writeCookie(userColors);
         color.value = toHex6(defaultColor(s, i)); syncReset(s); render();
       });
-      lbl.appendChild(cb); lbl.appendChild(color); lbl.appendChild(name); lbl.appendChild(reset);
+      lbl.appendChild(cb); lbl.appendChild(color); lbl.appendChild(name); lbl.appendChild(tag); lbl.appendChild(reset);
       wrap.appendChild(lbl);
       syncReset(s);
       return wrap;
       function syncReset(k) { reset.style.display = userColors[k] ? "inline-flex" : "none"; }
+    }
+
+    // in Curves × Paired the baseline pill becomes the reference marker: its Δ-curve would be
+    // identically 0, so its checkbox is parked and the zero line carries its colour instead
+    function syncBaselinePills() {
+      var isPaired = currentView === "paired";
+      series.forEach(function (s) {
+        if (!pillWraps[s]) { return; }
+        var isBase = isPaired && s === baselineSel.value;
+        pillWraps[s].classList.toggle("is-baseline", isBase);
+        baselineTags[s].style.display = isBase ? "" : "none";
+        seriesChecks[s].disabled = isBase;
+        pillWraps[s].querySelector(".series-toggle").title = isBase
+          ? "The baseline: the zero line every checked series is compared against. Change it with the Baseline selector."
+          : "";
+      });
     }
 
     function groupsFor(pred) {
@@ -628,7 +652,11 @@
       var t = Number(selectedBudget().toPrecision(3));
       return "<div class='desc-banner'>Descriptive slice at t ≈ " + t + " s per problem: " +
         "values are read off the plotted curves (interpolated along the drawn segments). " +
-        "There are <b>no verdicts, margins or corrected p-values between the marked budgets</b> (" +
+        "Marked budgets use the same straight line, rebuilt per expression on the set both " +
+        "bracketing configurations solved and with real statistics attached; a curve read " +
+        "can drift slightly from that where the solved set changes between configurations. " +
+        "There are <b>no verdicts, margins or corrected p-values " +
+        "between the marked budgets</b> (" +
         ((pairedData && pairedData.budgets) || []).join(", ") + " s, the pre-declared grid): " +
         "sliding until a difference looks convincing and quoting it is exactly the " +
         "multiple-comparisons trap the marks prevent. Snap to a mark for release-grade " +
@@ -748,12 +776,17 @@
         xaxis: { title: "Compute budget t (s, log scale)", dtick: 1,
                  type: "log", gridcolor: t.grid, zerolinecolor: t.zero, ticks: "outside", tickcolor: t.grid },
         yaxis: { title: "Δ " + (mi ? mi.label : metricKey),
-                 gridcolor: t.grid, zerolinewidth: 2, zerolinecolor: t.ink, ticks: "outside", tickcolor: t.grid },
+                 gridcolor: t.grid, zerolinewidth: 2,
+                 zerolinecolor: colorOf(baseline, idx[baseline]), ticks: "outside", tickcolor: t.grid },
         legend: { orientation: "h", y: -0.28, yanchor: "top", font: { size: 12 } },
         hovermode: "closest", paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
         shapes: traces.length ? [{ type: "line", x0: selectedBudget(), x1: selectedBudget(),
           yref: "paper", y0: 0, y1: 1, line: { color: t.ink, width: 1, dash: "dot" } }] : [],
-        annotations: traces.length ? [] : [{ text: (pairedData.records || []).some(function (r) { return r.benchmark === bench && (r.a === baseline || r.b === baseline); })
+        annotations: traces.length
+          ? [{ xref: "paper", x: 0.99, y: 0, yref: "y", xanchor: "right", yanchor: "bottom",
+               text: baseline + " (baseline) = 0", showarrow: false,
+               font: { size: 11, color: colorOf(baseline, idx[baseline]) } }]
+          : [{ text: (pairedData.records || []).some(function (r) { return r.benchmark === bench && (r.a === baseline || r.b === baseline); })
           ? "No paired curves for this selection. Toggle series above (the baseline itself is the zero line)."
           : "No paired comparisons are available for baseline " + baseline + " on " + bench + ". Pick another baseline or benchmark.",
           showarrow: false, font: { size: 14, color: t.ink } }]
@@ -817,6 +850,14 @@
       maxtested: "Nothing was tested beyond this point; the method itself is not " +
           "stagnating. It shows its largest tested configuration's value: a lower bound, " +
           "since more compute could only help it. Never extrapolated.",
+      interpolated: "This budget falls between two tested configurations, so the value is " +
+          "rebuilt per expression: every expression solved at BOTH configurations is read " +
+          "off the straight line (in log-time) between them, then bootstrapped for real " +
+          "CIs, noise margins and corrected p-values.",
+      curveread: "A ruler held on the plotted curve. Where both bracketing configurations " +
+          "solved the same expressions this equals the marked-budget number; where they " +
+          "did not, it can drift (the release number conditions on the shared set). And it " +
+          "never carries the statistics, which exist only at the pre-declared marks.",
       testedlimit: "A side at its max tested run could improve with more compute, so any " +
           "verdict it could overturn by improving is withheld.",
       margin: "The largest difference two EQUALLY GOOD methods would show from benchmark " +
@@ -1122,8 +1163,8 @@
         var basis = row.e.status === "plateau"
           ? "largest tested ≈" + fmtDesc(row.e.x) + " s <span class='lb-flag'>max tested</span>"
           : row.e.status === "interpolated"
-            ? (snapped ? "= " + row.e.x + " s (interpolated)"
-                       : "≈ " + Number(selectedBudget().toPrecision(3)) + " s (curve read)")
+            ? (snapped ? "= " + row.e.x + " s (" + term("interpolated", "interpolated") + ")"
+                       : "≈ " + Number(selectedBudget().toPrecision(3)) + " s (" + term("curveread", "curve read") + ")")
             : "measured ≈" + fmtDesc(row.e.x) + " s";
         html.push("<td class='lb-value'><b>" + fv(row.e.value) + "</b> [" + fv(row.e.lo) +
           ", " + fv(row.e.hi) + "]" + (row.e.status === "plateau" ? " <span class='lb-flag'>max tested</span>" : "") + "</td>" +

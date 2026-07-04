@@ -236,6 +236,16 @@ html[data-theme="dark"] #va {
 .series-swatch::-webkit-color-swatch-wrapper { padding: 0; }
 .series-swatch::-webkit-color-swatch { border: none; border-radius: 3px; }
 .series-swatch::-moz-color-swatch { border: none; border-radius: 3px; }
+/* in Curves × Paired the baseline pill is the parked reference, not a toggle */
+.series-pill.is-baseline .series-toggle {
+  border-color: var(--accent); background: var(--accent-soft); color: var(--ink); cursor: default;
+}
+.series-pill.is-baseline input[type="checkbox"] { cursor: default; }
+.baseline-tag {
+  font-size: .6rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  border-radius: 5px; padding: .04em .32em; margin-left: .15em; white-space: nowrap;
+}
 .series-reset {
   display: none; align-items: center; justify-content: center;
   width: 1.05rem; height: 1.05rem; padding: 0; margin-left: -.15rem;
@@ -308,7 +318,9 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 .footer-inner .brand-mark.small { vertical-align: baseline; }
 
 /* --- Paired views (WP1.D): tabs, Δ verdicts, matrix ------------------------------------ */
-.view-tabs { display: flex; gap: 1.4rem; margin: 0 0 1rem; flex-wrap: wrap; align-items: flex-start; }
+.view-tabs { display: flex; gap: 1.4rem; margin: 0 0 1rem; flex-wrap: wrap; align-items: stretch; }
+/* the two toggles form one 2×2 system: a rule separates them from each other (labels stay) */
+.view-toggle + .view-toggle { border-left: 1px solid var(--line); padding-left: 1.4rem; }
 .view-tab {
   border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft);
   padding: .45rem .95rem; border-radius: 999px; font: inherit; font-size: .92rem; cursor: pointer;
@@ -399,15 +411,13 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
   padding: .05em .4em; margin-left: .35em; vertical-align: middle;
 }
 
-/* compact controls on phones: toggles share one row, the budget slider gets the full width */
+/* compact controls on phones: toggles keep their headings and share one row (the divider
+   spans both label and buttons), the budget slider gets the full width */
 @media (max-width: 560px) {
-  .view-tabs { gap: 0; align-items: center; }
-  .view-toggle .results-field-label { display: none; }   /* buttons are self-explanatory */
-  .view-toggle-group { gap: .2rem; }
-  .view-toggle + .view-toggle .view-toggle-group {
-    margin-left: .3rem; padding-left: .3rem; border-left: 1px solid var(--line);
-  }
-  .view-tab { padding: .26rem .4rem; font-size: .75rem; }
+  .view-tabs { gap: .5rem; }
+  .view-toggle + .view-toggle { padding-left: .5rem; }
+  .view-toggle-group { gap: .18rem; }
+  .view-tab { padding: .26rem .34rem; font-size: .74rem; }
   .results-field:has(.budget-slider) { flex: 1 1 100%; }
   .budget-slider { min-width: 0; width: 100%; }
 }

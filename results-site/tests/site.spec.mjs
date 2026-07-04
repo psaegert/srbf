@@ -291,19 +291,61 @@ test('help: term hints render as soft prose, not label styling (ALL-CAPS regress
   expect(style.spacing).toBe('normal');
 });
 
-test('mobile: toggles share one row and the budget slider spans the panel', async ({ page }) => {
+test('mobile: toggles keep headings, share one row with a divider, slider spans the panel', async ({ page }) => {
   test.skip(page.viewportSize().width > 560, 'compact controls only apply below 560px');
   await gotoView(page, 'table');
   const layout = await page.evaluate(() => {
-    const groups = document.querySelectorAll('.view-toggle-group');
-    const a = groups[0].getBoundingClientRect();
-    const b = groups[1].getBoundingClientRect();
+    const toggles = document.querySelectorAll('.view-toggle');
+    const a = toggles[0].getBoundingClientRect();
+    const b = toggles[1].getBoundingClientRect();
+    const labelsVisible = [...document.querySelectorAll('.view-toggle .results-field-label')]
+      .every((l) => l.offsetHeight > 0);
     const slider = document.querySelector('.budget-slider').getBoundingClientRect();
     const panel = document.querySelector('.results-controls').getBoundingClientRect();
-    return { sameRow: Math.abs(a.top - b.top) < 2, sliderFill: slider.width / panel.width };
+    return { sameRow: Math.abs(a.top - b.top) < 2, labelsVisible,
+             divider: getComputedStyle(toggles[1]).borderLeftWidth,
+             sliderFill: slider.width / panel.width };
   });
   expect(layout.sameRow).toBe(true);
+  expect(layout.labelsVisible).toBe(true);
+  expect(layout.divider).toBe('1px');
   expect(layout.sliderFill).toBeGreaterThan(0.97);
+});
+
+// ---- Curves × Paired: the baseline pill is the parked reference ----------------------------
+
+test('paired: the baseline pill is marked, parked, follows the selector, and unparks on leave', async ({ page }) => {
+  const errors = collectErrors(page);
+  await gotoView(page, 'paired');
+  const basePill = page.locator('.series-pill.is-baseline');
+  await expect(basePill).toHaveCount(1);
+  await expect(basePill.locator('.series-name')).toHaveText('v23.0-120M');
+  await expect(basePill.locator('.baseline-tag')).toBeVisible();
+  expect(await basePill.locator('input[type=checkbox]').evaluate((c) => c.disabled)).toBe(true);
+  await page.locator('select:has(option[value="PySR"])').last().selectOption('PySR');
+  await expect(basePill.locator('.series-name')).toHaveText('PySR');
+  await switchTo(page, 'table');
+  await expect(page.locator('.series-pill.is-baseline')).toHaveCount(0);
+  expect(await page.evaluate(() =>
+    [...document.querySelectorAll('.series-pill input[type=checkbox]')].some((c) => c.disabled))).toBe(false);
+  expect(errors).toEqual([]);
+});
+
+test('paired: the zero line carries the baseline colour and an explicit label', async ({ page }) => {
+  await gotoView(page, 'paired');
+  await expect(page.locator('#results-plot .annotation-text', { hasText: 'baseline' }).first())
+    .toBeVisible({ timeout: 15_000 });
+});
+
+// ---- table: interpolated / curve read are tap-to-define -----------------------------------
+
+test('table: the interpolated status explains itself on tap', async ({ page }) => {
+  await gotoView(page, 'table');
+  await page.click('.budget-tick >> nth=2');                       // ≤ 100 s: interpolated rows exist
+  const t = page.locator('.term[data-term="interpolated"]').first();
+  await expect(t).toBeVisible();
+  await t.click();
+  await expect(page.locator('.term-pop')).toContainText('straight line');
 });
 
 // ---- payload contract ----------------------------------------------------------------------
