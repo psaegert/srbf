@@ -245,7 +245,12 @@
     budgetHint.textContent = "Marks = release-grade numbers · between marks = descriptive curve read (snaps near marks).";
     budgetField.appendChild(budgetHint);
     controls.appendChild(axisField);
-    controls.appendChild(labelled("Metric", metricSel));
+    var metricField = labelled("Metric", metricSel);
+    var metricHint = document.createElement("span");
+    metricHint.className = "results-field-hint metric-hint";
+    metricHint.style.display = "none";
+    metricField.appendChild(metricHint);
+    controls.appendChild(metricField);
     controls.appendChild(labelled("Benchmark", benchSel));
     controls.appendChild(budgetField);
     controls.appendChild(baselineField);
@@ -285,7 +290,24 @@
       var inRanks = VIEWS[currentView].display === "ranks";
       for (var oi = 0; oi < metricSel.options.length; oi++) {
         var opt2 = metricSel.options[oi];
-        opt2.disabled = inRanks && !!pairedData && !rankMetricInfo(opt2.value);
+        if (!opt2.dataset.label) { opt2.dataset.label = opt2.textContent; }
+        var rm = pairedData ? rankMetricInfo(opt2.value) : null;
+        opt2.disabled = inRanks && !!pairedData && !rm;
+        // in Ranks, the menu itself shows the league structure at first glance
+        opt2.textContent = (inRanks && rm)
+          ? opt2.dataset.label + (rm.primary ? " — primary league" : " — exploratory")
+          : opt2.dataset.label;
+      }
+      if (inRanks && pairedData) {
+        var current = rankMetricInfo(metricSel.value);
+        metricHint.textContent = current
+          ? (current.primary
+             ? "The primary league — the one rank result quoted as a claim."
+             : "An exploratory league — the quotable one is log10 FVU (validation).")
+          : "";
+        metricHint.style.display = "";
+      } else {
+        metricHint.style.display = "none";
       }
     }
 
@@ -1005,6 +1027,7 @@
 
     function renderRanks() {
       if (!pairedReady()) { return; }
+      applyMetricEligibility();
       var bench = benchSel.value, metricKey = metricSel.value;
       if (!pairedData.ranks) {
         plot.style.display = "none";

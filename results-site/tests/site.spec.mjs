@@ -147,6 +147,19 @@ test('ranks: entering with vNRR switches to the primary league VISIBLY and resto
   expect(errors).toEqual([]);
 });
 
+test('ranks: the metric menu shows the league structure at first glance', async ({ page }) => {
+  await gotoView(page, 'ranks');
+  expect(await metricSelect(page).locator('option[value="log10_fvu_val"]').textContent())
+    .toContain('primary league');
+  expect(await metricSelect(page).locator('option[value="edit_distance_norm"]').textContent())
+    .toContain('exploratory');
+  await expect(page.locator('.metric-hint')).toContainText('primary league');
+  await gotoView(page, 'curves');
+  expect(await metricSelect(page).locator('option[value="log10_fvu_val"]').textContent())
+    .not.toContain('primary league');
+  await expect(page.locator('.metric-hint')).toBeHidden();
+});
+
 test('ranks: ineligible metrics are disabled in the menu', async ({ page }) => {
   await gotoView(page, 'ranks');
   expect(await metricSelect(page).locator('option[value="numeric_recovery_val"]')
