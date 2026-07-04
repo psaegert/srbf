@@ -1125,12 +1125,16 @@
         "mean-rank gap that counts.</div>" +
         "<div class='matrix-legend'>" +
         "<span class='" + (league.primary ? "rank-primary" : "rank-exploratory") + "'>" +
-        (league.primary ? "PRIMARY league" : "exploratory league") + "</span> — " +
+        (league.primary ? "PRIMARY league" : "exploratory league") + "</span> — this label " +
+        "belongs to the metric selected above: each of the " +
+        (pairedData.rank_metrics || []).length + " continuous metrics has its own league, and " +
         (league.primary
-          ? "the one pre-declared rank claim per benchmark and budget. "
-          : "browse freely, quote only the primary (log10 FVU, validation) league. ") +
+          ? "<b>" + rmi.label + "</b> is the one pre-declared as quotable — rank claims are " +
+            "made from this league only. "
+          : "<b>" + rmi.label + "</b> is one of the browsing leagues — explore freely, but " +
+            "rank claims are quoted only from the primary league, log10 FVU (validation). ") +
         "Within each of the n = " + league.n_problems + " expressions, the " + k +
-        " methods are ranked 1 (best) to " + k + " on <b>" + rmi.label + "</b> at the ≤ " +
+        " methods are ranked 1 (best) to " + k + " at the ≤ " +
         selectedBudget() + " s per problem budget (every method evaluated at exactly t); " +
         "hard and easy expressions count equally, because each hands out the same placings. " +
         (league.mode === "worst-rank"
