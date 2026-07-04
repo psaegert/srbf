@@ -191,6 +191,31 @@ for (const view of VIEWS) {
   });
 }
 
+// ---- contextual help: ?-links, collapsed fine print, tap-to-define terms -------------------
+
+test('help: the metric ?-link routes to the metrics reference', async ({ page }) => {
+  await gotoView(page, 'curves');
+  await expect(page.locator('.help-link[href="#metrics"]')).toBeVisible();
+  await expect(page.locator('.help-link[href="#paired"]').first()).toBeAttached();
+});
+
+test('help: legends open with a key line, fine print collapsed by default', async ({ page }) => {
+  await gotoView(page, 'matrix');
+  const fine = page.locator('.matrix-legend details.fine-print');
+  await expect(fine).toBeVisible();
+  expect(await fine.evaluate((d) => d.open)).toBe(false);
+  await fine.locator('summary').click();
+  expect(await fine.evaluate((d) => d.open)).toBe(true);
+});
+
+test('help: tapping a term shows its one-sentence definition', async ({ page }) => {
+  await gotoView(page, 'ranks');
+  await page.locator('.term[data-term="cd"]').first().click();
+  await expect(page.locator('.term-pop')).toContainText('critical difference');
+  await page.locator('h1').click();          // click elsewhere closes it
+  await expect(page.locator('.term-pop')).toHaveCount(0);
+});
+
 // ---- payload contract ----------------------------------------------------------------------
 
 test('payload: schema and blocks the frontend depends on', async ({ request }) => {

@@ -337,6 +337,29 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
 
 .metric-badge { margin-left: .55rem; vertical-align: baseline; text-transform: uppercase; }
 
+/* contextual help: ?-links on control labels, tap-to-define terms, collapsed fine print */
+.help-link {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.15em; height: 1.15em; margin-left: .45em; border-radius: 50%;
+  border: 1px solid var(--line); color: var(--ink-faint); font-size: .85em;
+  text-decoration: none; line-height: 1; vertical-align: baseline;
+}
+.help-link:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+.term { border-bottom: 1px dotted var(--ink-faint); cursor: help; }
+.term:hover { border-bottom-color: var(--accent); }
+.term-pop {
+  display: block; margin: .35rem 0; padding: .55rem .8rem; max-width: 34rem;
+  background: var(--accent-soft); border: 1px solid var(--line); border-radius: 8px;
+  font-size: .84rem; color: var(--ink); line-height: 1.5;
+}
+.fine-print { margin-top: .45rem; }
+.fine-print > summary {
+  cursor: pointer; font-size: .8rem; font-weight: 600; color: var(--ink-faint);
+  list-style-position: inside;
+}
+.fine-print > summary:hover { color: var(--accent); }
+.fine-print > div { margin-top: .4rem; }
+
 /* rank-league chips */
 .rank-primary {
   font-size: .78em; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;

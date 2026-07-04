@@ -261,17 +261,29 @@
     baselineHint.textContent = "The zero line. Any series can serve — it does not have to be checked above.";
     baselineField.appendChild(baselineHint);
     var correctionField = labelled("Multiple-comparison correction", correctionSel);
+    correctionField.querySelector(".results-field-label")
+      .appendChild(helpLink("#paired", "Why corrections, and what they change"));
     var budgetField = labelled("Compute budget", budgetWrap);
+    budgetField.querySelector(".results-field-label")
+      .appendChild(helpLink("#paired", "How budgets and verdicts work"));
     var budgetHint = document.createElement("span");
     budgetHint.className = "results-field-hint";
     budgetHint.textContent = "Marks = release-grade numbers · between marks = descriptive curve read (snaps near marks).";
     budgetField.appendChild(budgetHint);
     controls.appendChild(axisField);
+    function helpLink(href, label) {
+      var a = document.createElement("a");
+      a.className = "help-link"; a.href = href; a.textContent = "?";
+      a.title = label; a.setAttribute("aria-label", label);
+      return a;
+    }
     var metricField = labelled("Metric", metricSel);
     var metricBadge = document.createElement("span");
     metricBadge.className = "metric-badge";
     metricBadge.style.display = "none";
     metricField.querySelector(".results-field-label").appendChild(metricBadge);
+    metricField.querySelector(".results-field-label")
+      .appendChild(helpLink("#metrics", "What does every metric mean?"));
     controls.appendChild(metricField);
     controls.appendChild(labelled("Benchmark", benchSel));
     controls.appendChild(budgetField);
@@ -727,6 +739,45 @@
       return verdict + (rec.verdict_note ? " (" + rec.verdict_note + ")" : "");
     }
 
+    // --- tap-to-define terms: jargon carries its own one-sentence explanation ------------
+    var TERMS = {
+      cd: "The critical difference: the smallest gap in mean rank that counts as real here, " +
+          "after correcting for comparing every pair of methods at once. The ruler above the " +
+          "chart is exactly this long — hold it against any gap.",
+      plateau: "This method's measurements end below the selected budget, so it shows its " +
+          "last measured value — a lower bound; more compute could only help it. Never " +
+          "extrapolated.",
+      ladderlimited: "A plateau side could improve with more compute, so any verdict it " +
+          "could overturn by improving is withheld.",
+      margin: "The largest difference two EQUALLY GOOD methods would show from benchmark " +
+          "noise alone (derived from each method's own repeated draws). Differences inside " +
+          "it are not real.",
+      mde: "The smallest true difference this comparison would reliably detect (80% power). " +
+          "'Undecided' means smaller differences could easily have been missed — it never " +
+          "means 'equal'.",
+      confirmatory: "One of the comparisons declared BEFORE looking at results, held to the " +
+          "strict Holm correction — the quotable tier.",
+      exploratory: "The browsing tier: corrected only by the lenient Benjamini–Hochberg " +
+          "procedure. Explore freely, never quote as a claim.",
+      equivalent: "The interval fits entirely inside the noise margin: any remaining " +
+          "difference is smaller than this benchmark can measure. Measurement-equivalence, " +
+          "not proof of identity.",
+    };
+    function term(key, text) {
+      return "<span class='term' data-term='" + key + "' role='button' tabindex='0'>" +
+        text + "</span>";
+    }
+    document.addEventListener("click", function (e) {
+      var open = document.querySelector(".term-pop");
+      var el = e.target.closest ? e.target.closest(".term") : null;
+      if (open) { open.remove(); }
+      if (!el || (open && open.previousSibling === el)) { return; }
+      var pop = document.createElement("span");
+      pop.className = "term-pop";
+      pop.textContent = TERMS[el.dataset.term] || "";
+      el.insertAdjacentElement("afterend", pop);
+    });
+
     var matrixCells = [], matrixSelectedKey = null;
 
     function matrixDetailHtml(cell) {
@@ -758,7 +809,7 @@
       return head +
         "<div><span style='color:" + (VERDICT_COLORS[o.verdict] || "#888") + "'><b>" + verdictLabel(rec, o.verdict) +
         "</b></span> — Δ = " + fmt(o.delta) + " [" + fmt(o.lo) + ", " + fmt(o.hi) +
-        "] vs noise margin ±" + rec.margin +
+        "] vs " + term("margin", "noise margin") + " ±" + rec.margin +
         (rec.verdict_note === "ladder-limited"
           ? " — <i>a plateau side has no measurements at this budget; its carried value is a lower bound, so no at-budget verdict can be issued</i>"
           : (o.verdict === "undecided" && rec.equivalence_attainable === false
@@ -770,7 +821,7 @@
           : " · exploratory — BH-corrected over the " + rec.exploratory_family_size + "-cell matrix") + "</div>" +
         "<div class='fam'>n = " + rec.n_pairs + " paired expressions" +
         (onlySided ? " (+" + onlySided + " solved by one side only)" : "") +
-        " · smallest reliably detectable Δ (MDE₈₀) ≈ " + rec.mde_80 +
+        " · smallest reliably detectable Δ (" + term("mde", "MDE₈₀") + ") ≈ " + rec.mde_80 +
         " · P(" + cell.rowS + " better on a random expression) = " + o.psup + "</div>" +
         "<div class='fam'>" + (rec.same_configuration
           ? "same configuration on both sides (≈" + o.xRow + " s / ≈" + o.xCol + " s per problem)"
@@ -921,15 +972,21 @@
       html.push("<div class='matrix-detail'>" +
         (selectedIdx >= 0 ? matrixDetailHtml(matrixCells[selectedIdx]) : "") + "</div>");
       html.push("<div class='matrix-legend'>" +
-        "<span class='v-better'>better ▲</span> / <span class='v-worse'>worse ▼</span> (CI clear of the noise margin) · " +
-        "<span class='v-equivalent'>equivalent ≈</span> (CI inside the margin: any difference is smaller than the benchmark can measure) · " +
-        "<span class='v-undecided'>undecided ?</span> (hatched fill; not enough data — the full record shows the smallest detectable difference) · " +
-        "<i>n/a</i> = not measurable within this budget, or not evaluated on this benchmark. " +
-        "A small <b>C</b> marks a confirmatory cell: one of the comparisons declared in advance (each ablation vs its parent, adjacent model sizes, " +
-        "and each model size vs each baseline), held to the stricter Holm correction — every other cell is exploratory screening " +
-        "with the lenient Benjamini–Hochberg correction; see <a href='#paired'>Paired comparisons</a>. " +
-        "Cells read row − column at the selected compute budget; tap or hover any cell to pin its full record below the table. Release " +
-        (pairedData.results_release_id || "?") + ".</div>");
+        "<span class='v-better'>▲ better</span> · <span class='v-worse'>▼ worse</span> · " +
+        term("equivalent", "<span class='v-equivalent'>≈ equivalent</span>") + " · " +
+        "<span class='v-undecided'>? undecided</span> · <i>n/a</i> · <b>C</b> " +
+        term("confirmatory", "confirmatory") + " — cells read row − column." +
+        "<details class='fine-print'><summary>Full method &amp; record</summary><div>" +
+        "<b>better ▲</b> / <b>worse ▼</b>: the CI clears the " + term("margin", "noise margin") +
+        " — a real difference. <b>equivalent ≈</b>: the CI fits inside the margin. " +
+        "<b>undecided ?</b> (hatched): not enough data — each record shows its " +
+        term("mde", "MDE₈₀") + ". <i>n/a</i>: not measurable within this budget, or not " +
+        "evaluated on this benchmark. A small <b>C</b> marks a " +
+        term("confirmatory", "confirmatory") + " cell (each ablation vs its parent, adjacent " +
+        "model sizes, each model size vs each baseline), held to the stricter Holm " +
+        "correction; every other cell is " + term("exploratory", "exploratory") +
+        " screening — see <a href='#paired'>Paired comparisons</a>. Release " +
+        (pairedData.results_release_id || "?") + ".</div></details></div>");
       pairedFoot.innerHTML = html.join("");
     }
 
@@ -1015,16 +1072,17 @@
         "rows proves nothing. For any A-vs-B question use the Paired Δ views " +
         "(<a href='#paired'>why</a>).</div>");
       html.push("<div class='matrix-legend'>" +
+        (hib ? "Higher" : "Lower") + " is better, best first · " +
+        term("plateau", "<span class='lb-flag'>plateau</span>") + " = value is a lower bound " +
+        "· per benchmark only." +
+        "<details class='fine-print'><summary>Full method &amp; record</summary><div>" +
         "Each row: the series evaluated at exactly the selected budget — interpolated per " +
         "problem, linearly in log-time, between its two bracketing measured configurations " +
         "(the same model as the Δ(t) curves, so the value sits on the plotted segment; " +
-        "measured points keep the exact Curves-view value). " +
-        "<span class='lb-flag'>plateau</span> = the method's measurements end below the " +
-        "budget (its largest tested configuration is shown); the value is carried forward as " +
-        "a lower bound, since more compute could only help it — never extrapolated. " +
-        (hib ? "Higher" : "Lower") + " is better, best first; rankings are per benchmark " +
-        "only — there is deliberately no combined number. Release " +
-        (pairedData.results_release_id || "?") + ".</div>" +
+        "measured points keep the exact Curves-view value). Plateau rows show the method's " +
+        "largest tested configuration, carried forward as a lower bound — never extrapolated. " +
+        "There is deliberately no combined cross-benchmark number. Release " +
+        (pairedData.results_release_id || "?") + ".</div></details></div>" +
         (notes ? "<div class='matrix-legend'>" + notes + "</div>" : ""));
       pairedFoot.innerHTML = html.join("");
     }
@@ -1159,38 +1217,34 @@
         "mean-rank gap that counts.</div>" +
         "<div class='matrix-legend'>" +
         "<span class='" + (league.primary ? "rank-primary" : "rank-exploratory") + "'>" +
-        (league.primary ? "PRIMARY league" : "exploratory league") + "</span> — this label " +
-        "belongs to the metric selected above: each of the " +
-        (pairedData.rank_metrics || []).length + " continuous metrics has its own league, and " +
+        (league.primary ? "PRIMARY league" : "exploratory league") + "</span> — " +
         (league.primary
-          ? "<b>" + rmi.label + "</b> is the one pre-declared as quotable — rank claims are " +
-            "made from this league only. "
-          : "<b>" + rmi.label + "</b> is one of the browsing leagues — explore freely, but " +
-            "rank claims are quoted only from the primary league, log10 FVU (validation). ") +
-        "Within each of the n = " + league.n_problems + " expressions, the " + k +
-        " methods are ranked 1 (best) to " + k + " at the ≤ " +
-        selectedBudget() + " s per problem budget (every method evaluated at exactly t); " +
-        "hard and easy expressions count equally, because each hands out the same placings. " +
+          ? "the pre-declared quotable league (see the metric menu for the others). "
+          : "a browsing league — claims come from the primary one, log10 FVU (validation). ") +
+        k + " methods ranked on <b>" + rmi.label + "</b> over n = " + league.n_problems +
+        " expressions · " + term("cd", "CD") + " = " + league.cd + " · " +
+        (reject ? "the omnibus test confirms real rank differences"
+                : "<b>the omnibus test does not reject — no groupings drawn</b>") + "." +
+        (excludedNote || "") +
+        "<details class='fine-print'><summary>Full method &amp; record</summary><div>" +
+        "Within each expression, the " + k + " methods are ranked 1 (best) to " + k +
+        " at the ≤ " + selectedBudget() + " s per problem budget (every method evaluated at " +
+        "exactly t); hard and easy expressions count equally, because each hands out the same " +
+        "placings. " +
         (league.mode === "worst-rank"
           ? "A method that fails an expression ranks last on it" +
             (missing.length ? " (failures: " + missing.join(", ") + ")" : "") + "."
           : "<b>Conditional league</b>: only expressions every method solved — a smaller, " +
             "easier population; the property being ranked is undefined for failures.") + " " +
-        (reject
-          ? "A <a href='#ranks'>Friedman omnibus</a> confirms the spread of mean ranks is " +
-            "real before any grouping is drawn; the Nemenyi critical difference corrects for " +
-            "comparing all " + (k * (k - 1) / 2) + " pairs at once. A pre-declared Paired " +
-            "verdict can legitimately separate two methods that share a band — it asks a " +
-            "magnitude question, ranks ask a consistency question (a hair's win counts like " +
-            "a mile's)."
-          : "<b>The Friedman omnibus does not reject</b> — no rank separations to report; " +
-            "positions are shown without groupings.") +
-        "<div class='fam'>Full record: Friedman (tie-corrected) χ² = " + league.friedman_chi2 +
-        ", p = " + fmtP(league.friedman_p) + " over n = " + league.n_problems +
-        " expressions · CD = " + league.cd + " at α = " + league.alpha +
-        " · release " + (pairedData.results_release_id || "?") + ".</div>" +
-        excludedNote +
-        "</div>";
+        "A <a href='#ranks'>Friedman omnibus</a> confirms the spread of mean ranks is real " +
+        "before any grouping is drawn; the Nemenyi critical difference corrects for comparing " +
+        "all " + (k * (k - 1) / 2) + " pairs at once. A pre-declared Paired verdict can " +
+        "legitimately separate two methods that share a band — it asks a magnitude question, " +
+        "ranks ask a consistency question (a hair's win counts like a mile's). " +
+        "Friedman (tie-corrected) χ² = " + league.friedman_chi2 + ", p = " +
+        fmtP(league.friedman_p) + " · CD = " + league.cd + " at α = " + league.alpha +
+        " · release " + (pairedData.results_release_id || "?") + "." +
+        "</div></details></div>";
     }
 
     function renderCurves() {
