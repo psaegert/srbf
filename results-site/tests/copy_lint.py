@@ -60,6 +60,14 @@ def main() -> int:
             for match in re.finditer(pattern, text, flags=re.IGNORECASE):
                 snippet = text[max(0, match.start() - 40):match.end() + 40].replace("\n", " ")
                 failures.append(f"{name}: /{pattern}/ ({why})\n    …{snippet}…")
+    # em-dash budget: AI prose overuses them; colons, semicolons and structure read better.
+    # index.html allows 0; explorer.js strings allow 2 (the matrix-diagonal placeholders).
+    for name, text, budget in [("index.html", surfaces["index.html"], 0),
+                               ("explorer.js (strings)", surfaces["explorer.js (strings)"], 2)]:
+        count = text.count("—") + text.count("&mdash;")
+        if count > budget:
+            failures.append(f"{name}: {count} em-dashes (budget {budget}) — rewrite with "
+                            "colons, semicolons, parentheses, or structure")
     if failures:
         print(f"COPY LINT: {len(failures)} banned pattern(s) found:\n")
         print("\n".join(failures))

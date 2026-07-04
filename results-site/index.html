@@ -52,16 +52,22 @@
         <strong>Flash-ANSR</strong> model scales and the <strong>PySR</strong>,
         <strong>NeSymReS</strong>, and <strong>E2E</strong> baselines (plus <strong>Prior</strong>,
         a reference that samples candidate skeletons from the training prior without any model).
-        Views are organized on two axes: <strong>Display</strong> &mdash; Curves over a whole
-        sweep (compute, support size, or noise level), a Table at one chosen compute budget, or
-        <a href="#ranks">Ranks</a>, a ranking of all methods at once &mdash; &times;
-        <strong>Values</strong> &mdash; Absolute numbers per series, or Paired head-to-head
-        differences (Ranks is inherently many-method, so the Values axis does not apply to
-        it). Absolute views show each series on its own, with 95% bootstrap confidence
-        bands; Paired views answer head-to-head questions &mdash; is A better than B, beyond what
-        benchmark noise can explain? &mdash; with <a href="#paired">pre-declared comparisons</a>:
-        multiplicity-corrected p-values and interval-vs-noise-margin verdicts. <a href="#about">About these numbers</a> explains how each point is
-        computed, and <a href="#metrics">Metrics</a> defines every metric in the menu.
+        Views are organized on two axes:
+      </p>
+      <ul class="lede-axes">
+        <li><strong>Display:</strong> Curves over a whole sweep (compute, support size, or
+          noise level), a Table at one chosen compute budget, or <a href="#ranks">Ranks</a>,
+          a ranking of all methods at once.</li>
+        <li><strong>Values:</strong> Absolute numbers per series, shown with 95% bootstrap
+          confidence bands, or Paired head-to-head differences (is A better than B, beyond
+          what benchmark noise can explain?) with <a href="#paired">pre-declared
+          comparisons</a>: multiplicity-corrected p-values and interval-vs-noise-margin
+          verdicts. Ranks is inherently many-method, so the Values axis does not apply to
+          it.</li>
+      </ul>
+      <p class="lede">
+        <a href="#about">About these numbers</a> explains how each point is computed;
+        <a href="#metrics">Metrics</a> defines every metric in the menu.
       </p>
       <div class="va-wrap">
         <img class="visual-abstract" src="visual-abstract.svg"
@@ -178,21 +184,21 @@
       <h2>Paired comparisons</h2>
       <p>
         Every method in this explorer solved the <em>same</em> benchmark expressions. The
-        <strong>Paired</strong> views (the &Delta;-curves &mdash; Curves &times; Paired &Delta;
-        &mdash; and the verdict Matrix &mdash; Table &times; Paired &Delta;) exploit that:
+        <strong>Paired</strong> views (the &Delta;-curves, reached via Curves &times; Paired
+        &Delta;, and the verdict Matrix, via Table &times; Paired &Delta;) exploit that:
         instead of comparing two methods' separate averages (whose uncertainty bands are inflated
-        by shared expression difficulty &mdash; hard expressions are hard for everyone), they
+        by shared expression difficulty: hard expressions are hard for everyone), they
         compute the difference <em>per expression</em> and ask whether those per-expression
         differences are consistently one-sided. This is also why the <strong>Absolute</strong>
         Table view warns against reading differences off its rows: two marginal confidence
         intervals can overlap even when one method is reliably better on expression after
-        expression &mdash; if the question is "A vs B", use a Paired view. The convention is
+        expression. If the question is "A vs B", use a Paired view. The convention is
         <strong>&Delta;&nbsp;=&nbsp;selected&nbsp;&minus;&nbsp;baseline</strong> (in the Matrix, cells
         read row&nbsp;&minus;&nbsp;column), and the tap/hover record says which series a value favors. Every statistic on this page is computed ahead of time by
         <a href="https://github.com/psaegert/srbf" target="_blank" rel="noopener">srbf</a>'s
-        open-source paired layer and published with the page &mdash; nothing is calculated in
-        your browser, so what you see is exactly what is citable. Every claim is <strong>per benchmark</strong> &mdash;
-        there is deliberately no combined number, because the two benchmarks measure different
+        open-source paired layer and published with the page: nothing is calculated in
+        your browser, so what you see is exactly what is citable. Every claim is <strong>per
+        benchmark</strong>: there is deliberately no combined number, because the two benchmarks measure different
         populations.
       </p>
       <p><strong>How to read a verdict.</strong> Each comparison is judged against a
@@ -202,78 +208,78 @@
         halves, the halves are compared against each other, and the margin is the 95th percentile
         of those null differences, combined for the specific pair at hand. Verdicts are issued at
         <em>standardized compute budgets</em> (&le;1, 10, 100, or 1000 seconds per problem,
-        median &mdash; selectable in the view), and every method is evaluated <em>at exactly</em>
+        median; selectable in the view), and every method is evaluated <em>at exactly</em>
         that time: interpolated per problem, linearly in log-time, between its two bracketing
-        measured configurations &mdash; the same model that draws the &Delta;(t) curves, so no
+        measured configurations. This is the same model that draws the &Delta;(t) curves, so no
         method is under- or over-credited just because its tested configurations happen to land
         near or far from the budget. Two honest boundaries: a method whose cheapest configuration
         already exceeds the budget is <em>n/a</em> (it cannot run within t), and a method whose
-        measurements <em>end below</em> the budget is never extrapolated &mdash; its largest
+        measurements <em>end below</em> the budget is never extrapolated: its largest
         tested configuration's value is carried forward, visibly flagged <em>max tested</em>,
         and treated as a lower bound (more compute could only help it; the method is not
-        stagnating &mdash; we simply did not test beyond that point). A verdict stands only if
+        stagnating; we simply did not test beyond that point). A verdict stands only if
         no max-tested side could overturn it by improving; otherwise it is downgraded to
         <em>undecided (max-tested limit)</em>. Same-method comparisons (ablations, the size
         ladder of model scales) instead keep
         the <em>same measured configuration</em> on both sides: comparing them at equal time
         would let two factors vary at once. Every cell in the Matrix answers <em>who is better,
-        at exactly t seconds?</em> &mdash; and every row of the Absolute Table answers <em>what
+        at exactly t seconds?</em>; every row of the Absolute Table answers <em>what
         does this method achieve, at exactly t seconds?</em> The budget slider itself is
         continuous for exploration: it snaps magnetically to the marked budgets, and any
         position <em>between</em> them shows clearly-labeled <em>descriptive</em> reads of the
-        plotted curves &mdash; deliberately without verdicts or corrected p-values, because
+        plotted curves, deliberately without verdicts or corrected p-values, because
         sliding until a difference looks convincing and quoting it would defeat the
         pre-declared grid. Four
         outcomes (all intervals are 95% confidence intervals):
       </p>
       <ul>
-        <li><strong style="color:#16a34a">better</strong> / <strong style="color:#dc2626">worse</strong> &mdash;
+        <li><strong style="color:#16a34a">better</strong> / <strong style="color:#dc2626">worse</strong>:
           the confidence interval clears the noise margin: a real difference, larger than
           benchmark noise can explain.</li>
-        <li><strong style="color:#2563eb">equivalent</strong> &mdash; the interval fits entirely
+        <li><strong style="color:#2563eb">equivalent</strong>: the interval fits entirely
           <em>inside</em> the margin: any remaining difference is smaller than this benchmark can
           measure. (This is measurement-equivalence, not proof the models are identical.)</li>
-        <li><strong>undecided</strong> &mdash; neither of the above: not enough data to call it.
+        <li><strong>undecided</strong>: neither of the above, meaning not enough data to call it.
           Each record reports its <em>minimum detectable effect</em> (MDE₈₀): the smallest
-          true difference this comparison would have caught reliably &mdash; 80% of the time,
-          hence the subscript. Smaller differences could easily have been missed, so "undecided"
+          true difference this comparison would have caught reliably (80% of the time,
+          hence the subscript). Smaller differences could easily have been missed, so "undecided"
           never means "equal".</li>
       </ul>
       <p><strong>Corrected vs raw p-values.</strong> Checking many comparisons at once produces
-        false positives by luck alone, so displayed significance is corrected by default &mdash;
-        Holm (strict) within the small <em>pre-declared</em> set of confirmatory comparisons
-        &mdash; each ablation vs its parent model, adjacent steps of the model-size ladder, and
-        each model size vs each baseline (marked with a small <strong>C</strong> in the matrix; the common
-        thread is that every confirmatory pair varies <em>exactly one factor</em>: a design
-        choice, one scale step, or the method itself) &mdash; and
-        Benjamini&ndash;Hochberg (screening) for everything else, which stays labeled
-        <em>exploratory</em>. The p-value and the verdict answer different questions: the p-value
+        false positives by luck alone, so displayed significance is corrected by default:
+        Holm (strict) within the small <em>pre-declared</em> set of confirmatory comparisons,
+        and Benjamini&ndash;Hochberg (screening) for everything else, which stays labeled
+        <em>exploratory</em>. The confirmatory set: each ablation vs its parent model, adjacent
+        steps of the model-size ladder, and each model size vs each baseline (marked with a
+        small <strong>C</strong> in the matrix). The common thread is that every confirmatory
+        pair varies <em>exactly one factor</em>: a design choice, one scale step, or the method
+        itself. The p-value and the verdict answer different questions: the p-value
         asks whether &Delta; is exactly zero, while the verdict asks whether the confidence
-        interval clears the pair's noise margin &mdash; so a comparison can be significant yet
+        interval clears the pair's noise margin, so a comparison can be significant yet
         <em>undecided</em>: a real-looking difference that is not provably larger than benchmark
         noise. Verdicts are interval-based and do not change with the correction toggle, which
-        can show raw p-values for browsing, behind a warning &mdash; never quote those. Every
+        can show raw p-values for browsing, behind a warning; never quote those. Every
         cell records which family and method produced its correction, so numbers remain auditable
         as the model roster grows.</p>
       <p><strong>Small print, honestly stated.</strong> The compute axis pairs configurations
-        whose <em>median</em> cost is <em>t</em> &mdash; not per-expression equal budgets; solid
+        whose <em>median</em> cost is <em>t</em>, not per-expression equal budgets; solid
         dots are measured configurations, hollow dots are interpolated between neighboring
         measured ones (never extrapolated). Where a model failed on an expression that its
         opponent solved, rate metrics count the failure as 0 while diagnostic (quality-of-fit) metrics compare
-        only expressions both models solved &mdash; each record discloses those counts. On
+        only expressions both models solved; each record discloses those counts. On
         v23-val, cross-method cells carry an <em>in-distribution</em> note: that benchmark is
         drawn from flash-ansr's own training distribution. Bands on &Delta;-curves are
         pointwise: each budget's band stands on its own, not as a statement about the whole curve. Displayed numbers are rounded to the precision their uncertainty justifies,
-        and every number on this page carries a release id &mdash; cite them together.</p>
+        and every number on this page carries a release id; cite them together.</p>
 
       <h2 id="ranks">The Ranks view</h2>
       <p>
-        The <strong>Ranks</strong> display answers the standings question &mdash; how do <em>all</em>
+        The <strong>Ranks</strong> display answers the standings question: how do <em>all</em>
         methods stack up at once? Within each benchmark expression, the fixed roster (every
         Flash-ANSR size plus every baseline) is ranked 1st, 2nd, &hellip; like race placings, at
         exactly the selected compute budget. Ranking <em>within</em> each expression makes hard
-        and easy expressions count equally &mdash; every expression hands out the same placings
-        &mdash; so a method's <em>mean rank</em> is a difficulty-adjusted standing. Ranks
+        and easy expressions count equally (every expression hands out the same placings),
+        so a method's <em>mean rank</em> is a difficulty-adjusted standing. Ranks
         measure <em>consistency</em>: winning by a hair counts exactly like winning by a mile,
         which is why this view complements the Paired views (which measure <em>by how much</em>)
         rather than repeating them.
@@ -281,19 +287,19 @@
       <p>
         Two statistical guards keep the picture honest. The <em>Friedman test</em> first asks
         whether the spread of mean ranks is bigger than chance would produce between
-        interchangeable methods &mdash; if not, no groupings are drawn at all. If it is, the
+        interchangeable methods; if not, no groupings are drawn at all. If it is, the
         <em>critical difference</em> (CD) is the smallest mean-rank gap that is meaningful after
         correcting for comparing every pair at once; methods closer than one CD share a shaded
         band, meaning <strong>no reliable rank difference was detectable at this sample
-        size</strong> &mdash; absence of evidence, not proof of equality (a pre-declared Paired
+        size</strong>: absence of evidence, not proof of equality (a pre-declared Paired
         verdict can legitimately separate two methods that share a band: it asks a different,
         magnitude-based question). Hollow dots mark methods whose measurements end below the
         budget: their plotted position is a worst case that more compute could only improve.
         Rankings exist for the continuous metrics that every roster method has; failures rank
         last within their expression on quality metrics, while expression-property metrics
-        (like length) are ranked only over expressions every method solved &mdash; a smaller,
+        (like length) are ranked only over expressions every method solved, a smaller,
         explicitly-labeled population. One metric is <em>primary</em> and quotable
-        &mdash; held-out log&#8321;&#8320; FVU &mdash; every other metric's ranking is
+        (held-out log&#8321;&#8320; FVU); every other metric's ranking is
         exploratory browsing; the metric menu is grouped accordingly, and a small badge on the
         Metric control says which kind is on screen.
       </p>
@@ -598,7 +604,7 @@
           stores exactly <strong>one first-party cookie</strong> (<code>srbf_colors</code>), and only
           <strong>after you change a series colour</strong>: it holds your colour overrides so the
           chart looks the same when you return on this device. It contains no personal data and is
-          never sent anywhere — the page is fully client-side. Use <em>Reset all colours</em> in the
+          never sent anywhere; the page is fully client-side. Use <em>Reset all colours</em> in the
           explorer to delete it at any time. Because it is set solely to fulfil a preference you
           explicitly request and carries no tracking, it is a functional/strictly-necessary cookie
           under the GDPR / ePrivacy Directive and requires no consent banner; this notice is provided

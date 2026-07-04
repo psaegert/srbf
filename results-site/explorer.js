@@ -139,7 +139,7 @@
     })();
     if (series.indexOf("v23.0-120M") >= 0) { baselineSel.value = "v23.0-120M"; }
 
-    var correctionSel = selectFrom([["corrected", "corrected (default)"], ["raw", "raw p — exploratory only"]]);
+    var correctionSel = selectFrom([["corrected", "corrected (default)"], ["raw", "raw p (exploratory only)"]]);
 
     // compute-budget slider: CONTINUOUS in log-time over the measured span, with magnetic
     // snap points at the PRE-DECLARED budget grid. Only the marks carry precomputed verdicts,
@@ -255,10 +255,10 @@
     var controls = document.createElement("div");
     controls.className = "results-controls";
     var axisField = labelled("X-axis", axisSel);
-    var baselineField = labelled("Baseline — every checked series is compared against it", baselineSel);
+    var baselineField = labelled("Baseline: every checked series is compared against it", baselineSel);
     var baselineHint = document.createElement("span");
     baselineHint.className = "results-field-hint";
-    baselineHint.textContent = "The zero line. Any series can serve — it does not have to be checked above.";
+    baselineHint.textContent = "The zero line. Any series can serve; it does not have to be checked above.";
     baselineField.appendChild(baselineHint);
     var correctionField = labelled("Multiple-comparison correction", correctionSel);
     correctionField.querySelector(".results-field-label")
@@ -272,7 +272,7 @@
     budgetField.appendChild(budgetHint);
     controls.appendChild(axisField);
     var HELP = {
-      metrics: "Every metric in the menu, defined precisely — what it measures, its formula, " +
+      metrics: "Every metric in the menu, defined precisely: what it measures, its formula, " +
                "and which direction is better.",
       paired: "How comparisons work: measurement-noise margins, the four verdicts, " +
               "standardized budgets, and why p-values are corrected.",
@@ -400,7 +400,7 @@
 
     var seriesArea = document.createElement("div"); seriesArea.className = "series-area";
     var rosterNote = document.createElement("div"); rosterNote.className = "results-field-hint roster-note";
-    rosterNote.textContent = "Ranks always compares the full pre-declared roster (all sizes + all baselines) — series selection does not apply here.";
+    rosterNote.textContent = "Ranks always compares the full pre-declared roster (all sizes + all baselines); series selection does not apply here.";
     rosterNote.style.display = "none";
     var primary = function (s) { return !metaOf(s).is_ablation; };
     var ablation = function (s) { return metaOf(s).is_ablation === true; };
@@ -411,7 +411,7 @@
       var det = document.createElement("details"); det.className = "ablation-details";
       var sum = document.createElement("summary");
       var nAbl = series.filter(ablation).length;
-      sum.textContent = "Ablations (" + nAbl + ") — off by default";
+      sum.textContent = "Ablations (" + nAbl + "), off by default";
       det.appendChild(sum);
       ablGroups.forEach(function (g) { det.appendChild(groupBlock(g, ablation)); });
       seriesArea.appendChild(det);
@@ -428,7 +428,7 @@
       hideCookieNotice(); render();
     });
     var notice = document.createElement("span"); notice.className = "cookie-notice"; notice.id = "cookie-notice";
-    notice.innerHTML = "A single functional cookie remembers your colour choices on this device — " +
+    notice.innerHTML = "A single functional cookie remembers your colour choices on this device: " +
       "no tracking, no third parties. It is written only when you change a colour, and “Reset all colours” deletes it.";
     tools.appendChild(resetAll); tools.appendChild(notice);
     function showCookieNotice() { notice.classList.add("visible"); }
@@ -488,7 +488,7 @@
       plot.style.display = "";
       Plotly.react(plot, [], {
         annotations: [{ text: pairedLoading ? "Loading comparison data…" :
-          (pairedData && pairedData.error ? "The comparison data failed to load — refresh to retry." : "Loading comparison data…"),
+          (pairedData && pairedData.error ? "The comparison data failed to load. Refresh to retry." : "Loading comparison data…"),
           showarrow: false, font: { size: 15, color: theme().ink } }],
         paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)"
       }, { responsive: true, displayModeBar: false });
@@ -565,7 +565,7 @@
 
     function descBanner() {
       var t = Number(selectedBudget().toPrecision(3));
-      return "<div class='desc-banner'>Descriptive slice at t ≈ " + t + " s per problem — " +
+      return "<div class='desc-banner'>Descriptive slice at t ≈ " + t + " s per problem: " +
         "values are read off the plotted curves (interpolated along the drawn segments). " +
         "There are <b>no verdicts, margins or corrected p-values between the marked budgets</b> (" +
         ((pairedData && pairedData.budgets) || []).join(", ") + " s, the pre-declared grid): " +
@@ -588,7 +588,7 @@
       plot.style.display = "none";
       var label = (metrics.filter(function (m) { return m.key === metricKey; })[0] || {}).label || metricKey;
       pairedFoot.innerHTML = "<div class='matrix-warning'>" + label + " has no paired " +
-        "comparisons — this view covers the Main metrics. Pick one from the “Main metrics” " +
+        "comparisons; this view covers the Main metrics. Pick one from the “Main metrics” " +
         "group in the Metric menu.</div>";
       return false;
     }
@@ -597,7 +597,7 @@
       if (metricInfo(metricKey)) { return true; }
       plot.style.display = "";
       Plotly.react(plot, [], {
-        annotations: [{ text: "Paired comparisons are available for the Main metrics — pick one from the “Main metrics” group in the Metric menu.",
+        annotations: [{ text: "Paired comparisons are available for the Main metrics: pick one from the “Main metrics” group in the Metric menu.",
           showarrow: false, font: { size: 14, color: theme().ink } }],
         paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)"
       }, { responsive: true, displayModeBar: false });
@@ -642,13 +642,13 @@
                     (p.mA && p.mB) ? "measured" : "interpolated", favors];
           }),
           hovertemplate: "<b>" + s + " − " + baseline + "</b><br>t: %{x:.3g}s (%{customdata[3]})<br>" +
-            "Δ: %{y:.3f} [%{customdata[0]:.3f}, %{customdata[1]:.3f}] — point estimate favors %{customdata[4]}" +
+            "Δ: %{y:.3f} [%{customdata[0]:.3f}, %{customdata[1]:.3f}]; point estimate favors %{customdata[4]}" +
             "<br>n=%{customdata[2]} expressions<extra></extra>" });
         if (!budgetIsSnapped()) {
           var read = pairedReadAt(curve, sign, selectedBudget());
           if (read) {
             notes.push("<b>" + s + "</b> vs " + baseline + ": " + (read.status === "outside"
-              ? "<i>t is outside this pair's measured overlap — no read</i>"
+              ? "<i>t is outside this pair's measured overlap; no read</i>"
               : "Δ ≈ " + fmtDesc(read.delta) + " [" + fmtDesc(read.lo) + ", " + fmtDesc(read.hi) +
                 "] <span class='fam'>(descriptive curve read · n ≈ " + read.n + " expressions)</span>"));
           }
@@ -665,15 +665,15 @@
           var pLabel = corrected ? (rec.p_adj !== undefined ? "Holm-corrected p = " : "BH-corrected q = ") : "raw p = ";
           var onlySided = (rec.n_only_a || 0) + (rec.n_only_b || 0);
           notes.push("<b>" + s + "</b> vs " + baseline + ": " +
-            "<span style='color:" + (VERDICT_COLORS[verdict] || "#888") + "'><b>" + verdictLabel(rec, verdict) + "</b></span> — " +
+            "<span style='color:" + (VERDICT_COLORS[verdict] || "#888") + "'><b>" + verdictLabel(rec, verdict) + "</b></span> · Δ = " +
             "Δ = " + fmt(rSign * rec.delta) + " [" + fmt(rSign > 0 ? rec.lo : -rec.hi) + ", " +
             fmt(rSign > 0 ? rec.hi : -rec.lo) + "] vs noise margin ±" + rec.margin +
             (rec.verdict_note === "ladder-limited"
-              ? " — <i>the losing side has no measurements at this budget; its carried value is a lower bound, so no at-budget verdict can be issued</i>"
+              ? ". <i>The losing side has no measurements at this budget; its carried value is a lower bound, so no at-budget verdict can be issued.</i>"
               : (verdict === "undecided" && rec.equivalence_attainable === false
-                 ? " — <i>too few paired expressions to ever certify “equivalent” at this margin; limited resolution, not evidence of parity</i>" : "")) +
+                 ? ". <i>Too few paired expressions to ever certify “equivalent” at this margin; limited resolution, not evidence of parity.</i>" : "")) +
             "<br><span class='fam'>" + pLabel + fmtP(p) +
-            (rec.family_id ? " · confirmatory — pre-declared " + setName(rec.confirmatory_set) + " set, Holm-corrected over " + rec.family_size + " comparisons"
+            (rec.family_id ? " · confirmatory: pre-declared " + setName(rec.confirmatory_set) + " set, Holm-corrected over " + rec.family_size + " comparisons"
                            : " · exploratory (BH-corrected)") +
             " · n = " + rec.n_pairs + " paired expressions" +
             (onlySided ? " (+" + onlySided + " solved by one side only)" : "") +
@@ -693,8 +693,8 @@
         shapes: traces.length ? [{ type: "line", x0: selectedBudget(), x1: selectedBudget(),
           yref: "paper", y0: 0, y1: 1, line: { color: t.ink, width: 1, dash: "dot" } }] : [],
         annotations: traces.length ? [] : [{ text: (pairedData.records || []).some(function (r) { return r.benchmark === bench && (r.a === baseline || r.b === baseline); })
-          ? "No paired curves for this selection — toggle series above (the baseline itself is the zero line)."
-          : "No paired comparisons are available for baseline " + baseline + " on " + bench + " — pick another baseline or benchmark.",
+          ? "No paired curves for this selection. Toggle series above (the baseline itself is the zero line)."
+          : "No paired comparisons are available for baseline " + baseline + " on " + bench + ". Pick another baseline or benchmark.",
           showarrow: false, font: { size: 14, color: t.ink } }]
       };
       Plotly.react(plot, traces, layout, { responsive: true, displayModeBar: false });
@@ -702,13 +702,13 @@
       var caption = traces.length
         ? "<div class='plot-caption'>Δ = selected − baseline; " +
           (mi && mi.higher_is_better === false ? "below" : "above") + " 0 favors the selected series. " +
-          "x: each series' median wall-clock time per problem — solid markers are measured configurations, " +
+          "x: each series' median wall-clock time per problem. Solid markers are measured configurations, " +
           "hollow are interpolated between them; the dotted line marks the selected budget.</div>" : "";
       var rawWarn = correctionSel.value !== "corrected"
-        ? "<div class='matrix-warning'>⚠ Uncorrected p-values — exploratory browsing only; never quote these as claims. Switch back to “corrected”.</div>" : "";
+        ? "<div class='matrix-warning'>⚠ Uncorrected p-values: exploratory browsing only. Never quote these as claims; switch back to “corrected”.</div>" : "";
       var panelTitle = budgetIsSnapped()
-        ? "Verdicts at the standardized budget of ≤ " + selectedBudget() + " s per problem (dotted line) — " +
-          "every series at exactly t, plateaus flagged (95% CIs · release " +
+        ? "Verdicts at the standardized budget of ≤ " + selectedBudget() + " s per problem (dotted line): " +
+          "every series at exactly t, max-tested values flagged (95% CIs · release " +
           (pairedData.results_release_id || "?") + " · α = " + (pairedData.alpha || 0.05) + ")"
         : "Curve reads at t ≈ " + Number(selectedBudget().toPrecision(3)) + " s per problem (dotted line)";
       pairedFoot.innerHTML = notes.length
@@ -739,7 +739,7 @@
 
     // one side's basis at the budget, for titles/detail panels ("interpolated", "plateau"...)
     function sideBasis(name, status, x, bracket) {
-      if (status === "plateau") { return name + ": largest tested ≈" + x + " s (value carried forward — a lower bound)"; }
+      if (status === "plateau") { return name + ": largest tested ≈" + x + " s (value carried forward, a lower bound)"; }
       if (status === "interpolated") { return name + ": interpolated at " + x + " s (between ≈" + bracket[0] + " and ≈" + bracket[1] + " s)"; }
       return name + ": measured at ≈" + x + " s";
     }
@@ -752,8 +752,8 @@
     var TERMS = {
       cd: "The critical difference: the smallest gap in mean rank that counts as real here, " +
           "after correcting for comparing every pair of methods at once. The ruler above the " +
-          "chart is exactly this long — hold it against any gap.",
-      maxtested: "Nothing was tested beyond this point — the method itself is not " +
+          "chart is exactly this long; hold it against any gap.",
+      maxtested: "Nothing was tested beyond this point; the method itself is not " +
           "stagnating. It shows its largest tested configuration's value: a lower bound, " +
           "since more compute could only help it. Never extrapolated.",
       testedlimit: "A side at its max tested run could improve with more compute, so any " +
@@ -762,10 +762,10 @@
           "noise alone (derived from each method's own repeated draws). Differences inside " +
           "it are not real.",
       mde: "The smallest true difference this comparison would reliably detect (80% power). " +
-          "'Undecided' means smaller differences could easily have been missed — it never " +
+          "'Undecided' means smaller differences could easily have been missed; it never " +
           "means 'equal'.",
       confirmatory: "One of the comparisons declared BEFORE looking at results, held to the " +
-          "strict Holm correction — the quotable tier.",
+          "strict Holm correction. The quotable tier.",
       exploratory: "The browsing tier: corrected only by the lenient Benjamini–Hochberg " +
           "procedure. Explore freely, never quote as a claim.",
       equivalent: "The interval fits entirely inside the noise margin: any remaining " +
@@ -801,19 +801,19 @@
           "</b> · " + benchSel.value + " · t ≈ " + Number(selectedBudget().toPrecision(3)) +
           " s per problem</div>";
         if (cell.desc.status !== "in") {
-          return dHead + "<div class='fam'>t is outside this pair's measured overlap — no read.</div>";
+          return dHead + "<div class='fam'>t is outside this pair's measured overlap; no read.</div>";
         }
         return dHead + "<div>Δ ≈ " + fmtDesc(cell.desc.delta) + " [" + fmtDesc(cell.desc.lo) +
           ", " + fmtDesc(cell.desc.hi) + "] <span class='fam'>(descriptive curve read · n ≈ " +
           cell.desc.n + " expressions)</span></div>" +
-          "<div class='fam'>No verdict at unmarked times — noise margins and corrections exist " +
+          "<div class='fam'>No verdict at unmarked times: noise margins and corrections exist " +
           "only at the pre-declared budgets; snap the slider to a mark.</div>";
       }
       var head = "<div class='matrix-detail-title'><b>" + cell.rowS + "</b> − <b>" + cell.colS +
         "</b> · " + benchSel.value + " · budget ≤ " + selectedBudget() + " s per problem</div>";
       var rec = cell.rec;
       if (!rec) {
-        return head + "<div class='fam'>n/a — this pair was not measurable within this budget, " +
+        return head + "<div class='fam'>n/a: this pair was not measurable within this budget, " +
           "or was not evaluated on this benchmark.</div>";
       }
       var o = orientRecord(rec, cell.rowS);
@@ -823,24 +823,24 @@
       var onlySided = (rec.n_only_a || 0) + (rec.n_only_b || 0);
       return head +
         "<div><span style='color:" + (VERDICT_COLORS[o.verdict] || "#888") + "'><b>" + verdictLabel(rec, o.verdict) +
-        "</b></span> — Δ = " + fmt(o.delta) + " [" + fmt(o.lo) + ", " + fmt(o.hi) +
+        "</b></span> · Δ = " + fmt(o.delta) + " [" + fmt(o.lo) + ", " + fmt(o.hi) +
         "] vs " + term("margin", "noise margin") + " ±" + rec.margin +
         (rec.verdict_note === "ladder-limited"
-          ? " — <i>a side at its max tested run has no measurements at this budget; its carried value is a lower bound, so no at-budget verdict can be issued</i>"
+          ? ". <i>A side at its max tested run has no measurements at this budget; its carried value is a lower bound, so no at-budget verdict can be issued.</i>"
           : (o.verdict === "undecided" && rec.equivalence_attainable === false
-             ? " — <i>too few paired expressions to ever certify “equivalent” at this margin; limited resolution, not evidence of parity</i>" : "")) +
+             ? ". <i>Too few paired expressions to ever certify “equivalent” at this margin; limited resolution, not evidence of parity.</i>" : "")) +
         "</div>" +
         "<div class='fam'>" + pLabel + fmtP(p) + " (uncorrected p = " + fmtP(rec.p_raw) + ")" +
         (rec.family_id
-          ? " · confirmatory — pre-declared " + setName(rec.confirmatory_set) + " set, Holm-corrected over " + rec.family_size + " comparisons"
-          : " · exploratory — BH-corrected over the " + rec.exploratory_family_size + "-cell matrix") + "</div>" +
+          ? " · confirmatory: pre-declared " + setName(rec.confirmatory_set) + " set, Holm-corrected over " + rec.family_size + " comparisons"
+          : " · exploratory: BH-corrected over the " + rec.exploratory_family_size + "-cell matrix") + "</div>" +
         "<div class='fam'>n = " + rec.n_pairs + " paired expressions" +
         (onlySided ? " (+" + onlySided + " solved by one side only)" : "") +
         " · smallest reliably detectable Δ (" + term("mde", "MDE₈₀") + ") ≈ " + rec.mde_80 +
         " · P(" + cell.rowS + " better on a random expression) = " + o.psup + "</div>" +
         "<div class='fam'>" + (rec.same_configuration
           ? "same configuration on both sides (≈" + o.xRow + " s / ≈" + o.xCol + " s per problem)"
-          : "both sides at the budget — " + sideBasis(cell.rowS, o.statusRow, o.xRow, o.bracketRow) +
+          : "both sides at the budget: " + sideBasis(cell.rowS, o.statusRow, o.xRow, o.bracketRow) +
             " · " + sideBasis(cell.colS, o.statusCol, o.xCol, o.bracketCol)) + "</div>" +
         (rec.notes && rec.notes.length ? "<div class='fam'><i>" + rec.notes.join(" ") + "</i></div>" : "");
     }
@@ -905,7 +905,7 @@
       html.push("<div class='matrix-detail'>" +
         (selectedIdx >= 0 ? matrixDetailHtml(matrixCells[selectedIdx]) : "") + "</div>");
       html.push("<div class='matrix-legend'>Cells read row − column: Δ read off the paired " +
-        "Δ(t) curve at t ≈ " + Number(t.toPrecision(3)) + " s per problem — descriptive only, " +
+        "Δ(t) curve at t ≈ " + Number(t.toPrecision(3)) + " s per problem. Descriptive only: " +
         "no verdict colours or confirmatory badges at unmarked times. <i>n/a</i> = t outside " +
         "the pair's measured overlap. Tap a cell for its interval; snap the slider to a mark " +
         "for the verdict matrix.</div>");
@@ -930,8 +930,8 @@
       var selectedIdx = -1;
       var html = [];
       if (!corrected) {
-        html.push("<div class='matrix-warning'>⚠ Uncorrected p-values — exploratory browsing only; " +
-          "never quote these as claims. Switch back to “corrected”.</div>");
+        html.push("<div class='matrix-warning'>⚠ Uncorrected p-values: exploratory browsing only. " +
+          "Never quote these as claims; switch back to “corrected”.</div>");
       }
       html.push("<div class='matrix-wrap'>");
       html.push("<table class='paired-matrix'><thead><tr><th>row − column</th>");
@@ -990,17 +990,17 @@
         "<span class='v-better'>▲ better</span> · <span class='v-worse'>▼ worse</span> · " +
         term("equivalent", "<span class='v-equivalent'>≈ equivalent</span>") + " · " +
         "<span class='v-undecided'>? undecided</span> · <i>n/a</i> · <b>C</b> " +
-        term("confirmatory", "confirmatory") + " — cells read row − column." +
+        term("confirmatory", "confirmatory") + " · cells read row − column." +
         "<details class='fine-print'><summary>Full method &amp; record</summary><div>" +
         "<b>better ▲</b> / <b>worse ▼</b>: the CI clears the " + term("margin", "noise margin") +
-        " — a real difference. <b>equivalent ≈</b>: the CI fits inside the margin. " +
-        "<b>undecided ?</b> (hatched): not enough data — each record shows its " +
+        ": a real difference. <b>equivalent ≈</b>: the CI fits inside the margin. " +
+        "<b>undecided ?</b> (hatched): not enough data; each record shows its " +
         term("mde", "MDE₈₀") + ". <i>n/a</i>: not measurable within this budget, or not " +
         "evaluated on this benchmark. A small <b>C</b> marks a " +
         term("confirmatory", "confirmatory") + " cell (each ablation vs its parent, adjacent " +
         "model sizes, each model size vs each baseline), held to the stricter Holm " +
         "correction; every other cell is " + term("exploratory", "exploratory") +
-        " screening — see <a href='#paired'>Paired comparisons</a>. Release " +
+        " screening; see <a href='#paired'>Paired comparisons</a>. Release " +
         (pairedData.results_release_id || "?") + ".</div></details></div>");
       pairedFoot.innerHTML = html.join("");
     }
@@ -1014,7 +1014,7 @@
       var hib = !(mi && mi.higher_is_better === false);
       if (!pairedData.leaderboard) {
         pairedFoot.innerHTML = "<div class='matrix-warning'>The Table data is not part of " +
-          "this results release yet — check back after the next release.</div>";
+          "this results release yet. Check back after the next release.</div>";
         return;
       }
       var snapped = budgetIsSnapped();
@@ -1053,7 +1053,7 @@
         html.push("<tr><th><span class='lb-swatch' style='background:" + col + "'></span>" +
           row.s + marks + "</th>");
         if (!row.e) {
-          html.push("<td class='missing' colspan='3'>n/a — cannot run within ≤ " +
+          html.push("<td class='missing' colspan='3'>n/a: cannot run within ≤ " +
             selectedBudget() + " s per problem on this benchmark</td></tr>");
           return;
         }
@@ -1077,13 +1077,13 @@
         html.push(descBanner() +
           "<div class='matrix-legend'>" + (hib ? "Higher" : "Lower") + " is better, best first. " +
           "<b>These are marginal numbers: never read a difference between two rows off their " +
-          "CIs</b> — head-to-head questions belong to the Paired Δ views (<a href='#paired'>why</a>). " +
+          "CIs</b>; head-to-head questions belong to the Paired Δ views (<a href='#paired'>why</a>). " +
           "Rankings are per benchmark only.</div>");
         pairedFoot.innerHTML = html.join("");
         return;
       }
-      html.push("<div class='desc-banner'><b>Not a leaderboard:</b> these are marginal numbers " +
-        "— overlapping intervals are NOT evidence of no difference, and a small gap between " +
+      html.push("<div class='desc-banner'><b>Not a leaderboard:</b> these are marginal numbers. " +
+        "Overlapping intervals are NOT evidence of no difference, and a small gap between " +
         "rows proves nothing. For any A-vs-B question use the Paired Δ views " +
         "(<a href='#paired'>why</a>).</div>");
       html.push("<div class='matrix-legend'>" +
@@ -1091,11 +1091,11 @@
         term("maxtested", "<span class='lb-flag'>max tested</span>") + " = value is a lower bound " +
         "· per benchmark only." +
         "<details class='fine-print'><summary>Full method &amp; record</summary><div>" +
-        "Each row: the series evaluated at exactly the selected budget — interpolated per " +
+        "Each row: the series evaluated at exactly the selected budget, interpolated per " +
         "problem, linearly in log-time, between its two bracketing measured configurations " +
         "(the same model as the Δ(t) curves, so the value sits on the plotted segment; " +
         "measured points keep the exact Curves-view value). Max-tested rows show the method's " +
-        "largest tested configuration, carried forward as a lower bound — never extrapolated. " +
+        "largest tested configuration, carried forward as a lower bound, never extrapolated. " +
         "There is deliberately no combined cross-benchmark number. Release " +
         (pairedData.results_release_id || "?") + ".</div></details></div>" +
         (notes ? "<div class='matrix-legend'>" + notes + "</div>" : ""));
@@ -1116,7 +1116,7 @@
       if (!pairedData.ranks) {
         plot.style.display = "none";
         pairedFoot.innerHTML = "<div class='matrix-warning'>The rankings are not part of " +
-          "this results release yet — check back after the next release.</div>";
+          "this results release yet. Check back after the next release.</div>";
         return;
       }
       var rmi = rankMetricInfo(metricKey);
@@ -1137,7 +1137,7 @@
       if (!rmi) {
         plot.style.display = "none";
         pairedFoot.innerHTML = "<div class='matrix-warning'>Rankings exist for the " +
-          "continuous metrics only — rate metrics take so few values that most methods tie " +
+          "continuous metrics only: rate metrics take so few values that most methods tie " +
           "on most expressions, and model-internal metrics do not exist for the baselines. " +
           "Pick one of: " + (pairedData.rank_metrics || [])
             .map(function (m) { return m.label; }).join(" · ") + ".</div>";
@@ -1146,7 +1146,7 @@
       if (!budgetIsSnapped()) {
         plot.style.display = "none";
         pairedFoot.innerHTML = "<div class='desc-banner'>Rankings exist at the marked " +
-          "budgets only — snap the slider to a mark to see one.</div>";
+          "budgets only. Snap the slider to a mark to see one.</div>";
         return;
       }
       var league = (pairedData.ranks || []).filter(function (r) {
@@ -1155,7 +1155,7 @@
       if (!league) {
         plot.style.display = "none";
         pairedFoot.innerHTML = "<div class='matrix-warning'>No ranking for this metric at this " +
-          "budget — fewer than two methods can run within it, or too few expressions have " +
+          "budget: fewer than two methods can run within it, or too few expressions have " +
           "values for every method.</div>";
         return;
       }
@@ -1220,26 +1220,26 @@
           " cannot run within this budget and sit out this ranking.</div>" : "";
       var switchNote = ranksSwitchedFrom
         ? "<div class='desc-banner'>Showing <b>" + rmi.label + "</b>, the primary ranking " +
-          "metric — " + ranksSwitchedFrom + " cannot be ranked (rate metrics tie on most " +
+          "metric; " + ranksSwitchedFrom + " cannot be ranked (rate metrics tie on most " +
           "expressions). Your metric choice comes back when you leave Ranks.</div>" : "";
       pairedFoot.innerHTML =
         switchNote +
         // decode key: the two glyphs and the ruler, right where the eye lands
         "<div class='plot-caption'><span class='key-band'></span> shaded band = no reliable " +
-        "rank difference (gap smaller than the critical difference — absence of evidence, not " +
+        "rank difference (gap smaller than the critical difference: absence of evidence, not " +
         "equality) · <b>○</b> " + term("testedlimit", "hollow dot") + " = at max tested: " +
         "nothing measured beyond this budget, so its true position could only improve · the " +
         "CD ruler (top) shows the smallest mean-rank gap that counts.</div>" +
         "<div class='matrix-legend'>" +
         "<span class='" + (league.primary ? "rank-primary" : "rank-exploratory") + "'>" +
-        (league.primary ? "primary" : "exploratory") + "</span> — " +
+        (league.primary ? "primary" : "exploratory") + "</span>: " +
         (league.primary
           ? "pre-declared and quotable (see the metric menu for the rest). "
-          : "for browsing — claims come from the primary metric, log10 FVU (validation). ") +
+          : "for browsing; claims come from the primary metric, log10 FVU (validation). ") +
         k + " methods ranked on <b>" + rmi.label + "</b> over n = " + league.n_problems +
         " expressions · " + term("cd", "CD") + " = " + league.cd + " · " +
         (reject ? "the omnibus test confirms real rank differences"
-                : "<b>the omnibus test does not reject — no groupings drawn</b>") + "." +
+                : "<b>the omnibus test does not reject; no groupings drawn</b>") + "." +
         (excludedNote || "") +
         "<details class='fine-print'><summary>Full method &amp; record</summary><div>" +
         "Within each expression, the " + k + " methods are ranked 1 (best) to " + k +
@@ -1249,12 +1249,12 @@
         (league.mode === "worst-rank"
           ? "A method that fails an expression ranks last on it" +
             (missing.length ? " (failures: " + missing.join(", ") + ")" : "") + "."
-          : "<b>Conditional ranking</b>: only expressions every method solved — a smaller, " +
-            "easier population; the property being ranked is undefined for failures.") + " " +
+          : "<b>Conditional ranking</b>: only expressions every method solved (a smaller, " +
+            "easier population); the property being ranked is undefined for failures.") + " " +
         "A <a href='#ranks'>Friedman omnibus</a> confirms the spread of mean ranks is real " +
         "before any grouping is drawn; the Nemenyi critical difference corrects for comparing " +
         "all " + (k * (k - 1) / 2) + " pairs at once. A pre-declared Paired verdict can " +
-        "legitimately separate two methods that share a band — it asks a magnitude question, " +
+        "legitimately separate two methods that share a band: it asks a magnitude question, " +
         "ranks ask a consistency question (a hair's win counts like a mile's). " +
         "Friedman (tie-corrected) χ² = " + league.friedman_chi2 + ", p = " +
         fmtP(league.friedman_p) + " · CD = " + league.cd + " at α = " + league.alpha +

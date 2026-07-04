@@ -1,54 +1,68 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 330" font-family="Inter, system-ui, -apple-system, sans-serif">
-  <!-- srbf visual abstract: inputs -> one fair protocol -> honest results -->
-  <rect x="1" y="1" width="1198" height="328" rx="18" fill="#ffffff" stroke="#e6e8f0" stroke-width="2"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" font-family="Inter, system-ui, -apple-system, sans-serif">
+  <!-- srbf visual abstract: (benchmarks x methods) -> srbf -> curves / table / ranks -->
+  <rect x="1" y="1" width="1198" height="298" rx="18" fill="#ffffff" stroke="#e6e8f0" stroke-width="2"/>
 
-  <!-- brand row -->
-  <rect x="36" y="28" width="34" height="34" rx="9" fill="#4f46e5"/>
-  <text x="53" y="51" text-anchor="middle" fill="#ffffff" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="17" font-weight="600">sr</text>
-  <text x="82" y="45" fill="#4f46e5" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="21" font-weight="600">srbf</text>
-  <text x="82" y="61" fill="#4a4f5e" font-size="12.5">Symbolic Regression Benchmark Framework</text>
-  <text x="1164" y="51" text-anchor="end" fill="#868c9c" font-size="12.5">psaegert.github.io/srbf</text>
+  <!-- left: benchmarks x methods (cartesian product) -->
+  <rect x="40" y="46" width="290" height="86" rx="12" fill="#f6f7fb" stroke="#e6e8f0"/>
+  <text x="62" y="76" fill="#4f46e5" font-size="11.5" font-weight="700" letter-spacing="1.4">BENCHMARKS</text>
+  <text x="62" y="99" fill="#12141c" font-size="13">FastSRB: curated physics laws</text>
+  <text x="62" y="118" fill="#12141c" font-size="13">v23-val: held-out, decontaminated</text>
 
-  <!-- panel 1: what goes in -->
-  <rect x="36" y="88" width="344" height="206" rx="12" fill="#f6f7fb" stroke="#e6e8f0"/>
-  <text x="60" y="122" fill="#4f46e5" font-size="12" font-weight="700" letter-spacing="1.6">WHAT GOES IN</text>
-  <text x="60" y="152" fill="#12141c" font-size="14.5" font-weight="600">Benchmarks</text>
-  <text x="60" y="174" fill="#4a4f5e" font-size="13">FastSRB — curated physics &amp; textbook laws</text>
-  <text x="60" y="193" fill="#4a4f5e" font-size="13">v23-val — held-out, decontaminated</text>
-  <text x="60" y="228" fill="#12141c" font-size="14.5" font-weight="600">Methods</text>
-  <text x="60" y="250" fill="#4a4f5e" font-size="13">Flash-ANSR 3M → 1B · PySR · NeSymReS</text>
-  <text x="60" y="269" fill="#4a4f5e" font-size="13">E2E · Prior reference — upstream defaults</text>
+  <text x="185" y="158" text-anchor="middle" fill="#4f46e5" font-size="24" font-weight="600">&#215;</text>
+
+  <rect x="40" y="170" width="290" height="86" rx="12" fill="#f6f7fb" stroke="#e6e8f0"/>
+  <text x="62" y="200" fill="#4f46e5" font-size="11.5" font-weight="700" letter-spacing="1.4">METHODS</text>
+  <text x="62" y="223" fill="#12141c" font-size="13">Flash-ANSR 3M &#8594; 1B</text>
+  <text x="62" y="242" fill="#12141c" font-size="13">PySR &#183; NeSymReS &#183; E2E &#183; Prior</text>
 
   <!-- arrow -->
-  <path d="M388 191 h30" stroke="#4f46e5" stroke-width="2.5" fill="none"/>
-  <path d="M414 184 l12 7 -12 7 z" fill="#4f46e5"/>
+  <path d="M346 151 h34" stroke="#4f46e5" stroke-width="2.5" fill="none"/>
+  <path d="M376 144 l12 7 -12 7 z" fill="#4f46e5"/>
 
-  <!-- panel 2: one fair protocol -->
-  <rect x="428" y="88" width="344" height="206" rx="12" fill="#eef0fe" stroke="#dfe3fc"/>
-  <text x="452" y="122" fill="#4f46e5" font-size="12" font-weight="700" letter-spacing="1.6">ONE FAIR PROTOCOL</text>
-  <text x="452" y="152" fill="#12141c" font-size="13.5">Every method solves the same expressions</text>
-  <text x="452" y="176" fill="#12141c" font-size="13.5">Wall-clock budgets: 1 → 1000 s per problem</text>
-  <text x="452" y="200" fill="#12141c" font-size="13.5">Raw predictions archived, scored two-stage</text>
-  <text x="452" y="224" fill="#12141c" font-size="13.5">Paired per-expression statistics</text>
-  <text x="452" y="248" fill="#12141c" font-size="13.5">Pre-declared comparisons, corrected p-values</text>
-  <text x="452" y="272" fill="#12141c" font-size="13.5">Measurement-noise margins, never bare stars</text>
+  <!-- middle: srbf, compact -->
+  <rect x="412" y="82" width="220" height="138" rx="14" fill="#eef0fe" stroke="#dfe3fc"/>
+  <rect x="436" y="104" width="30" height="30" rx="8" fill="#4f46e5"/>
+  <text x="451" y="125" text-anchor="middle" fill="#ffffff" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="15" font-weight="600">sr</text>
+  <text x="476" y="126" fill="#4f46e5" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="20" font-weight="600">srbf</text>
+  <text x="436" y="160" fill="#12141c" font-size="12.5">one protocol, same problems</text>
+  <text x="436" y="180" fill="#12141c" font-size="12.5">time budgets: 1 &#8594; 1000 s</text>
+  <text x="436" y="200" fill="#12141c" font-size="12.5">paired stats, pre-declared</text>
 
   <!-- arrow -->
-  <path d="M780 191 h30" stroke="#4f46e5" stroke-width="2.5" fill="none"/>
-  <path d="M806 184 l12 7 -12 7 z" fill="#4f46e5"/>
+  <path d="M648 151 h34" stroke="#4f46e5" stroke-width="2.5" fill="none"/>
+  <path d="M678 144 l12 7 -12 7 z" fill="#4f46e5"/>
 
-  <!-- panel 3: what comes out -->
-  <rect x="820" y="88" width="344" height="206" rx="12" fill="#f6f7fb" stroke="#e6e8f0"/>
-  <text x="844" y="122" fill="#4f46e5" font-size="12" font-weight="700" letter-spacing="1.6">WHAT COMES OUT</text>
-  <text x="844" y="152" fill="#12141c" font-size="14.5" font-weight="600">Interactive results explorer</text>
-  <text x="844" y="176" fill="#4a4f5e" font-size="13">Curves — every series over compute, noise, data</text>
-  <text x="844" y="195" fill="#4a4f5e" font-size="13">Table — everyone at exactly your time budget</text>
-  <text x="844" y="214" fill="#4a4f5e" font-size="13">Ranks — all methods, one standings chart</text>
-  <text x="844" y="248" fill="#12141c" font-size="14.5" font-weight="600">Four-state verdicts</text>
-  <text x="844" y="271" font-size="13">
-    <tspan fill="#16a34a" font-weight="600">▲ better</tspan>
-    <tspan fill="#2563eb" font-weight="600" dx="10">≈ equivalent</tspan>
-    <tspan fill="#dc2626" font-weight="600" dx="10">▼ worse</tspan>
-    <tspan fill="#868c9c" font-weight="600" dx="10">? undecided</tspan>
-  </text>
+  <!-- right: three minimal glyphs -->
+  <!-- curves -->
+  <rect x="714" y="70" width="136" height="130" rx="12" fill="#f6f7fb" stroke="#e6e8f0"/>
+  <path d="M732 170 C 762 168, 772 120, 832 100 L 832 118 C 782 132, 766 172, 732 178 Z" fill="#4f46e5" opacity="0.14"/>
+  <path d="M732 174 C 762 172, 772 128, 832 109" stroke="#4f46e5" stroke-width="2.5" fill="none"/>
+  <path d="M732 182 C 770 182, 792 160, 832 150" stroke="#9aa1b4" stroke-width="2.5" fill="none"/>
+  <line x1="728" y1="88" x2="728" y2="184" stroke="#d7dae4" stroke-width="1.5"/>
+  <line x1="728" y1="184" x2="838" y2="184" stroke="#d7dae4" stroke-width="1.5"/>
+  <text x="782" y="230" text-anchor="middle" fill="#4a4f5e" font-size="13.5" font-weight="600">Curves</text>
+
+  <!-- table -->
+  <rect x="870" y="70" width="136" height="130" rx="12" fill="#f6f7fb" stroke="#e6e8f0"/>
+  <rect x="890" y="90" width="96" height="18" rx="4" fill="#4f46e5" opacity="0.16"/>
+  <rect x="890" y="114" width="96" height="18" rx="4" fill="#ffffff" stroke="#e6e8f0"/>
+  <rect x="890" y="138" width="96" height="18" rx="4" fill="#ffffff" stroke="#e6e8f0"/>
+  <rect x="890" y="162" width="96" height="18" rx="4" fill="#ffffff" stroke="#e6e8f0"/>
+  <rect x="894" y="118" width="38" height="10" rx="3" fill="#4f46e5" opacity="0.55"/>
+  <rect x="894" y="142" width="30" height="10" rx="3" fill="#9aa1b4" opacity="0.6"/>
+  <rect x="894" y="166" width="22" height="10" rx="3" fill="#9aa1b4" opacity="0.45"/>
+  <text x="938" y="230" text-anchor="middle" fill="#4a4f5e" font-size="13.5" font-weight="600">Table</text>
+
+  <!-- ranks -->
+  <rect x="1026" y="70" width="136" height="130" rx="12" fill="#f6f7fb" stroke="#e6e8f0"/>
+  <rect x="1042" y="96" width="46" height="26" rx="7" fill="#4f46e5" opacity="0.12" stroke="#4f46e5" stroke-opacity="0.35"/>
+  <circle cx="1054" cy="109" r="5.5" fill="#4f46e5"/>
+  <circle cx="1075" cy="109" r="5.5" fill="none" stroke="#4f46e5" stroke-width="2.5"/>
+  <circle cx="1112" cy="109" r="5.5" fill="#65788a"/>
+  <circle cx="1140" cy="109" r="5.5" fill="#f97316"/>
+  <line x1="1042" y1="140" x2="1148" y2="140" stroke="#d7dae4" stroke-width="1.5"/>
+  <text x="1042" y="160" fill="#868c9c" font-size="10.5">1</text>
+  <text x="1141" y="160" fill="#868c9c" font-size="10.5">k</text>
+  <text x="1092" y="182" text-anchor="middle" fill="#868c9c" font-size="10.5">mean rank</text>
+  <text x="1094" y="230" text-anchor="middle" fill="#4a4f5e" font-size="13.5" font-weight="600">Ranks</text>
 </svg>
