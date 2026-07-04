@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>srbf: Symbolic Regression Benchmark Framework · Results</title>
-  <meta name="description" content="Interactive results explorer of srbf, the Symbolic Regression Benchmark Framework: Flash-ANSR across model scales versus PySR, NeSymReS, and E2E, over inference compute, noise, and sample-count sweeps." />
+  <meta name="description" content="Interactive results explorer of srbf, the Symbolic Regression Benchmark Framework: Flash-ANSR across model scales versus PySR, NeSymReS, and E2E, over inference compute, noise, and support-size sweeps." />
   <link rel="icon" type="image/svg+xml" href="srbf-icon.svg" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <meta property="og:type" content="website" />
@@ -34,6 +34,7 @@
       <nav class="site-nav">
         <a href="#about">About</a>
         <a href="#paired">Paired</a>
+        <a href="#ranks">Ranks</a>
         <a href="#metrics">Metrics</a>
         <a href="https://srbf.readthedocs.io/" target="_blank" rel="noopener">Docs</a>
         <a href="https://github.com/psaegert/srbf" target="_blank" rel="noopener">GitHub</a>
@@ -51,14 +52,15 @@
         <strong>Flash-ANSR</strong> model scales and the <strong>PySR</strong>,
         <strong>NeSymReS</strong>, and <strong>E2E</strong> baselines (plus <strong>Prior</strong>,
         a reference that samples candidate skeletons from the training prior without any model).
-        Views are organized on two axes: <strong>Display</strong> &mdash; Curves over the whole
-        compute sweep, a Table at one chosen compute budget, or Ranks, a critical-difference
-        league of all methods at once &mdash; &times; <strong>Values</strong> &mdash; Absolute
-        numbers per series, or Paired head-to-head differences (Ranks is inherently
-        many-method, so the Values axis does not apply to it). Absolute views show each series on its own, with 95% bootstrap confidence
+        Views are organized on two axes: <strong>Display</strong> &mdash; Curves over a whole
+        sweep (compute, support size, or noise level), a Table at one chosen compute budget, or
+        <a href="#ranks">Ranks</a>, a league of all methods at once &mdash; &times;
+        <strong>Values</strong> &mdash; Absolute numbers per series, or Paired head-to-head
+        differences (Ranks is inherently many-method, so the Values axis does not apply to
+        it). Absolute views show each series on its own, with 95% bootstrap confidence
         bands; Paired views answer head-to-head questions &mdash; is A better than B, beyond what
-        benchmark noise can explain? &mdash; with <a href="#paired">pre-declared, corrected
-        verdicts</a>. <a href="#about">About these numbers</a> explains how each point is
+        benchmark noise can explain? &mdash; with <a href="#paired">pre-declared comparisons</a>:
+        multiplicity-corrected p-values and interval-vs-noise-margin verdicts. <a href="#about">About these numbers</a> explains how each point is
         computed, and <a href="#metrics">Metrics</a> defines every metric in the menu.
       </p>
     </section>
@@ -142,7 +144,8 @@
           resampled with replacement 1,000 times; the mean over expressions is computed for each
           resample. The plotted point is the median of that bootstrap distribution and the shaded
           band is its 2.5th–97.5th percentile range (a 95% confidence interval). The
-          <code>n</code> shown on hover is the number of contributing expressions.
+          <code>n</code> shown in a point's tooltip (tap or hover) is the number of
+          contributing expressions.
         </li>
       </ol>
 
@@ -170,9 +173,10 @@
     <section id="paired" class="prose">
       <h2>Paired comparisons</h2>
       <p>
-        Every model in this explorer solved the <em>same</em> benchmark expressions. The
-        <strong>Paired</strong> views (the &Delta;-curves and the verdict Matrix) exploit that:
-        instead of comparing two models' separate averages (whose uncertainty bands are inflated
+        Every method in this explorer solved the <em>same</em> benchmark expressions. The
+        <strong>Paired</strong> views (the &Delta;-curves &mdash; Curves &times; Paired &Delta;
+        &mdash; and the verdict Matrix &mdash; Table &times; Paired &Delta;) exploit that:
+        instead of comparing two methods' separate averages (whose uncertainty bands are inflated
         by shared expression difficulty &mdash; hard expressions are hard for everyone), they
         compute the difference <em>per expression</em> and ask whether those per-expression
         differences are consistently one-sided. This is also why the <strong>Absolute</strong>
@@ -180,7 +184,7 @@
         intervals can overlap even when one method is reliably better on expression after
         expression &mdash; if the question is "A vs B", use a Paired view. The convention is
         <strong>&Delta;&nbsp;=&nbsp;selected&nbsp;&minus;&nbsp;baseline</strong> (in the Matrix, cells
-        read row&nbsp;&minus;&nbsp;column), and the tap/hover record says which model a value favors. All statistics are precomputed in Python by
+        read row&nbsp;&minus;&nbsp;column), and the tap/hover record says which series a value favors. All statistics are precomputed in Python by
         <a href="https://github.com/psaegert/srbf" target="_blank" rel="noopener">srbf</a>'s paired
         layer; this page only renders them. Every claim is <strong>per benchmark</strong> &mdash;
         there is deliberately no combined number, because the two benchmarks measure different
@@ -254,6 +258,36 @@
         drawn from flash-ansr's own training distribution. Bands on &Delta;-curves are
         pointwise: each budget's band stands on its own, not as a statement about the whole curve. Displayed numbers are rounded to the precision their uncertainty justifies,
         and each paired payload carries a release id &mdash; cite numbers together with it.</p>
+
+      <h2 id="ranks">Rank leagues (the Ranks view)</h2>
+      <p>
+        The <strong>Ranks</strong> display answers the league question &mdash; how do <em>all</em>
+        methods stack up at once? Within each benchmark expression, the fixed roster (every
+        Flash-ANSR size plus every baseline) is ranked 1st, 2nd, &hellip; like race placings, at
+        exactly the selected compute budget. Ranking <em>within</em> each expression makes hard
+        and easy expressions count equally &mdash; every expression hands out the same placings
+        &mdash; so a method's <em>mean rank</em> is a difficulty-adjusted league position. Ranks
+        measure <em>consistency</em>: winning by a hair counts exactly like winning by a mile,
+        which is why this view complements the Paired views (which measure <em>by how much</em>)
+        rather than repeating them.
+      </p>
+      <p>
+        Two statistical guards keep the picture honest. The <em>Friedman test</em> first asks
+        whether the spread of mean ranks is bigger than chance would produce between
+        interchangeable methods &mdash; if not, no groupings are drawn at all. If it is, the
+        <em>critical difference</em> (CD) is the smallest mean-rank gap that is meaningful after
+        correcting for comparing every pair at once; methods closer than one CD share a shaded
+        band, meaning <strong>no reliable rank difference was detectable at this sample
+        size</strong> &mdash; absence of evidence, not proof of equality (a pre-declared Paired
+        verdict can legitimately separate two methods that share a band: it asks a different,
+        magnitude-based question). Hollow dots mark methods whose measurements end below the
+        budget: their plotted position is a worst case that more compute could only improve.
+        Leagues exist for the continuous metrics that every roster method has; failures rank
+        last within their expression on quality metrics, while expression-property metrics
+        (like length) are ranked only over expressions every method solved &mdash; a smaller,
+        explicitly-labeled population. One league is <em>primary</em> and quotable &mdash;
+        held-out log&#8321;&#8320; FVU &mdash; the rest are exploratory browsing.
+      </p>
     </section>
 
     <section id="metrics" class="prose">
@@ -353,7 +387,7 @@
           decoding, parsing, compiling, and constant fitting all completed and returned an
           evaluable expression. This is the denominator-integrity metric behind the failure
           convention above: where success dips, the rate metrics absorb the failures as zeros and
-          the diagnostic metrics thin out (visible as shrinking <code>n</code> on hover).
+          the diagnostic metrics thin out (visible as shrinking <code>n</code> in the tooltip).
         </p>
       </article>
 

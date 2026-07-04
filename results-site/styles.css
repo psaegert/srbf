@@ -319,6 +319,13 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
 .view-toggle-group { display: flex; gap: .35rem; }
 .view-tab.disabled { opacity: .35; pointer-events: none; }
 
+.tap-hint { font-size: .78rem; color: var(--ink-faint); margin: .45rem 0 0; }
+.key-band {
+  display: inline-block; width: 1.1em; height: .8em; vertical-align: -0.08em;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 25%, transparent); border-radius: 2px;
+}
+
 /* rank-league chips */
 .rank-primary {
   font-size: .78em; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;

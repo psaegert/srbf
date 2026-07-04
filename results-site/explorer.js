@@ -3,11 +3,12 @@
  * Reads window.RESULTS_DATA (emitted by srbf.analysis.export_data + augmented by
  * build_results_data.py): { metrics:[{key,label,higher_is_better,tier}], axes:[...],
  * colors:{series:hex}, series_meta:{series:{group,default_on,is_ablation,parent,predecessor}},
- * records:[...] }. Views form a 2×2 (registry): {Display: Curves|Table} × {Values: Absolute|Paired}
- * — curves×absolute (marginal line + CI band), curves×paired (Δ-vs-baseline curves with pointwise
- * bands + verdict), table×absolute (leaderboard: each series' best configuration within the budget,
- * marginal value + CI), table×paired (k×k four-state verdict matrix). Everything except
- * curves×absolute reads paired_data.json (lazy-fetched; ALL statistics precomputed in Python by
+ * records:[...] }. Views form a registry over {Display: Curves|Table|Ranks} × {Values:
+ * Absolute|Paired}: curves×absolute (marginal line + CI band), curves×paired (Δ-vs-baseline
+ * curves with pointwise bands + verdict), table×absolute (each series read at exactly the
+ * selected budget, interpolated in log-time, plateau-flagged), table×paired (k×k four-state
+ * verdict matrix), ranks (critical-difference league of the fixed roster; Values n/a).
+ * Everything except curves×absolute reads paired_data.json (lazy-fetched; ALL statistics precomputed in Python by
  * srbf's paired layer — this file only renders). Per-series colour customisation persists in a
  * single functional cookie; two-tier metric menu; theme-aware (light/dark).
  */
@@ -150,7 +151,15 @@
       if (!budgetLog) { budgetValue.textContent = "…"; return; }
       var t = tOf(parseInt(budgetRange.value, 10) / 1000);
       budgetSnapped = false;
-      for (var i = 0; i < budgets.length; i++) {
+      if (currentView === "ranks" && budgets.length) {
+        // leagues exist at marks only — the slider is snap-only here (nearest mark wins)
+        t = budgets.reduce(function (a, b) {
+          return Math.abs(Math.log10(t) - Math.log10(a)) <= Math.abs(Math.log10(t) - Math.log10(b)) ? a : b;
+        });
+        budgetSnapped = true;
+        budgetRange.value = String(Math.round(positionOf(t) * 1000));
+      }
+      for (var i = 0; !budgetSnapped && i < budgets.length; i++) {
         if (Math.abs(Math.log10(t) - Math.log10(budgets[i])) <= SNAP_FRACTION * budgetLog.span) {
           t = budgets[i]; budgetSnapped = true;     // magnetic snap near a mark
           budgetRange.value = String(Math.round(positionOf(t) * 1000));
@@ -230,10 +239,10 @@
     baselineHint.textContent = "The zero line. Any series can serve — it does not have to be checked above.";
     baselineField.appendChild(baselineHint);
     var correctionField = labelled("Multiple-comparison correction", correctionSel);
-    var budgetField = labelled("Compute budget (verdicts)", budgetWrap);
+    var budgetField = labelled("Compute budget", budgetWrap);
     var budgetHint = document.createElement("span");
     budgetHint.className = "results-field-hint";
-    budgetHint.textContent = "Drag freely for a descriptive read of the curves; verdicts and release-grade numbers live at the marks (it snaps nearby).";
+    budgetHint.textContent = "Marks = release-grade numbers · between marks = descriptive curve read (snaps near marks).";
     budgetField.appendChild(budgetHint);
     controls.appendChild(axisField);
     controls.appendChild(labelled("Metric", metricSel));
@@ -242,6 +251,7 @@
     controls.appendChild(baselineField);
     controls.appendChild(correctionField);
     [axisSel, metricSel, benchSel, baselineSel, correctionSel].forEach(function (s) { s.addEventListener("change", render); });
+    metricSel.addEventListener("change", function () { ranksSwitchedFrom = null; });
 
     function switchView(v) {
       currentView = v;
@@ -257,7 +267,13 @@
       correctionField.style.display = vm.usesCorrection ? "" : "none";
       seriesArea.style.display = vm.usesSeries === false ? "none" : "";
       tools.style.display = vm.usesSeries === false ? "none" : "";
-      if (v === "ranks") { ranksAutoPicked = false; }
+      if (v === "ranks") { ranksAutoPicked = false; syncBudget(); }
+      var inRanks = vm.display === "ranks";
+      for (var oi = 0; oi < metricSel.options.length; oi++) {
+        var opt2 = metricSel.options[oi];
+        opt2.disabled = inRanks && pairedData && !rankMetricInfo(opt2.value);
+      }
+      rosterNote.style.display = inRanks ? "" : "none";
       if (v !== "curves" && !pairedData && !pairedLoading) { loadPaired(); }
       render();
     }
@@ -319,6 +335,9 @@
     }
 
     var seriesArea = document.createElement("div"); seriesArea.className = "series-area";
+    var rosterNote = document.createElement("div"); rosterNote.className = "results-field-hint roster-note";
+    rosterNote.textContent = "Ranks always compares the full pre-declared roster (all sizes + all baselines) — series selection does not apply here.";
+    rosterNote.style.display = "none";
     var primary = function (s) { return !metaOf(s).is_ablation; };
     var ablation = function (s) { return metaOf(s).is_ablation === true; };
     groupsFor(primary).forEach(function (g) { seriesArea.appendChild(groupBlock(g, primary)); });
@@ -370,6 +389,7 @@
     root.appendChild(tabs);
     root.appendChild(controls);
     root.appendChild(seriesArea);
+    root.appendChild(rosterNote);
     root.appendChild(tools);
     root.appendChild(plot);
     root.appendChild(pairedFoot);
@@ -574,8 +594,10 @@
             "<span style='color:" + (VERDICT_COLORS[verdict] || "#888") + "'><b>" + verdictLabel(rec, verdict) + "</b></span> — " +
             "Δ = " + fmt(rSign * rec.delta) + " [" + fmt(rSign > 0 ? rec.lo : -rec.hi) + ", " +
             fmt(rSign > 0 ? rec.hi : -rec.lo) + "] vs noise margin ±" + rec.margin +
-            (verdict === "undecided" && rec.equivalence_attainable === false
-              ? " — <i>too few paired expressions to ever certify “equivalent” at this margin; limited resolution, not evidence of parity</i>" : "") +
+            (rec.verdict_note === "ladder-limited"
+              ? " — <i>the losing side has no measurements at this budget; its carried value is a lower bound, so no at-budget verdict can be issued</i>"
+              : (verdict === "undecided" && rec.equivalence_attainable === false
+                 ? " — <i>too few paired expressions to ever certify “equivalent” at this margin; limited resolution, not evidence of parity</i>" : "")) +
             "<br><span class='fam'>" + pLabel + fmtP(p) +
             (rec.family_id ? " · confirmatory — pre-declared " + setName(rec.confirmatory_set) + " set, Holm-corrected over " + rec.family_size + " comparisons"
                            : " · exploratory (BH-corrected)") +
@@ -588,7 +610,7 @@
       var layout = {
         font: { family: "Inter, system-ui, sans-serif", color: t.ink, size: 13 },
         margin: { l: 62, r: 20, t: 16, b: 58 },
-        xaxis: { title: "Compute budget t (s, log scale)",
+        xaxis: { title: "Compute budget t (s, log scale)", dtick: 1,
                  type: "log", gridcolor: t.grid, zerolinecolor: t.zero, ticks: "outside", tickcolor: t.grid },
         yaxis: { title: "Δ " + (mi ? mi.label : metricKey),
                  gridcolor: t.grid, zerolinewidth: 2, zerolinecolor: t.ink, ticks: "outside", tickcolor: t.grid },
@@ -683,8 +705,10 @@
         "<div><span style='color:" + (VERDICT_COLORS[o.verdict] || "#888") + "'><b>" + verdictLabel(rec, o.verdict) +
         "</b></span> — Δ = " + fmt(o.delta) + " [" + fmt(o.lo) + ", " + fmt(o.hi) +
         "] vs noise margin ±" + rec.margin +
-        (o.verdict === "undecided" && rec.equivalence_attainable === false
-          ? " — <i>too few paired expressions to ever certify “equivalent” at this margin; limited resolution, not evidence of parity</i>" : "") +
+        (rec.verdict_note === "ladder-limited"
+          ? " — <i>a plateau side has no measurements at this budget; its carried value is a lower bound, so no at-budget verdict can be issued</i>"
+          : (o.verdict === "undecided" && rec.equivalence_attainable === false
+             ? " — <i>too few paired expressions to ever certify “equivalent” at this margin; limited resolution, not evidence of parity</i>" : "")) +
         "</div>" +
         "<div class='fam'>" + pLabel + fmtP(p) + " (uncorrected p = " + fmtP(rec.p_raw) + ")" +
         (rec.family_id
@@ -713,6 +737,10 @@
       var td = pairedFoot.querySelector("td[data-cell='" + i + "']");
       if (td) { td.classList.add("selected"); }
       detail.innerHTML = matrixDetailHtml(cell);
+      var box = detail.getBoundingClientRect();
+      if (box.bottom > window.innerHeight || box.top < 0) {
+        detail.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
     }
 
     function renderMatrixDescriptive() {
@@ -752,6 +780,7 @@
         html.push("</tr>");
       });
       html.push("</tbody></table></div>");
+      html.push("<div class='tap-hint'>Tap any cell to pin its read below.</div>");
       if (selectedIdx < 0) { matrixSelectedKey = null; }
       html.push("<div class='matrix-detail'>" +
         (selectedIdx >= 0 ? matrixDetailHtml(matrixCells[selectedIdx]) : "") + "</div>");
@@ -833,6 +862,7 @@
         html.push("</tr>");
       });
       html.push("</tbody></table></div>");
+      html.push("<div class='tap-hint'>Tap any cell to pin its full statistical record below.</div>");
       if (selectedIdx < 0) { matrixSelectedKey = null; }   // selected pair no longer on screen
       html.push("<div class='matrix-detail'>" +
         (selectedIdx >= 0 ? matrixDetailHtml(matrixCells[selectedIdx]) : "") + "</div>");
@@ -840,7 +870,7 @@
         "<span class='v-better'>better ▲</span> / <span class='v-worse'>worse ▼</span> (CI clear of the noise margin) · " +
         "<span class='v-equivalent'>equivalent ≈</span> (CI inside the margin: any difference is smaller than the benchmark can measure) · " +
         "<span class='v-undecided'>undecided ?</span> (hatched fill; not enough data — the full record shows the smallest detectable difference) · " +
-        "<i>n/a</i> = this pair was not evaluated on this benchmark. " +
+        "<i>n/a</i> = not measurable within this budget, or not evaluated on this benchmark. " +
         "A small <b>C</b> marks a confirmatory cell: one of the comparisons declared in advance (each ablation vs its parent, adjacent model sizes, " +
         "and each model size vs each baseline), held to the stricter Holm correction — every other cell is exploratory screening " +
         "with the lenient Benjamini–Hochberg correction; see <a href='#paired'>Paired comparisons</a>. " +
@@ -885,8 +915,8 @@
       html.push("<div class='matrix-wrap'>");
       html.push("<table class='paired-matrix abs-table'><thead><tr>" +
         "<th>series</th><th>" + (mi ? mi.label : metricKey) + " [95% CI]</th>" +
-        "<th>at " + (snapped ? "≤ " + selectedBudget() : "t ≈ " + Number(selectedBudget().toPrecision(3))) +
-        " s per problem</th><th>n</th></tr></thead><tbody>");
+        "<th>at the " + (snapped ? "≤ " + selectedBudget() : "t ≈ " + Number(selectedBudget().toPrecision(3))) +
+        " s budget</th><th>n</th></tr></thead><tbody>");
       rows.forEach(function (row) {
         var col = colorOf(row.s, idx[row.s]);
         var marks = "";
@@ -909,7 +939,7 @@
                        : "≈ " + Number(selectedBudget().toPrecision(3)) + " s (curve read)")
             : "measured ≈" + fmtDesc(row.e.x) + " s";
         html.push("<td class='lb-value'><b>" + fv(row.e.value) + "</b> [" + fv(row.e.lo) +
-          ", " + fv(row.e.hi) + "]</td>" +
+          ", " + fv(row.e.hi) + "]" + (row.e.status === "plateau" ? " <span class='lb-flag'>plateau</span>" : "") + "</td>" +
           "<td class='lb-x'>" + basis + "</td>" +
           "<td class='lb-n'>" + row.e.n + "</td></tr>");
       });
@@ -926,24 +956,26 @@
         pairedFoot.innerHTML = html.join("");
         return;
       }
+      html.push("<div class='desc-banner'><b>Not a leaderboard:</b> these are marginal numbers " +
+        "— overlapping intervals are NOT evidence of no difference, and a small gap between " +
+        "rows proves nothing. For any A-vs-B question use the Paired Δ views " +
+        "(<a href='#paired'>why</a>).</div>");
       html.push("<div class='matrix-legend'>" +
-        "Each row: the series AT EXACTLY the selected budget — interpolated per problem, " +
-        "linearly in log-time, between its two bracketing measured configurations (the same " +
-        "model as the Δ(t) curves, so the value sits on the plotted segment; measured points " +
-        "keep the exact Curves-view value). Never extrapolated: a series whose ladder ends " +
-        "below the budget shows its last measured value flagged <i>plateau</i> — a lower " +
-        "bound, since more compute could only help it. " +
-        (hib ? "Higher" : "Lower") + " is better, best first. " +
-        "<b>These are marginal numbers: never read a difference between two rows off their " +
-        "CIs</b> — shared expression difficulty makes marginal intervals overlap even when one " +
-        "method is reliably better. Head-to-head questions belong to the Paired Δ views " +
-        "(<a href='#paired'>why</a>). Rankings are per benchmark only — there is deliberately " +
-        "no combined number. Release " + (pairedData.results_release_id || "?") + ".</div>" +
+        "Each row: the series evaluated at exactly the selected budget — interpolated per " +
+        "problem, linearly in log-time, between its two bracketing measured configurations " +
+        "(the same model as the Δ(t) curves, so the value sits on the plotted segment; " +
+        "measured points keep the exact Curves-view value). " +
+        "<span class='lb-flag'>plateau</span> = the method's measurements end below the " +
+        "budget (its largest tested configuration is shown); the value is carried forward as " +
+        "a lower bound, since more compute could only help it — never extrapolated. " +
+        (hib ? "Higher" : "Lower") + " is better, best first; rankings are per benchmark " +
+        "only — there is deliberately no combined number. Release " +
+        (pairedData.results_release_id || "?") + ".</div>" +
         (notes ? "<div class='matrix-legend'>" + notes + "</div>" : ""));
       pairedFoot.innerHTML = html.join("");
     }
 
-    var ranksAutoPicked = false;
+    var ranksAutoPicked = false, ranksSwitchedFrom = null;
     function rankMetricInfo(key) {
       if (!pairedData || pairedData.error) { return null; }
       return (pairedData.rank_metrics || []).filter(function (m) { return m.key === key; })[0] || null;
@@ -961,10 +993,15 @@
       var rmi = rankMetricInfo(metricKey);
       if (!rmi && !ranksAutoPicked) {
         // entering the view with a non-league metric (e.g. the default vNRR): jump to the
-        // primary league once; a deliberate ineligible pick afterwards shows the guard
+        // primary league once — VISIBLY (a silent control change misattributes the ranking);
+        // a deliberate ineligible pick afterwards shows the guard instead
         ranksAutoPicked = true;
-        var prim = ((pairedData.rank_metrics || []).filter(function (m) { return m.primary; })[0] || {}).key;
-        if (prim) { metricSel.value = prim; return renderRanks(); }
+        var prim = (pairedData.rank_metrics || []).filter(function (m) { return m.primary; })[0];
+        if (prim) {
+          ranksSwitchedFrom = (metrics.filter(function (m) { return m.key === metricKey; })[0] || {}).label || metricKey;
+          metricSel.value = prim.key;
+          return renderRanks();
+        }
       }
       if (!rmi) {
         plot.style.display = "none";
@@ -1048,38 +1085,51 @@
       Plotly.react(plot, traces, layout, { responsive: true, displayModeBar: false });
       var missing = order.filter(function (m) { return (league.n_missing[m] || 0) > 0; })
         .map(function (m) { return m + " (" + league.n_missing[m] + ")"; });
-      pairedFoot.innerHTML = "<div class='matrix-legend'>" +
+      var excludedNote = league.excluded.length
+        ? "<div class='fam'>" + league.excluded.join(" and ") +
+          " cannot run within this budget and sit out this league.</div>" : "";
+      var switchNote = ranksSwitchedFrom
+        ? "<div class='desc-banner'>Switched the metric to <b>" + rmi.label + "</b> — the " +
+          "primary league metric (your previous pick, " + ranksSwitchedFrom + ", has no rank " +
+          "league; the near-binary rate metrics tie on most expressions).</div>" : "";
+      pairedFoot.innerHTML =
+        switchNote +
+        // decode key: the two glyphs and the ruler, right where the eye lands
+        "<div class='plot-caption'><span class='key-band'></span> shaded band = no reliable " +
+        "rank difference (gap smaller than the critical difference — absence of evidence, not " +
+        "equality) · <b>○</b> hollow dot = ladder-limited: measurements end below the budget, " +
+        "so the true position could only improve · the CD ruler (top) shows the smallest " +
+        "mean-rank gap that counts.</div>" +
+        "<div class='matrix-legend'>" +
         "<span class='" + (league.primary ? "rank-primary" : "rank-exploratory") + "'>" +
         (league.primary ? "PRIMARY league" : "exploratory league") + "</span> — " +
         (league.primary
           ? "the one pre-declared rank claim per benchmark and budget. "
           : "browse freely, quote only the primary (log10 FVU, validation) league. ") +
-        "Within each problem, the " + k + " methods are ranked 1 (best) to " + k +
-        " on <b>" + rmi.label + "</b> at exactly ≤ " + selectedBudget() + " s per problem; " +
-        "shared difficulty cancels because every problem hands out the same placings. " +
+        "Within each of the n = " + league.n_problems + " expressions, the " + k +
+        " methods are ranked 1 (best) to " + k + " on <b>" + rmi.label + "</b> at the ≤ " +
+        selectedBudget() + " s per problem budget (every method evaluated at exactly t); " +
+        "hard and easy expressions count equally, because each hands out the same placings. " +
         (league.mode === "worst-rank"
-          ? "Failures rank strictly worst in their problem" +
-            (missing.length ? " (" + missing.join(", ") + " of " + league.n_problems + " problems)" : "") + "."
-          : "<b>Conditional league</b>: only the " + league.n_problems + " problems where every " +
-            "method produced an expression — a different, easier population; the property being " +
-            "ranked is undefined for failures.") + " " +
-        "Friedman omnibus (tie-corrected): χ² = " + league.friedman_chi2 + ", p = " +
-        fmtP(league.friedman_p) + " over n = " + league.n_problems + " problems. " +
+          ? "A method that fails an expression ranks last on it" +
+            (missing.length ? " (failures: " + missing.join(", ") + ")" : "") + "."
+          : "<b>Conditional league</b>: only expressions every method solved — a smaller, " +
+            "easier population; the property being ranked is undefined for failures.") + " " +
         (reject
-          ? "Shaded bands are Nemenyi cliques: methods whose mean-rank gap is below the " +
-            "critical difference (CD = " + league.cd + ", corrected for all " +
-            (k * (k - 1) / 2) + " pairwise comparisons) are statistically indistinguishable " +
-            "in rank."
-          : "<b>The omnibus does not reject</b> — no rank separations to report; the positions " +
-            "are shown without cliques.") + " " +
-        "Hollow dots are ladder-limited (their value is a plateau lower bound, so their true " +
-        "position could only improve). " +
-        (league.excluded.length
-          ? league.excluded.join(", ") + " cannot run within this budget and sit out this league. "
-          : "") +
-        "Ranks measure <i>consistency across problems</i>, not magnitude — a hair's win counts " +
-        "like a mile's; magnitudes live in the Paired views. Release " +
-        (pairedData.results_release_id || "?") + ".</div>";
+          ? "A <a href='#ranks'>Friedman omnibus</a> confirms the spread of mean ranks is " +
+            "real before any grouping is drawn; the Nemenyi critical difference corrects for " +
+            "comparing all " + (k * (k - 1) / 2) + " pairs at once. A pre-declared Paired " +
+            "verdict can legitimately separate two methods that share a band — it asks a " +
+            "magnitude question, ranks ask a consistency question (a hair's win counts like " +
+            "a mile's)."
+          : "<b>The Friedman omnibus does not reject</b> — no rank separations to report; " +
+            "positions are shown without groupings.") +
+        "<div class='fam'>Full record: Friedman (tie-corrected) χ² = " + league.friedman_chi2 +
+        ", p = " + fmtP(league.friedman_p) + " over n = " + league.n_problems +
+        " expressions · CD = " + league.cd + " at α = " + league.alpha +
+        " · release " + (pairedData.results_release_id || "?") + ".</div>" +
+        excludedNote +
+        "</div>";
     }
 
     function renderCurves() {
@@ -1118,7 +1168,7 @@
       var layout = {
         font: { family: "Inter, system-ui, sans-serif", color: t.ink, size: 13 },
         margin: { l: 62, r: 20, t: 16, b: 58 },
-        xaxis: { title: am.label + (am.unit ? " (" + am.unit + ")" : ""), type: am.log ? "log" : "linear",
+        xaxis: { title: am.label + (am.unit ? " (" + am.unit + ")" : ""), type: am.log ? "log" : "linear", dtick: am.log ? 1 : undefined,
                  gridcolor: t.grid, zerolinecolor: t.zero, ticks: "outside", tickcolor: t.grid },
         yaxis: { title: metric.label, gridcolor: t.grid, zerolinecolor: t.zero, ticks: "outside", tickcolor: t.grid },
         legend: { orientation: "h", y: -0.22, font: { size: 12 } },
@@ -1127,6 +1177,11 @@
         annotations: traces.length ? [] : [{ text: "No data for this selection", showarrow: false, font: { size: 15, color: t.ink } }]
       };
       Plotly.react(plot, traces, layout, { responsive: true, displayModeBar: false });
+      pairedFoot.innerHTML = traces.length
+        ? "<div class='plot-caption'>Each line: one series' <b>" + (metric ? metric.label : metricKey) +
+          "</b> (the median of bootstrapped means over expressions); the shaded band is its 95% " +
+          "bootstrap confidence interval. Tap or hover a point for its exact values and n. " +
+          "<a href='#metrics'>What this metric means</a>.</div>" : "";
     }
 
     render();
