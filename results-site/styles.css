@@ -80,7 +80,13 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
 .lede { margin: 0; color: var(--ink-soft); font-size: 1.05rem; }
 .lede strong { color: var(--ink); font-weight: 600; }
 
-.visual-abstract { display: block; width: 100%; height: auto; margin: 1.4rem 0 0; border-radius: 18px; box-shadow: var(--shadow); }
+.va-wrap { margin: 1.4rem 0 0; }
+.visual-abstract { display: block; width: 100%; height: auto; border-radius: 18px; box-shadow: var(--shadow); }
+/* on narrow screens the abstract keeps a readable width and scrolls in its own box */
+@media (max-width: 700px) {
+  .va-wrap { overflow-x: auto; border-radius: 18px; }
+  .visual-abstract { min-width: 760px; }
+}
 
 /* explorer panel */
 .panel {
