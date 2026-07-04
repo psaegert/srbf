@@ -423,8 +423,8 @@
       if (pairedData && !pairedData.error) { return true; }
       plot.style.display = "";
       Plotly.react(plot, [], {
-        annotations: [{ text: pairedLoading ? "Loading paired data…" :
-          (pairedData && pairedData.error ? "paired_data.json failed to load." : "Loading paired data…"),
+        annotations: [{ text: pairedLoading ? "Loading comparison data…" :
+          (pairedData && pairedData.error ? "The comparison data failed to load — refresh to retry." : "Loading comparison data…"),
           showarrow: false, font: { size: 15, color: theme().ink } }],
         paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)"
       }, { responsive: true, displayModeBar: false });
@@ -523,7 +523,7 @@
       if (metricInfo(metricKey)) { return true; }
       plot.style.display = "";
       Plotly.react(plot, [], {
-        annotations: [{ text: "Paired data is available for the Main metrics — pick one from the “Main metrics” group in the Metric menu.",
+        annotations: [{ text: "Paired comparisons are available for the Main metrics — pick one from the “Main metrics” group in the Metric menu.",
           showarrow: false, font: { size: 14, color: theme().ink } }],
         paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)"
       }, { responsive: true, displayModeBar: false });
@@ -620,7 +620,7 @@
           yref: "paper", y0: 0, y1: 1, line: { color: t.ink, width: 1, dash: "dot" } }] : [],
         annotations: traces.length ? [] : [{ text: (pairedData.records || []).some(function (r) { return r.benchmark === bench && (r.a === baseline || r.b === baseline); })
           ? "No paired curves for this selection — toggle series above (the baseline itself is the zero line)."
-          : "No precomputed pairs for baseline " + baseline + " on " + bench + " — pick another baseline or benchmark.",
+          : "No paired comparisons are available for baseline " + baseline + " on " + bench + " — pick another baseline or benchmark.",
           showarrow: false, font: { size: 14, color: t.ink } }]
       };
       Plotly.react(plot, traces, layout, { responsive: true, displayModeBar: false });
@@ -887,8 +887,8 @@
       var mi = metricInfo(metricKey);
       var hib = !(mi && mi.higher_is_better === false);
       if (!pairedData.leaderboard) {
-        pairedFoot.innerHTML = "<div class='matrix-warning'>This paired payload predates the " +
-          "Table view (no leaderboard block) — re-run build_paired_data.py.</div>";
+        pairedFoot.innerHTML = "<div class='matrix-warning'>The Table data is not part of " +
+          "this results release yet — check back after the next release.</div>";
         return;
       }
       var snapped = budgetIsSnapped();
@@ -986,8 +986,8 @@
       var bench = benchSel.value, metricKey = metricSel.value;
       if (!pairedData.ranks) {
         plot.style.display = "none";
-        pairedFoot.innerHTML = "<div class='matrix-warning'>This paired payload predates the " +
-          "Ranks view — re-run build_paired_data.py.</div>";
+        pairedFoot.innerHTML = "<div class='matrix-warning'>The rank leagues are not part of " +
+          "this results release yet — check back after the next release.</div>";
         return;
       }
       var rmi = rankMetricInfo(metricKey);
@@ -1006,17 +1006,16 @@
       if (!rmi) {
         plot.style.display = "none";
         pairedFoot.innerHTML = "<div class='matrix-warning'>Rank leagues exist for the " +
-          "continuous metrics only — the near-binary rate metrics tie on most problems " +
-          "(rank tests degenerate under mass ties), and model-internal metrics do not exist " +
-          "for the baselines. Pick one of: " + (pairedData.rank_metrics || [])
+          "continuous metrics only — rate metrics take so few values that most methods tie " +
+          "on most expressions, and model-internal metrics do not exist for the baselines. " +
+          "Pick one of: " + (pairedData.rank_metrics || [])
             .map(function (m) { return m.label; }).join(" · ") + ".</div>";
         return;
       }
       if (!budgetIsSnapped()) {
         plot.style.display = "none";
-        pairedFoot.innerHTML = "<div class='desc-banner'>Rank leagues are computed at the " +
-          "marked budgets only (the per-problem cross-method ranks live in Python, not in the " +
-          "browser) — snap the slider to a mark.</div>";
+        pairedFoot.innerHTML = "<div class='desc-banner'>Rank leagues exist at the marked " +
+          "budgets only — snap the slider to a mark to see one.</div>";
         return;
       }
       var league = (pairedData.ranks || []).filter(function (r) {
@@ -1025,8 +1024,8 @@
       if (!league) {
         plot.style.display = "none";
         pairedFoot.innerHTML = "<div class='matrix-warning'>No league for this metric at this " +
-          "budget — fewer than two methods can run within it, or too few problems survive " +
-          "the block design.</div>";
+          "budget — fewer than two methods can run within it, or too few expressions have " +
+          "values for every method.</div>";
         return;
       }
       plot.style.display = "";

@@ -184,9 +184,10 @@
         intervals can overlap even when one method is reliably better on expression after
         expression &mdash; if the question is "A vs B", use a Paired view. The convention is
         <strong>&Delta;&nbsp;=&nbsp;selected&nbsp;&minus;&nbsp;baseline</strong> (in the Matrix, cells
-        read row&nbsp;&minus;&nbsp;column), and the tap/hover record says which series a value favors. All statistics are precomputed in Python by
-        <a href="https://github.com/psaegert/srbf" target="_blank" rel="noopener">srbf</a>'s paired
-        layer; this page only renders them. Every claim is <strong>per benchmark</strong> &mdash;
+        read row&nbsp;&minus;&nbsp;column), and the tap/hover record says which series a value favors. Every statistic on this page is computed ahead of time by
+        <a href="https://github.com/psaegert/srbf" target="_blank" rel="noopener">srbf</a>'s
+        open-source paired layer and published with the page &mdash; nothing is calculated in
+        your browser, so what you see is exactly what is citable. Every claim is <strong>per benchmark</strong> &mdash;
         there is deliberately no combined number, because the two benchmarks measure different
         populations.
       </p>
@@ -257,7 +258,7 @@
         v23-val, cross-method cells carry an <em>in-distribution</em> note: that benchmark is
         drawn from flash-ansr's own training distribution. Bands on &Delta;-curves are
         pointwise: each budget's band stands on its own, not as a statement about the whole curve. Displayed numbers are rounded to the precision their uncertainty justifies,
-        and each paired payload carries a release id &mdash; cite numbers together with it.</p>
+        and every number on this page carries a release id &mdash; cite them together.</p>
 
       <h2 id="ranks">Rank leagues (the Ranks view)</h2>
       <p>
