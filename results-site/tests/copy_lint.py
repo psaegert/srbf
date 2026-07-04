@@ -23,6 +23,7 @@ BANNED = {
     r"precomputed in Python": "architecture note; use reproducibility framing",
     r"your previous pick": "assumes a deliberate choice; defaults are not picks",
     r"n = \d+ problems": "counts are denominated in expressions site-wide",
+    r"league": "dropped vocabulary — 'primary'/'exploratory' and 'ranking' suffice",
 }
 
 def js_strings(source: str) -> list[str]:
@@ -44,7 +45,9 @@ def js_strings(source: str) -> list[str]:
             continue
         lines.append(line)
     text = "\n".join(lines)
-    return re.findall(r'"((?:[^"\\]|\\.)*)"', text) + re.findall(r"'((?:[^'\\]|\\.)*)'", text)
+    # double-quoted literals only: all viewer copy uses them, and apostrophes inside them
+    # ("method's") would make a single-quote scan pair across strings and swallow code
+    return re.findall(r'"((?:[^"\\]|\\.)*)"', text)
 
 def main() -> int:
     failures = []

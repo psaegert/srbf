@@ -137,11 +137,11 @@ test('table: a metric without paired data shows a banner, never a ghost plot', a
   expect(errors).toEqual([]);
 });
 
-test('ranks: entering with vNRR switches to the primary league VISIBLY and restores on leave', async ({ page }) => {
+test('ranks: entering with vNRR switches to the primary metric VISIBLY and restores on leave', async ({ page }) => {
   const errors = collectErrors(page);
   await gotoView(page, 'ranks');
   await expect(metricSelect(page)).toHaveValue('log10_fvu_val');
-  await expect(page.locator('.desc-banner')).toContainText('primary league metric');
+  await expect(page.locator('.desc-banner')).toContainText('primary ranking metric');
   await switchTo(page, 'table');                       // the 2026-07-04 regression path
   await expect(metricSelect(page)).toHaveValue('numeric_recovery_val');
   expect(errors).toEqual([]);
@@ -150,10 +150,10 @@ test('ranks: entering with vNRR switches to the primary league VISIBLY and resto
 test('ranks: the metric menu shows the league structure at first glance', async ({ page }) => {
   await gotoView(page, 'ranks');
   await expect(metricSelect(page)
-    .locator('optgroup[label="Primary league"] option[value="log10_fvu_val"]')).toHaveCount(1);
+    .locator('optgroup[label="Primary"] option[value="log10_fvu_val"]')).toHaveCount(1);
   expect(await metricSelect(page)
-    .locator('optgroup[label="Exploratory leagues"] option').count()).toBeGreaterThan(5);
-  await expect(page.locator('.metric-badge')).toContainText('primary league');
+    .locator('optgroup[label="Exploratory"] option').count()).toBeGreaterThan(5);
+  await expect(page.locator('.metric-badge')).toHaveText('primary');
   await gotoView(page, 'curves');
   await expect(metricSelect(page).locator('optgroup[label="Main metrics"]')).toHaveCount(1);
   await expect(page.locator('.metric-badge')).toBeHidden();
@@ -193,10 +193,14 @@ for (const view of VIEWS) {
 
 // ---- contextual help: ?-links, collapsed fine print, tap-to-define terms -------------------
 
-test('help: the metric ?-link routes to the metrics reference', async ({ page }) => {
+test('help: the ?-link opens a hint with a Read-more link, no jump', async ({ page }) => {
   await gotoView(page, 'curves');
-  await expect(page.locator('.help-link[href="#metrics"]')).toBeVisible();
-  await expect(page.locator('.help-link[href="#paired"]').first()).toBeAttached();
+  await page.locator('.help-link[href="#metrics"]').click();
+  await expect(page.locator('.term-pop')).toContainText('defined precisely');
+  await expect(page.locator('.term-pop a[href="#metrics"]')).toContainText('Read more');
+  expect(new URL(page.url()).hash).not.toBe('#metrics');   // no navigation happened
+  await page.locator('h1').click();
+  await expect(page.locator('.term-pop')).toHaveCount(0);
 });
 
 test('help: legends open with a key line, fine print collapsed by default', async ({ page }) => {

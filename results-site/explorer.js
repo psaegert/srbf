@@ -70,8 +70,8 @@
           var rm = rankMetricInfo(m.key);
           (rm ? (rm.primary ? prim : expl) : none).push(m);
         });
-        groups = [["Primary league", prim, false], ["Exploratory leagues", expl, false],
-                  ["No rank league here", none, true]];
+        groups = [["Primary", prim, false], ["Exploratory", expl, false],
+                  ["No ranking here", none, true]];
       } else {
         groups = [["Main metrics",
                    metrics.filter(function (m) { return (m.tier || "more") === "main"; }), false],
@@ -262,19 +262,27 @@
     baselineField.appendChild(baselineHint);
     var correctionField = labelled("Multiple-comparison correction", correctionSel);
     correctionField.querySelector(".results-field-label")
-      .appendChild(helpLink("#paired", "Why corrections, and what they change"));
+      .appendChild(helpLink("#paired", "paired", "Why corrections, and what they change"));
     var budgetField = labelled("Compute budget", budgetWrap);
     budgetField.querySelector(".results-field-label")
-      .appendChild(helpLink("#paired", "How budgets and verdicts work"));
+      .appendChild(helpLink("#paired", "budget", "How budgets and verdicts work"));
     var budgetHint = document.createElement("span");
     budgetHint.className = "results-field-hint";
     budgetHint.textContent = "Marks = release-grade numbers · between marks = descriptive curve read (snaps near marks).";
     budgetField.appendChild(budgetHint);
     controls.appendChild(axisField);
-    function helpLink(href, label) {
+    var HELP = {
+      metrics: "Every metric in the menu, defined precisely — what it measures, its formula, " +
+               "and which direction is better.",
+      paired: "How comparisons work: measurement-noise margins, the four verdicts, " +
+              "standardized budgets, and why p-values are corrected.",
+      budget: "Marks carry the release-grade, pre-declared numbers; between marks you get a " +
+              "clearly-labeled descriptive read of the curves.",
+    };
+    function helpLink(href, key, label) {
       var a = document.createElement("a");
       a.className = "help-link"; a.href = href; a.textContent = "?";
-      a.title = label; a.setAttribute("aria-label", label);
+      a.dataset.help = key; a.title = label; a.setAttribute("aria-label", label);
       return a;
     }
     var metricField = labelled("Metric", metricSel);
@@ -283,7 +291,7 @@
     metricBadge.style.display = "none";
     metricField.querySelector(".results-field-label").appendChild(metricBadge);
     metricField.querySelector(".results-field-label")
-      .appendChild(helpLink("#metrics", "What does every metric mean?"));
+      .appendChild(helpLink("#metrics", "metrics", "What does every metric mean?"));
     controls.appendChild(metricField);
     controls.appendChild(labelled("Benchmark", benchSel));
     controls.appendChild(budgetField);
@@ -325,7 +333,7 @@
       buildMetricMenu(inRanks && pairedData ? "ranks" : "standard");
       var current = inRanks && pairedData ? rankMetricInfo(metricSel.value) : null;
       if (current) {
-        metricBadge.textContent = current.primary ? "primary league" : "exploratory";
+        metricBadge.textContent = current.primary ? "primary" : "exploratory";
         metricBadge.className = "metric-badge " +
           (current.primary ? "rank-primary" : "rank-exploratory");
         metricBadge.style.display = "";
@@ -731,12 +739,13 @@
 
     // one side's basis at the budget, for titles/detail panels ("interpolated", "plateau"...)
     function sideBasis(name, status, x, bracket) {
-      if (status === "plateau") { return name + ": ladder ends at ≈" + x + " s (value carried forward — a lower bound)"; }
+      if (status === "plateau") { return name + ": largest tested ≈" + x + " s (value carried forward — a lower bound)"; }
       if (status === "interpolated") { return name + ": interpolated at " + x + " s (between ≈" + bracket[0] + " and ≈" + bracket[1] + " s)"; }
       return name + ": measured at ≈" + x + " s";
     }
     function verdictLabel(rec, verdict) {
-      return verdict + (rec.verdict_note ? " (" + rec.verdict_note + ")" : "");
+      var note = rec.verdict_note === "ladder-limited" ? "max-tested limit" : rec.verdict_note;
+      return verdict + (note ? " (" + note + ")" : "");
     }
 
     // --- tap-to-define terms: jargon carries its own one-sentence explanation ------------
@@ -744,11 +753,11 @@
       cd: "The critical difference: the smallest gap in mean rank that counts as real here, " +
           "after correcting for comparing every pair of methods at once. The ruler above the " +
           "chart is exactly this long — hold it against any gap.",
-      plateau: "This method's measurements end below the selected budget, so it shows its " +
-          "last measured value — a lower bound; more compute could only help it. Never " +
-          "extrapolated.",
-      ladderlimited: "A plateau side could improve with more compute, so any verdict it " +
-          "could overturn by improving is withheld.",
+      maxtested: "Nothing was tested beyond this point — the method itself is not " +
+          "stagnating. It shows its largest tested configuration's value: a lower bound, " +
+          "since more compute could only help it. Never extrapolated.",
+      testedlimit: "A side at its max tested run could improve with more compute, so any " +
+          "verdict it could overturn by improving is withheld.",
       margin: "The largest difference two EQUALLY GOOD methods would show from benchmark " +
           "noise alone (derived from each method's own repeated draws). Differences inside " +
           "it are not real.",
@@ -768,13 +777,19 @@
         text + "</span>";
     }
     document.addEventListener("click", function (e) {
+      var el = e.target.closest ? e.target.closest(".term, .help-link") : null;
+      if (el && el.classList.contains("help-link")) { e.preventDefault(); }
       var open = document.querySelector(".term-pop");
-      var el = e.target.closest ? e.target.closest(".term") : null;
       if (open) { open.remove(); }
-      if (!el || (open && open.previousSibling === el)) { return; }
+      if (!el || (open && open.previousElementSibling === el)) { return; }
       var pop = document.createElement("span");
       pop.className = "term-pop";
-      pop.textContent = TERMS[el.dataset.term] || "";
+      if (el.classList.contains("help-link")) {
+        pop.innerHTML = (HELP[el.dataset.help] || "") +
+          " <a href='" + el.getAttribute("href") + "'>Read more ↓</a>";
+      } else {
+        pop.textContent = TERMS[el.dataset.term] || "";
+      }
       el.insertAdjacentElement("afterend", pop);
     });
 
@@ -811,7 +826,7 @@
         "</b></span> — Δ = " + fmt(o.delta) + " [" + fmt(o.lo) + ", " + fmt(o.hi) +
         "] vs " + term("margin", "noise margin") + " ±" + rec.margin +
         (rec.verdict_note === "ladder-limited"
-          ? " — <i>a plateau side has no measurements at this budget; its carried value is a lower bound, so no at-budget verdict can be issued</i>"
+          ? " — <i>a side at its max tested run has no measurements at this budget; its carried value is a lower bound, so no at-budget verdict can be issued</i>"
           : (o.verdict === "undecided" && rec.equivalence_attainable === false
              ? " — <i>too few paired expressions to ever certify “equivalent” at this margin; limited resolution, not evidence of parity</i>" : "")) +
         "</div>" +
@@ -1044,13 +1059,13 @@
         }
         var fv = snapped ? fmtAbs : fmtDesc;
         var basis = row.e.status === "plateau"
-          ? "ladder ends ≈" + fmtDesc(row.e.x) + " s <span class='lb-flag'>plateau</span>"
+          ? "largest tested ≈" + fmtDesc(row.e.x) + " s <span class='lb-flag'>max tested</span>"
           : row.e.status === "interpolated"
             ? (snapped ? "= " + row.e.x + " s (interpolated)"
                        : "≈ " + Number(selectedBudget().toPrecision(3)) + " s (curve read)")
             : "measured ≈" + fmtDesc(row.e.x) + " s";
         html.push("<td class='lb-value'><b>" + fv(row.e.value) + "</b> [" + fv(row.e.lo) +
-          ", " + fv(row.e.hi) + "]" + (row.e.status === "plateau" ? " <span class='lb-flag'>plateau</span>" : "") + "</td>" +
+          ", " + fv(row.e.hi) + "]" + (row.e.status === "plateau" ? " <span class='lb-flag'>max tested</span>" : "") + "</td>" +
           "<td class='lb-x'>" + basis + "</td>" +
           "<td class='lb-n'>" + row.e.n + "</td></tr>");
       });
@@ -1073,13 +1088,13 @@
         "(<a href='#paired'>why</a>).</div>");
       html.push("<div class='matrix-legend'>" +
         (hib ? "Higher" : "Lower") + " is better, best first · " +
-        term("plateau", "<span class='lb-flag'>plateau</span>") + " = value is a lower bound " +
+        term("maxtested", "<span class='lb-flag'>max tested</span>") + " = value is a lower bound " +
         "· per benchmark only." +
         "<details class='fine-print'><summary>Full method &amp; record</summary><div>" +
         "Each row: the series evaluated at exactly the selected budget — interpolated per " +
         "problem, linearly in log-time, between its two bracketing measured configurations " +
         "(the same model as the Δ(t) curves, so the value sits on the plotted segment; " +
-        "measured points keep the exact Curves-view value). Plateau rows show the method's " +
+        "measured points keep the exact Curves-view value). Max-tested rows show the method's " +
         "largest tested configuration, carried forward as a lower bound — never extrapolated. " +
         "There is deliberately no combined cross-benchmark number. Release " +
         (pairedData.results_release_id || "?") + ".</div></details></div>" +
@@ -1100,7 +1115,7 @@
       var bench = benchSel.value, metricKey = metricSel.value;
       if (!pairedData.ranks) {
         plot.style.display = "none";
-        pairedFoot.innerHTML = "<div class='matrix-warning'>The rank leagues are not part of " +
+        pairedFoot.innerHTML = "<div class='matrix-warning'>The rankings are not part of " +
           "this results release yet — check back after the next release.</div>";
         return;
       }
@@ -1121,7 +1136,7 @@
       }
       if (!rmi) {
         plot.style.display = "none";
-        pairedFoot.innerHTML = "<div class='matrix-warning'>Rank leagues exist for the " +
+        pairedFoot.innerHTML = "<div class='matrix-warning'>Rankings exist for the " +
           "continuous metrics only — rate metrics take so few values that most methods tie " +
           "on most expressions, and model-internal metrics do not exist for the baselines. " +
           "Pick one of: " + (pairedData.rank_metrics || [])
@@ -1130,7 +1145,7 @@
       }
       if (!budgetIsSnapped()) {
         plot.style.display = "none";
-        pairedFoot.innerHTML = "<div class='desc-banner'>Rank leagues exist at the marked " +
+        pairedFoot.innerHTML = "<div class='desc-banner'>Rankings exist at the marked " +
           "budgets only — snap the slider to a mark to see one.</div>";
         return;
       }
@@ -1139,7 +1154,7 @@
       })[0];
       if (!league) {
         plot.style.display = "none";
-        pairedFoot.innerHTML = "<div class='matrix-warning'>No league for this metric at this " +
+        pairedFoot.innerHTML = "<div class='matrix-warning'>No ranking for this metric at this " +
           "budget — fewer than two methods can run within it, or too few expressions have " +
           "values for every method.</div>";
         return;
@@ -1177,7 +1192,7 @@
                           color: order.map(function (m) { return colorOf(m, idx[m] || 0); }) } },
         customdata: order.map(function (m) {
           return [league.n_missing[m] || 0,
-                  league.ladder_limited.indexOf(m) >= 0 ? " · ladder-limited (worst-case position)" : ""];
+                  league.ladder_limited.indexOf(m) >= 0 ? " · at max tested (worst-case position)" : ""];
         }),
         hovertemplate: "<b>%{text}</b><br>mean rank %{x:.2f} of " + k +
           "<br>%{customdata[0]} failures ranked worst%{customdata[1]}<extra></extra>",
@@ -1202,25 +1217,25 @@
         .map(function (m) { return m + " (" + league.n_missing[m] + ")"; });
       var excludedNote = league.excluded.length
         ? "<div class='fam'>" + league.excluded.join(" and ") +
-          " cannot run within this budget and sit out this league.</div>" : "";
+          " cannot run within this budget and sit out this ranking.</div>" : "";
       var switchNote = ranksSwitchedFrom
-        ? "<div class='desc-banner'>Showing <b>" + rmi.label + "</b>, the primary league " +
-          "metric — " + ranksSwitchedFrom + " has no rank league (rate metrics tie on most " +
+        ? "<div class='desc-banner'>Showing <b>" + rmi.label + "</b>, the primary ranking " +
+          "metric — " + ranksSwitchedFrom + " cannot be ranked (rate metrics tie on most " +
           "expressions). Your metric choice comes back when you leave Ranks.</div>" : "";
       pairedFoot.innerHTML =
         switchNote +
         // decode key: the two glyphs and the ruler, right where the eye lands
         "<div class='plot-caption'><span class='key-band'></span> shaded band = no reliable " +
         "rank difference (gap smaller than the critical difference — absence of evidence, not " +
-        "equality) · <b>○</b> hollow dot = ladder-limited: measurements end below the budget, " +
-        "so the true position could only improve · the CD ruler (top) shows the smallest " +
-        "mean-rank gap that counts.</div>" +
+        "equality) · <b>○</b> " + term("testedlimit", "hollow dot") + " = at max tested: " +
+        "nothing measured beyond this budget, so its true position could only improve · the " +
+        "CD ruler (top) shows the smallest mean-rank gap that counts.</div>" +
         "<div class='matrix-legend'>" +
         "<span class='" + (league.primary ? "rank-primary" : "rank-exploratory") + "'>" +
-        (league.primary ? "PRIMARY league" : "exploratory league") + "</span> — " +
+        (league.primary ? "primary" : "exploratory") + "</span> — " +
         (league.primary
-          ? "the pre-declared quotable league (see the metric menu for the others). "
-          : "a browsing league — claims come from the primary one, log10 FVU (validation). ") +
+          ? "pre-declared and quotable (see the metric menu for the rest). "
+          : "for browsing — claims come from the primary metric, log10 FVU (validation). ") +
         k + " methods ranked on <b>" + rmi.label + "</b> over n = " + league.n_problems +
         " expressions · " + term("cd", "CD") + " = " + league.cd + " · " +
         (reject ? "the omnibus test confirms real rank differences"
@@ -1234,7 +1249,7 @@
         (league.mode === "worst-rank"
           ? "A method that fails an expression ranks last on it" +
             (missing.length ? " (failures: " + missing.join(", ") + ")" : "") + "."
-          : "<b>Conditional league</b>: only expressions every method solved — a smaller, " +
+          : "<b>Conditional ranking</b>: only expressions every method solved — a smaller, " +
             "easier population; the property being ranked is undefined for failures.") + " " +
         "A <a href='#ranks'>Friedman omnibus</a> confirms the spread of mean ranks is real " +
         "before any grouping is drawn; the Nemenyi critical difference corrects for comparing " +

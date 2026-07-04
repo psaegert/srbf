@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 330" font-family="Inter, system-ui, -apple-system, sans-serif">
+  <!-- srbf visual abstract: inputs -> one fair protocol -> honest results -->
+  <rect x="1" y="1" width="1198" height="328" rx="18" fill="#ffffff" stroke="#e6e8f0" stroke-width="2"/>
+
+  <!-- brand row -->
+  <rect x="36" y="28" width="34" height="34" rx="9" fill="#4f46e5"/>
+  <text x="53" y="51" text-anchor="middle" fill="#ffffff" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="17" font-weight="600">sr</text>
+  <text x="82" y="45" fill="#4f46e5" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="21" font-weight="600">srbf</text>
+  <text x="82" y="61" fill="#4a4f5e" font-size="12.5">Symbolic Regression Benchmark Framework</text>
+  <text x="1164" y="51" text-anchor="end" fill="#868c9c" font-size="12.5">psaegert.github.io/srbf</text>
+
+  <!-- panel 1: what goes in -->
+  <rect x="36" y="88" width="344" height="206" rx="12" fill="#f6f7fb" stroke="#e6e8f0"/>
+  <text x="60" y="122" fill="#4f46e5" font-size="12" font-weight="700" letter-spacing="1.6">WHAT GOES IN</text>
+  <text x="60" y="152" fill="#12141c" font-size="14.5" font-weight="600">Benchmarks</text>
+  <text x="60" y="174" fill="#4a4f5e" font-size="13">FastSRB — curated physics &amp; textbook laws</text>
+  <text x="60" y="193" fill="#4a4f5e" font-size="13">v23-val — held-out, decontaminated</text>
+  <text x="60" y="228" fill="#12141c" font-size="14.5" font-weight="600">Methods</text>
+  <text x="60" y="250" fill="#4a4f5e" font-size="13">Flash-ANSR 3M → 1B · PySR · NeSymReS</text>
+  <text x="60" y="269" fill="#4a4f5e" font-size="13">E2E · Prior reference — upstream defaults</text>
+
+  <!-- arrow -->
+  <path d="M388 191 h30" stroke="#4f46e5" stroke-width="2.5" fill="none"/>
+  <path d="M414 184 l12 7 -12 7 z" fill="#4f46e5"/>
+
+  <!-- panel 2: one fair protocol -->
+  <rect x="428" y="88" width="344" height="206" rx="12" fill="#eef0fe" stroke="#dfe3fc"/>
+  <text x="452" y="122" fill="#4f46e5" font-size="12" font-weight="700" letter-spacing="1.6">ONE FAIR PROTOCOL</text>
+  <text x="452" y="152" fill="#12141c" font-size="13.5">Every method solves the same expressions</text>
+  <text x="452" y="176" fill="#12141c" font-size="13.5">Wall-clock budgets: 1 → 1000 s per problem</text>
+  <text x="452" y="200" fill="#12141c" font-size="13.5">Raw predictions archived, scored two-stage</text>
+  <text x="452" y="224" fill="#12141c" font-size="13.5">Paired per-expression statistics</text>
+  <text x="452" y="248" fill="#12141c" font-size="13.5">Pre-declared comparisons, corrected p-values</text>
+  <text x="452" y="272" fill="#12141c" font-size="13.5">Measurement-noise margins, never bare stars</text>
+
+  <!-- arrow -->
+  <path d="M780 191 h30" stroke="#4f46e5" stroke-width="2.5" fill="none"/>
+  <path d="M806 184 l12 7 -12 7 z" fill="#4f46e5"/>
+
+  <!-- panel 3: what comes out -->
+  <rect x="820" y="88" width="344" height="206" rx="12" fill="#f6f7fb" stroke="#e6e8f0"/>
+  <text x="844" y="122" fill="#4f46e5" font-size="12" font-weight="700" letter-spacing="1.6">WHAT COMES OUT</text>
+  <text x="844" y="152" fill="#12141c" font-size="14.5" font-weight="600">Interactive results explorer</text>
+  <text x="844" y="176" fill="#4a4f5e" font-size="13">Curves — every series over compute, noise, data</text>
+  <text x="844" y="195" fill="#4a4f5e" font-size="13">Table — everyone at exactly your time budget</text>
+  <text x="844" y="214" fill="#4a4f5e" font-size="13">Ranks — all methods, one standings chart</text>
+  <text x="844" y="248" fill="#12141c" font-size="14.5" font-weight="600">Four-state verdicts</text>
+  <text x="844" y="271" font-size="13">
+    <tspan fill="#16a34a" font-weight="600">▲ better</tspan>
+    <tspan fill="#2563eb" font-weight="600" dx="10">≈ equivalent</tspan>
+    <tspan fill="#dc2626" font-weight="600" dx="10">▼ worse</tspan>
+    <tspan fill="#868c9c" font-weight="600" dx="10">? undecided</tspan>
+  </text>
+</svg>

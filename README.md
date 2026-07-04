@@ -13,6 +13,13 @@
 
 # srbf: Symbolic Regression Benchmark Framework
 
+<p align="center">
+  <a href="https://psaegert.github.io/srbf/">
+    <img alt="srbf visual abstract: benchmarks and methods go through one fair protocol (same expressions, wall-clock budgets, paired statistics, pre-declared corrected comparisons) into the interactive explorer with four-state verdicts."
+         src="https://raw.githubusercontent.com/psaegert/srbf/main/assets/brand/visual-abstract.svg" width="100%">
+  </a>
+</p>
+
 `srbf` evaluates symbolic-regression models on shared benchmarks with shared metrics. It is the
 Symbolic Regression Benchmark Framework carved out of
 [flash-ansr](https://github.com/psaegert/flash-ansr): the `Benchmark` driver, model adapters, and
