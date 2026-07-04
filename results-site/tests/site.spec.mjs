@@ -149,15 +149,14 @@ test('ranks: entering with vNRR switches to the primary league VISIBLY and resto
 
 test('ranks: the metric menu shows the league structure at first glance', async ({ page }) => {
   await gotoView(page, 'ranks');
-  expect(await metricSelect(page).locator('option[value="log10_fvu_val"]').textContent())
-    .toContain('primary league');
-  expect(await metricSelect(page).locator('option[value="edit_distance_norm"]').textContent())
-    .toContain('exploratory');
-  await expect(page.locator('.metric-hint')).toContainText('primary league');
+  await expect(metricSelect(page)
+    .locator('optgroup[label="Primary league"] option[value="log10_fvu_val"]')).toHaveCount(1);
+  expect(await metricSelect(page)
+    .locator('optgroup[label="Exploratory leagues"] option').count()).toBeGreaterThan(5);
+  await expect(page.locator('.metric-badge')).toContainText('primary league');
   await gotoView(page, 'curves');
-  expect(await metricSelect(page).locator('option[value="log10_fvu_val"]').textContent())
-    .not.toContain('primary league');
-  await expect(page.locator('.metric-hint')).toBeHidden();
+  await expect(metricSelect(page).locator('optgroup[label="Main metrics"]')).toHaveCount(1);
+  await expect(page.locator('.metric-badge')).toBeHidden();
 });
 
 test('ranks: ineligible metrics are disabled in the menu', async ({ page }) => {

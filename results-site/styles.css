@@ -335,6 +335,8 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
   border: 1px solid color-mix(in srgb, var(--ink) 25%, transparent); border-radius: 2px;
 }
 
+.metric-badge { margin-left: .55rem; vertical-align: baseline; text-transform: uppercase; }
+
 /* rank-league chips */
 .rank-primary {
   font-size: .78em; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;

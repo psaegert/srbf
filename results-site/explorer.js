@@ -58,16 +58,38 @@
     function colorOf(s, i) { return userColors[s] || defaultColor(s, i); }
     var idx = {}; series.forEach(function (s, i) { idx[s] = i; });
 
-    // --- metric select, two-tier via optgroups ---
+    // --- metric select: two-tier optgroups; in Ranks the groups become the league structure --
     var metricSel = document.createElement("select");
-    var tiers = [["main", "Main metrics"], ["more", "More metrics"]];
-    tiers.forEach(function (t) {
-      var ms = metrics.filter(function (m) { return (m.tier || "more") === t[0]; });
-      if (!ms.length) { return; }
-      var og = document.createElement("optgroup"); og.label = t[1];
-      ms.forEach(function (m) { var o = document.createElement("option"); o.value = m.key; o.textContent = m.label; og.appendChild(o); });
-      metricSel.appendChild(og);
-    });
+    function buildMetricMenu(mode) {
+      var previous = metricSel.value;
+      metricSel.innerHTML = "";
+      var groups;
+      if (mode === "ranks") {
+        var prim = [], expl = [], none = [];
+        metrics.forEach(function (m) {
+          var rm = rankMetricInfo(m.key);
+          (rm ? (rm.primary ? prim : expl) : none).push(m);
+        });
+        groups = [["Primary league", prim, false], ["Exploratory leagues", expl, false],
+                  ["No rank league here", none, true]];
+      } else {
+        groups = [["Main metrics",
+                   metrics.filter(function (m) { return (m.tier || "more") === "main"; }), false],
+                  ["More metrics",
+                   metrics.filter(function (m) { return (m.tier || "more") !== "main"; }), false]];
+      }
+      groups.forEach(function (g) {
+        if (!g[1].length) { return; }
+        var og = document.createElement("optgroup"); og.label = g[0];
+        g[1].forEach(function (m) {
+          var o = document.createElement("option"); o.value = m.key; o.textContent = m.label;
+          o.disabled = g[2]; og.appendChild(o);
+        });
+        metricSel.appendChild(og);
+      });
+      if (previous) { metricSel.value = previous; }
+    }
+    buildMetricMenu("standard");
     var firstMain = metrics.filter(function (m) { return (m.tier || "more") === "main"; })[0];
     if (firstMain) { metricSel.value = firstMain.key; }
 
@@ -246,10 +268,10 @@
     budgetField.appendChild(budgetHint);
     controls.appendChild(axisField);
     var metricField = labelled("Metric", metricSel);
-    var metricHint = document.createElement("span");
-    metricHint.className = "results-field-hint metric-hint";
-    metricHint.style.display = "none";
-    metricField.appendChild(metricHint);
+    var metricBadge = document.createElement("span");
+    metricBadge.className = "metric-badge";
+    metricBadge.style.display = "none";
+    metricField.querySelector(".results-field-label").appendChild(metricBadge);
     controls.appendChild(metricField);
     controls.appendChild(labelled("Benchmark", benchSel));
     controls.appendChild(budgetField);
@@ -288,26 +310,15 @@
 
     function applyMetricEligibility() {
       var inRanks = VIEWS[currentView].display === "ranks";
-      for (var oi = 0; oi < metricSel.options.length; oi++) {
-        var opt2 = metricSel.options[oi];
-        if (!opt2.dataset.label) { opt2.dataset.label = opt2.textContent; }
-        var rm = pairedData ? rankMetricInfo(opt2.value) : null;
-        opt2.disabled = inRanks && !!pairedData && !rm;
-        // in Ranks, the menu itself shows the league structure at first glance
-        opt2.textContent = (inRanks && rm)
-          ? opt2.dataset.label + (rm.primary ? " — primary league" : " — exploratory")
-          : opt2.dataset.label;
-      }
-      if (inRanks && pairedData) {
-        var current = rankMetricInfo(metricSel.value);
-        metricHint.textContent = current
-          ? (current.primary
-             ? "The primary league — the one rank result quoted as a claim."
-             : "An exploratory league — the quotable one is log10 FVU (validation).")
-          : "";
-        metricHint.style.display = "";
+      buildMetricMenu(inRanks && pairedData ? "ranks" : "standard");
+      var current = inRanks && pairedData ? rankMetricInfo(metricSel.value) : null;
+      if (current) {
+        metricBadge.textContent = current.primary ? "primary league" : "exploratory";
+        metricBadge.className = "metric-badge " +
+          (current.primary ? "rank-primary" : "rank-exploratory");
+        metricBadge.style.display = "";
       } else {
-        metricHint.style.display = "none";
+        metricBadge.style.display = "none";
       }
     }
 
