@@ -24,6 +24,9 @@ BANNED = {
     r"your previous pick": "assumes a deliberate choice; defaults are not picks",
     r"n = \d+ problems": "counts are denominated in expressions site-wide",
     r"league": "dropped vocabulary — 'primary'/'exploratory' and 'ranking' suffice",
+    r"not a leaderboard": "self-undermining framing: say how to read the table instead",
+    r"never quote": "scolding tone: name the quotable alternative instead",
+    r"curve read": "retired vocabulary: the split is declared-vs-free, say 'descriptive' (same interpolation)",
 }
 
 def js_strings(source: str) -> list[str]:

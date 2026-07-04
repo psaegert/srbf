@@ -286,10 +286,12 @@
         instead of comparing two methods' separate averages (whose uncertainty bands are inflated
         by shared expression difficulty: hard expressions are hard for everyone), they
         compute the difference <em>per expression</em> and ask whether those per-expression
-        differences are consistently one-sided. This is also why the <strong>Absolute</strong>
-        Table view warns against reading differences off its rows: two marginal confidence
-        intervals can overlap even when one method is reliably better on expression after
-        expression. If the question is "A vs B", use a Paired view. The convention is
+        differences are consistently one-sided. This also divides the work between the views: the
+        <strong>Absolute</strong> Table answers per-series questions (what does this method
+        achieve at this budget?), while A-vs-B questions get their calibrated answer in the
+        Paired views, because two marginal confidence intervals can overlap even when one
+        method is reliably better on expression after expression. If the question is "A vs B",
+        use a Paired view. The convention is
         <strong>&Delta;&nbsp;=&nbsp;selected&nbsp;&minus;&nbsp;baseline</strong> (in the Matrix, cells
         read row&nbsp;&minus;&nbsp;column), and the tap/hover record says which series a value favors. Every statistic on this page is computed ahead of time by
         <a href="https://github.com/psaegert/srbf" target="_blank" rel="noopener">srbf</a>'s
@@ -309,7 +311,7 @@
         that time: interpolated per problem, linearly in log-time, between its two bracketing
         measured configurations. This is the same model that draws the &Delta;(t) curves, so no
         method is under- or over-credited just because its tested configurations happen to land
-        near or far from the budget. Two honest boundaries: a method whose cheapest configuration
+        near or far from the budget. Two boundary rules: a method whose cheapest configuration
         already exceeds the budget is <em>n/a</em> (it cannot run within t), and a method whose
         measurements <em>end below</em> the budget is never extrapolated: its largest
         tested configuration's value is carried forward, visibly flagged <em>max tested</em>,
@@ -324,9 +326,8 @@
         does this method achieve, at exactly t seconds?</em> The budget slider itself is
         continuous for exploration: it snaps magnetically to the marked budgets, and any
         position <em>between</em> them shows clearly-labeled <em>descriptive</em> reads of the
-        plotted curves, deliberately without verdicts or corrected p-values, because
-        sliding until a difference looks convincing and quoting it would defeat the
-        pre-declared grid. Four
+        plotted curves; verdicts and corrected p-values belong to the pre-declared marks,
+        which keep the set of quotable claims finite and the corrections meaningful. Four
         outcomes (all intervals are 95% confidence intervals):
       </p>
       <ul>
@@ -355,10 +356,11 @@
         interval clears the pair's noise margin, so a comparison can be significant yet
         <em>undecided</em>: a real-looking difference that is not provably larger than benchmark
         noise. Verdicts are interval-based and do not change with the correction toggle, which
-        can show raw p-values for browsing, behind a warning; never quote those. Every
+        can show raw p-values for browsing, behind a notice; the corrected values are the
+        quotable ones. Every
         cell records which family and method produced its correction, so numbers remain auditable
         as the model roster grows.</p>
-      <p><strong>Small print, honestly stated.</strong> The compute axis pairs configurations
+      <p><strong>Measurement details.</strong> The compute axis pairs configurations
         whose <em>median</em> cost is <em>t</em>, not per-expression equal budgets; solid
         dots are measured configurations, hollow dots are interpolated between neighboring
         measured ones (never extrapolated). Where a model failed on an expression that its

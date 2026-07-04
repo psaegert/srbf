@@ -455,9 +455,11 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 .help-link:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
 .term { border-bottom: 1px dotted var(--ink-faint); cursor: help; }
 .term:hover { border-bottom-color: var(--accent); }
+/* floating hint card: fixed at body level so revealed content never reflows the page */
 .term-pop {
-  display: block; margin: .35rem 0; padding: .55rem .8rem; max-width: 34rem;
-  background: var(--accent-soft); border: 1px solid var(--line); border-radius: 8px;
+  position: fixed; z-index: 60; margin: 0; padding: .6rem .85rem; max-width: 34rem;
+  background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  border-radius: 10px; box-shadow: var(--shadow);
   font-size: .84rem; color: var(--ink); line-height: 1.5;
   font-weight: 400; text-transform: none; letter-spacing: normal;
 }

@@ -328,7 +328,7 @@
       .appendChild(helpLink("#paired", "budget", "How budgets and verdicts work"));
     var budgetHint = document.createElement("span");
     budgetHint.className = "results-field-hint";
-    budgetHint.textContent = "Marks = release-grade numbers · between marks = descriptive curve read (snaps near marks).";
+    budgetHint.textContent = "One interpolation everywhere · verdicts and CIs at the four pre-declared marks (the slider snaps near them).";
     budgetField.appendChild(budgetHint);
     controls.appendChild(axisField);
     var HELP = {
@@ -336,8 +336,8 @@
                "and which direction is better.",
       paired: "How comparisons work: measurement-noise margins, the four verdicts, " +
               "standardized budgets, and why p-values are corrected.",
-      budget: "Marks carry the release-grade, pre-declared numbers; between marks you get a " +
-              "clearly-labeled descriptive read of the curves.",
+      budget: "The slider reads the same interpolated curves everywhere; the four marks are " +
+              "the pre-declared budgets that carry verdicts, CIs and corrected p-values.",
     };
     function helpLink(href, key, label) {
       var a = document.createElement("a");
@@ -650,17 +650,12 @@
 
     function descBanner() {
       var t = Number(selectedBudget().toPrecision(3));
-      return "<div class='desc-banner'>Descriptive slice at t ≈ " + t + " s per problem: " +
-        "values are read off the plotted curves (interpolated along the drawn segments). " +
-        "Marked budgets use the same straight line, rebuilt per expression on the set both " +
-        "bracketing configurations solved and with real statistics attached; a curve read " +
-        "can drift slightly from that where the solved set changes between configurations. " +
-        "There are <b>no verdicts, margins or corrected p-values " +
-        "between the marked budgets</b> (" +
-        ((pairedData && pairedData.budgets) || []).join(", ") + " s, the pre-declared grid): " +
-        "sliding until a difference looks convincing and quoting it is exactly the " +
-        "multiple-comparisons trap the marks prevent. Snap to a mark for release-grade " +
-        "numbers.</div>";
+      return "<div class='desc-banner'>Descriptive slice at t ≈ " + t + " s per problem: the " +
+        "same log-time interpolation as the marked budgets, read off the plotted curves. " +
+        "Verdicts, noise margins and corrected p-values live at the pre-declared budgets (" +
+        ((pairedData && pairedData.budgets) || []).join(", ") + " s): a finite, " +
+        "pre-registered set of claims is what keeps the corrections meaningful. Snap to a " +
+        "mark for the quotable numbers.</div>";
     }
 
     function metricInfo(key) { return (pairedData.metrics || []).filter(function (m) { return m.key === key; })[0]; }
@@ -739,7 +734,7 @@
             notes.push("<b>" + s + "</b> vs " + baseline + ": " + (read.status === "outside"
               ? "<i>t is outside this pair's measured overlap; no read</i>"
               : "Δ ≈ " + fmtDesc(read.delta) + " [" + fmtDesc(read.lo) + ", " + fmtDesc(read.hi) +
-                "] <span class='fam'>(descriptive curve read · n ≈ " + read.n + " expressions)</span>"));
+                "] <span class='fam'>(" + term("descriptive", "descriptive read") + " · n ≈ " + read.n + " expressions)</span>"));
           }
         }
         var rec = budgetIsSnapped() ? (pairedData.records || []).filter(function (r) {
@@ -799,12 +794,12 @@
           "x: each series' median wall-clock time per problem. Solid markers are measured configurations, " +
           "hollow are interpolated between them; the dotted line marks the selected budget.</div>" : "";
       var rawWarn = correctionSel.value !== "corrected"
-        ? "<div class='matrix-warning'>⚠ Uncorrected p-values: exploratory browsing only. Never quote these as claims; switch back to “corrected”.</div>" : "";
+        ? "<div class='matrix-warning'>Showing uncorrected p-values for exploratory browsing; the corrected view (default) is the quotable one.</div>" : "";
       var panelTitle = budgetIsSnapped()
         ? "Verdicts at the standardized budget of ≤ " + selectedBudget() + " s per problem (dotted line): " +
           "every series at exactly t, max-tested values flagged (95% CIs · release " +
           (pairedData.results_release_id || "?") + " · α = " + (pairedData.alpha || 0.05) + ")"
-        : "Curve reads at t ≈ " + Number(selectedBudget().toPrecision(3)) + " s per problem (dotted line)";
+        : "Descriptive reads at t ≈ " + Number(selectedBudget().toPrecision(3)) + " s per problem (dotted line)";
       pairedFoot.innerHTML = notes.length
         ? caption + (budgetIsSnapped() ? rawWarn : descBanner()) +
           "<div class='paired-verdicts'><div class='paired-verdicts-title'>" + panelTitle + "</div>" +
@@ -851,13 +846,14 @@
           "stagnating. It shows its largest tested configuration's value: a lower bound, " +
           "since more compute could only help it. Never extrapolated.",
       interpolated: "This budget falls between two tested configurations, so the value is " +
-          "rebuilt per expression: every expression solved at BOTH configurations is read " +
-          "off the straight line (in log-time) between them, then bootstrapped for real " +
-          "CIs, noise margins and corrected p-values.",
-      curveread: "A ruler held on the plotted curve. Where both bracketing configurations " +
-          "solved the same expressions this equals the marked-budget number; where they " +
-          "did not, it can drift (the release number conditions on the shared set). And it " +
-          "never carries the statistics, which exist only at the pre-declared marks.",
+          "read off the straight line (in log-time) between them: the same line the curves " +
+          "draw, at every budget. At the four pre-declared budgets it is rebuilt per " +
+          "expression and carries CIs, noise margins and corrected p-values.",
+      descriptive: "The same log-time interpolation as everywhere else, at a freely chosen " +
+          "budget: the number only. Verdicts and statistics belong to the four pre-declared " +
+          "budgets, which keep the set of quotable claims finite and correctable. The value " +
+          "can also drift marginally from a mark's where the solved-expression set changes " +
+          "between configurations.",
       testedlimit: "A side at its max tested run could improve with more compute, so any " +
           "verdict it could overturn by improving is withheld.",
       margin: "The largest difference two EQUALLY GOOD methods would show from benchmark " +
@@ -869,7 +865,7 @@
       confirmatory: "One of the comparisons declared BEFORE looking at results, held to the " +
           "strict Holm correction. The quotable tier.",
       exploratory: "The browsing tier: corrected only by the lenient Benjamini–Hochberg " +
-          "procedure. Explore freely, never quote as a claim.",
+          "procedure. Explore freely; the confirmatory tier is the quotable one.",
       equivalent: "The interval fits entirely inside the noise margin: any remaining " +
           "difference is smaller than this benchmark can measure. Measurement-equivalence, " +
           "not proof of identity.",
@@ -878,13 +874,24 @@
       return "<span class='term' data-term='" + key + "' role='button' tabindex='0'>" +
         text + "</span>";
     }
+    // hints float above the page (fixed, body-level): revealed content must never push the
+    // layout around, especially inside tables
+    // scroll events queued BEFORE the popover opened (e.g. the browser scrolling the tapped
+    // element into view) are delivered on the next frame; arm the dismiss only after that
+    var popArmed = false;
+    function closePop() {
+      var open = document.querySelector(".term-pop");
+      if (!open) { return null; }
+      var anchor = open._anchor;
+      open.remove();
+      return anchor;
+    }
     document.addEventListener("click", function (e) {
       var el = e.target.closest ? e.target.closest(".term, .help-link") : null;
       if (el && el.classList.contains("help-link")) { e.preventDefault(); }
-      var open = document.querySelector(".term-pop");
-      if (open) { open.remove(); }
-      if (!el || (open && open.previousElementSibling === el)) { return; }
-      var pop = document.createElement("span");
+      var prevAnchor = closePop();
+      if (!el || prevAnchor === el) { return; }
+      var pop = document.createElement("div");
       pop.className = "term-pop";
       if (el.classList.contains("help-link")) {
         pop.innerHTML = (HELP[el.dataset.help] || "") +
@@ -892,8 +899,27 @@
       } else {
         pop.textContent = TERMS[el.dataset.term] || "";
       }
-      el.insertAdjacentElement("afterend", pop);
+      pop._anchor = el;
+      document.body.appendChild(pop);
+      var margin = 8;
+      pop.style.maxWidth = Math.min(544, window.innerWidth - 2 * margin) + "px";
+      var r = el.getBoundingClientRect();
+      var left = Math.min(Math.max(r.left, margin), window.innerWidth - pop.offsetWidth - margin);
+      var top = r.bottom + 6;
+      if (top + pop.offsetHeight > window.innerHeight - margin &&
+          r.top - pop.offsetHeight - 6 > margin) {
+        top = r.top - pop.offsetHeight - 6;   // not enough room below: flip above
+      }
+      pop.style.left = left + "px";
+      pop.style.top = top + "px";
+      popArmed = false;
+      window.requestAnimationFrame(function () {
+        window.requestAnimationFrame(function () { popArmed = true; });
+      });
     });
+    // a floating hint cannot follow its anchor, so any scroll or resize dismisses it
+    document.addEventListener("scroll", function () { if (popArmed) { closePop(); } }, true);
+    window.addEventListener("resize", function () { if (popArmed) { closePop(); } });
 
     var matrixCells = [], matrixSelectedKey = null;
 
@@ -906,10 +932,10 @@
           return dHead + "<div class='fam'>t is outside this pair's measured overlap; no read.</div>";
         }
         return dHead + "<div>Δ ≈ " + fmtDesc(cell.desc.delta) + " [" + fmtDesc(cell.desc.lo) +
-          ", " + fmtDesc(cell.desc.hi) + "] <span class='fam'>(descriptive curve read · n ≈ " +
+          ", " + fmtDesc(cell.desc.hi) + "] <span class='fam'>(" + term("descriptive", "descriptive read") + " · n ≈ " +
           cell.desc.n + " expressions)</span></div>" +
-          "<div class='fam'>No verdict at unmarked times: noise margins and corrections exist " +
-          "only at the pre-declared budgets; snap the slider to a mark.</div>";
+          "<div class='fam'>Verdicts, noise margins and corrections live at the pre-declared " +
+          "budgets; snap the slider to a mark for them.</div>";
       }
       var head = "<div class='matrix-detail-title'><b>" + cell.rowS + "</b> − <b>" + cell.colS +
         "</b> · " + benchSel.value + " · budget ≤ " + selectedBudget() + " s per problem</div>";
@@ -1007,10 +1033,10 @@
       html.push("<div class='matrix-detail'>" +
         (selectedIdx >= 0 ? matrixDetailHtml(matrixCells[selectedIdx]) : "") + "</div>");
       html.push("<div class='matrix-legend'>Cells read row − column: Δ read off the paired " +
-        "Δ(t) curve at t ≈ " + Number(t.toPrecision(3)) + " s per problem. Descriptive only: " +
-        "no verdict colours or confirmatory badges at unmarked times. <i>n/a</i> = t outside " +
-        "the pair's measured overlap. Tap a cell for its interval; snap the slider to a mark " +
-        "for the verdict matrix.</div>");
+        "Δ(t) curve at t ≈ " + Number(t.toPrecision(3)) + " s per problem: descriptive reads " +
+        "of the paired curves; verdict colours and confirmatory badges live at the marked " +
+        "budgets. <i>n/a</i> = t outside the pair's measured overlap. Tap a cell for its " +
+        "interval; snap the slider to a mark for the verdict matrix.</div>");
       pairedFoot.innerHTML = html.join("");
     }
 
@@ -1032,8 +1058,8 @@
       var selectedIdx = -1;
       var html = [];
       if (!corrected) {
-        html.push("<div class='matrix-warning'>⚠ Uncorrected p-values: exploratory browsing only. " +
-          "Never quote these as claims; switch back to “corrected”.</div>");
+        html.push("<div class='matrix-warning'>Showing uncorrected p-values for exploratory " +
+          "browsing; the corrected view (default) is the quotable one.</div>");
       }
       html.push("<div class='matrix-wrap'>");
       html.push("<table class='paired-matrix'><thead><tr><th>row − column</th>");
@@ -1164,7 +1190,7 @@
           ? "largest tested ≈" + fmtDesc(row.e.x) + " s <span class='lb-flag'>max tested</span>"
           : row.e.status === "interpolated"
             ? (snapped ? "= " + row.e.x + " s (" + term("interpolated", "interpolated") + ")"
-                       : "≈ " + Number(selectedBudget().toPrecision(3)) + " s (" + term("curveread", "curve read") + ")")
+                       : "≈ " + Number(selectedBudget().toPrecision(3)) + " s (" + term("interpolated", "interpolated") + ")")
             : "measured ≈" + fmtDesc(row.e.x) + " s";
         html.push("<td class='lb-value'><b>" + fv(row.e.value) + "</b> [" + fv(row.e.lo) +
           ", " + fv(row.e.hi) + "]" + (row.e.status === "plateau" ? " <span class='lb-flag'>max tested</span>" : "") + "</td>" +
@@ -1177,17 +1203,17 @@
       }).join("");
       if (!snapped) {
         html.push(descBanner() +
-          "<div class='matrix-legend'>" + (hib ? "Higher" : "Lower") + " is better, best first. " +
-          "<b>These are marginal numbers: never read a difference between two rows off their " +
-          "CIs</b>; head-to-head questions belong to the Paired Δ views (<a href='#paired'>why</a>). " +
-          "Rankings are per benchmark only.</div>");
+          "<div class='matrix-legend'>" + (hib ? "Higher" : "Lower") + " is better, best first · " +
+          term("descriptive", "descriptive slice") + " · each value stands on its own: " +
+          "row-vs-row questions get their calibrated answer in the Paired Δ views " +
+          "(<a href='#paired'>why</a>) · per benchmark only.</div>");
         pairedFoot.innerHTML = html.join("");
         return;
       }
-      html.push("<div class='desc-banner'><b>Not a leaderboard:</b> these are marginal numbers. " +
-        "Overlapping intervals are NOT evidence of no difference, and a small gap between " +
-        "rows proves nothing. For any A-vs-B question use the Paired Δ views " +
-        "(<a href='#paired'>why</a>).</div>");
+      html.push("<div class='desc-banner'><b>How to read this table:</b> each value is one " +
+        "series' own number at this budget, with its own CI. For any A-vs-B question the " +
+        "Paired Δ views give the calibrated verdict: they test the difference between two " +
+        "series directly, which two separate intervals cannot (<a href='#paired'>why</a>).</div>");
       html.push("<div class='matrix-legend'>" +
         (hib ? "Higher" : "Lower") + " is better, best first · " +
         term("maxtested", "<span class='lb-flag'>max tested</span>") + " = value is a lower bound " +

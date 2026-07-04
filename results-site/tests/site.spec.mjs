@@ -348,6 +348,42 @@ test('table: the interpolated status explains itself on tap', async ({ page }) =
   await expect(page.locator('.term-pop')).toContainText('straight line');
 });
 
+// ---- hints float: revealed content must never push the layout around ----------------------
+
+// document-relative layout box: immune to the page scrolling between measurements
+function layoutBox(page, selector) {
+  return page.evaluate((sel) => {
+    const r = document.querySelector(sel).getBoundingClientRect();
+    return { top: r.top + window.scrollY, height: r.height };
+  }, selector);
+}
+
+test('help: popovers float and do not reflow the table they are opened from', async ({ page }) => {
+  await gotoView(page, 'table');
+  await page.click('.budget-tick >> nth=2');
+  const before = await layoutBox(page, 'table.abs-table');
+  await page.locator('.term[data-term="interpolated"]').first().click();
+  const pop = page.locator('.term-pop');
+  await expect(pop).toBeVisible();
+  expect(await pop.evaluate((el) => getComputedStyle(el).position)).toBe('fixed');
+  const box = await pop.boundingBox();
+  const vp = page.viewportSize();
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(vp.width + 1);
+  const after = await layoutBox(page, 'table.abs-table');
+  expect(after.height).toBe(before.height);   // nothing was squeezed
+  expect(after.top).toBe(before.top);         // nothing was pushed
+});
+
+test('help: a floating popover dismisses on scroll', async ({ page }) => {
+  await gotoView(page, 'ranks');
+  await page.locator('.term[data-term="cd"]').first().click();
+  await expect(page.locator('.term-pop')).toBeVisible();
+  await page.waitForTimeout(100);                       // let the dismiss handler arm
+  await page.evaluate(() => window.scrollBy(0, 120));   // wheel does not scroll in touch emulation
+  await expect(page.locator('.term-pop')).toHaveCount(0);
+});
+
 // ---- payload contract ----------------------------------------------------------------------
 
 test('payload: schema and blocks the frontend depends on', async ({ request }) => {
