@@ -275,20 +275,24 @@
       seriesArea.style.display = vm.usesSeries === false ? "none" : "";
       tools.style.display = vm.usesSeries === false ? "none" : "";
       if (v === "ranks") { ranksAutoPicked = false; syncBudget(); }
-      var inRanks = vm.display === "ranks";
-      for (var oi = 0; oi < metricSel.options.length; oi++) {
-        var opt2 = metricSel.options[oi];
-        opt2.disabled = inRanks && pairedData && !rankMetricInfo(opt2.value);
-      }
-      rosterNote.style.display = inRanks ? "" : "none";
+      applyMetricEligibility();
+      rosterNote.style.display = vm.display === "ranks" ? "" : "none";
       if (v !== "curves" && !pairedData && !pairedLoading) { loadPaired(); }
       render();
+    }
+
+    function applyMetricEligibility() {
+      var inRanks = VIEWS[currentView].display === "ranks";
+      for (var oi = 0; oi < metricSel.options.length; oi++) {
+        var opt2 = metricSel.options[oi];
+        opt2.disabled = inRanks && !!pairedData && !rankMetricInfo(opt2.value);
+      }
     }
 
     function loadPaired() {
       pairedLoading = true;
       fetch("paired_data.json").then(function (r) { return r.json(); }).then(function (d) {
-        pairedData = d; pairedLoading = false; fillBudgets(); render();
+        pairedData = d; pairedLoading = false; fillBudgets(); applyMetricEligibility(); render();
       }).catch(function () {
         pairedLoading = false; pairedData = { error: true }; render();
       });

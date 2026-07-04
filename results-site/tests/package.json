@@ -1,0 +1,8 @@
+{
+  "name": "srbf-results-site-tests",
+  "private": true,
+  "description": "Functionality tests for the results explorer (gates the Pages deploy)",
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}

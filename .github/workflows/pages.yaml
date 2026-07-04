@@ -1,9 +1,8 @@
 name: deploy-results-site
 
-# Deploys results-site/ to GitHub Pages via the workflow builder. Replaces the legacy
-# gh-pages-branch builder (2026-07-03: it hung >20 min on 4 consecutive deploys while the
-# status page read "operational"; ghp-import + build kicks were needed every time). Push to
-# main touching results-site/ deploys automatically; workflow_dispatch for manual redeploys.
+# Test-gated Pages deploy: the functionality suite (Playwright, desktop + mobile) and the
+# copy lint must pass against the exact artifact before it ships. Replaces the legacy
+# gh-pages-branch builder (retired 2026-07-03 after repeated multi-hour hangs).
 on:
   push:
     branches: [main]
@@ -20,7 +19,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Copy lint (viewer-facing wording)
+        run: python3 results-site/tests/copy_lint.py
+      - name: Install Playwright
+        working-directory: results-site/tests
+        run: |
+          npm install --no-fund --no-audit
+          npx playwright install --with-deps chromium
+      - name: Functionality suite (desktop + mobile)
+        working-directory: results-site/tests
+        run: npx playwright test --config playwright.config.mjs
+
   deploy:
+    needs: test
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

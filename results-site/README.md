@@ -43,6 +43,22 @@ flash-ansr checkout), which needs the same archived evaluation snapshots, writes
 directly into this directory, and self-checks the Table view's values against `results_data.js` —
 so regenerate `results_data.js` first.
 
+## Testing
+
+`tests/` holds the functionality suite (Playwright, desktop + mobile projects) and a copy lint
+for viewer-facing wording. Both gate the Pages deploy in CI. Locally:
+
+```bash
+cd results-site/tests
+npm install && npx playwright install chromium
+python3 copy_lint.py && npx playwright test --config playwright.config.mjs
+```
+
+The suite covers every view from deep links, the full view-transition matrix, slider
+snap/descriptive semantics, tap-to-pin, metric-eligibility guards (no ghost plots), benchmark
+switches, zero console errors in every state, and no horizontal page overflow at 390 px. When a
+wording bug is fixed, add its pattern to `tests/copy_lint.py` so it cannot return.
+
 ## Deploying
 
 Deploys are automatic: pushing to `main` with changes under `results-site/` triggers

@@ -40,3 +40,6 @@ site/
 /srbf_improvement_plan_wp1_review.md
 /noise_margins.json
 /noise_margins_2026-07-02.log
+results-site/tests/node_modules/
+results-site/tests/test-results/
+results-site/tests/package-lock.json
