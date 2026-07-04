@@ -11,9 +11,25 @@
   --radius: 16px;
   --shadow: 0 1px 2px rgba(18, 20, 28, .04), 0 8px 24px rgba(18, 20, 28, .06);
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  color-scheme: light;
+}
+/* Dark tokens. Auto (the default, no data-theme attribute) follows the device; the header
+   toggle sets html[data-theme="light"|"dark"] as an explicit override. The two blocks below
+   must stay identical: one serves the manual override, one the auto path. */
+html[data-theme="dark"] {
+  --bg: #0c0e14;
+  --surface: #151824;
+  --ink: #eef0f6;
+  --ink-soft: #b7bdcc;
+  --ink-faint: #7c8397;
+  --line: #232838;
+  --accent: #8b8bff;
+  --accent-soft: #1c2136;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 12px 32px rgba(0, 0, 0, .35);
+  color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  html:not([data-theme="light"]) {
     --bg: #0c0e14;
     --surface: #151824;
     --ink: #eef0f6;
@@ -23,6 +39,7 @@
     --accent: #8b8bff;
     --accent-soft: #1c2136;
     --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 12px 32px rgba(0, 0, 0, .35);
+    color-scheme: dark;
   }
 }
 
@@ -55,14 +72,26 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
 .brand-mark { font-family: var(--mono); font-weight: 600; font-size: 1.2rem; color: var(--accent); letter-spacing: -.02em; }
 .brand-mark.small { font-size: 1rem; }
 .brand-sub { color: var(--ink-soft); font-weight: 500; font-size: .92rem; }
-.site-nav { display: flex; gap: 1.4rem; flex-wrap: wrap; justify-content: flex-end; row-gap: .1rem; }
+.site-nav { display: flex; gap: 1.4rem; flex-wrap: wrap; justify-content: flex-end; row-gap: .1rem; margin-left: auto; }
 .site-nav a { color: var(--ink-soft); font-weight: 500; font-size: .92rem; }
 .site-nav a:hover { color: var(--accent); text-decoration: none; }
+.theme-toggle {
+  display: inline-flex; align-items: center; gap: .38rem; flex: none;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft);
+  border-radius: 999px; padding: .3rem .7rem; font: inherit; font-size: .82rem; font-weight: 500;
+  cursor: pointer; white-space: nowrap; transition: border-color .15s, color .15s;
+}
+.theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
+.theme-toggle svg { display: block; }
 @media (max-width: 680px) { .brand-sub { display: none; } }
-@media (max-width: 560px) { .site-nav { gap: .7rem; } }
+@media (max-width: 560px) {
+  .site-nav { gap: .7rem; }
+  .theme-toggle { padding: .3rem .45rem; }
+  .theme-toggle .theme-name { display: none; }   /* icon says it on tight screens */
+}
 
 /* long series labels wrap inside their pill instead of overflowing the page */
-@media (max-width: 480px) {
+@media (max-width: 560px) {
   .series-pill, .series-toggle { max-width: 100%; min-width: 0; }
   .series-name { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
 }
@@ -90,6 +119,49 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
   .va-wrap { overflow-x: auto; border-radius: 18px; }
   .visual-abstract { min-width: 760px; }
 }
+
+/* Inline visual abstract (#va): the palette of assets/brand/visual-abstract.svg, scoped and
+   theme-switched here so the graphic follows the site theme (manual toggle included). Same
+   two-block structure as the page tokens; keep the values in sync with the standalone SVG. */
+#va {
+  aspect-ratio: 1200 / 320;
+  --va-bg: #ffffff;      --va-bg-line: #e6e8f0;
+  --va-panel: #f6f7fb;   --va-panel-line: #e6e8f0;
+  --va-panel2: #eef0fe;  --va-panel2-line: #dfe3fc;
+  --va-cell: #ffffff;    --va-cell-line: #e6e8f0;
+  --va-ink: #12141c;     --va-soft: #4a4f5e;     --va-faint: #868c9c;
+  --va-accent: #4f46e5;  --va-grid: #d7dae4;     --va-grey: #9aa1b4;
+}
+html[data-theme="dark"] #va {
+  --va-bg: #0c0e14;      --va-bg-line: #232838;
+  --va-panel: #151824;   --va-panel-line: #232838;
+  --va-panel2: #1c2136;  --va-panel2-line: #2a3050;
+  --va-cell: #10131c;    --va-cell-line: #232838;
+  --va-ink: #eef0f6;     --va-soft: #b7bdcc;     --va-faint: #7c8397;
+  --va-accent: #8b8bff;  --va-grid: #333a4f;     --va-grey: #65788a;
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) #va {
+    --va-bg: #0c0e14;      --va-bg-line: #232838;
+    --va-panel: #151824;   --va-panel-line: #232838;
+    --va-panel2: #1c2136;  --va-panel2-line: #2a3050;
+    --va-cell: #10131c;    --va-cell-line: #232838;
+    --va-ink: #eef0f6;     --va-soft: #b7bdcc;     --va-faint: #7c8397;
+    --va-accent: #8b8bff;  --va-grid: #333a4f;     --va-grey: #65788a;
+  }
+}
+#va .bg     { fill: var(--va-bg); stroke: var(--va-bg-line); }
+#va .panel  { fill: var(--va-panel); stroke: var(--va-panel-line); }
+#va .panel2 { fill: var(--va-panel2); stroke: var(--va-panel2-line); }
+#va .cell   { fill: var(--va-cell); stroke: var(--va-cell-line); }
+#va .ink    { fill: var(--va-ink); }
+#va .soft   { fill: var(--va-soft); }
+#va .faint  { fill: var(--va-faint); }
+#va .accent { fill: var(--va-accent); }
+#va .accent-stroke { stroke: var(--va-accent); }
+#va .grid   { stroke: var(--va-grid); }
+#va .grey   { fill: var(--va-grey); }
+#va .grey-stroke { stroke: var(--va-grey); }
 
 /* explorer panel */
 .panel {
@@ -219,9 +291,11 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
 .dir.up { color: #0f7b45; border-color: color-mix(in srgb, #0f7b45 35%, var(--line)); background: color-mix(in srgb, #0f7b45 7%, var(--surface)); }
 .dir.down { color: #9a4f0b; border-color: color-mix(in srgb, #9a4f0b 35%, var(--line)); background: color-mix(in srgb, #9a4f0b 7%, var(--surface)); }
 .dir.one { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); background: var(--accent-soft); }
+html[data-theme="dark"] .dir.up { color: #4ade80; }
+html[data-theme="dark"] .dir.down { color: #fbbf24; }
 @media (prefers-color-scheme: dark) {
-  .dir.up { color: #4ade80; }
-  .dir.down { color: #fbbf24; }
+  html:not([data-theme="light"]) .dir.up { color: #4ade80; }
+  html:not([data-theme="light"]) .dir.down { color: #fbbf24; }
 }
 
 /* KaTeX display blocks: card-friendly and scrollable on narrow screens */
@@ -326,7 +400,7 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
 }
 
 /* compact controls on phones: toggles share one row, the budget slider gets the full width */
-@media (max-width: 480px) {
+@media (max-width: 560px) {
   .view-tabs { gap: 0; align-items: center; }
   .view-toggle .results-field-label { display: none; }   /* buttons are self-explanatory */
   .view-toggle-group { gap: .2rem; }
@@ -375,6 +449,7 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
   display: block; margin: .35rem 0; padding: .55rem .8rem; max-width: 34rem;
   background: var(--accent-soft); border: 1px solid var(--line); border-radius: 8px;
   font-size: .84rem; color: var(--ink); line-height: 1.5;
+  font-weight: 400; text-transform: none; letter-spacing: normal;
 }
 .fine-print { margin-top: .45rem; }
 .fine-print > summary {

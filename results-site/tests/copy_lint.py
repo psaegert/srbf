@@ -49,12 +49,39 @@ def js_strings(source: str) -> list[str]:
     # ("method's") would make a single-quote scan pair across strings and swallow code
     return re.findall(r'"((?:[^"\\]|\\.)*)"', text)
 
+def svg_geometry(text: str) -> str:
+    """The drawable content of an SVG: root tag, <style>, and comments stripped, whitespace
+    normalised. Used to keep the inline visual abstract identical to the brand file."""
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
+    text = re.sub(r"<style>.*?</style>", "", text, flags=re.S)
+    body = re.search(r"<svg[^>]*>(.*)</svg>", text, flags=re.S).group(1)
+    body = re.sub(r"\s+", " ", body).strip()
+    return re.sub(r"> <", "><", body)
+
+
+def va_drift(index_html: str) -> str | None:
+    """The visual abstract is inlined in index.html (so it can follow the site theme) AND
+    kept as assets/brand/visual-abstract.svg (for the repo README). Geometry must match."""
+    brand = SITE.parent / "assets" / "brand" / "visual-abstract.svg"
+    inline = re.search(r'<svg id="va".*?</svg>', index_html, flags=re.S)
+    if not inline:
+        return "index.html: inline visual abstract (<svg id=\"va\") not found"
+    if svg_geometry(inline.group(0)) != svg_geometry(brand.read_text(encoding="utf-8")):
+        return ("index.html vs assets/brand/visual-abstract.svg: the inline visual abstract "
+                "drifted from the brand file (edit the brand SVG, then regenerate the inline "
+                "copy: same geometry, styles stay in styles.css under #va)")
+    return None
+
+
 def main() -> int:
     failures = []
     surfaces = {
         "index.html": (SITE / "index.html").read_text(encoding="utf-8"),
         "explorer.js (strings)": "\n".join(js_strings((SITE / "explorer.js").read_text(encoding="utf-8"))),
     }
+    drift = va_drift(surfaces["index.html"])
+    if drift:
+        failures.append(drift)
     for pattern, why in BANNED.items():
         for name, text in surfaces.items():
             for match in re.finditer(pattern, text, flags=re.IGNORECASE):

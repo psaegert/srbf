@@ -220,6 +220,92 @@ test('help: tapping a term shows its one-sentence definition', async ({ page }) 
   await expect(page.locator('.term-pop')).toHaveCount(0);
 });
 
+// ---- theme: Auto by default, manual override, persistence ---------------------------------
+
+const DARK_BG = 'rgb(12, 14, 20)';     // --bg #0c0e14
+const LIGHT_BG = 'rgb(246, 247, 251)'; // --bg #f6f7fb
+
+function bodyBg(page) {
+  return page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+}
+
+test('theme: Auto follows the device scheme and stores nothing', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await gotoView(page, 'curves');
+  expect(await bodyBg(page)).toBe(DARK_BG);
+  expect(await page.evaluate(() => localStorage.getItem('srbf_theme'))).toBe(null);
+  await page.emulateMedia({ colorScheme: 'light' });
+  await expect.poll(() => bodyBg(page)).toBe(LIGHT_BG);
+  expect(errors).toEqual([]);
+});
+
+test('theme: the toggle forces dark on a light device, persists, and cycles back to Auto', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.emulateMedia({ colorScheme: 'light' });
+  await gotoView(page, 'curves');
+  await page.click('#theme-toggle');                       // Auto -> Dark
+  await expect.poll(() => bodyBg(page)).toBe(DARK_BG);
+  expect(await page.evaluate(() => localStorage.getItem('srbf_theme'))).toBe('dark');
+  await page.reload();                                     // pre-paint script applies it
+  await expectViewRendered(page, 'curves');
+  expect(await bodyBg(page)).toBe(DARK_BG);
+  await page.click('#theme-toggle');                       // Dark -> Light
+  await expect.poll(() => bodyBg(page)).toBe(LIGHT_BG);
+  await page.click('#theme-toggle');                       // Light -> Auto (entry removed)
+  expect(await page.evaluate(() => localStorage.getItem('srbf_theme'))).toBe(null);
+  expect(errors).toEqual([]);
+});
+
+test('theme: the visual abstract follows the manual override', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await gotoView(page, 'curves');
+  await page.click('#theme-toggle');
+  await expect.poll(() => page.locator('#va rect.bg')
+    .evaluate((r) => getComputedStyle(r).fill)).toBe(DARK_BG);
+});
+
+test('theme: every view survives a toggle without errors', async ({ page }) => {
+  const errors = collectErrors(page);
+  for (const view of VIEWS) {
+    await gotoView(page, view);
+    await page.click('#theme-toggle');                     // -> dark: Plotly re-renders
+    await expectViewRendered(page, view);
+    await page.click('#theme-toggle');                     // -> light
+    await page.click('#theme-toggle');                     // -> auto (clean for next view)
+  }
+  expect(errors).toEqual([]);
+});
+
+// ---- regressions from user phone reports (2026-07-04) --------------------------------------
+
+test('help: term hints render as soft prose, not label styling (ALL-CAPS regression)', async ({ page }) => {
+  await gotoView(page, 'ranks');
+  await page.locator('.term[data-term="cd"]').first().click();
+  const style = await page.locator('.term-pop').evaluate((el) => {
+    const s = getComputedStyle(el);
+    return { weight: s.fontWeight, transform: s.textTransform, spacing: s.letterSpacing };
+  });
+  expect(style.weight).toBe('400');
+  expect(style.transform).toBe('none');
+  expect(style.spacing).toBe('normal');
+});
+
+test('mobile: toggles share one row and the budget slider spans the panel', async ({ page }) => {
+  test.skip(page.viewportSize().width > 560, 'compact controls only apply below 560px');
+  await gotoView(page, 'table');
+  const layout = await page.evaluate(() => {
+    const groups = document.querySelectorAll('.view-toggle-group');
+    const a = groups[0].getBoundingClientRect();
+    const b = groups[1].getBoundingClientRect();
+    const slider = document.querySelector('.budget-slider').getBoundingClientRect();
+    const panel = document.querySelector('.results-controls').getBoundingClientRect();
+    return { sameRow: Math.abs(a.top - b.top) < 2, sliderFill: slider.width / panel.width };
+  });
+  expect(layout.sameRow).toBe(true);
+  expect(layout.sliderFill).toBeGreaterThan(0.97);
+});
+
 // ---- payload contract ----------------------------------------------------------------------
 
 test('payload: schema and blocks the frontend depends on', async ({ request }) => {
