@@ -251,11 +251,18 @@
     controls.appendChild(baselineField);
     controls.appendChild(correctionField);
     [axisSel, metricSel, benchSel, baselineSel, correctionSel].forEach(function (s) { s.addEventListener("change", render); });
-    metricSel.addEventListener("change", function () { ranksSwitchedFrom = null; });
+    metricSel.addEventListener("change", function () {
+      ranksSwitchedFrom = null; ranksRestoreKey = null; ranksAutoKey = null;
+    });
 
     function switchView(v) {
+      var leavingRanks = currentView === "ranks" && v !== "ranks";
       currentView = v;
       var vm = VIEWS[v];
+      if (leavingRanks && ranksRestoreKey && metricSel.value === ranksAutoKey) {
+        metricSel.value = ranksRestoreKey;   // the Ranks metric switch is view-scoped
+        ranksRestoreKey = null; ranksAutoKey = null; ranksSwitchedFrom = null;
+      }
       if (vm.values) { lastValues = vm.values; }
       tabs.querySelectorAll(".view-tab").forEach(function (b) {
         b.classList.toggle("active", vm[b.dataset.axis] === b.dataset.value);
@@ -976,6 +983,7 @@
     }
 
     var ranksAutoPicked = false, ranksSwitchedFrom = null;
+    var ranksRestoreKey = null, ranksAutoKey = null;
     function rankMetricInfo(key) {
       if (!pairedData || pairedData.error) { return null; }
       return (pairedData.rank_metrics || []).filter(function (m) { return m.key === key; })[0] || null;
@@ -999,6 +1007,8 @@
         var prim = (pairedData.rank_metrics || []).filter(function (m) { return m.primary; })[0];
         if (prim) {
           ranksSwitchedFrom = (metrics.filter(function (m) { return m.key === metricKey; })[0] || {}).label || metricKey;
+          ranksRestoreKey = metricKey;      // put the user's metric back when they leave Ranks
+          ranksAutoKey = prim.key;
           metricSel.value = prim.key;
           return renderRanks();
         }
@@ -1088,9 +1098,9 @@
         ? "<div class='fam'>" + league.excluded.join(" and ") +
           " cannot run within this budget and sit out this league.</div>" : "";
       var switchNote = ranksSwitchedFrom
-        ? "<div class='desc-banner'>Switched the metric to <b>" + rmi.label + "</b> — the " +
-          "primary league metric (your previous pick, " + ranksSwitchedFrom + ", has no rank " +
-          "league; the near-binary rate metrics tie on most expressions).</div>" : "";
+        ? "<div class='desc-banner'>Showing <b>" + rmi.label + "</b>, the primary league " +
+          "metric — " + ranksSwitchedFrom + " has no rank league (rate metrics tie on most " +
+          "expressions). Your metric choice comes back when you leave Ranks.</div>" : "";
       pairedFoot.innerHTML =
         switchNote +
         // decode key: the two glyphs and the ruler, right where the eye lands
