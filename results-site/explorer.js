@@ -1232,10 +1232,10 @@
         "CD ruler (top) shows the smallest mean-rank gap that counts.</div>" +
         "<div class='matrix-legend'>" +
         "<span class='" + (league.primary ? "rank-primary" : "rank-exploratory") + "'>" +
-        (league.primary ? "primary" : "exploratory") + "</span>: " +
+        (league.primary ? "primary" : "exploratory") + "</span> " +
         (league.primary
-          ? "pre-declared and quotable (see the metric menu for the rest). "
-          : "for browsing; claims come from the primary metric, log10 FVU (validation). ") +
+          ? "Pre-declared and quotable (see the metric menu for the rest). "
+          : "For browsing; claims come from the primary metric, log10 FVU (validation). ") +
         k + " methods ranked on <b>" + rmi.label + "</b> over n = " + league.n_problems +
         " expressions · " + term("cd", "CD") + " = " + league.cd + " · " +
         (reject ? "the omnibus test confirms real rank differences"

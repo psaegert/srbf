@@ -325,6 +325,19 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
   padding: .05em .4em; margin-left: .35em; vertical-align: middle;
 }
 
+/* compact controls on phones: toggles share one row, the budget slider gets the full width */
+@media (max-width: 480px) {
+  .view-tabs { gap: 0; align-items: center; }
+  .view-toggle .results-field-label { display: none; }   /* buttons are self-explanatory */
+  .view-toggle-group { gap: .2rem; }
+  .view-toggle + .view-toggle .view-toggle-group {
+    margin-left: .3rem; padding-left: .3rem; border-left: 1px solid var(--line);
+  }
+  .view-tab { padding: .26rem .4rem; font-size: .75rem; }
+  .results-field:has(.budget-slider) { flex: 1 1 100%; }
+  .budget-slider { min-width: 0; width: 100%; }
+}
+
 /* free slider positions: descriptive reads of the plotted curves, never verdicts */
 .desc-banner {
   background: var(--accent-soft); border: 1px solid var(--line); border-radius: 10px;
