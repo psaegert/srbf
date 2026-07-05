@@ -199,6 +199,29 @@
         carry no timing information and therefore cannot be placed on the wall-clock compute axis.
       </p>
 
+      <h3>Who chose each configuration</h3>
+      <p>
+        Every series carries a configuration-provenance label, part of the benchmark's written
+        <a href="https://srbf.readthedocs.io/en/latest/fairness/" target="_blank"
+        rel="noopener">fairness policy</a>. The labels answer the first question to ask of any
+        benchmark whose authors also enter their own method: who picked the hyperparameters?
+        Headline comparisons state the label of every entrant, and the labels also appear on
+        the compute-curve hovers and as table footnotes.
+      </p>
+      <ul>
+        <li><strong>Upstream defaults</strong> (PySR, NeSymReS, E2E): the method's own released
+          defaults, untouched in either direction. Where a default is consequential on these
+          benchmarks, srbf measures the consequence and documents it next to the method's
+          results rather than patching it.</li>
+        <li><strong>Author-blessed</strong> (all Flash-ANSR series, including ablations and
+          inference variants): the configuration was chosen by the method's authors. The
+          benchmark and Flash-ANSR share authors, which is exactly what this label discloses;
+          any method's authors can submit a blessed configuration on the same terms via the
+          fairness policy.</li>
+        <li><strong>Maintainer-chosen</strong> (the Prior reference): benchmark-native series
+          with no upstream and no external author.</li>
+      </ul>
+
       <h3>Benchmarks and sweeps</h3>
       <p>
         Two benchmarks are available in the menu. <strong>FastSRB</strong> is a curated suite of

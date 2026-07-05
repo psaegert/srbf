@@ -384,6 +384,70 @@ test('help: a floating popover dismisses on scroll', async ({ page }) => {
   await expect(page.locator('.term-pop')).toHaveCount(0);
 });
 
+// ---- config provenance: the fairness labels reach every surface ---------------------------
+
+const PROVENANCE_VALUES = ['upstream_default', 'author_blessed', 'harness_tuned'];
+
+test('provenance: every series carries a valid config_provenance label', async ({ request }) => {
+  const data = await (await request.get('/results_data.json')).json();
+  expect(data.schema_version).toBeGreaterThanOrEqual(3);
+  const entries = Object.entries(data.series_meta);
+  expect(entries.length).toBeGreaterThan(20);
+  for (const [series, m] of entries) {
+    expect(PROVENANCE_VALUES, `${series} label`).toContain(m.config_provenance);
+  }
+});
+
+test('provenance: the About section explains the three labels', async ({ page }) => {
+  await page.goto('/');
+  const about = page.locator('#about');
+  await expect(about).toContainText('Who chose each configuration');
+  await expect(about).toContainText('Upstream defaults');
+  await expect(about).toContainText('Author-blessed');
+  await expect(about).toContainText('Maintainer-chosen');
+  await expect(about).toContainText('The benchmark and Flash-ANSR share authors');
+});
+
+test('provenance: table rows footnote who chose each configuration', async ({ page }) => {
+  await gotoView(page, 'table');
+  await expect(page.locator('.paired-foot')).toContainText('Configuration: the method\'s own upstream defaults');
+  await expect(page.locator('.paired-foot')).toContainText('author-blessed');
+});
+
+test('provenance: a pinned matrix cell states both sides\' labels', async ({ page }) => {
+  await gotoView(page, 'matrix');
+  await page.click('td[data-cell="2"]');
+  await expect(page.locator('.matrix-detail')).toContainText('configs:');
+  await expect(page.locator('.matrix-detail a[href="#about"]')).toContainText('who chose what');
+});
+
+test('provenance: footnotes appear only at snapped budgets (descriptive slices stay clean)', async ({ page }) => {
+  await gotoView(page, 'table');
+  await expect(page.locator('.paired-foot')).toContainText('Configuration:');
+  await page.evaluate(() => {
+    const r = document.querySelector('.budget-slider input[type=range]');
+    r.value = '500'; r.dispatchEvent(new Event('input'));
+  });
+  await expect(page.locator('.desc-banner').first()).toContainText('Descriptive slice');
+  await expect(page.locator('.paired-foot')).not.toContainText('Configuration:');
+});
+
+test('provenance: an old cached payload without labels degrades gracefully', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.route('**/results_data.js', async (route) => {
+    const body = (await (await fetch(new URL('/results_data.js', 'http://localhost:8123'))).text())
+      .replace(/"config_provenance":\s*"[a-z_]+",?/g, '');
+    await route.fulfill({ status: 200, contentType: 'application/javascript', body });
+  });
+  await gotoView(page, 'table');
+  await expect(page.locator('.paired-foot')).not.toContainText('Configuration:');
+  await switchTo(page, 'matrix');
+  await page.click('td[data-cell="2"]');
+  await expect(page.locator('.matrix-detail')).toContainText('noise margin');
+  await expect(page.locator('.matrix-detail')).not.toContainText('configs:');
+  expect(errors).toEqual([]);
+});
+
 // ---- payload contract ----------------------------------------------------------------------
 
 test('payload: schema and blocks the frontend depends on', async ({ request }) => {

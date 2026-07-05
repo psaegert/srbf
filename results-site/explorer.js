@@ -114,6 +114,19 @@
 
     var userColors = readCookie();
     function metaOf(s) { return meta[s] || {}; }
+    // config-provenance labels (fairness policy): viewer-facing names + one footnote per label.
+    // Guarded everywhere: an older cached results_data.js simply carries no label.
+    var PROVENANCE_NAMES = {
+      upstream_default: "upstream defaults",
+      author_blessed: "author-blessed",
+      harness_tuned: "maintainer-chosen"
+    };
+    var PROVENANCE_NOTES = {
+      upstream_default: "Configuration: the method's own upstream defaults; nothing was tuned in either direction.",
+      author_blessed: "Configuration: author-blessed, chosen by the method's authors. For Flash-ANSR entries the benchmark and the method share authors; that is what this label discloses.",
+      harness_tuned: "Configuration: maintainer-chosen, set by the benchmark maintainers (benchmark-native reference)."
+    };
+    function provenanceOf(s) { return PROVENANCE_NAMES[metaOf(s).config_provenance] || null; }
     function defaultColor(s, i) { return defaults[s] || FALLBACK[i % FALLBACK.length]; }
     function colorOf(s, i) { return userColors[s] || defaultColor(s, i); }
     var idx = {}; series.forEach(function (s, i) { idx[s] = i; });
@@ -970,6 +983,9 @@
           ? "same configuration on both sides (≈" + o.xRow + " s / ≈" + o.xCol + " s per problem)"
           : "both sides at the budget: " + sideBasis(cell.rowS, o.statusRow, o.xRow, o.bracketRow) +
             " · " + sideBasis(cell.colS, o.statusCol, o.xCol, o.bracketCol)) + "</div>" +
+        (provenanceOf(cell.rowS) && provenanceOf(cell.colS)
+          ? "<div class='fam'>configs: " + cell.rowS + ": " + provenanceOf(cell.rowS) + " · " +
+            cell.colS + ": " + provenanceOf(cell.colS) + " (<a href='#about'>who chose what</a>)</div>" : "") +
         (rec.notes && rec.notes.length ? "<div class='fam'><i>" + rec.notes.join(" ") + "</i></div>" : "");
     }
 
@@ -1174,7 +1190,10 @@
       rows.forEach(function (row) {
         var col = colorOf(row.s, idx[row.s]);
         var marks = "";
-        (row.e && row.e.notes ? row.e.notes : []).forEach(function (note) {
+        var provKey = (snapped && row.e) ? metaOf(row.s).config_provenance : null;   // footnote list renders only when snapped
+        var rowNotes = (row.e && row.e.notes ? row.e.notes : [])
+          .concat(provKey && PROVENANCE_NOTES[provKey] ? [PROVENANCE_NOTES[provKey]] : []);
+        rowNotes.forEach(function (note) {
           if (!(note in noteIndex)) { noteIndex[note] = Object.keys(noteIndex).length + 1; }
           marks += "<sup>" + noteIndex[note] + "</sup>";
         });
@@ -1420,7 +1439,8 @@
           type: "scatter", mode: "lines+markers",
           customdata: pts.map(function (r) { return [r[metricKey].lo, r[metricKey].hi, r[metricKey].n]; }),
           hovertemplate: "<b>" + s + "</b><br>" + am.label + ": %{x}<br>" +
-            metric.label + ": %{y:.3f} [%{customdata[0]:.3f}, %{customdata[1]:.3f}]<br>n=%{customdata[2]}<extra></extra>"
+            metric.label + ": %{y:.3f} [%{customdata[0]:.3f}, %{customdata[1]:.3f}]<br>n=%{customdata[2]}" +
+            (provenanceOf(s) ? "<br>config: " + provenanceOf(s) : "") + "<extra></extra>"
         });
       });
       var layout = {
