@@ -9,6 +9,7 @@ run:
         name: ladder
         values: [10, 10, 10, 10, 10, 10, 5, 5]
   model_adapter:
+    config_provenance: upstream_default
     type: nesymres
     eq_setting_path: '{{ROOT}}/models/nesymres/eq_setting.json'
     config_path: '{{ROOT}}/models/nesymres/config.yaml'

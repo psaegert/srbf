@@ -226,7 +226,8 @@ sampled arrays (`x`, `y`, `y_noisy`, `x_val`, `y_val`, ...), and the adapter's r
 (`y_pred`, `y_pred_val`, `predicted_*`, timings). It does **not** compute FVU / recovery /
 F1: those are **derived metrics** produced by a separate step (see [Deriving
 metrics](#deriving-metrics)). The pickle also embeds a `__meta__` provenance entry (config
-path, git state, sweep labels), which `srbf` strips automatically on resume.
+path, git state, sweep labels, and the declared `config_provenance` label — see
+[fairness](fairness.md)), which `srbf` strips automatically on resume.
 
 ### Raw run columns
 

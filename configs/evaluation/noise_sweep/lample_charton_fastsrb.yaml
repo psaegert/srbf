@@ -9,6 +9,7 @@ run:
         values: [0.0, 0.001, 0.01, 0.1]
       problems_per_expression: 10
   model_adapter:
+    config_provenance: harness_tuned
     type: lample_charton
     simplipy_engine: dev_7-3
     samples: 2048

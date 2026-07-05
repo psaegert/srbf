@@ -39,12 +39,17 @@ class Benchmark:
         total_limit: Optional[int] = None,
         existing_results: int = 0,
         label: Optional[Mapping[str, Any]] = None,
+        config_provenance: Optional[str] = None,
     ) -> None:
         self.source = source
         self.model_adapter = model_adapter
         self.result_store = result_store or ResultStore()
         # Run identity for a sweep/experiment (e.g. {"experiment": ..., "ladder": 256}); display-only.
         self.label = dict(label) if label else {}
+        # Who chose the model_adapter configuration (docs/fairness.md); persisted into __meta__.
+        # None (direct construction) => run() falls back to a caller-supplied meta label, then to
+        # the conservative default; `from_config` always passes the validated config value.
+        self.config_provenance = config_provenance
         # Resolved run parameters (set by `from_config`; `run()` falls back to these when its own
         # arguments are left None). `completed` => the configured target is already reached and `run()`
         # is a no-op. `total_limit` / `existing_results` are reporting-only (CLI summary).
@@ -85,6 +90,9 @@ class Benchmark:
         model_cfg = run_cfg.get("model_adapter")
         if not isinstance(model_cfg, Mapping):
             raise ValueError("run.model_adapter section is required")
+        # Validate + capture here, BEFORE the completed short-circuits below: a bad label must
+        # surface even for runs that need no work, and the adapter builder is skipped for them.
+        config_provenance = run_config.coerce_config_provenance(model_cfg.get("config_provenance"))
         runner_cfg = run_cfg.get("runner", {})
 
         save_every = save_every_override if save_every_override is not None else runner_cfg.get("save_every")
@@ -120,7 +128,7 @@ class Benchmark:
             if remaining == 0:
                 return cls(None, None, result_store=store, output_path=output_path,
                            save_every=save_every, completed=True, total_limit=total_limit,
-                           existing_results=existing)
+                           existing_results=existing, config_provenance=config_provenance)
             target_override = remaining
         else:
             total_limit = None
@@ -134,7 +142,7 @@ class Benchmark:
         if pending is not None and pending <= 0:
             return cls(None, None, result_store=store, output_path=output_path, save_every=save_every,
                        completed=True, total_limit=total_limit if total_limit is not None else existing,
-                       existing_results=existing)
+                       existing_results=existing, config_provenance=config_provenance)
         if total_limit is None and pending is not None:
             # Frozen catalog with no explicit total: the source's own count is the total. Set an explicit
             # remaining cap too (belt-and-braces with the source's bound). An OPEN generative source has
@@ -145,7 +153,7 @@ class Benchmark:
         adapter = run_config.build_model_adapter(model_cfg)  # LAST: loads the model
 
         return cls(source, adapter, result_store=store, output_path=output_path, save_every=save_every,
-                   limit=remaining, completed=False, total_limit=total_limit, existing_results=existing)
+                   limit=remaining, completed=False, total_limit=total_limit, existing_results=existing, config_provenance=config_provenance)
 
     @classmethod
     def runs_from_config(
@@ -222,6 +230,16 @@ class Benchmark:
                 target = self.total_limit if self.total_limit is not None else "configured"
                 print(f"Evaluation already completed ({self.existing_results}/{target}). Nothing to do.")
             return self.result_store.snapshot()
+
+        # The label declared in the config wins (from_config sets it); a directly-constructed
+        # Benchmark falls back to a caller-supplied meta label (validated), then to the
+        # conservative default, so every saved __meta__ carries a resolved label.
+        provenance = self.config_provenance
+        if provenance is None:
+            from srbf import config as run_config
+            provenance = run_config.coerce_config_provenance(
+                dict(meta).get("config_provenance") if meta else None)
+        meta = {**(meta or {}), "config_provenance": provenance}
 
         # Fall back to the parameters `from_config` resolved when the caller leaves them unset.
         limit = limit if limit is not None else self.limit

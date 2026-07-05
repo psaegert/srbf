@@ -44,6 +44,7 @@ use and cached, so there is no local data-build step. The config sweeps over can
 | [Running evaluations](running.md) | the `srbf run` CLI, config anatomy, `!sweep`, outputs, resume, reporting |
 | [Benchmarks & datasets](benchmarks.md) | the `data_source` catalog block, the shipped catalogs, custom catalogs |
 | [Models & provisioning](models.md) | installing/patching the built-in models; the `model_adapter` block per type |
+| [Fairness & provenance](fairness.md) | one protocol for every method, the upstream-defaults policy, config-provenance labels, blessed configs |
 | [**Adding your model**](adapters.md) | the adapter protocol + registry, and the PR flow to contribute a new SR method |
 
 ## License

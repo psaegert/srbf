@@ -9,6 +9,7 @@ run:
       noise: 0.0
       problems_per_expression: 10
   model_adapter:
+    config_provenance: upstream_default
     type: pysr
     timeout_in_seconds: 3600
     niterations: 128

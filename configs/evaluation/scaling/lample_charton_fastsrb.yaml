@@ -9,6 +9,7 @@ run:
         name: ladder
         values: [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 5, 5]
   model_adapter:
+    config_provenance: harness_tuned
     type: lample_charton
     simplipy_engine: dev_7-3
     samples: !sweep

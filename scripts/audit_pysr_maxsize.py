@@ -101,7 +101,7 @@ def main() -> int:
     print()
     print("NOTE: benchmark policy is to run baselines at their upstream defaults, so these numbers "
           "are DOCUMENTATION of what PySR's default complexity budget implies on these benchmarks, "
-          "not a defect to patch. See docs/models.md (PySR section).")
+          "not a defect to patch. See docs/fairness.md (policy) and docs/models.md (PySR section).")
     return 0
 
 

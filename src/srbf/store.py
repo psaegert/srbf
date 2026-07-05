@@ -36,8 +36,11 @@ class ResultStore:
         return lengths.pop()
 
     def extend(self, records: Mapping[str, Iterable[Any]]) -> None:
-        """Append a batch of equal-length column lists, backfilling any missing keys with ``None``."""
-        snapshots = {key: list(values) for key, values in records.items()}
+        """Append a batch of equal-length column lists, backfilling any missing keys with ``None``.
+
+        The reserved non-list ``__meta__`` key that :meth:`save` embeds is ignored here, so a raw
+        loaded pickle round-trips without the caller having to strip it."""
+        snapshots = {key: list(values) for key, values in records.items() if key != "__meta__"}
         lengths = {len(values) for values in snapshots.values()}
         if lengths and len(lengths) != 1:
             raise ValueError("Existing results have inconsistent lengths")

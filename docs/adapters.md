@@ -14,7 +14,9 @@ problem at a time. You implement two methods and register a builder. That is the
    `EvaluationModelAdapter` protocol.
 2. A **builder function** `_build_<name>_adapter(config)` and a one-line entry in the
    `_ADAPTER_REGISTRY` in `src/srbf/config.py`.
-3. An **example config** under `configs/evaluation/` with a `model_adapter: {type: <name>, ...}` block.
+3. An **example config** under `configs/evaluation/` with a `model_adapter: {type: <name>, ...}`
+   block, including its [`config_provenance` label](fairness.md) (`upstream_default` for a
+   method's own defaults; `author_blessed` if you tuned it as the method's author).
 4. **Install instructions** for your model's dependencies (see [Provisioning](#provisioning-your-models-dependencies)).
 5. Ideally a small **test** under `tests/` and a note in [docs/models.md](models.md).
 
@@ -189,7 +191,8 @@ mean each baseline wants its **own environment**; document that for your model.
       `prediction_success`, `y_pred`/`y_pred_val`, and `predicted_*` keys
 - [ ] model library imported lazily (importing `srbf` stays light)
 - [ ] `_build_<name>_adapter` + one `_ADAPTER_REGISTRY` entry
-- [ ] an example `configs/evaluation/...yaml` selecting `type: <name>`
+- [ ] an example `configs/evaluation/...yaml` selecting `type: <name>` and declaring
+      [`config_provenance`](fairness.md)
 - [ ] install/provisioning instructions (pip, or `scripts/patch_<name>.py` + weights), added to
       [docs/models.md](models.md)
 - [ ] a small smoke test under `tests/`

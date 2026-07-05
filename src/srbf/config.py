@@ -87,6 +87,25 @@ def build_catalog_source(
 
 AdapterBuilder = Callable[[Mapping[str, Any]], Any]
 
+# Config provenance: who chose this configuration (docs/fairness.md). DECLARED by the config
+# author, unlike the MEASURED run provenance in provenance.py; travels into __meta__.
+CONFIG_PROVENANCE_VALUES = ("upstream_default", "author_blessed", "harness_tuned")
+
+
+def coerce_config_provenance(value: Any, field_name: str = "model_adapter.config_provenance") -> str:
+    """Validate a ``config_provenance`` label, raising ``ValueError`` naming ``field_name``.
+
+    ``None`` (key absent) resolves to ``'harness_tuned'``: an unlabeled configuration was, by
+    definition, chosen by whoever assembled the config, and the conservative reading of that is
+    "tuned by the evaluators". Shipped configs declare the key explicitly (test-gated)."""
+    if value is None:
+        return "harness_tuned"
+    if isinstance(value, str) and value in CONFIG_PROVENANCE_VALUES:
+        return value
+    raise ValueError(
+        f"{field_name} must be one of {', '.join(CONFIG_PROVENANCE_VALUES)} (got {value!r})"
+    )
+
 
 def build_model_adapter(config: Mapping[str, Any]) -> Any:
     """Build the model adapter for a ``model_adapter`` config, dispatching on its ``type`` field."""
@@ -94,6 +113,7 @@ def build_model_adapter(config: Mapping[str, Any]) -> Any:
     builder = _ADAPTER_REGISTRY.get(adapter_type)
     if builder is None:
         raise ValueError(f"Unsupported model adapter type: {adapter_type}")
+    coerce_config_provenance(config.get("config_provenance"))  # reject invalid labels early
     return builder(config)
 
 

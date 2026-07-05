@@ -87,6 +87,7 @@ for benchmark in Benchmark.runs_from_config("configs/evaluation/scaling/v23.0-3M
 | [Running evaluations](docs/running.md) | the `srbf run` CLI, config anatomy (data_source / model_adapter / runner / experiments / `!sweep`), outputs, resume, reporting |
 | [Benchmarks & datasets](docs/benchmarks.md) | the `data_source` catalog block, the shipped catalogs (`v23-val`, `fastsrb`, `lample-charton-v23`), custom catalogs |
 | [Models & provisioning](docs/models.md) | installing/patching the built-in models; the `model_adapter` block per type |
+| [Fairness & provenance](docs/fairness.md) | one protocol for every method, the upstream-defaults policy, config-provenance labels, blessed configs |
 | [**Adding your model**](docs/adapters.md) | the adapter protocol + registry, and the PR flow to contribute a new SR method |
 
 ## Development

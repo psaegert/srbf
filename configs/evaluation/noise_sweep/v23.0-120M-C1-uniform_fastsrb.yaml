@@ -9,6 +9,7 @@ run:
         values: [0.0, 0.001, 0.01, 0.1]
       problems_per_expression: 10
   model_adapter:
+    config_provenance: author_blessed
     type: flash_ansr
     model_path: '{{ROOT}}/models/ansr-models/v23.0-120M-C1-uniform'
     evaluation_config:

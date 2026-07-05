@@ -52,6 +52,7 @@ nav:
   - Paired comparisons: paired.md
   - Benchmarks & datasets: benchmarks.md
   - Models & provisioning: models.md
+  - Fairness & provenance: fairness.md
   - Adding your model: adapters.md
 
 plugins:

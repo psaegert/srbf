@@ -9,6 +9,7 @@ run:
         values: [0.0, 0.001, 0.01, 0.1]
       problems_per_expression: 10
   model_adapter:
+    config_provenance: upstream_default
     type: nesymres
     eq_setting_path: '{{ROOT}}/models/nesymres/eq_setting.json'
     config_path: '{{ROOT}}/models/nesymres/config.yaml'

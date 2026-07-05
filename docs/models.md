@@ -15,7 +15,7 @@ How to provision the symbolic-regression models that `srbf` evaluates, and how e
 
 `srbf` is a community framework: new SR methods are contributed by PR with their own adapter plus install instructions. The built-ins below show the pattern; to add your own model, see [docs/adapters.md](./adapters.md).
 
-See also: [docs/running.md](./running.md) (running a config), [docs/benchmarks.md](./benchmarks.md) (the data the models are scored on), and the [project README](https://github.com/psaegert/srbf/blob/main/README.md).
+See also: [docs/running.md](./running.md) (running a config), [docs/benchmarks.md](./benchmarks.md) (the data the models are scored on), [docs/fairness.md](./fairness.md) (the fairness policy and config-provenance labels), and the [project README](https://github.com/psaegert/srbf/blob/main/README.md).
 
 ## Asset root and `{{ROOT}}`
 
@@ -110,8 +110,8 @@ Key fields: `niterations` (the compute-scaling axis, swept per run), `timeout_in
 
 Two properties of the adapter worth knowing:
 
-- **Complexity budget = PySR's own default.** Benchmark policy: baselines run at their upstream
-  defaults — a method's default hyperparameters are part of the method. Note what that default
+- **Complexity budget = PySR's own default.** [Benchmark policy](./fairness.md): baselines run
+  at their upstream defaults — a method's default hyperparameters are part of the method. Note what that default
   implies here: at PySR's `maxsize=20`, 23/120 FastSRB and 743/1000 v23-val ground truths are not
   representable under the adapter vocabulary at all (largest ground truth = 40 nodes; measure it
   yourself with `python scripts/audit_pysr_maxsize.py`). This is a documented property of running

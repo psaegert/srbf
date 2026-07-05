@@ -9,6 +9,7 @@ run:
         name: ladder
         values: [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 5, 5]
   model_adapter:
+    config_provenance: author_blessed
     type: flash_ansr
     model_path: '{{ROOT}}/models/ansr-models/v23.0-3M'
     evaluation_config:

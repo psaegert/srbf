@@ -362,6 +362,89 @@ def test_from_config_end_to_end_through_catalog_source(monkeypatch):
     assert sorted(snapshot["benchmark_eq_id"]) == ["E1", "E2", "E3"]
 
 
+# --- config_provenance: validation, capture, persistence into __meta__ -------------------
+
+def test_coerce_config_provenance_accepts_labels_and_defaults():
+    for value in run_config.CONFIG_PROVENANCE_VALUES:
+        assert run_config.coerce_config_provenance(value) == value
+    assert run_config.coerce_config_provenance(None) == "harness_tuned"
+    with pytest.raises(ValueError, match="model_adapter.config_provenance"):
+        run_config.coerce_config_provenance("tuned")
+    with pytest.raises(ValueError, match="upstream_default"):
+        run_config.coerce_config_provenance(True)
+
+
+def test_from_config_captures_and_validates_config_provenance(tmp_path, monkeypatch):
+    results_path = tmp_path / "existing.pkl"
+    _write_results(results_path, length=3)
+    base = {
+        "run": {
+            "data_source": {"catalog": "v23-val"},
+            "model_adapter": {"type": "flash_ansr", "config_provenance": "upstream_default"},
+            "runner": {"limit": 3, "output": str(results_path), "resume": True},
+        }
+    }
+    # captured even on the completed short-circuit (the adapter builder never runs there)
+    bench = Benchmark.from_config(base)
+    assert bench.completed is True
+    assert bench.config_provenance == "upstream_default"
+    # and an invalid label surfaces on that same path
+    bad = {"run": {**base["run"], "model_adapter": {"type": "flash_ansr", "config_provenance": "best"}}}
+    with pytest.raises(ValueError, match="config_provenance"):
+        Benchmark.from_config(bad)
+
+
+def test_run_persists_config_provenance_into_meta(tmp_path, monkeypatch):
+    import numpy as np
+    from symbolic_data import Problem, ProblemSource
+
+    x = np.arange(8, dtype=np.float32).reshape(8, 1)
+    y = x.astype(np.float32)
+    problem = Problem(
+        x_support=x, y_support=y, y_support_noisy=y.copy(),
+        x_validation=x[:2], y_validation=y[:2], y_validation_noisy=y[:2].copy(),
+        skeleton=["x1"], expression=["x1"], constants=[],
+        variables=["x1"], complexity=1, eq_id="E1",
+    )
+    catalog = ProblemSource({"problems": [problem.to_dict()]}).to_catalog(name="meta-smoke")
+
+    class _FakeAdapter:
+        def evaluate_sample(self, sample):
+            return {**sample.clone_metadata(), "prediction_success": True}
+
+    monkeypatch.setattr(run_config, "build_model_adapter", lambda cfg: _FakeAdapter())
+    out = tmp_path / "run.pkl"
+    bench = Benchmark.from_config({
+        "run": {
+            "data_source": {"catalog": catalog},
+            "model_adapter": {"type": "flash_ansr", "config_provenance": "author_blessed"},
+            "runner": {"output": str(out)},
+        }
+    })
+    caller_meta = {"config_provenance": "harness_tuned", "extra": "kept"}
+    bench.run(verbose=False, progress=False, meta=caller_meta)
+    with out.open("rb") as handle:
+        snapshot = pickle.load(handle)
+    # the declared label wins over the caller-supplied duplicate; other meta keys survive;
+    # the caller's dict is not mutated
+    assert snapshot["__meta__"]["config_provenance"] == "author_blessed"
+    assert snapshot["__meta__"]["extra"] == "kept"
+    assert caller_meta == {"config_provenance": "harness_tuned", "extra": "kept"}
+
+    # the library path (direct construction, no from_config): a caller-supplied meta label is
+    # validated and respected; with no label anywhere the conservative default lands
+    from srbf.data_sources import CatalogSource
+    out2 = tmp_path / "run2.pkl"
+    bench2 = Benchmark(CatalogSource.from_catalog(catalog), _FakeAdapter())
+    bench2.run(verbose=False, progress=False, output_path=str(out2), save_every=1,
+               meta={"config_provenance": "upstream_default"})
+    with out2.open("rb") as handle:
+        assert pickle.load(handle)["__meta__"]["config_provenance"] == "upstream_default"
+    bench3 = Benchmark(CatalogSource.from_catalog(catalog), _FakeAdapter())
+    with pytest.raises(ValueError, match="config_provenance"):
+        bench3.run(verbose=False, progress=False, meta={"config_provenance": "best"})
+
+
 # --- runs_from_config: experiments map + inline !sweep -----------------------------------
 
 def test_runs_from_config_expands_named_sweep(monkeypatch):

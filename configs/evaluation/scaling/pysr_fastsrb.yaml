@@ -9,6 +9,7 @@ run:
         name: ladder
         values: [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 5, 5]
   model_adapter:
+    config_provenance: upstream_default
     type: pysr
     timeout_in_seconds: !sweep
       name: ladder

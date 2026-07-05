@@ -7,6 +7,7 @@ run:
       noise: 0.0
       problems_per_expression: 5
   model_adapter:
+    config_provenance: author_blessed
     type: flash_ansr
     model_path: '{{ROOT}}/models/ansr-models/v23.0-20M-A-Y50K'
     evaluation_config:

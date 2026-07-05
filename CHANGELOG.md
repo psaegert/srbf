@@ -4,6 +4,26 @@ All notable changes to srbf are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-07-05
+
+### Added
+- **Config provenance (WP3):** every `model_adapter` block declares who chose the configuration
+  via `config_provenance: upstream_default | author_blessed | harness_tuned`, validated at config
+  load (`srbf.config.coerce_config_provenance`) and embedded in every result pickle's `__meta__`
+  next to the measured run provenance. All 76 shipped eval configs are labeled, test-gated to the
+  policy assignment (third-party baselines `upstream_default`; Flash-ANSR `author_blessed`; an
+  omitted key resolves to `harness_tuned` as the conservative reading).
+- **docs/fairness.md:** the written fairness policy — one protocol for every method, the
+  baselines-at-upstream-defaults policy (canonical home; models.md keeps the PySR worked example),
+  the three provenance labels, the blessed-config submission path for method authors (one blessed
+  configuration per method), and the rule that headline comparisons state every entrant's label.
+  Cross-linked from the nav, README/index documentation tables, models.md, adapters.md (PR
+  checklist), and the maxsize audit script.
+
+### Fixed
+- `ResultStore.extend` (and thus the constructor) now ignores the reserved `__meta__` key that
+  `save` embeds, so a raw loaded pickle round-trips without the caller stripping it first.
+
 ## [0.9.0] - 2026-07-04
 
 ### Added
