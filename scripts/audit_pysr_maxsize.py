@@ -39,7 +39,19 @@ PYSR_UNARY = {
 }
 PYSR_BINARY = {"+", "-", "*", "/", "^", "pow", "**"}
 COMPOUND_MULT_DIV = {"mult2", "mult3", "mult4", "mult5", "div2", "div3", "div4", "div5"}
-PYSR_LIBRARY_DEFAULT_MAXSIZE = 20  # pysr.PySRRegressor()'s own default (runs before srbf 0.6.1)
+# The upstream default is VERSION-DEPENDENT (pysr <=0.x: 20; pysr 1.5.x: 30), so read it from
+# the installed library; the fallback only applies when pysr is not importable here.
+def _installed_default_maxsize() -> tuple[int, str]:
+    try:
+        import inspect
+        import pysr
+        default = inspect.signature(pysr.PySRRegressor.__init__).parameters["maxsize"].default
+        return int(default), f"pysr {pysr.__version__} installed default"
+    except Exception:
+        return 20, "FALLBACK (pysr not importable here; pysr <=0.x default)"
+
+
+PYSR_LIBRARY_DEFAULT_MAXSIZE, MAXSIZE_SOURCE = _installed_default_maxsize()
 
 
 def node_count(tokens: list[str] | tuple[str, ...], operator_arity: dict[str, int],
@@ -93,7 +105,7 @@ def main() -> int:
         print(f"== {name}: n={n}  min={sizes[0]}  median={sizes[n // 2]}  p95={p95}  max={sizes[-1]}")
         hist = Counter(size for size in sizes)
         print("   sizes:", dict(sorted(hist.items())))
-        print(f"   > PySR default maxsize ({PYSR_LIBRARY_DEFAULT_MAXSIZE}): "
+        print(f"   > PySR default maxsize ({PYSR_LIBRARY_DEFAULT_MAXSIZE}, {MAXSIZE_SOURCE}): "
               f"{len(over)}/{n} ({100 * len(over) / n:.1f}%) not representable")
         for gt, size in sorted(over, key=lambda t: -t[1])[:10]:
             print(f"     {size:3d}  {gt}")
