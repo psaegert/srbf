@@ -111,10 +111,12 @@ Key fields: `niterations` (the compute-scaling axis, swept per run), `timeout_in
 Two properties of the adapter worth knowing:
 
 - **Complexity budget = PySR's own default.** [Benchmark policy](./fairness.md): baselines run
-  at their upstream defaults — a method's default hyperparameters are part of the method. Note what that default
-  implies here: at PySR's `maxsize=20`, 23/120 FastSRB and 743/1000 v23-val ground truths are not
-  representable under the adapter vocabulary at all (largest ground truth = 40 nodes; measure it
-  yourself with `python scripts/audit_pysr_maxsize.py`). This is a documented property of running
+  at their upstream defaults — a method's default hyperparameters are part of the method. The
+  default is version-dependent: `maxsize=30` since pysr 1.x (the version srbf's results use),
+  `maxsize=20` in pysr ≤0.x. At `maxsize=30`, 7/120 FastSRB (5.8%) and 102/1000 v23-val (10.2%)
+  ground truths are not representable under the adapter vocabulary at all (largest ground truth =
+  40 nodes; measure it against your installed pysr with `python scripts/audit_pysr_maxsize.py`,
+  which reads the installed default). This is a documented property of running
   PySR at its defaults on these benchmarks, not something srbf corrects. An optional `maxsize` key
   exists in the `model_adapter` block for side experiments only; headline results use the default.
 - **Warmup fit in `prepare()`** (`warmup: true` by default, srbf 0.6.1) — the first `fit` in a
