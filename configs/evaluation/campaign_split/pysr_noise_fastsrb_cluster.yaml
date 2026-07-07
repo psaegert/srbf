@@ -1,0 +1,28 @@
+# Campaign 2026-07 cluster leg (ppe=9) of configs/evaluation/noise_sweep/pysr_fastsrb.yaml
+# Split-eval pattern: solomon = 1-ppe timing anchor; cluster = 9-ppe quality (user
+# directive 2026-07-07). Knobs identical to the source config; only ppe + outputs differ.
+run:
+  data_source:
+    catalog: fastsrb
+    sampling:
+      n_support: 512
+      n_validation: 512
+      noise: !sweep
+        name: ladder
+        values: [0.0, 0.001, 0.01, 0.1]
+      problems_per_expression: 9
+  model_adapter:
+    config_provenance: upstream_default
+    type: pysr
+    timeout_in_seconds: 3600
+    niterations: 128
+    padding: false
+    use_mult_div_operators: false
+    simplipy_engine: dev_7-3
+  runner:
+    limit: null
+    save_every: 4
+    resume: true
+    output: !sweep
+      name: ladder
+      values: ['{{ROOT}}/results/evaluation/campaign_2026-07/cluster/noise_sweep/pysr/fastsrb/noise_0p000.pkl', '{{ROOT}}/results/evaluation/campaign_2026-07/cluster/noise_sweep/pysr/fastsrb/noise_0p001.pkl', '{{ROOT}}/results/evaluation/campaign_2026-07/cluster/noise_sweep/pysr/fastsrb/noise_0p010.pkl', '{{ROOT}}/results/evaluation/campaign_2026-07/cluster/noise_sweep/pysr/fastsrb/noise_0p100.pkl']

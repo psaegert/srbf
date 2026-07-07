@@ -1,0 +1,35 @@
+# Campaign 2026-07 solomon leg (ppe=1) of configs/evaluation/panels/pysr_parsimony_0p0032_support_val.yaml
+# Split-eval pattern: solomon = 1-ppe timing anchor; cluster = 9-ppe quality (user
+# directive 2026-07-07). Knobs identical to the source config; only ppe + outputs differ.
+# Pre-registered parsimony panel arm (docs/fairness.md: harness_tuned - we set the knob).
+# parsimony=0.0032 vs the upstream default 0.0 (pysr 1.5.x); 0.0032 = the pysr <=0.x default.
+# Derived from configs/evaluation/support_sweep/pysr_val.yaml; identical ladder/sampling, outputs under panels/.
+run:
+  data_source:
+    catalog: v23-val
+    sampling:
+      n_support: !sweep
+        name: ladder
+        values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
+      n_validation: 512
+      noise: 0.0
+      problems_per_expression: 1
+    target_size: 1000
+  model_adapter:
+    config_provenance: harness_tuned
+    type: pysr
+    parsimony: 0.0032
+    timeout_in_seconds: 3600
+    niterations: 128
+    padding: false
+    use_mult_div_operators: false
+    simplipy_engine: dev_7-3
+  runner:
+    limit: null
+    save_every: 4
+    resume: true
+    output: !sweep
+      name: ladder
+      values: ['{{ROOT}}/results/evaluation/campaign_2026-07/solomon/panels/pysr_parsimony_0p0032/support_sweep/pysr/val/support_00001.pkl', '{{ROOT}}/results/evaluation/campaign_2026-07/solomon/panels/pysr_parsimony_0p0032/support_sweep/pysr/val/support_00002.pkl', '{{ROOT}}/results/evaluation/campaign_2026-07/solomon/panels/pysr_parsimony_0p0032/support_sweep/pysr/val/support_00004.pkl', '{{ROOT}}/results/evaluation/campaign_2026-07/solomon/panels/pysr_parsimony_0p0032/support_sweep/pysr/val/support_00008.pkl',
+        '{{ROOT}}/results/evaluation/campaign_2026-07/solomon/panels/pysr_parsimony_0p0032/support_sweep/pysr/val/support_00016.pkl', '{{ROOT}}/results/evaluation/campaign_2026-07/solomon/panels/pysr_parsimony_0p0032/support_sweep/pysr/val/support_00032.pkl', '{{ROOT}}/results/evaluation/campaign_2026-07/solomon/panels/pysr_parsimony_0p0032/support_sweep/pysr/val/support_00064.pkl', '{{ROOT}}/results/evaluation/campaign_2026-07/solomon/panels/pysr_parsimony_0p0032/support_sweep/pysr/val/support_00128.pkl',
+        '{{ROOT}}/results/evaluation/campaign_2026-07/solomon/panels/pysr_parsimony_0p0032/support_sweep/pysr/val/support_00256.pkl', '{{ROOT}}/results/evaluation/campaign_2026-07/solomon/panels/pysr_parsimony_0p0032/support_sweep/pysr/val/support_00512.pkl', '{{ROOT}}/results/evaluation/campaign_2026-07/solomon/panels/pysr_parsimony_0p0032/support_sweep/pysr/val/support_01024.pkl', '{{ROOT}}/results/evaluation/campaign_2026-07/solomon/panels/pysr_parsimony_0p0032/support_sweep/pysr/val/support_02048.pkl']
