@@ -196,6 +196,14 @@ def _build_pysr_adapter(config: Mapping[str, Any]) -> PySRAdapter:
     niterations = coerce_int(config.get("niterations", 100), "model_adapter.niterations")
     padding = bool(config.get("padding", True))
     use_mult_div = bool(config.get("use_mult_div_operators", False))
+    # Panel/side-experiment knobs (docs/fairness.md): None/'best' = upstream defaults. Setting
+    # maxsize or parsimony makes a config harness_tuned; headline baselines never set them.
+    maxsize = coerce_optional_int(config.get("maxsize"), "model_adapter.maxsize")
+    parsimony = config.get("parsimony")
+    if parsimony is not None:
+        parsimony = coerce_float(parsimony, "model_adapter.parsimony")
+    model_selection = str(config.get("model_selection", "best"))
+    warmup = bool(config.get("warmup", True))
 
     return PySRAdapter(
         timeout_in_seconds=timeout,
@@ -203,6 +211,10 @@ def _build_pysr_adapter(config: Mapping[str, Any]) -> PySRAdapter:
         use_mult_div_operators=use_mult_div,
         padding=padding,
         simplipy_engine=resolve_simplipy_engine(config, adapter_name="pysr"),
+        warmup=warmup,
+        maxsize=maxsize,
+        model_selection=model_selection,
+        parsimony=parsimony,
     )
 
 

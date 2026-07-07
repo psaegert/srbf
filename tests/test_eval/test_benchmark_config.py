@@ -314,6 +314,42 @@ def test_build_pysr_adapter_requires_explicit_engine(monkeypatch):
         run_config.build_model_adapter({"type": "pysr", "niterations": 1})
 
 
+def test_build_pysr_adapter_panel_knobs_and_defaults(monkeypatch):
+    class DummyEngineLoader:
+        @staticmethod
+        def load(path, install=True):
+            return SimpleNamespace(name="engine", path=path)
+
+    class DummyAdapter:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    monkeypatch.setattr(run_config, "SimpliPyEngine", DummyEngineLoader)
+    monkeypatch.setattr(run_config, "PySRAdapter", DummyAdapter)
+
+    # defaults: upstream everything (None/None/'best'), warmup on
+    plain = run_config.build_model_adapter({"type": "pysr", "niterations": 2, "simplipy_engine": "dev_7-3"})
+    assert plain.kwargs["maxsize"] is None
+    assert plain.kwargs["parsimony"] is None
+    assert plain.kwargs["model_selection"] == "best"
+    assert plain.kwargs["warmup"] is True
+
+    # panel knobs plumbed through; parsimony coerced to float
+    panel = run_config.build_model_adapter({
+        "type": "pysr", "niterations": 2, "simplipy_engine": "dev_7-3",
+        "maxsize": 45, "parsimony": "0.0032", "model_selection": "accuracy", "warmup": False,
+    })
+    assert panel.kwargs["maxsize"] == 45
+    assert panel.kwargs["parsimony"] == 0.0032
+    assert panel.kwargs["model_selection"] == "accuracy"
+    assert panel.kwargs["warmup"] is False
+
+    with pytest.raises(ValueError, match="model_adapter.parsimony"):
+        run_config.build_model_adapter({
+            "type": "pysr", "niterations": 2, "simplipy_engine": "dev_7-3", "parsimony": "high",
+        })
+
+
 # --- end-to-end wiring smoke -------------------------------------------------------------
 
 def test_from_config_end_to_end_through_catalog_source(monkeypatch):

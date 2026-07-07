@@ -313,6 +313,8 @@ class PySRAdapter(EvaluationModelAdapter):
         simplipy_engine: Any,
         warmup: bool = True,
         maxsize: int | None = None,
+        model_selection: str = "best",
+        parsimony: float | None = None,
     ) -> None:
         _require_pysr()  # import lazily to avoid initializing Julia unless needed
 
@@ -322,6 +324,12 @@ class PySRAdapter(EvaluationModelAdapter):
         self.padding = padding
         self.simplipy_engine = simplipy_engine
         self.warmup = warmup
+        # Selection rule for get_best()/predict(); never touches the search. 'best' = PySR's own
+        # default. With the persisted hall of fame (record['equations']) other rules are also
+        # free offline re-scores; a config-driven arm remains the deployment-matched measurement.
+        self.model_selection = model_selection
+        # Parsimony changes the SEARCH loss; None = upstream default (version-dependent).
+        self.parsimony = parsimony
         # Benchmark policy: baselines run at their upstream defaults. maxsize=None leaves PySR's
         # own default in place (which cannot represent 23/120 FastSRB / 743/1000 v23-val ground
         # truths -- a documented property of the method, not ours to fix; see
@@ -336,6 +344,8 @@ class PySRAdapter(EvaluationModelAdapter):
             niterations=self.niterations,
             use_mult_div_operators=self.use_mult_div_operators,
             maxsize=self.maxsize,
+            model_selection=self.model_selection,
+            parsimony=self.parsimony,
         )
         if self.warmup:
             self._run_warmup_fit()
@@ -354,6 +364,8 @@ class PySRAdapter(EvaluationModelAdapter):
             niterations=1,
             use_mult_div_operators=self.use_mult_div_operators,
             maxsize=self.maxsize,
+            model_selection=self.model_selection,
+            parsimony=self.parsimony,
         )
         x = np.linspace(-1.0, 1.0, 32).reshape(-1, 1)
         y = 2.0 * x[:, 0] + 1.0
@@ -400,6 +412,16 @@ class PySRAdapter(EvaluationModelAdapter):
 
         record["y_pred"] = y_pred.copy()
         record["y_pred_val"] = y_pred_val.copy()
+
+        try:
+            # Persist the full Pareto hall of fame (plain columns only; sympy_format/
+            # lambda_format hold unpicklable lambdas). equations_ lives in memory and is
+            # overwritten by the next fit, so capture it here. ~3-15 KB per problem; makes
+            # every selection rule an offline re-score against the stored raw arrays.
+            hof = self._model.equations_
+            record["equations"] = hof[["complexity", "loss", "score", "equation"]].to_dict("records")
+        except Exception:  # pragma: no cover - persistence is best-effort, never blocks scoring
+            pass
 
         try:
             best = self._model.get_best()
@@ -757,6 +779,8 @@ def _create_pysr_model(
     niterations: int,
     use_mult_div_operators: bool,
     maxsize: int | None = None,
+    model_selection: str = "best",
+    parsimony: float | None = None,
 ) -> Any:
     additional_unary_operators: list[str]
     additional_extra_sympy_mappings: dict[str, Any]
@@ -787,16 +811,23 @@ def _create_pysr_model(
 
     PySR = _require_pysr()
 
-    # maxsize is only forwarded when explicitly set; None = PySR's own default (benchmark policy:
-    # baselines run at upstream defaults).
-    maxsize_kwargs = {} if maxsize is None else {"maxsize": maxsize}
+    # maxsize/parsimony are only forwarded when explicitly set; None = PySR's own default
+    # (benchmark policy: baselines run at upstream defaults, and the upstream default is
+    # version-dependent -- never hardcode it here). model_selection defaults to PySR's own
+    # 'best'; non-default values are panel knobs (config_provenance: harness_tuned).
+    optional_kwargs: dict[str, Any] = {}
+    if maxsize is not None:
+        optional_kwargs["maxsize"] = maxsize
+    if parsimony is not None:
+        optional_kwargs["parsimony"] = parsimony
 
     return PySR(
         temp_equation_file=True,
         delete_tempfiles=True,
         timeout_in_seconds=timeout_in_seconds,
         niterations=niterations,
-        **maxsize_kwargs,
+        model_selection=model_selection,
+        **optional_kwargs,
         unary_operators=[
             "neg",
             "abs",

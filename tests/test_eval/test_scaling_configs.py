@@ -54,15 +54,21 @@ def test_eval_config_uses_catalog_schema_and_resolves(config_path):
     runs = resolve_sweeps(config)
     assert runs, f"{config_path}: no runs"
 
+    # configs/evaluation/panels/ = pre-registered side-experiment arms where the maintainers set
+    # knobs (docs/fairness.md): they must carry harness_tuned and NEVER pose as headline configs.
+    in_panels = "panels" in config_path.parts
+
     for resolved, _labels in runs:
         run = resolved.get("run", resolved)
         ds = run["data_source"]
         ma = run["model_adapter"]
         assert ds.get("catalog") in VALID_CATALOGS, f"{config_path}: bad catalog {ds.get('catalog')!r}"
         assert ma.get("type") in VALID_ADAPTERS, f"{config_path}: bad adapter {ma.get('type')!r}"
-        assert ma.get("config_provenance") == EXPECTED_PROVENANCE[ma["type"]], \
+        expected = "harness_tuned" if in_panels else EXPECTED_PROVENANCE[ma["type"]]
+        assert ma.get("config_provenance") == expected, \
             f"{config_path}: config_provenance {ma.get('config_provenance')!r} does not match the " \
-            f"policy label {EXPECTED_PROVENANCE[ma['type']]!r} for adapter {ma['type']!r}"
+            f"policy label {expected!r} for adapter {ma['type']!r}" \
+            + (" (panels/ arms are harness_tuned by definition)" if in_panels else "")
         sampling = ds.get("sampling", {})
         assert {"n_support", "n_validation", "problems_per_expression"} <= set(sampling), \
             f"{config_path}: sampling missing keys ({sorted(sampling)})"

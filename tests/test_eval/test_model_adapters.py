@@ -143,7 +143,8 @@ class _FakePySRModel:
 def _patch_pysr_factory(monkeypatch):
     created: list[_FakePySRModel] = []
 
-    def fake_create(*, timeout_in_seconds, niterations, use_mult_div_operators, maxsize=None):
+    def fake_create(*, timeout_in_seconds, niterations, use_mult_div_operators, maxsize=None,
+                    model_selection="best", parsimony=None):
         model = _FakePySRModel(niterations, maxsize)
         created.append(model)
         return model

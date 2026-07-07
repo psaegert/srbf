@@ -4,6 +4,20 @@ All notable changes to srbf are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.1] - 2026-07-07
+
+### Added
+- **PySR panel knobs + hall-of-fame persistence** (the WP3 selection-rule panel prerequisites):
+  `model_selection` (default `'best'` = upstream), `parsimony` and the previously
+  documented-but-unplumbed `maxsize`/`warmup` keys now flow from the `model_adapter` config
+  block through `_build_pysr_adapter`; `maxsize`/`parsimony` are forwarded only when set
+  (None = the installed PySR's own default, never a hardcoded number). Every successful fit
+  persists the full Pareto hall of fame as `record['equations']`
+  (complexity/loss/score/equation; ~3-15 KB per problem), making any selection rule an
+  offline re-score against the stored raw arrays.
+- **`configs/evaluation/panels/` carve-out** in the config gate: pre-registered
+  side-experiment arms live there and must carry `config_provenance: harness_tuned`.
+
 ## [0.10.0] - 2026-07-05
 
 ### Added
