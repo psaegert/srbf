@@ -7,7 +7,7 @@ run:
       noise: 0.0
       problems_per_expression: !sweep
         name: ladder
-        values: [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 5, 5]
+        values: [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10]
   model_adapter:
     config_provenance: upstream_default
     type: pysr

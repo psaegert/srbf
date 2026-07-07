@@ -1,0 +1,29 @@
+# Pre-registered parsimony panel arm (docs/fairness.md: harness_tuned - we set the knob).
+# parsimony=0.032 vs the upstream default 0.0 (pysr 1.5.x); 0.0032 = the pysr <=0.x default.
+# Derived from configs/evaluation/noise_sweep/pysr_fastsrb.yaml; identical ladder/sampling, outputs under panels/.
+run:
+  data_source:
+    catalog: fastsrb
+    sampling:
+      n_support: 512
+      n_validation: 512
+      noise: !sweep
+        name: ladder
+        values: [0.0, 0.001, 0.01, 0.1]
+      problems_per_expression: 10
+  model_adapter:
+    config_provenance: harness_tuned
+    type: pysr
+    parsimony: 0.032
+    timeout_in_seconds: 3600
+    niterations: 128
+    padding: false
+    use_mult_div_operators: false
+    simplipy_engine: dev_7-3
+  runner:
+    limit: null
+    save_every: 4
+    resume: true
+    output: !sweep
+      name: ladder
+      values: ['{{ROOT}}/results/evaluation/panels/pysr_parsimony_0p032/noise_sweep/pysr/fastsrb/noise_0p000.pkl', '{{ROOT}}/results/evaluation/panels/pysr_parsimony_0p032/noise_sweep/pysr/fastsrb/noise_0p001.pkl', '{{ROOT}}/results/evaluation/panels/pysr_parsimony_0p032/noise_sweep/pysr/fastsrb/noise_0p010.pkl', '{{ROOT}}/results/evaluation/panels/pysr_parsimony_0p032/noise_sweep/pysr/fastsrb/noise_0p100.pkl']
