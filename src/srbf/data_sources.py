@@ -136,6 +136,8 @@ class CatalogSource(EvaluationDataSource):
             labels_decoded=(self.tokenizer.decode(input_ids, special_tokens="<constant>")
                             if (input_ids is not None and self.tokenizer is not None) else None),
             complexity=problem.complexity,
+            y_reference_support=getattr(problem, "y_reference_support", None),
+            y_reference_validation=getattr(problem, "y_reference_validation", None),
         )
         metadata.update(self._eval_fields(problem, skeleton, input_ids, row_index))
         return EvaluationSample(
@@ -192,6 +194,9 @@ class CatalogSource(EvaluationDataSource):
             "ground_truth_prefix": gt_prefix,
             "ground_truth_infix": gt_infix,
             "eval_row_index": row_index,
+            # exact | reference | none (symbolic-data 0.11.0); "exact" for older releases.
+            # Metric regimes key on this: never pool reference/none FVU with exact-GT rows.
+            "gt_kind": getattr(problem, "gt_kind", "exact"),
         }
 
     def _encode_input_ids(self, skeleton_tokens: list[str]) -> list[int]:

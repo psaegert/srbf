@@ -30,6 +30,12 @@ DEFAULT_NEGATIVES: dict[str, Any] = {
     'variables': [],
     'variable_names': [],
     'complexity': np.nan,
+    'y_ref': np.nan,
+    'y_ref_val': np.nan,
+    'reference_fvu_fit': np.inf,
+    'reference_fvu_val': np.inf,
+    'numeric_recovery_relative_fit': 0.0,   # RATE metric: failures count as misses
+    'numeric_recovery_relative_val': 0.0,
     'placeholder_reason': None,
     'benchmark_metadata': {},
     'ground_truth_infix': [],
@@ -231,6 +237,22 @@ def compute_derived_metrics(
                     r[f'only_approx_log10_fvu_{split}'] = np.where(
                         r[f'numeric_recovery_{split}'], -np.inf, r[f'log10_fvu_{split}'],
                     )
+
+                    # ── Reference-relative recovery (WP7, real-data catalogs) ──
+                    # reference_fvu = the accepted law's own FVU on the same target; recovery
+                    # relative to it: candidate at least as good as the reference (with the
+                    # float32-eps floor). On clean synthetic data reference_fvu == 0, the
+                    # threshold is eps, and the relative criterion reduces EXACTLY to
+                    # numeric_recovery (regression-tested identity).
+                    yref_key = f'y_ref{saved_split_name}'
+                    if yref_key in r:
+                        r[f'reference_fvu_{split}'] = np.array([
+                            fvu(yt, yr) for yt, yr in zip(r[y_key], r[yref_key])
+                        ])
+                        eps = float(np.finfo(np.float32).eps)
+                        ref = r[f'reference_fvu_{split}']
+                        thr = np.where(np.isfinite(ref), np.maximum(ref, eps), eps)
+                        r[f'numeric_recovery_relative_{split}'] = r[f'fvu_{split}'] <= thr
 
                 # ── Simplified skeletons ──────────────────────────
                 if simplify_fn is not None:

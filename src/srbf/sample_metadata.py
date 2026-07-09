@@ -49,6 +49,8 @@ def build_base_metadata(
     skeleton_hash: Sequence[str] | None = None,
     labels_decoded: Sequence[str] | None = None,
     complexity: int | None = None,
+    y_reference_support: np.ndarray | None = None,
+    y_reference_validation: np.ndarray | None = None,
     extra_fields: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Generate a metadata dictionary with consistent core fields."""
@@ -73,6 +75,12 @@ def build_base_metadata(
         "x_val": x_validation.copy(),
         "y_val": y_validation.copy(),
         "y_noisy_val": y_validation_noisy.copy(),
+        # Reference-law predictions on the same points (real-data catalogs, WP7). For synthetic
+        # problems the generating expression IS the reference, so the default is the clean y:
+        # reference_fvu is then exactly 0 and reference-relative recovery reduces to the
+        # machine-precision criterion.
+        "y_ref": (y_reference_support if y_reference_support is not None else y_support).copy(),
+        "y_ref_val": (y_reference_validation if y_reference_validation is not None else y_validation).copy(),
         "n_support": int(x_support.shape[0]),
         "labels_decoded": list(labels_decoded) if labels_decoded is not None else None,
         "complexity": complexity,

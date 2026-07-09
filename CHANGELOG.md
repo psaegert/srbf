@@ -4,6 +4,22 @@ All notable changes to srbf are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-07-10
+
+### Added
+- **Reference-relative recovery (WP7 P0, real-data catalogs):** `CatalogSource` bridges
+  symbolic-data 0.11.0's reference-law prediction arrays into per-row `y_ref`/`y_ref_val`
+  columns (defaulting to the clean targets for synthetic problems), and
+  `compute_derived_metrics` derives `reference_fvu_{fit,val}` (the accepted law's own FVU on
+  the same target) plus `numeric_recovery_relative_{fit,val}` (candidate FVU ≤
+  max(reference FVU, float32 eps); a RATE metric, failures = misses). On clean synthetic
+  catalogs the reference FVU is exactly 0 and the relative criterion reduces elementwise to
+  machine-precision `numeric_recovery` (regression-tested endpoint identity). The full R(ε)
+  profile remains deferred; it is pure post-processing over these columns.
+- **`gt_kind` bridged per row** (`exact` | `reference` | `none`; `exact` for older
+  symbolic-data releases): metric regimes key on it — reference/black-box FVU is never pooled
+  with exact-GT rows.
+
 ## [0.10.1] - 2026-07-07
 
 ### Added
