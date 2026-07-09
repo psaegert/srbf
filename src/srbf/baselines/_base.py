@@ -167,7 +167,7 @@ class _RefiningBaselineModel(BaseEstimator):
         if sample_count <= 1:
             y_variance = float('nan')
         else:
-            y_variance = float(np.var(y_np, axis=0, ddof=1).item())
+            y_variance = float(np.var(y_np, axis=0, ddof=0).item())  # ddof=0: match the evaluation-side FVU definition (flash-ansr 0.11.0)
 
         return X_np, y_np, sample_count, y_variance
 

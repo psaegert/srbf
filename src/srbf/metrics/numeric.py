@@ -15,6 +15,7 @@ def safe_divide(a: float, b: float) -> float:
     return a / b
 
 
+@np.errstate(over="ignore", under="ignore", invalid="ignore", divide="ignore")
 def fvu(y_true: np.ndarray | None, y_pred: np.ndarray | None) -> float:
     """Compute Fraction of Variance Unexplained between two arrays.
 
@@ -35,46 +36,71 @@ def fvu(y_true: np.ndarray | None, y_pred: np.ndarray | None) -> float:
     if y_pred is None or y_true is None:
         return np.inf
 
-    # Coerce first (lists/scalars), then guard degenerate inputs -> inf per the documented contract
-    # (a bare-list y_pred would make the old scalar np.isnan check raise an ambiguous-truth ValueError;
-    # empty arrays would crash the np.max reduction in the non-finite branch below).
-    y_pred = np.asarray(y_pred, dtype=np.float64).ravel()
-    y_true = np.asarray(y_true, dtype=np.float64).ravel()
+    # Coerce to float64 arrays up front. Non-numeric input (a bare scalar, a python list, or a
+    # None embedded in an object array from a placeholder row) is invalid -> worst (inf). Doing the
+    # conversion here -- rather than a pre-conversion np.isnan() guard -- fixes both a list-input
+    # crash and an object-dtype crash; a scalar/array nan is then caught by the finite-check below.
+    try:
+        y_pred = np.asarray(y_pred, dtype=np.float64).ravel()
+        y_true = np.asarray(y_true, dtype=np.float64).ravel()
+    except (TypeError, ValueError):
+        return np.inf
+
+    # Degenerate empty inputs -> inf per the documented contract (an empty array would crash the
+    # np.max reduction in the non-finite branch below).
     if y_pred.size == 0 or y_true.size == 0:
         return np.inf
 
-    # Ground truth finite but prediction not → infinite error
+    # Ground truth finite but prediction not (incl. a scalar/array nan) → infinite error
     if np.isfinite(y_true).all() and not np.isfinite(y_pred).all():
         return np.inf
 
-    # Scale by inverse MSE to avoid numerical issues
-    ss_res = np.mean((y_true - y_pred) ** 2)
-    if ss_res == 0:
-        return 0.0
-
-    # Overflow guard. A finite-but-DIVERGENT prediction can make the squared residual
-    # overflow to +inf; the 1/ss_res rescale below then drives scale -> 0, collapsing every
-    # term to 0 so safe_divide(0, 0) returns 0.0 and is_perfect_fit() spuriously fires
-    # (e.g. fvu([1,2,3,4,5], [1,2,3,4,1e167]) used to return 0.0). Decide good-vs-bad robustly
-    # by re-scaling the residual and total variance by the GT magnitude (an O(1) normalizer
-    # that never collapses a genuine divergence to zero). The finite-ss_res path is left
-    # byte-identical, so all non-pathological results are unchanged.
-    if not np.isfinite(ss_res):
+    def _normalized_by_gt() -> float:
+        # Scale-invariant fallback for when the 1/ss_res rescale would mis-behave: normalize the
+        # residual and total spread by the GT magnitude BEFORE squaring (an O(1) normalizer that
+        # never collapses a genuine divergence to 0 nor produces nan). Used by both the OVERFLOW
+        # guard (huge divergent residual) and the UNDERFLOW guard (tiny-magnitude data).
         denom = np.max(np.abs(y_true))
         if not np.isfinite(denom) or denom == 0.0:
             return np.inf
         ss_res_n = np.mean(((y_true - y_pred) / denom) ** 2)
         ss_tot_n = np.mean(((y_true - np.mean(y_true)) / denom) ** 2)
-        if not np.isfinite(ss_res_n):
+        if not np.isfinite(ss_res_n) or not np.isfinite(ss_tot_n):
             return np.inf
         return safe_divide(ss_res_n, ss_tot_n)
 
+    # Scale by inverse MSE to avoid numerical issues. The squarings below intentionally probe for
+    # overflow/underflow on extreme-magnitude inputs and branch on the finite-checks; the @np.errstate
+    # decorator silences the expected numpy warnings so callers never see spam.
+    ss_res = np.mean((y_true - y_pred) ** 2)
+    if ss_res == 0:
+        # Either a genuine perfect fit, OR squared-residual UNDERFLOW on tiny-magnitude data
+        # (e.g. |y| ~ 1e-180: (diff)^2 underflows to 0 -> would spuriously read as perfect).
+        # Distinguish by the un-squared max residual, which does not underflow.
+        if np.max(np.abs(y_true - y_pred)) == 0.0:
+            return 0.0                 # genuine perfect fit (byte-identical to before)
+        return _normalized_by_gt()     # underflow -> recover a scale-invariant result
+
+    # Overflow guard. A finite-but-DIVERGENT prediction can make the squared residual overflow to
+    # +inf; the 1/ss_res rescale below would then drive scale -> 0, collapsing every term so
+    # safe_divide(0, 0) returns 0.0 and is_perfect_fit() spuriously fires
+    # (e.g. fvu([1,2,3,4,5], [1,2,3,4,1e167]) used to return 0.0).
+    if not np.isfinite(ss_res):
+        return _normalized_by_gt()
+
     scale = 1.0 / ss_res
 
-    ss_res = np.mean((y_true * scale - y_pred * scale) ** 2)
-    ss_tot = np.mean((y_true * scale - np.mean(y_true * scale, keepdims=True)) ** 2)
+    ss_res_s = np.mean((y_true * scale - y_pred * scale) ** 2)
+    ss_tot_s = np.mean((y_true * scale - np.mean(y_true * scale, keepdims=True)) ** 2)
 
-    return safe_divide(ss_res, ss_tot)
+    # Underflow guard. A subnormal-but-finite ss_res makes `scale` huge enough that the rescaled
+    # sums overflow to +inf -> safe_divide(inf, inf) = nan (e.g. |y| ~ 1e-154). FVU must never be
+    # nan; fall back to the GT-magnitude normalization. (Never fires for normal-magnitude data, so
+    # the finite path stays byte-identical.)
+    if not np.isfinite(ss_res_s) or not np.isfinite(ss_tot_s):
+        return _normalized_by_gt()
+
+    return safe_divide(ss_res_s, ss_tot_s)
 
 
 def log10_fvu(y_true: np.ndarray | None, y_pred: np.ndarray | None) -> float:

@@ -4,6 +4,31 @@ All notable changes to srbf are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.1] - 2026-07-10
+
+FVU hardening parity with flash-ansr 0.11.0 (the 2026-07 reconciliation): the evaluation-side `fvu` adopts
+the research-hardened implementation, baseline selection variance switches to `ddof=0`, and the flash-ansr
+pin floor moves to `>=0.11` (corrected scoring semantics; 0.10-era selection scores are not comparable).
+
+### Changed
+- **`metrics.numeric.fvu` hardened** (finite paths byte-identical): squared-residual UNDERFLOW guard on
+  tiny-magnitude targets (un-squared max-residual check distinguishes a genuine perfect fit from
+  underflow; scale-invariant `_normalized_by_gt` fallback shared with the overflow guard), rescaled-sum
+  underflow guard (FVU is never NaN), object-dtype/list inputs -> `inf` via coercion `try/except`,
+  `ss_tot` finite check in the normalizer, and `@np.errstate` to silence the intentionally-probed numpy
+  warnings. Keeps 0.11.0's empty-array guard and `bool()` cast.
+- **Baseline selection variance `ddof=1 -> ddof=0`** (`baselines/_base.py`), matching the evaluation-side
+  FVU definition and flash-ansr 0.11.0's selection variance, so selection-FVU == eval-FVU family-wide.
+- **BREAKING (transitive): `flash-ansr>=0.11`.** Forces the corrected candidate scoring (scale-invariant
+  `compute_fvu`, `score_from_fvu` ranking fix). Numbers produced against 0.10.x are not comparable by
+  default; see the flash-ansr 0.11.0 changelog.
+
+### Added
+- `tests/fixtures/golden_baseline_results.json` re-recorded under 0.11 scoring semantics (the ddof=0 shift scales every selection FVU by n/(n-1); verified quantitatively before re-recording).
+- `tests/test_fvu_correctness.py`: the cross-path FVU consistency suite (scale-invariance, tiny-magnitude
+  regression, eval-never-NaN, non-finite-is-worst, input contract) ported from the research repo; asserts
+  `srbf.metrics.numeric.fvu` and `flash_ansr.scoring.compute_fvu` agree on the reduced inputs.
+
 ## [0.11.0] - 2026-07-10
 
 ### Added
