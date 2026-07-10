@@ -12,7 +12,11 @@ from srbf.result_processing import compute_derived_metrics, derive_metrics
 # flash_ansr config loader) parses without first needing an explicit register_sweep_yaml() call.
 register_sweep_yaml()
 
-__version__ = "0.6.0"
+try:  # single-source from dist metadata (was a hardcoded string that drifted: said 0.6.0 at dist 0.11.1)
+    from importlib.metadata import version as _v
+    __version__ = _v("srbf")
+except Exception:  # editable/unusual installs without metadata
+    __version__ = "0.11.1"
 
 __all__ = [
     "Benchmark",
