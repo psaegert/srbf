@@ -9,7 +9,6 @@ from contextlib import nullcontext
 from typing import Any, Callable, Iterable, Mapping, Optional, TYPE_CHECKING
 
 import numpy as np
-import simplipy
 from srbf.baselines import BruteForceModel, LampleChartonModel
 from simplipy import normalize_skeleton, normalize_expression
 # sympy is imported lazily inside the two baseline adapters that use it (E2E, NeSymReS);
@@ -796,14 +795,14 @@ def _create_pysr_model(
             "div5(x) = x/5",
         ]
         additional_extra_sympy_mappings = {
-            "mult2": simplipy.operators.mult2,
-            "mult3": simplipy.operators.mult3,
-            "mult4": simplipy.operators.mult4,
-            "mult5": simplipy.operators.mult5,
-            "div2": simplipy.operators.div2,
-            "div3": simplipy.operators.div3,
-            "div4": simplipy.operators.div4,
-            "div5": simplipy.operators.div5,
+            "mult2": lambda x: 2 * x,
+            "mult3": lambda x: 3 * x,
+            "mult4": lambda x: 4 * x,
+            "mult5": lambda x: 5 * x,
+            "div2": lambda x: x / 2,
+            "div3": lambda x: x / 3,
+            "div4": lambda x: x / 4,
+            "div5": lambda x: x / 5,
         }
     else:
         additional_unary_operators = []
@@ -858,13 +857,13 @@ def _create_pysr_model(
         + additional_unary_operators,
         binary_operators=["+", "-", "*", "/", "^"],
         extra_sympy_mappings={
-            "pow2": simplipy.operators.pow2,
-            "pow3": simplipy.operators.pow3,
-            "pow4": simplipy.operators.pow4,
-            "pow5": simplipy.operators.pow5,
-            "pow1_2": simplipy.operators.pow1_2,
+            "pow2": lambda x: x ** 2,
+            "pow3": lambda x: x ** 3,
+            "pow4": lambda x: x ** 4,
+            "pow5": lambda x: x ** 5,
+            "pow1_2": lambda x: x ** (1 / 2),
             "pow1_3": lambda x: x ** (1 / 3),
-            "pow1_4": simplipy.operators.pow1_4,
+            "pow1_4": lambda x: x ** (1 / 4),
             "pow1_5": lambda x: x ** (1 / 5),
         }
         | additional_extra_sympy_mappings,
