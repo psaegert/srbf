@@ -46,7 +46,6 @@ def test_real_data_reference_threshold():
     x = np.linspace(0, 1, 128).reshape(-1, 1).astype(np.float32)
     y = (2 * x + rng.normal(0, 0.1, x.shape)).astype(np.float32)   # measured data
     reference = 2 * x                                              # the accepted law
-    better = 2 * x + 0.01 * np.sin(9 * x)                          # closer to y than the law? keep simple:
     results = _snapshot([y, y], [reference.copy(), (y + 5.0)], y_ref=[reference, reference])
     compute_derived_metrics(results, operator_arity={}, test_sets=["t"])
     r = results["m"]["results"]["t"][0]

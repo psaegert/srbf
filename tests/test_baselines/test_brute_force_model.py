@@ -8,7 +8,7 @@ from srbf.baselines import BruteForceModel
 
 @pytest.fixture(scope="module")
 def simplipy_engine() -> SimpliPyEngine:
-    return SimpliPyEngine.load("dev_7-3", install=True)
+    return SimpliPyEngine.load("acj-4-3", install=True)
 
 
 def _build_toy_pool(engine: SimpliPyEngine) -> LampleChartonCatalog:
