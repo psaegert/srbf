@@ -40,6 +40,8 @@ PYSR_BINARY = {"+", "-", "*", "/", "^", "pow", "**"}
 COMPOUND_MULT_DIV = {"mult2", "mult3", "mult4", "mult5", "div2", "div3", "div4", "div5"}
 # The upstream default is VERSION-DEPENDENT (pysr <=0.x: 20; pysr 1.5.x: 30), so read it from
 # the installed library; the fallback only applies when pysr is not importable here.
+
+
 def _installed_default_maxsize() -> tuple[int, str]:
     try:
         import inspect

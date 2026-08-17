@@ -29,6 +29,7 @@ BANNED = {
     r"curve read": "retired vocabulary: the split is declared-vs-free, say 'descriptive' (same interpolation)",
 }
 
+
 def js_strings(source: str) -> list[str]:
     """Double/single-quoted string literals of explorer.js, comments stripped (crudely but
     sufficiently: full-line comments and block comments; inline '//' inside strings is safe
@@ -52,12 +53,15 @@ def js_strings(source: str) -> list[str]:
     # ("method's") would make a single-quote scan pair across strings and swallow code
     return re.findall(r'"((?:[^"\\]|\\.)*)"', text)
 
+
 def svg_geometry(text: str) -> str:
     """The drawable content of an SVG: root tag, <style>, and comments stripped, whitespace
     normalised. Used to keep the inline visual abstract identical to the brand file."""
     text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
     text = re.sub(r"<style>.*?</style>", "", text, flags=re.S)
-    body = re.search(r"<svg[^>]*>(.*)</svg>", text, flags=re.S).group(1)
+    svg_match = re.search(r"<svg[^>]*>(.*)</svg>", text, flags=re.S)
+    assert svg_match is not None, "no <svg> body found"
+    body = svg_match.group(1)
     body = re.sub(r"\s+", " ", body).strip()
     return re.sub(r"> <", "><", body)
 
@@ -104,6 +108,7 @@ def main() -> int:
         return 1
     print(f"copy lint clean ({len(BANNED)} banned patterns checked on 2 surfaces)")
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())
