@@ -143,7 +143,7 @@ class _FakePySRModel:
 def _patch_pysr_factory(monkeypatch):
     created: list[_FakePySRModel] = []
 
-    def fake_create(*, timeout_in_seconds, niterations, use_mult_div_operators, maxsize=None,
+    def fake_create(*, timeout_in_seconds, niterations, maxsize=None,
                     model_selection="best", parsimony=None):
         model = _FakePySRModel(niterations, maxsize)
         created.append(model)
@@ -159,7 +159,7 @@ def test_pysr_adapter_prepare_runs_a_warmup_fit_by_default(monkeypatch):
     # must pay it on a THROWAWAY model so problem 0's fit_time starts warm.
     created = _patch_pysr_factory(monkeypatch)
     adapter = model_adapters.PySRAdapter(
-        timeout_in_seconds=10, niterations=5, use_mult_div_operators=False,
+        timeout_in_seconds=10, niterations=5,
         padding=True, simplipy_engine=_DummyEngine())
     adapter.prepare()
 
@@ -176,7 +176,7 @@ def test_pysr_adapter_prepare_runs_a_warmup_fit_by_default(monkeypatch):
 def test_pysr_adapter_warmup_can_be_disabled(monkeypatch):
     created = _patch_pysr_factory(monkeypatch)
     adapter = model_adapters.PySRAdapter(
-        timeout_in_seconds=10, niterations=5, use_mult_div_operators=False,
+        timeout_in_seconds=10, niterations=5,
         padding=True, simplipy_engine=_DummyEngine(), warmup=False)
     adapter.prepare()
 
