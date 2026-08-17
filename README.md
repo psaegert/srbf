@@ -31,11 +31,10 @@ metrics, over `symbolic-data` catalogs. It depends one-way on `flash-ansr` (`srb
 `nesymres`, `e2e`, `lample_charton`, `brute_force`) are reference examples, not a closed set. See the
 [adapter contribution guide](docs/adapters.md).
 
-> **Status: 0.6, data-layer redesign.** The benchmark seam (`srbf.core` Protocols + the `Benchmark`
-> driver) is model-agnostic, the data source is always a `symbolic-data` catalog, and adapters are a
-> thin mapper over each model (flash-ansr via `FlashANSR.infer()`). Inline `!sweep` config
-> cross-products and multi-draw bootstrap reporting (`bootstrap_report` / `draw_distribution`) ship in
-> this release.
+The benchmark seam (`srbf.core` Protocols + the `Benchmark` driver) is model-agnostic, the data
+source is always a `symbolic-data` catalog, and adapters are a thin mapper over each model
+(flash-ansr via `FlashANSR.infer()`). Inline `!sweep` config cross-products and multi-draw
+bootstrap reporting (`bootstrap_report` / `draw_distribution`) are built in.
 
 ## Install
 
