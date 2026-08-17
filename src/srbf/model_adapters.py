@@ -307,7 +307,6 @@ class PySRAdapter(EvaluationModelAdapter):
         *,
         timeout_in_seconds: int,
         niterations: int,
-        use_mult_div_operators: bool,
         padding: bool,
         simplipy_engine: Any,
         warmup: bool = True,
@@ -319,7 +318,6 @@ class PySRAdapter(EvaluationModelAdapter):
 
         self.timeout_in_seconds = timeout_in_seconds
         self.niterations = niterations
-        self.use_mult_div_operators = use_mult_div_operators
         self.padding = padding
         self.simplipy_engine = simplipy_engine
         self.warmup = warmup
@@ -341,7 +339,6 @@ class PySRAdapter(EvaluationModelAdapter):
         self._model = _create_pysr_model(
             timeout_in_seconds=self.timeout_in_seconds,
             niterations=self.niterations,
-            use_mult_div_operators=self.use_mult_div_operators,
             maxsize=self.maxsize,
             model_selection=self.model_selection,
             parsimony=self.parsimony,
@@ -361,7 +358,6 @@ class PySRAdapter(EvaluationModelAdapter):
         warmup_model = _create_pysr_model(
             timeout_in_seconds=self.timeout_in_seconds,
             niterations=1,
-            use_mult_div_operators=self.use_mult_div_operators,
             maxsize=self.maxsize,
             model_selection=self.model_selection,
             parsimony=self.parsimony,
@@ -776,37 +772,10 @@ def _create_pysr_model(
     *,
     timeout_in_seconds: int,
     niterations: int,
-    use_mult_div_operators: bool,
     maxsize: int | None = None,
     model_selection: str = "best",
     parsimony: float | None = None,
 ) -> Any:
-    additional_unary_operators: list[str]
-    additional_extra_sympy_mappings: dict[str, Any]
-    if use_mult_div_operators:
-        additional_unary_operators = [
-            "mult2(x) = 2*x",
-            "mult3(x) = 3*x",
-            "mult4(x) = 4*x",
-            "mult5(x) = 5*x",
-            "div2(x) = x/2",
-            "div3(x) = x/3",
-            "div4(x) = x/4",
-            "div5(x) = x/5",
-        ]
-        additional_extra_sympy_mappings = {
-            "mult2": lambda x: 2 * x,
-            "mult3": lambda x: 3 * x,
-            "mult4": lambda x: 4 * x,
-            "mult5": lambda x: 5 * x,
-            "div2": lambda x: x / 2,
-            "div3": lambda x: x / 3,
-            "div4": lambda x: x / 4,
-            "div5": lambda x: x / 5,
-        }
-    else:
-        additional_unary_operators = []
-        additional_extra_sympy_mappings = {}
 
     PySR = _require_pysr()
 
@@ -827,6 +796,10 @@ def _create_pysr_model(
         niterations=niterations,
         model_selection=model_selection,
         **optional_kwargs,
+        # The operator set is flash-ansr v24.0's 23-operator vocabulary, exactly
+        # (owner ruling 2026-08-17): 17 unaries + {+, -, *, /, pow, rootn}. The
+        # legacy hyper-operator families (multN/divN, powN/pow1_N) existed only
+        # for parity with the pre-v24 flash-ansr vocabulary and are gone.
         unary_operators=[
             "neg",
             "abs",
@@ -845,28 +818,20 @@ def _create_pysr_model(
             "atanh",
             "exp",
             "log",
-            "pow2(x) = x^2",
-            "pow3(x) = x^3",
-            "pow4(x) = x^4",
-            "pow5(x) = x^5",
-            r"pow1_2(x::T) where {T} = x >= 0 ? T(x^(1/2)) : T(NaN)",
-            r"pow1_3(x::T) where {T} = x >= 0 ? T(x^(1/3)) : T(-((-x)^(1/3)))",
-            r"pow1_4(x::T) where {T} = x >= 0 ? T(x^(1/4)) : T(NaN)",
-            r"pow1_5(x::T) where {T} = x >= 0 ? T(x^(1/5)) : T(-((-x)^(1/5)))",
-        ]
-        + additional_unary_operators,
-        binary_operators=["+", "-", "*", "/", "^"],
+        ],
+        binary_operators=[
+            "+", "-", "*", "/", "^",
+            # IEEE-754 rootn, matching simplipy.operators.rootn's table: odd
+            # integer index = signed root (total on R), even = principal (NaN on
+            # negatives), negative index = reciprocal (via the negative exponent),
+            # index 0 or non-integer = NaN.
+            r"rootn(x::T, n::T) where {T} = (isfinite(n) && n == round(n) && n != 0) ? ((x >= 0) ? abs(x)^(one(T)/n) : (isodd(Int(abs(n))) ? -(abs(x)^(one(T)/n)) : T(NaN))) : T(NaN)",
+        ],
         extra_sympy_mappings={
-            "pow2": lambda x: x ** 2,
-            "pow3": lambda x: x ** 3,
-            "pow4": lambda x: x ** 4,
-            "pow5": lambda x: x ** 5,
-            "pow1_2": lambda x: x ** (1 / 2),
-            "pow1_3": lambda x: x ** (1 / 3),
-            "pow1_4": lambda x: x ** (1 / 4),
-            "pow1_5": lambda x: x ** (1 / 5),
-        }
-        | additional_extra_sympy_mappings,
+            # principal branch on export, following this file's existing
+            # convention for fractional powers
+            "rootn": lambda x, n: x ** (1 / n),
+        },
     )
 
 

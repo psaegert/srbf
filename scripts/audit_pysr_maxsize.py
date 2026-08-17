@@ -9,11 +9,10 @@ Benchmark policy: baselines run at their upstream defaults, so this audit DOCUME
 PySR's default budget implies on these benchmarks (the numbers belong next to PySR's
 results); it does not justify overriding the default.
 
-Node counting mirrors ``srbf.model_adapters._create_pysr_model``'s vocabulary: the
-powers/roots ``pow2..pow5`` / ``pow1_2..pow1_5`` are single-node unary operators; the
-compound ``mult2..mult5`` / ``div2..div5`` are single-node only when
-``use_mult_div_operators=True`` (the shipped evaluation configs use ``False``, so they
-expand to two nodes, e.g. ``mult3 x -> * 3 x``); every other token (variables,
+Node counting mirrors ``srbf.model_adapters._create_pysr_model``'s vocabulary
+(flash-ansr v24.0's 23 operators; the legacy hyper-operator families are gone).
+Historic corpus tokens from the removed families count at their expanded
+spelling (two nodes, e.g. ``mult3 x -> * 3 x``); every other token (variables,
 ``<constant>``, numeric literals) is one node.
 
 Ground truths audited:
@@ -55,18 +54,18 @@ PYSR_LIBRARY_DEFAULT_MAXSIZE, MAXSIZE_SOURCE = _installed_default_maxsize()
 
 
 def node_count(tokens: list[str] | tuple[str, ...], operator_arity: dict[str, int],
-               *, use_mult_div_operators: bool = False) -> int:
+               ) -> int:
     """PySR node count of a prefix expression under the adapter vocabulary.
 
-    One node per token, except compound mult/div tokens which cost two nodes when
-    ``use_mult_div_operators`` is False (binary op + literal). Any OPERATOR token
+    One node per token, except legacy compound mult/div tokens, which cost two
+    nodes (binary op + literal). Any OPERATOR token
     (known to the engine) that the PySR vocabulary lacks raises, so unmapped
     operators can never be silently under-counted.
     """
     total = 0
     for token in tokens:
         if token in COMPOUND_MULT_DIV:
-            total += 1 if use_mult_div_operators else 2
+            total += 2  # hyper-operator spellings are gone; binary op + literal
         elif token in PYSR_UNARY or token in PYSR_BINARY:
             total += 1
         elif token in operator_arity:

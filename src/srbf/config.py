@@ -195,7 +195,11 @@ def _build_pysr_adapter(config: Mapping[str, Any]) -> PySRAdapter:
     timeout = coerce_int(config.get("timeout_in_seconds", 60), "model_adapter.timeout_in_seconds")
     niterations = coerce_int(config.get("niterations", 100), "model_adapter.niterations")
     padding = bool(config.get("padding", True))
-    use_mult_div = bool(config.get("use_mult_div_operators", False))
+    if bool(config.get("use_mult_div_operators", False)):
+        raise ValueError(
+            "model_adapter.use_mult_div_operators: the hyper-operator families were "
+            "removed (they existed only for parity with the pre-v24 flash-ansr "
+            "vocabulary); the PySR operator set is now flash-ansr v24.0's, fixed")
     # Panel/side-experiment knobs (docs/fairness.md): None/'best' = upstream defaults. Setting
     # maxsize or parsimony makes a config harness_tuned; headline baselines never set them.
     maxsize = coerce_optional_int(config.get("maxsize"), "model_adapter.maxsize")
@@ -208,7 +212,6 @@ def _build_pysr_adapter(config: Mapping[str, Any]) -> PySRAdapter:
     return PySRAdapter(
         timeout_in_seconds=timeout,
         niterations=niterations,
-        use_mult_div_operators=use_mult_div,
         padding=padding,
         simplipy_engine=resolve_simplipy_engine(config, adapter_name="pysr"),
         warmup=warmup,
