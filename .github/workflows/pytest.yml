@@ -27,10 +27,13 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install srbf + test deps (resolves flash-ansr>=0.10 + runtime deps from PyPI)
+      - name: Install srbf + test deps
         run: |
           python -m pip install --upgrade pip
           pip install -e '.[analysis]'
+          # No released flash-ansr supports simplipy >= 0.13 yet; test against its main
+          # until the next flash-ansr release, then remove this line and raise the pin.
+          pip install 'flash-ansr @ git+https://github.com/psaegert/flash-ansr@main'
           pip install pytest pytest-cov
 
       - name: Fetch FastSRB benchmark
