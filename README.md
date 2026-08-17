@@ -13,6 +13,10 @@
 
 # srbf: Symbolic Regression Benchmark Framework
 
+## Publications
+
+- Saegert & Köthe 2026, _Breaking the Simplification Bottleneck in Amortized Neural Symbolic Regression_ (ICML 2026) [https://arxiv.org/abs/2602.08885](https://arxiv.org/abs/2602.08885)
+
 <p align="center">
   <a href="https://psaegert.github.io/srbf/">
     <img alt="srbf visual abstract: benchmarks and methods go through one fair protocol (same expressions, wall-clock budgets, paired statistics, pre-declared corrected comparisons) into the interactive explorer with four-state verdicts."
