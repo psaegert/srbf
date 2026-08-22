@@ -18,7 +18,7 @@ from typing import Any, Iterator, Mapping, Sequence
 
 import numpy as np
 
-from simplipy import normalize_skeleton
+from symbolic_data.token_ops import normalize_skeleton
 
 from srbf.core import EvaluationDataSource, EvaluationSample
 from srbf.sample_metadata import build_base_metadata

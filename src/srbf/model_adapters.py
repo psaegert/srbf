@@ -10,7 +10,7 @@ from typing import Any, Callable, Iterable, Mapping, Optional, TYPE_CHECKING
 
 import numpy as np
 from srbf.baselines import BruteForceModel, LampleChartonModel
-from simplipy import normalize_skeleton, normalize_expression
+from symbolic_data.token_ops import normalize_expression, normalize_skeleton
 # sympy is imported lazily inside the two baseline adapters that use it (E2E, NeSymReS);
 # it is an optional `[baselines]` extra, not a core runtime dependency.
 

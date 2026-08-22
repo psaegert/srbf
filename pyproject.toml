@@ -14,8 +14,8 @@ license-files = ["LICEN[CS]E*", "THIRD_PARTY_LICENSES*"]
 dependencies = [
     "scipy>=1.9",        # paired statistics: Wilcoxon signed-rank (zero_method pinned in reporting)
     "flash-ansr>=0.13,<1.0",   # one-way dep; >=0.11 forces the corrected scoring (scale-invariant FVU + ranking fix); provides FlashANSR.infer() + the CandidateLedger join
-    "simplipy>=0.12,<0.14",   # DIRECT: baselines + normalize_*; acj artifacts pair with >=0.12, cap per its compat policy
-    "symbolic-data>=0.10", # DIRECT: catalog / ProblemSource data layer (CatalogSource wraps it)
+    "simplipy>=0.14,<0.15",   # DIRECT: baselines; acj artifacts pair per its compat policy (0.14 hard cut: pin the pair)
+    "symbolic-data>=0.15", # DIRECT: catalog / ProblemSource data layer (CatalogSource wraps it) + normalize_* (token_ops, the 0.14 carve-back)
     "numpy>=1.24",
     "pandas>=1.3",       # runtime: baselines imported top-level by model_adapters.py
     "scikit-learn>=1.0", # runtime: baselines BaseEstimator, same reason
