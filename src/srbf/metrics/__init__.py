@@ -3,6 +3,7 @@
 from srbf.metrics.bootstrap import bootstrapped_metric_ci
 from srbf.metrics.numeric import (
     fvu,
+    fvu_exact,
     is_perfect_fit,
     log10_fvu,
     naninfmean,
@@ -15,6 +16,7 @@ __all__ = [
     "bootstrapped_metric_ci",
     "build_tree",
     "fvu",
+    "fvu_exact",
     "is_perfect_fit",
     "log10_fvu",
     "naninfmean",

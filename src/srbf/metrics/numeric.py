@@ -1,6 +1,7 @@
 """Numeric evaluation metrics for comparing predictions to ground truth."""
 from __future__ import annotations
 
+from fractions import Fraction
 import numpy as np
 
 
@@ -101,6 +102,67 @@ def fvu(y_true: np.ndarray | None, y_pred: np.ndarray | None) -> float:
         return _normalized_by_gt()
 
     return safe_divide(ss_res_s, ss_tot_s)
+
+
+def fvu_exact(y_true: np.ndarray | None, y_pred: np.ndarray | None) -> float:
+    """EXACT rational FVU -- the reference :func:`fvu` is certified against, not a faster path.
+
+    Every finite float IS a rational number, so :class:`fractions.Fraction` evaluates
+    ``sum((y-yhat)^2) / sum((y-mean)^2)`` with **no rounding at any step** and no exponent range at
+    all: the FastSRB span (``|y|`` from 1e-30 to 5e36, whose float32 squares overflow and whose
+    float64 squares do not) is arithmetically indistinguishable from unit-scale data here. Use it to
+    settle a verdict, never in a hot loop -- it is ~1e3x slower than the float64 path.
+
+    The motivating defect (measured 2026-08-26): a benchmark harness that divided by a float32
+    ``np.var(y)`` scored ``fvu = finite/inf = 0.0`` on 12 of 110 problems and awarded each a free
+    "perfect symbolic recovery". Rows whose float64 FVU lands within a decade of a decision
+    threshold should be re-settled here before the verdict is quoted.
+
+    Parameters
+    ----------
+    y_true : np.ndarray or None
+        Ground truth values.
+    y_pred : np.ndarray or None
+        Predicted values.
+
+    Returns
+    -------
+    float
+        FVU value. Returns ``np.inf`` when inputs are invalid or non-finite, ``0.0`` for an exactly
+        constant target fitted exactly (matching :func:`fvu`'s degenerate-variance contract).
+    """
+    if y_pred is None or y_true is None:
+        return np.inf
+
+    try:
+        yp = np.asarray(y_pred, dtype=np.float64).ravel()
+        yt = np.asarray(y_true, dtype=np.float64).ravel()
+    except (TypeError, ValueError):
+        return np.inf
+
+    if yp.size == 0 or yt.size == 0 or yp.size != yt.size:
+        return np.inf
+    if not (np.isfinite(yt).all() and np.isfinite(yp).all()):
+        return np.inf
+
+    true_q = [Fraction(float(v)) for v in yt]
+    pred_q = [Fraction(float(v)) for v in yp]
+    n = len(true_q)
+
+    mean_q = sum(true_q) / n
+    ss_res = sum((a - b) * (a - b) for a, b in zip(true_q, pred_q))
+    ss_tot = sum((a - mean_q) * (a - mean_q) for a in true_q)
+
+    if ss_tot == 0:
+        # Degenerate (constant) target: only an EXACT reproduction is perfect. Same contract as
+        # flash_ansr.scoring.compute_fvu -- any absolute tolerance would reintroduce scale-dependence.
+        return 0.0 if ss_res == 0 else float(np.inf)
+
+    ratio = ss_res / ss_tot
+    try:
+        return float(ratio)
+    except OverflowError:
+        return float(np.inf)
 
 
 def log10_fvu(y_true: np.ndarray | None, y_pred: np.ndarray | None) -> float:
