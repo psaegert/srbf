@@ -6,7 +6,7 @@ Motivation (see ../STANDARD_EVAL.md Section 7):
     pickle is ~105-170 B/candidate (measured on 24 real result pickles) and, worse, ~1 GB/problem LIVE as
     Python objects -> RAM, not disk, is the binding constraint.
   - Fix: store ONLY unique candidates (dedup is already free, pre-refinement) in a COMPACT COLUMNAR layout
-    (uint8 tokens since vocab=83<256, float32 scalars, uint8 flags), and STREAM: flush ONE problem at a time
+    (uint16 tokens, float64 scalars, uint8 flags), and STREAM: flush ONE problem at a time
     to its own compressed file, never holding the full pool or accumulating across problems.
 
 This module is dependency-light (numpy only) and is wired into FlashANSRAdapter (model_adapters.py):
@@ -14,14 +14,22 @@ setting candidate_store_dir enables the save-all THOROUGH tier, streaming the fu
 via a per-problem CandidateStoreWriter instead of keeping only the single best candidate.
 
 Layout: one compressed .npz per (problem) under <out_dir>/, columns:
-  tokens   uint8   [sum(len)]      flat concatenation of all candidates' token-ids
+  tokens   uint16  [sum(len)]      flat concatenation of all candidates' token-ids
   offsets  int64   [n_cand + 1]    tokens[offsets[i]:offsets[i+1]] is candidate i  (CSR-style)
-  fvu      float32 [n_cand]
-  log_prob float32 [n_cand]
+  fvu      float64 [n_cand]
+  log_prob float64 [n_cand]
   valid    uint8   [n_cand]        1/0
   fit_status uint8 [n_cand]        small enum (0=ok, 1=failed, ...)
-  const_vals  float32 [sum(n_const)]   (optional) flat fitted constants
+  const_vals  float64 [sum(n_const)]   (optional) flat fitted constants
   const_off   int64   [n_cand + 1]     (optional) CSR offsets into const_vals
+
+Widened 2026-08-27 for the f64 + byte-token migration. `tokens` was uint8, which a byte-alphabet
+vocabulary (95 -> 335) overflows; `fvu` and `const_vals` were float32, which silently FLUSHED a
+genuine FVU of ~1e-50 to 0.0 on disk -- it then read back as a perfect recovery. Readers must key
+off each column's stored dtype: files written before this date carry uint8/float32 and stay
+readable, since np.load reports the dtype it saved. Re-measured after the widening:
+**57.9 compressed B/candidate** at the 50k-unique self-test shape (the pre-widening
+figure this docstring used to quote is no longer comparable).
 Per-problem files keep both write-time and read-time (analysis) memory bounded to one problem.
 """
 from __future__ import annotations
@@ -39,8 +47,8 @@ class CandidateStoreWriter:
     def __init__(self, out_dir: str | Path, *, vocab_size: int) -> None:
         self.out_dir = Path(out_dir)
         self.out_dir.mkdir(parents=True, exist_ok=True)
-        if vocab_size > 256:
-            raise ValueError(f"vocab_size {vocab_size} > 256 does not fit uint8; bump the token dtype")
+        if vocab_size > 65536:
+            raise ValueError(f"vocab_size {vocab_size} > 65536 does not fit uint16; bump the token dtype")
         self.vocab_size = vocab_size
         # RESUME-SAFE: the eval loop is restartable (resume:true, save_every), so a writer is
         # re-created mid-campaign over a dir that already holds earlier problems' files. Rebuild the
@@ -82,19 +90,21 @@ class CandidateStoreWriter:
         if not (len(fvu) == len(log_prob) == n):
             raise ValueError("fvu / log_prob length must match token_lists")
 
-        # CSR-pack the ragged token streams as flat uint8 + int64 offsets (no padding).
+        # CSR-pack the ragged token streams as flat uint16 + int64 offsets (no padding).
         offsets = np.empty(n + 1, dtype=np.int64)
         offsets[0] = 0
         np.cumsum([len(t) for t in token_lists], out=offsets[1:])
-        tokens = np.empty(int(offsets[-1]), dtype=np.uint8)
+        tokens = np.empty(int(offsets[-1]), dtype=np.uint16)
         for i, t in enumerate(token_lists):
-            tokens[offsets[i]:offsets[i + 1]] = np.asarray(t, dtype=np.uint8)
+            tokens[offsets[i]:offsets[i + 1]] = np.asarray(t, dtype=np.uint16)
 
         cols: dict[str, np.ndarray] = {
             "tokens": tokens,
             "offsets": offsets,
-            "fvu": np.asarray(fvu, dtype=np.float32),
-            "log_prob": np.asarray(log_prob, dtype=np.float32),
+            # float64, not float32: an FVU of ~1e-50 (reachable on the extreme-magnitude laws)
+            # flushes to 0.0 in float32 and reads back as a PERFECT RECOVERY.
+            "fvu": np.asarray(fvu, dtype=np.float64),
+            "log_prob": np.asarray(log_prob, dtype=np.float64),
             "valid": (np.ones(n, np.uint8) if valid is None else np.asarray(valid, np.uint8)),
             "fit_status": (np.zeros(n, np.uint8) if fit_status is None else np.asarray(fit_status, np.uint8)),
         }
@@ -102,9 +112,9 @@ class CandidateStoreWriter:
             coff = np.empty(n + 1, dtype=np.int64)
             coff[0] = 0
             np.cumsum([len(c) for c in constants], out=coff[1:])
-            cvals = np.empty(int(coff[-1]), dtype=np.float32)
+            cvals = np.empty(int(coff[-1]), dtype=np.float64)
             for i, c in enumerate(constants):
-                cvals[coff[i]:coff[i + 1]] = np.asarray(c, dtype=np.float32)
+                cvals[coff[i]:coff[i + 1]] = np.asarray(c, dtype=np.float64)
             cols["const_vals"] = cvals
             cols["const_off"] = coff
 
@@ -200,11 +210,11 @@ def _self_test() -> None:
 
     rng = np.random.default_rng(0)  # test-only; NOT a data seed
     n_cand = 50_000              # conservative c=1M unique-count placeholder
-    vocab = 83
+    vocab = 335                  # the byte-alphabet vocabulary; exercises the uint16 path
     lengths = np.clip(rng.normal(23.6, 4.0, n_cand).round().astype(int), 4, 35)
-    token_lists = [rng.integers(0, vocab, L, dtype=np.uint8).tolist() for L in lengths]
-    fvu = rng.random(n_cand).astype(np.float32)
-    log_prob = (-rng.random(n_cand) * 50).astype(np.float32)
+    token_lists = [rng.integers(0, vocab, L, dtype=np.uint16).tolist() for L in lengths]
+    fvu = rng.random(n_cand).astype(np.float64)
+    log_prob = (-rng.random(n_cand) * 50).astype(np.float64)
     constants = [rng.random(int(k)).tolist() for k in rng.integers(0, 3, n_cand)]
 
     with tempfile.TemporaryDirectory() as d:
@@ -221,7 +231,7 @@ def _self_test() -> None:
         r = CandidateStoreReader(d)
         blk = next(iter(r))
         assert blk["fvu"].shape[0] == n_cand
-        assert np.array_equal(CandidateStoreReader.candidate_tokens(blk, 7), np.asarray(token_lists[7], np.uint8))
+        assert np.array_equal(CandidateStoreReader.candidate_tokens(blk, 7), np.asarray(token_lists[7], np.uint16))
         assert np.allclose(blk["fvu"], fvu) and np.allclose(blk["log_prob"], log_prob)
         print("round-trip OK (tokens + scalars match);  manifest total_candidates =", man["total_candidates"])
 

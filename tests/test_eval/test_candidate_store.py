@@ -25,7 +25,7 @@ def test_ledger_round_trips_through_writer_reader(tmp_path):
     )
     w.close()
     block = next(iter(CandidateStoreReader(tmp_path)))
-    np.testing.assert_array_equal(CandidateStoreReader.candidate_tokens(block, 0), np.array(A, np.uint8))
+    np.testing.assert_array_equal(CandidateStoreReader.candidate_tokens(block, 0), np.array(A, np.uint16))
     np.testing.assert_array_equal(block["fit_status"], [FIT_OK, FIT_FAILED])
     assert np.isnan(block["fvu"][1])
 
@@ -110,3 +110,33 @@ def test_adapter_capture_is_best_effort_on_error(tmp_path):
         adapter._capture_ledger({"eval_row_index": 0}, broken)
     # no crash; nothing written
     assert not list(tmp_path.glob("problem_*.npz"))
+
+
+def test_byte_alphabet_vocabulary_is_representable(tmp_path):
+    """The f64 + byte-token migration takes the vocabulary 95 -> 335.
+
+    The writer used to bound vocab_size at 256 (uint8 tokens) and raise. That raise is caught by
+    FlashANSRAdapter._capture_ledger's `except Exception: warnings.warn(...)`, so crossing the
+    bound produced an EMPTY candidate store for a whole campaign while every eval row reported
+    success. Token ids above 255 must round-trip.
+    """
+    w = CandidateStoreWriter(tmp_path, vocab_size=335)
+    high = [334, 256, 255, 0]
+    w.write_problem(0, [high], [0.5], [-1.0])
+    w.close()
+    block = next(iter(CandidateStoreReader(tmp_path)))
+    got = CandidateStoreReader.candidate_tokens(block, 0)
+    assert got.dtype == np.uint16
+    np.testing.assert_array_equal(got, np.array(high, np.uint16))
+
+
+def test_tiny_fvu_survives_the_store(tmp_path):
+    """float32 flushed a genuine FVU of ~1e-50 to 0.0, which reads back as a PERFECT recovery."""
+    tiny = 1e-50
+    w = CandidateStoreWriter(tmp_path, vocab_size=335)
+    w.write_problem(0, [[1, 2]], [tiny], [-1.0], constants=[[1.18885916993963e-52]])
+    w.close()
+    block = next(iter(CandidateStoreReader(tmp_path)))
+    assert block["fvu"].dtype == np.float64
+    assert block["fvu"][0] == tiny and block["fvu"][0] != 0.0
+    assert block["const_vals"][0] == 1.18885916993963e-52

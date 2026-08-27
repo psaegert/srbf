@@ -1,6 +1,8 @@
 """Model adapter implementations for the evaluation engine."""
 from __future__ import annotations
 
+from pathlib import Path
+
 import time
 import warnings
 import functools
@@ -80,6 +82,18 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         self.model.to(self.device).eval()
         if self.refiner_workers is not None:
             self.model.refiner_workers = self.refiner_workers
+
+        # Fail HERE, once, before the campaign starts -- not per problem inside _capture_ledger,
+        # whose `except Exception: warnings.warn(...)` would turn a store that cannot represent
+        # this vocabulary into an EMPTY candidate store for the whole run while every eval row
+        # still reports success. Measured 2026-08-27: the byte-alphabet vocabulary (95 -> 335)
+        # crosses the writer's old uint8 bound and did exactly that.
+        if self.candidate_store_dir is not None:
+            from srbf.candidate_store import CandidateStoreWriter
+            vocab_size = len(self.model.tokenizer)
+            probe = Path(self.candidate_store_dir)
+            probe.mkdir(parents=True, exist_ok=True)
+            CandidateStoreWriter(probe, vocab_size=vocab_size).close()
 
     def evaluate_sample(self, sample: EvaluationSample) -> EvaluationResult:
         """Serial fit + evaluate via the model's own public inference API.

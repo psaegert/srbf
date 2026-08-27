@@ -291,10 +291,19 @@ class TestRegressionAndScope:
         assert fvu_ddof1 == pytest.approx(fvu_ddof0 * (7 - 1) / 7, rel=1e-12)
 
     def test_recovery_metric_independent_of_scoring_module(self):
-        # the scoring fix cannot move is_perfect_fit: numeric.py does not import scoring.py
+        # the scoring fix cannot move is_perfect_fit: numeric.py does not import scoring.py.
+        # Checked as an IMPORT, not a substring: the substring form also convicted a comment
+        # that merely names flash_ansr.scoring to explain a shared contract (2026-08-26).
+        import ast
         import srbf.metrics.numeric as numeric_mod
-        src = inspect.getsource(numeric_mod)
-        assert "scoring" not in src
+        tree = ast.parse(inspect.getsource(numeric_mod))
+        imported = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(a.name for a in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imported.add(node.module)
+        assert not any("scoring" in m for m in imported), imported
         # and is_perfect_fit on the tiny-y bug data is correctly False (eval is already right)
         y = 1e-32 * np.array([1.0, 2.0, 3.0, 4.0, 5.0])
         assert not is_perfect_fit(y, np.full_like(y, y.mean()))
