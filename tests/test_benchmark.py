@@ -45,7 +45,7 @@ class _PassthroughAdapter:
 
 
 def _dummy(idx: int) -> EvaluationSample:
-    data = np.zeros((2, 1), dtype=np.float32)
+    data = np.zeros((2, 1), dtype=np.float64)
     return EvaluationSample(x_support=data, y_support=data, x_validation=data, y_validation=data,
                             metadata={"sample_id": idx})
 

@@ -15,10 +15,10 @@ from srbf.data_sources import CatalogSource
 def _problem(skeleton, expression, variables, complexity, *, eq_id=None, n_support=8, n_val=4,
              is_placeholder=False):
     nv = max(1, len(variables))
-    xs = np.arange(n_support * nv, dtype=np.float32).reshape(n_support, nv)
-    ys = np.arange(n_support, dtype=np.float32).reshape(n_support, 1)
-    xv = np.zeros((n_val, nv), dtype=np.float32)
-    yv = np.zeros((n_val, 1), dtype=np.float32)
+    xs = np.arange(n_support * nv, dtype=np.float64).reshape(n_support, nv)
+    ys = np.arange(n_support, dtype=np.float64).reshape(n_support, 1)
+    xv = np.zeros((n_val, nv), dtype=np.float64)
+    yv = np.zeros((n_val, 1), dtype=np.float64)
     return Problem(
         x_support=xs, y_support=ys, y_support_noisy=ys.copy(),
         x_validation=xv, y_validation=yv, y_validation_noisy=yv.copy(),

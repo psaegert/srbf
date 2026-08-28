@@ -365,8 +365,8 @@ def test_from_config_end_to_end_through_catalog_source(monkeypatch):
     from symbolic_data import Problem, ProblemSource
 
     def _p(i: int) -> Problem:
-        x = np.arange(8, dtype=np.float32).reshape(8, 1)
-        y = (x * i).astype(np.float32)
+        x = np.arange(8, dtype=np.float64).reshape(8, 1)
+        y = (x * i).astype(np.float64)
         return Problem(
             x_support=x, y_support=y, y_support_noisy=y.copy(),
             x_validation=x[:2], y_validation=y[:2], y_validation_noisy=y[:2].copy(),
@@ -434,8 +434,8 @@ def test_run_persists_config_provenance_into_meta(tmp_path, monkeypatch):
     import numpy as np
     from symbolic_data import Problem, ProblemSource
 
-    x = np.arange(8, dtype=np.float32).reshape(8, 1)
-    y = x.astype(np.float32)
+    x = np.arange(8, dtype=np.float64).reshape(8, 1)
+    y = x.astype(np.float64)
     problem = Problem(
         x_support=x, y_support=y, y_support_noisy=y.copy(),
         x_validation=x[:2], y_validation=y[:2], y_validation_noisy=y[:2].copy(),
