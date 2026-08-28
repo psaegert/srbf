@@ -188,9 +188,9 @@ class CatalogSource(EvaluationDataSource):
         return {
             "input_ids": np.asarray(input_ids, dtype=np.int64) if input_ids is not None else None,
             "labels": np.asarray(input_ids[1:], dtype=np.int64) if input_ids is not None else None,
-            # float64: the only coercion between symbolic-data's Problem and the eval record,
-            # and the srbf-side twin of the generation gate. At float32 it silently
-            # re-narrowed constants the generator had just stopped narrowing.
+            # The only coercion between symbolic-data's Problem and the eval record: it
+            # matches the generator's storage width, so constants reach the benchmark at
+            # the precision they were realized at.
             "constants": [np.asarray(problem.constants, dtype=np.float64)] if problem.constants else [],
             "benchmark_eq_id": problem.eq_id,
             "variable_names": list(problem.variables) if problem.variables else None,

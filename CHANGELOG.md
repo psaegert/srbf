@@ -4,6 +4,15 @@ All notable changes to srbf are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **Constants reach the evaluation record at float64.** The coercion between a
+  `symbolic_data.Problem` and the eval record matches the generator's storage width, so a
+  constant is benchmarked at the precision it was realized at. Fit-quality tolerances are
+  unchanged: `is_perfect_fit` and the reference-FVU noise floor still use float32 epsilon,
+  which is a bar on agreement, not a storage width.
+
 ## [0.11.1] - 2026-07-10
 
 FVU hardening parity with flash-ansr 0.11.0 (the 2026-07 reconciliation): the evaluation-side `fvu` adopts
