@@ -29,6 +29,15 @@ The equal-treatment machinery is implemented, not aspirational:
   measurement-noise margins derived from each method's own repeated draws and pre-declared,
   multiplicity-corrected comparison families ([paired](./paired.md)).
 
+## Decontamination is verified, not assumed
+
+`python -m srbf decontamination -t <training catalog yaml>` probes every benchmark problem against
+the training catalog's registered holdout — the same `is_held_out` family quotient the training-time
+sampler rejects candidate draws with — and reports per-catalog coverage
+(`srbf.decontamination.verify_decontamination`). The check is fail-closed: a problem whose tokens
+cannot be probed is reported as UNVERIFIED, never as covered, and the exit code is 0 only when every
+probe-able benchmark problem is verified held out.
+
 ## Baselines run at their upstream defaults
 
 > **Benchmark policy: baselines run at their upstream defaults.** A method's default

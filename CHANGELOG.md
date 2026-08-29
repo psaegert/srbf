@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Decontamination verification** (`python -m srbf decontamination -t <training catalog yaml>
+  [-b name ...] [-o report.json]`; library: `srbf.decontamination.verify_decontamination`): probes
+  every benchmark problem against the training catalog's registered holdout via `is_held_out` (the
+  training-time sampler's own family quotient) and reports per-catalog coverage
+  (total / held / missed / black-box / unparseable). Fail-closed: a problem whose tokens cannot be
+  probed counts as UNVERIFIED, never as covered; exit code 0 only when every probe-able benchmark
+  problem is verified held out.
+
 ### Changed
 - **Constants reach the evaluation record at float64.** The coercion between a
   `symbolic_data.Problem` and the eval record matches the generator's storage width, so a
