@@ -24,7 +24,7 @@ driver.
 
 ```yaml
 data_source:
-  catalog: v23-val              # a catalog name/ref, an HF 'user/repo:name' ref, a local path, or an inline config
+  catalog: fastsrb              # a catalog name/ref, an HF 'user/repo:name' ref, a local path, or an inline config
   sampling:                     # the symbolic-data usage policy (all fields optional)
     n_support: 512              # points the model fits on
     n_validation: 1024          # held-out points (omit for catalogs that carry their own validation)
@@ -32,7 +32,7 @@ data_source:
     problems_per_expression: 10 # distinct sampled problems per ground-truth expression
     method: iterate             # frozen catalog -> 'iterate'; open generative catalog -> 'procedural'
   holdouts:                     # optional decontamination / filters (see below)
-    - exclude: lample-charton-v23
+    - exclude: my-training-catalog
     - filter: {finite: true}
   target_size: 1000             # cap the number of rows (also the run total when runner.limit is null)
 ```
@@ -63,16 +63,10 @@ data_source:
 
 | name | what it is | kind |
 |---|---|---|
-| `v23-val` | the frozen, sha-pinned v23 validation set | fixed set (deterministic; iterate) |
 | `fastsrb` | the FastSRB benchmark equations | fixed set (samples `(X, y)` per equation) |
-| `lample-charton-v23` | the generative v23 training recipe | open generative (streams skeletons) |
 
-`v23-val` is the drift-safe evaluation set: it is deterministic and sha256-pinned on Hugging Face, so
-"val" means the same problems across models and machines without any per-run seeding or pinned-list
-bookkeeping. Both a FastSRB config (`*_fastsrb.yaml`, `catalog: fastsrb`) and a validation config
-(`*_val.yaml`, `catalog: v23-val`) ship for the model and baseline configs under
-`configs/evaluation/{scaling,noise_sweep,support_sweep}/`. Evaluating on both is the standard dual
-protocol.
+Every shipped evaluation config (`*_fastsrb.yaml` under `configs/evaluation/`) evaluates on
+`catalog: fastsrb`.
 
 FastSRB is [Martinek 2025](https://arxiv.org/abs/2508.14481) (MIT-licensed; attribution in
 `THIRD_PARTY_LICENSES`).
@@ -81,7 +75,7 @@ FastSRB is [Martinek 2025](https://arxiv.org/abs/2508.14481) (MIT-licensed; attr
 
 The `catalog` field (and any `holdouts.exclude` reference) accepts four forms:
 
-1. **A name**, e.g. `v23-val` or `fastsrb`, optionally version-pinned as `name@version`. It is looked up in the `symbolic-data` asset manifest on Hugging Face (`psaegert/symbolic-data-assets` by default), fetched with `hf_hub_download`, integrity-checked against the manifest's `sha256`, and cached. A fresh install needs network on first use; subsequent runs hit the cache.
+1. **A name**, e.g. `fastsrb`, optionally version-pinned as `name@version`. It is looked up in the `symbolic-data` asset manifest on Hugging Face (`psaegert/symbolic-data-assets` by default), fetched with `hf_hub_download`, integrity-checked against the manifest's `sha256`, and cached. A fresh install needs network on first use; subsequent runs hit the cache.
 2. **A third-party HF ref**, `user/repo:name` or `user/repo:name@version`, against another repo's manifest, so anyone can publish and load their own catalogs.
 3. **A local path**, e.g. `{{ROOT}}/configs/my_catalog.yaml` — used as-is, no download, for fully offline operation.
 4. **An inline config** — a mapping written directly in the YAML (e.g. a generative `{type: lample_charton, ...}` spec), so the catalog is defined in place rather than referenced.
@@ -116,8 +110,8 @@ You have three routes, depending on the data you have.
 2. **A local catalog config.** Write a `symbolic-data` catalog config (expressions plus their per-variable sampling spec) and point `data_source.catalog` at the local file path. The catalog samples `(X, y)` itself, so the support/validation split and noise come from `sampling`.
 3. **An inline catalog.** For a one-off, write the catalog spec directly under `data_source.catalog` as a mapping.
 
-Copy a shipped config (e.g. `configs/evaluation/scaling/v23.0-3M_fastsrb.yaml` or `..._val.yaml`),
-swap the `catalog` reference, and run it as in [docs/running.md](running.md). The complete catalog
+Copy a shipped config (e.g. `configs/evaluation/scaling/pysr_fastsrb.yaml`), swap the `catalog`
+reference, and run it as in [docs/running.md](running.md). The complete catalog
 authoring reference lives in the [`symbolic-data`](https://github.com/psaegert/symbolic-data) docs.
 
 ## Outputs

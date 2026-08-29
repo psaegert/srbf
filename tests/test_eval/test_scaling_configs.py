@@ -13,7 +13,7 @@ from srbf.sweep import Sweep, register_sweep_yaml, resolve_sweeps
 
 EVAL_CONFIG_DIR = Path(__file__).resolve().parents[2] / "configs" / "evaluation"
 VALID_ADAPTERS = {"flash_ansr", "pysr", "nesymres", "e2e", "lample_charton", "brute_force"}
-VALID_CATALOGS = {"v23-val", "fastsrb"}
+VALID_CATALOGS = {"fastsrb"}
 # The fairness policy, enforced structurally (docs/fairness.md): third-party baselines ship at
 # their upstream defaults; flash-ansr configs are author-blessed (the benchmark and Flash-ANSR
 # share authors, which is exactly what the label discloses); benchmark-native references are

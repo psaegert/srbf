@@ -16,9 +16,9 @@ The equal-treatment machinery is implemented, not aspirational:
 - **Same problems.** Every method is evaluated on the same ground-truth expressions from the same
   catalogs, and comparisons pair per expression by `benchmark_eq_id`, collapsing each method's
   independently sampled draws within an expression to one per-expression value
-  ([paired → the pairing contract](./paired.md#the-pairing-contract)). Decontamination holdouts
-  (e.g. `exclude: lample-charton-v23`) are declared on the data source and apply to the data,
-  never per method ([benchmarks](./benchmarks.md)).
+  ([paired → the pairing contract](./paired.md#the-pairing-contract)). When a config declares
+  decontamination holdouts, they live on the data source and apply to the data, never per method
+  ([benchmarks](./benchmarks.md)).
 - **Same timing conditions.** The serial driver evaluates one problem at a time, so per-problem
   wall-clock is uncontended; one-time costs (model loads, Julia precompile) are paid in `prepare()`
   outside the timed path, for every adapter alike.

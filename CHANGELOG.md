@@ -15,6 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   probed counts as UNVERIFIED, never as covered; exit code 0 only when every probe-able benchmark
   problem is verified held out.
 
+### Removed
+- **Retired evaluation configs cut from `configs/evaluation/`** (91 files; git history is the
+  archive): every config referencing a retired catalog (`v23-val`, `lample-charton-v23` — both
+  unresolvable under the pinned `simplipy>=0.14` / `symbolic-data>=0.15`), pinning a flash-ansr
+  v23 checkpoint (current flash-ansr refuses these at load), or requesting the retired
+  `method: beam_search`. The 33 surviving configs are the `fastsrb` baseline arms (PySR,
+  NeSymReS, E2E). The schema gate (`tests/test_eval/test_scaling_configs.py`) now accepts
+  `fastsrb` as the only shipped catalog.
+
 ### Changed
 - **Constants reach the evaluation record at float64.** The coercion between a
   `symbolic_data.Problem` and the eval record matches the generator's storage width, so a
