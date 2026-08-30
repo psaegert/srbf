@@ -13,9 +13,9 @@ license-files = ["LICEN[CS]E*", "THIRD_PARTY_LICENSES*"]
 
 dependencies = [
     "scipy>=1.9",        # paired statistics: Wilcoxon signed-rank (zero_method pinned in reporting)
-    "flash-ansr>=0.13,<1.0",   # one-way dep; >=0.11 forces the corrected scoring (scale-invariant FVU + ranking fix); provides FlashANSR.infer() + the CandidateLedger join
-    "simplipy>=0.14,<0.15",   # DIRECT: baselines; acj artifacts pair per its compat policy (0.14 hard cut: pin the pair)
-    "symbolic-data>=0.15", # DIRECT: catalog / ProblemSource data layer (CatalogSource wraps it) + normalize_* (token_ops, the 0.14 carve-back)
+    "flash-ansr>=0.13,<1.0",   # RELEASE BLOCKER: PyPI flash-ansr (<=0.13.0) pins simplipy<0.14, so this dependency set cannot resolve from PyPI until the simplipy-0.14-compatible flash-ansr releases; local installs use the editable compat branch. one-way dep; >=0.11 forces the corrected scoring (scale-invariant FVU + ranking fix); provides FlashANSR.infer() + the CandidateLedger join
+    "simplipy>=0.14.1,<0.15", # DIRECT: baselines; acj artifacts pair per its compat policy (0.14.1 = the line the v25 stack is qualified against)
+    "symbolic-data>=0.16,<0.17", # DIRECT: catalog / ProblemSource data layer (CatalogSource wraps it) + normalize_* (token_ops) + the holdout family key decontamination probes (0.16 surface)
     "numpy>=1.24",
     "pandas>=1.3",       # runtime: baselines imported top-level by model_adapters.py
     "scikit-learn>=1.0", # runtime: baselines BaseEstimator, same reason

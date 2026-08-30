@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Dependency floors rise to the qualified v25 stack**: `simplipy>=0.14.1,<0.15` and
+  `symbolic-data>=0.16,<0.17` (the decontamination verb probes through symbolic-data's 0.16
+  holdout family key). Publishing this as 0.12.0 waits on the simplipy-0.14-compatible
+  flash-ansr release: PyPI flash-ansr (<=0.13.0) pins `simplipy<0.14`, so the set cannot
+  resolve from PyPI until then.
+
 ### Added
 - **Decontamination verification** (`python -m srbf decontamination -t <training catalog yaml>
   [-b name ...] [-o report.json]`; library: `srbf.decontamination.verify_decontamination`): probes
