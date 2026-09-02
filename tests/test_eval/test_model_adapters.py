@@ -182,3 +182,23 @@ def test_pysr_adapter_warmup_can_be_disabled(monkeypatch):
 
     assert len(created) == 1
     assert created[0].n_fits == 0
+
+
+class TestEmissionConfig:
+    """The promptable emission format reaches the adapter and fails fast on bad values."""
+
+    def test_emission_default_is_the_unflagged_training_mode(self) -> None:
+        from srbf.model_adapters import FlashANSRAdapter
+        adapter = FlashANSRAdapter(object())
+        assert adapter.emission == "constants"
+
+    def test_emission_skeleton_is_stored(self) -> None:
+        from srbf.model_adapters import FlashANSRAdapter
+        adapter = FlashANSRAdapter(object(), emission="skeleton")
+        assert adapter.emission == "skeleton"
+
+    def test_emission_rejects_unknown_values_before_model_load(self) -> None:
+        import pytest
+        from srbf.model_adapters import FlashANSRAdapter
+        with pytest.raises(ValueError, match="emission"):
+            FlashANSRAdapter(object(), emission="masked")

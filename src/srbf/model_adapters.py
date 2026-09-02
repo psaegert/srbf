@@ -53,11 +53,20 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         *,
         device: str = "cpu",
         complexity: str | list[int | float] | int | float = "none",
+        emission: str = "constants",
         refiner_workers: int | None = None,
         candidate_store_dir: str | None = None,
     ) -> None:
         self.model = model
         self.device = device
+        # The promptable emission FORMAT the model is directed to use ('constants' is the
+        # unflagged training default; 'skeleton' sends <mask_all> so the refiner fits every
+        # slot from p0 noise; 'fittable' sends <mask_fittable>). Validated here for the same
+        # reason as `complexity`: a bad string must not wait for the first problem.
+        if emission not in ("constants", "skeleton", "fittable"):
+            raise ValueError(
+                f"emission must be 'constants', 'skeleton' or 'fittable'; got {emission!r}")
+        self.emission = emission
         # Fail fast on an unknown mode: a bad string would otherwise only surface on the first problem,
         # AFTER the (slow) model load. Keep the accepted strings in sync with `_resolve_complexity`.
         if isinstance(complexity, str) and complexity not in ("none", "ground_truth"):
@@ -122,6 +131,7 @@ class FlashANSRAdapter(EvaluationModelAdapter):
                     variable_names=variable_names if variable_names is not None else "auto",
                     X_val=x_val,
                     complexity=complexity_value,
+                    emission=self.emission,
                     predict_val=True,
                     top_k=1,
                 )

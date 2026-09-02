@@ -131,6 +131,7 @@ def _build_flash_ansr_adapter(config: Mapping[str, Any]) -> FlashANSRAdapter:
     if "evaluation" in eval_cfg:
         eval_cfg = eval_cfg["evaluation"]
 
+    emission = str(config.get("emission", "constants"))
     evaluation_overrides = config.get("evaluation_overrides")
     if evaluation_overrides is not None:
         if not isinstance(evaluation_overrides, Mapping):
@@ -181,6 +182,7 @@ def _build_flash_ansr_adapter(config: Mapping[str, Any]) -> FlashANSRAdapter:
         model,
         device=adapter_device,
         complexity=complexity,
+        emission=emission,
         refiner_workers=refiner_workers,
         # substitute_root_path like every other path field (output/model_path/...); without it a
         # {{ROOT}}-relative candidate_store_dir silently writes to a literal "{{ROOT}}/" dir (the capture
