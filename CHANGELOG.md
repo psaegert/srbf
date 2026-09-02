@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   behaviour). Rides on `FlashANSR.load(refiner_scope=)`.
 
 ### Changed
+- **The default `emission` is `'fittable'`** (was `'constants'`): the application mode --
+  the model spells the typed literals and leaves every fittable constant as a placeholder,
+  which the refiner fits from random inits. Configs that want the unflagged format say
+  `emission: constants` explicitly.
+
+### Changed
 - **Dependency floors rise to the qualified v25 stack**: `simplipy>=0.14.1,<0.15` and
   `symbolic-data>=0.16,<0.17` (the decontamination verb probes through symbolic-data's 0.16
   holdout family key). Publishing this as 0.12.0 waits on the simplipy-0.14-compatible

@@ -131,7 +131,7 @@ def _build_flash_ansr_adapter(config: Mapping[str, Any]) -> FlashANSRAdapter:
     if "evaluation" in eval_cfg:
         eval_cfg = eval_cfg["evaluation"]
 
-    emission = str(config.get("emission", "constants"))
+    emission = str(config.get("emission", "fittable"))
     evaluation_overrides = config.get("evaluation_overrides")
     if evaluation_overrides is not None:
         if not isinstance(evaluation_overrides, Mapping):

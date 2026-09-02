@@ -53,15 +53,18 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         *,
         device: str = "cpu",
         complexity: str | list[int | float] | int | float = "none",
-        emission: str = "constants",
+        emission: str = "fittable",
         refiner_workers: int | None = None,
         candidate_store_dir: str | None = None,
     ) -> None:
         self.model = model
         self.device = device
-        # The promptable emission FORMAT the model is directed to use ('constants' is the
-        # unflagged training default; 'skeleton' sends <mask_all> so the refiner fits every
-        # slot from p0 noise; 'fittable' sends <mask_fittable>). Validated here for the same
+        # The promptable emission FORMAT the model is directed to use. 'fittable' (default,
+        # the application mode -- owner ruling 2026-09-02) sends <mask_fittable>: the model
+        # spells the typed literals and leaves every fittable constant as a placeholder for the
+        # refiner; 'skeleton' sends <mask_all> so the refiner fits every slot from p0 noise;
+        # 'constants' is the unflagged training format (the model spells everything). Validated
+        # here for the same
         # reason as `complexity`: a bad string must not wait for the first problem.
         if emission not in ("constants", "skeleton", "fittable"):
             raise ValueError(

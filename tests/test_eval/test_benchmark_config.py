@@ -238,8 +238,10 @@ def _patch_flash_ansr(monkeypatch, captured):
             return SimpleNamespace()
 
     class DummyAdapter:
-        def __init__(self, model, device, complexity, refiner_workers, candidate_store_dir=None):
+        def __init__(self, model, device, complexity, refiner_workers, candidate_store_dir=None,
+                     emission="fittable"):
             self.model = model
+            self.emission = emission
 
     monkeypatch.setattr(run_config, "create_generation_config", fake_create_generation_config)
     monkeypatch.setattr(run_config, "FlashANSR", FakeFlashANSR)
@@ -523,3 +525,16 @@ def test_runs_from_config_expands_experiments(monkeypatch):
 
     only = Benchmark.runs_from_config(cfg, experiment="b")
     assert len(only) == 1 and only[0].label["experiment"] == "b"
+
+
+def test_build_flash_ansr_adapter_defaults_follow_the_doctrine(monkeypatch):
+    # Owner ruling 2026-09-02: fittable emission + fittable refine scope unless a config says otherwise.
+    captured = {}
+    _patch_flash_ansr(monkeypatch, captured)
+    adapter = run_config.build_model_adapter(
+        {"type": "flash_ansr", "model_path": "/nowhere", "evaluation_config": {
+            "n_restarts": 1, "refiner_p0_noise": "normal",
+            "generation_config": {"method": "softmax_sampling", "kwargs": {}}}}
+    )
+    assert adapter.emission == "fittable"
+    assert captured["flash_ansr_kwargs"]["refiner_scope"] == "fittable"

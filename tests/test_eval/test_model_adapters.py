@@ -187,10 +187,16 @@ def test_pysr_adapter_warmup_can_be_disabled(monkeypatch):
 class TestEmissionConfig:
     """The promptable emission format reaches the adapter and fails fast on bad values."""
 
-    def test_emission_default_is_the_unflagged_training_mode(self) -> None:
+    def test_emission_default_is_the_application_mode(self) -> None:
+        # Owner ruling 2026-09-02: the model predicts the typed literals, the refiner fits
+        # the placeholders -- <mask_fittable> is the default emission.
         from srbf.model_adapters import FlashANSRAdapter
         adapter = FlashANSRAdapter(object())
-        assert adapter.emission == "constants"
+        assert adapter.emission == "fittable"
+
+    def test_emission_constants_is_still_selectable(self) -> None:
+        from srbf.model_adapters import FlashANSRAdapter
+        assert FlashANSRAdapter(object(), emission="constants").emission == "constants"
 
     def test_emission_skeleton_is_stored(self) -> None:
         from srbf.model_adapters import FlashANSRAdapter
