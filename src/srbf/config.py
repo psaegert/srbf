@@ -160,6 +160,10 @@ def _build_flash_ansr_adapter(config: Mapping[str, Any]) -> FlashANSRAdapter:
         refiner_method=eval_cfg.get("refiner_method", "curve_fit_lm"),
         refiner_p0_noise=eval_cfg["refiner_p0_noise"],
         refiner_p0_noise_kwargs=eval_cfg.get("refiner_p0_noise_kwargs"),
+        # Which literals the refiner may move: 'fittable' (default; typed literals -- pow
+        # exponents, rootn indices -- stay as the model spelled them), 'placeholders' (only the
+        # <constant> slots) or 'all' (every literal). A model knob, so it rides on FlashANSR.load.
+        refiner_scope=config.get("refine_scope", eval_cfg.get("refine_scope", "fittable")),
         length_penalty=eval_cfg.get("length_penalty", 0.0),
         constants_penalty=eval_cfg.get("constants_penalty", 0.0),
         likelihood_penalty=eval_cfg.get("likelihood_penalty", 0.0),

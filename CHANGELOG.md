@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`refine_scope` on the flash_ansr adapter config** (adapter key, falling back to the
+  evaluation config): which literals of a candidate the refiner may move. `'fittable'`
+  (default) fits every `<constant>` slot plus every spelled literal a constant optimizer can
+  move and keeps the typed literals -- `pow` exponents, `rootn` indices -- as the model
+  spelled them; `'placeholders'` fits only the slots; `'all'` frees every literal (the old
+  behaviour). Rides on `FlashANSR.load(refiner_scope=)`.
+
 ### Changed
 - **Dependency floors rise to the qualified v25 stack**: `simplipy>=0.14.1,<0.15` and
   `symbolic-data>=0.16,<0.17` (the decontamination verb probes through symbolic-data's 0.16

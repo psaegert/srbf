@@ -202,3 +202,40 @@ class TestEmissionConfig:
         from srbf.model_adapters import FlashANSRAdapter
         with pytest.raises(ValueError, match="emission"):
             FlashANSRAdapter(object(), emission="masked")
+
+
+class TestRefineScopeConfig:
+    """`refine_scope` is a MODEL knob (which literals the refiner may move) and rides on
+    FlashANSR.load; the default is the predict-vs-refine doctrine ('fittable')."""
+
+    @staticmethod
+    def _build(monkeypatch, config_extra: dict, eval_extra: dict | None = None) -> dict:
+        import srbf.config as cfg_mod
+        captured: dict = {}
+
+        class FakeModel:
+            simplipy_engine = object()
+
+        def fake_load(**kwargs):
+            captured.update(kwargs)
+            return FakeModel()
+
+        monkeypatch.setattr(cfg_mod.FlashANSR, "load", staticmethod(fake_load))
+        monkeypatch.setattr(cfg_mod, "create_generation_config", lambda method, **kw: object())
+        eval_cfg = {"n_restarts": 2, "refiner_p0_noise": "normal",
+                    "generation_config": {"method": "softmax", "kwargs": {}}}
+        eval_cfg.update(eval_extra or {})
+        config = {"model_path": "/nowhere", "evaluation_config": eval_cfg}
+        config.update(config_extra)
+        cfg_mod._build_flash_ansr_adapter(config)
+        return captured
+
+    def test_default_scope_is_fittable(self, monkeypatch) -> None:
+        assert self._build(monkeypatch, {})["refiner_scope"] == "fittable"
+
+    def test_adapter_config_overrides_evaluation_config(self, monkeypatch) -> None:
+        captured = self._build(monkeypatch, {"refine_scope": "placeholders"}, {"refine_scope": "all"})
+        assert captured["refiner_scope"] == "placeholders"
+
+    def test_evaluation_config_sets_the_scope(self, monkeypatch) -> None:
+        assert self._build(monkeypatch, {}, {"refine_scope": "all"})["refiner_scope"] == "all"
