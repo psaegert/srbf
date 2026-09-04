@@ -140,3 +140,52 @@ def test_tiny_fvu_survives_the_store(tmp_path):
     assert block["fvu"].dtype == np.float64
     assert block["fvu"][0] == tiny and block["fvu"][0] != 0.0
     assert block["const_vals"][0] == 1.18885916993963e-52
+
+
+def test_ranking_and_validation_columns_round_trip(tmp_path):
+    """The offline re-sort substrate: per-candidate ranking columns from flash-ansr's ledger plus the
+    adapter-computed validation FVU / recovery flags, and the run's ranking in the manifest."""
+    w = CandidateStoreWriter(tmp_path, vocab_size=335, run_meta={"ranking": {"mode": "mdl", "mdl_strength": 4.5e-3}})
+    w.write_problem(
+        3, [[1, 2, 3], [4, 5]], [0.2, float("nan")], [-1.0, -2.0],
+        valid=[1, 1], fit_status=[FIT_OK, FIT_FAILED], constants=[[7.0], []],
+        n_nodes=[3, -1], n_constants=[1, -1], mdl=[123456.0, float("nan")], score=[-0.7, float("nan")],
+        pareto_rank=[-1, -1], rank=[0, -1], fvu_val=[0.25, float("nan")], recovery_fit=[0, 0], recovery_val=[1, 0],
+    )
+    manifest = w.close()
+    assert manifest["run_meta"]["ranking"]["mode"] == "mdl"
+    block = next(iter(CandidateStoreReader(tmp_path)))
+    np.testing.assert_array_equal(block["n_nodes"], [3, -1])
+    np.testing.assert_array_equal(block["rank"], [0, -1])
+    assert block["mdl"].dtype == np.float64 and block["mdl"][0] == 123456.0 and np.isnan(block["mdl"][1])
+    assert block["fvu_val"][0] == 0.25 and np.isnan(block["fvu_val"][1])
+    np.testing.assert_array_equal(block["recovery_val"], [1, 0])
+    with pytest.raises(ValueError, match="rank length"):
+        w.write_problem(4, [[1]], [0.1], [-1.0], rank=[0, 1])
+
+
+def test_adapter_capture_computes_validation_metrics_from_every_candidate(tmp_path):
+    """top_k='all' gives every FIT_OK candidate its predictions; the adapter turns them into per-candidate
+    validation FVU and recovery with the shared srbf metrics, aligned through result_index."""
+    from srbf.metrics.numeric import fvu, is_perfect_fit
+    adapter = FlashANSRAdapter(_mock_model(), candidate_store_dir=str(tmp_path))
+    y_sup = np.array([1.0, 2.0, 3.0]); y_val = np.array([4.0, 5.0])
+    exact = types.SimpleNamespace(y_pred=y_sup.copy(), y_pred_val=y_val.copy())
+    off = types.SimpleNamespace(y_pred=y_sup + 0.5, y_pred_val=y_val + 1.0)
+    ledger = CandidateLedger(
+        token_lists=[[1, 2], [3, 4], [5]], fvu=[0.0, 0.1, float("nan")], log_prob=[-1.0, -2.0, -3.0],
+        valid=[1, 1, 0], fit_status=[FIT_OK, FIT_OK, INVALID], constants=[[], [], []],
+        n_nodes=[2, 2, -1], n_constants=[0, 0, -1], mdl=[1.0, 2.0, float("nan")], score=[-9.0, -1.0, float("nan")],
+        pareto_rank=[-1, -1, -1], rank=[0, 1, -1], result_index=[0, 1, -1])
+    result = types.SimpleNamespace(ledger=ledger, candidates=[exact, off])
+    sample = types.SimpleNamespace(y_support=y_sup, y_validation=y_val)
+    adapter._capture_ledger({"eval_row_index": 9}, result, sample)
+    block = next(iter(CandidateStoreReader(tmp_path)))
+    np.testing.assert_array_equal(block["recovery_fit"], [1, 0, 0])
+    np.testing.assert_array_equal(block["recovery_val"], [1, 0, 0])
+    assert block["fvu_val"][0] == fvu(y_val, y_val) == 0.0
+    assert block["fvu_val"][1] == fvu(y_val, y_val + 1.0)
+    assert np.isnan(block["fvu_val"][2])
+    assert is_perfect_fit(y_val, y_val)
+    manifest = json.loads((tmp_path / "manifest.json").read_text()) if (tmp_path / "manifest.json").exists() else adapter._candidate_store.close()
+    assert "mdl_dialect" in manifest["run_meta"]

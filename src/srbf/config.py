@@ -32,6 +32,7 @@ from srbf.model_adapters import (
 )
 from srbf.baselines import BruteForceModel, LampleChartonModel
 from flash_ansr.flash_ansr import FlashANSR
+from flash_ansr.scoring import RankingConfig, resolve_ranking
 from flash_ansr.utils.config_io import load_config
 from flash_ansr.utils.generation import create_generation_config
 from flash_ansr.utils.paths import substitute_root_path
@@ -149,9 +150,11 @@ def _build_flash_ansr_adapter(config: Mapping[str, Any]) -> FlashANSRAdapter:
         generation_section = merge_mappings(generation_section, generation_overrides)
 
     # A retired ranking key in EITHER layer would be silently ignored and the run would rank at the
-    # default -- the defect that left every srbf run to date at penalty 0.0. Check both.
-    reject_retired_ranking_keys(config, where="model_adapter (flash_ansr)")
-    reject_retired_ranking_keys(eval_cfg, where="model_adapter.evaluation_config (flash_ansr)")
+    # default -- the defect that left every srbf run to date at penalty 0.0. Check both, then
+    # resolve the REQUIRED `ranking` block (validated before the model loads).
+    reject_retired_ranking_keys(config, where="model_adapter (flash_ansr)", retired=_RETIRED_FLASH_ANSR_RANKING_KEYS)
+    reject_retired_ranking_keys(eval_cfg, where="model_adapter.evaluation_config (flash_ansr)", retired=_RETIRED_FLASH_ANSR_RANKING_KEYS)
+    ranking = resolve_ranking_block(config, eval_cfg)
 
     generation_config = create_generation_config(
         method=generation_section["method"],
@@ -169,9 +172,13 @@ def _build_flash_ansr_adapter(config: Mapping[str, Any]) -> FlashANSRAdapter:
         # exponents, rootn indices -- stay as the model spelled them), 'placeholders' (only the
         # <constant> slots) or 'all' (every literal). A model knob, so it rides on FlashANSR.load.
         refiner_scope=config.get("refine_scope", eval_cfg.get("refine_scope", "fittable")),
-        node_penalty=eval_cfg.get("node_penalty", 0.0),
-        constants_penalty=eval_cfg.get("constants_penalty", 0.0),
-        likelihood_penalty=eval_cfg.get("likelihood_penalty", 0.0),
+        # The resolved ranking, knob by knob for ITS mode (the others stay None: the library
+        # refuses a knob of another mode rather than ignoring it).
+        ranking_mode=ranking.mode,
+        mdl_strength=ranking.mdl_strength,
+        ranking_weights=dict(ranking.weights) if ranking.mode == "weighted" else None,
+        ranking_metrics=ranking.metrics if ranking.mode == "pareto" else None,
+        ranking_tie_break=ranking.tie_break if ranking.mode == "pareto" else None,
         device=eval_cfg.get("device", config.get("device", "cpu")),
         refiner_workers=config.get("refiner_workers", eval_cfg.get("refiner_workers")),
         prune_constant_budget=eval_cfg.get("prune_constant_budget", 0),
@@ -349,26 +356,89 @@ def _build_brute_force_adapter(config: Mapping[str, Any]) -> BruteForceAdapter:
     return BruteForceAdapter(model)
 
 
-#: Keys that a ranking config must NOT carry any more. `parsimony` was never read by the flash_ansr
-#: adapter at all (it is a PySR key), and `length_penalty` was renamed to `node_penalty` on
-#: 2026-09-04. Both are silent-default hazards: a config carrying either would be ignored and the
-#: run would rank at whatever the default happens to be -- which is exactly how every srbf run to
-#: date came to rank at penalty 0.0. Refuse them loudly instead.
-_RETIRED_RANKING_KEYS = {
+#: Keys that a ranking config must NOT carry any more, and where their meaning went. They are
+#: silent-default hazards: a config carrying one would be ignored and the run would rank at
+#: whatever the default happens to be -- which is exactly how every srbf run to date came to rank
+#: at penalty 0.0 (`parsimony` was never read by the flash_ansr adapter at all; it is a PySR key).
+#: Refuse them loudly instead. The refiner baselines (lample_charton, brute_force) keep their own
+#: `node_penalty` / `constants_penalty` / `likelihood_penalty` knobs; only the two never-read
+#: spellings are retired there.
+_RETIRED_BASELINE_RANKING_KEYS = {
     "length_penalty": "node_penalty",
     "parsimony": "node_penalty",
 }
+#: On a flash_ansr adapter every loose penalty is retired: the ranking is the `ranking:` block.
+_RETIRED_FLASH_ANSR_RANKING_KEYS = {
+    "length_penalty": "ranking.weights.n_nodes (with ranking.mode: weighted)",
+    "parsimony": "ranking.weights.n_nodes (with ranking.mode: weighted)",
+    "node_penalty": "ranking.weights.n_nodes (with ranking.mode: weighted)",
+    "constants_penalty": "ranking.weights.n_constants (with ranking.mode: weighted)",
+    "likelihood_penalty": "ranking.weights.neg_log_prob (with ranking.mode: weighted)",
+    "mdl_penalty": "ranking.mdl_strength (with ranking.mode: mdl)",
+}
+
+#: The keys a `ranking:` block may carry (flash-ansr's RankingConfig surface). `mode` is required.
+_RANKING_BLOCK_KEYS = ("mode", "mdl_strength", "weights", "metrics", "tie_break")
 
 
-def reject_retired_ranking_keys(config: Mapping[str, Any], *, where: str) -> None:
+def reject_retired_ranking_keys(
+        config: Mapping[str, Any], *, where: str,
+        retired: Mapping[str, str] = _RETIRED_BASELINE_RANKING_KEYS) -> None:
     """Raise if ``config`` carries a retired ranking key. Clean break: no alias, no warning."""
-    for dead, replacement in _RETIRED_RANKING_KEYS.items():
+    for dead, replacement in retired.items():
         if dead in config:
             raise ValueError(
-                f"{where}: '{dead}' is no longer read (renamed to '{replacement}' on 2026-09-04). "
+                f"{where}: '{dead}' is no longer read (moved to '{replacement}' on 2026-09-04). "
                 f"Leaving it in place would silently rank at the default instead of your value. "
-                f"Rename it to '{replacement}'."
+                f"Say it as '{replacement}'."
             )
+
+
+def resolve_ranking_block(config: Mapping[str, Any], eval_cfg: Mapping[str, Any]) -> RankingConfig:
+    """Resolve the REQUIRED ``ranking:`` block of a flash_ansr adapter into flash-ansr's RankingConfig.
+
+    Read from ``model_adapter.ranking``; when absent, from ``evaluation_config.ranking``. When BOTH
+    carry one the adapter's block REPLACES the evaluation config's outright (no merge: a partial
+    merge across modes would combine the knobs of two modes, which the library refuses). Strict
+    inside: unknown keys raise, retired keys raise, ``mode`` is required. Vocabulary validation is
+    flash-ansr's own ``resolve_ranking`` -- never a second copy of the tuples.
+
+    The block is required, not defaulted, on purpose: every srbf flash_ansr run before 2026-09-04
+    ranked at an effective penalty of 0.0 while its config said 0.05, because the value it stated
+    lived under a key nothing read. A run must SAY how it ranks.
+    """
+    if "ranking" in config:
+        block, where = config["ranking"], "model_adapter.ranking"
+    elif "ranking" in eval_cfg:
+        block, where = eval_cfg["ranking"], "model_adapter.evaluation_config.ranking"
+    else:
+        raise ValueError(
+            "model_adapter.ranking is required for a flash_ansr adapter and neither the adapter nor "
+            "its evaluation_config carries one. State the candidate ranking, e.g. "
+            "`ranking: {mode: mdl}` (the library default: log10(FVU) + 4.5e-3 per bit of the refined "
+            "expression's description length), `ranking: {mode: weighted, weights: {n_nodes: 0.05}}` "
+            "(the pre-0.14 length penalty) or `ranking: {mode: pareto, metrics: [fvu, n_nodes]}`. "
+            "The historical effective value of every srbf flash_ansr run was penalty 0.0.")
+    if not isinstance(block, Mapping):
+        raise ValueError(f"{where} must be a mapping; got {type(block).__name__}")
+    reject_retired_ranking_keys(block, where=where, retired=_RETIRED_FLASH_ANSR_RANKING_KEYS)
+    unknown = sorted(set(block) - set(_RANKING_BLOCK_KEYS))
+    if unknown:
+        raise ValueError(f"{where}: unknown keys {unknown}; allowed: {list(_RANKING_BLOCK_KEYS)}")
+    if "mode" not in block:
+        raise ValueError(f"{where}: 'mode' is required (one of mdl, weighted, pareto)")
+    try:
+        return resolve_ranking(
+            str(block["mode"]),
+            mdl_strength=(None if block.get("mdl_strength") is None
+                          else coerce_float(block["mdl_strength"], f"{where}.mdl_strength")),
+            weights=(None if block.get("weights") is None
+                     else {str(k): coerce_float(v, f"{where}.weights.{k}") for k, v in dict(block["weights"]).items()}),
+            metrics=(None if block.get("metrics") is None else tuple(str(m) for m in block["metrics"])),
+            tie_break=(None if block.get("tie_break") is None else str(block["tie_break"])),
+        )
+    except ValueError as exc:
+        raise ValueError(f"{where}: {exc}") from exc
 
 
 def resolve_simplipy_engine(config: Mapping[str, Any], *, adapter_name: str) -> SimpliPyEngine:

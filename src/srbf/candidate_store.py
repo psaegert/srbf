@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Iterator, Sequence
+from typing import Any, Iterator, Sequence
 
 import numpy as np
 
@@ -44,12 +44,15 @@ import numpy as np
 class CandidateStoreWriter:
     """Streaming writer: one compressed .npz per problem. Bounded memory."""
 
-    def __init__(self, out_dir: str | Path, *, vocab_size: int) -> None:
+    def __init__(self, out_dir: str | Path, *, vocab_size: int, run_meta: dict | None = None) -> None:
         self.out_dir = Path(out_dir)
         self.out_dir.mkdir(parents=True, exist_ok=True)
         if vocab_size > 65536:
             raise ValueError(f"vocab_size {vocab_size} > 65536 does not fit uint16; bump the token dtype")
         self.vocab_size = vocab_size
+        # Once per run, into the manifest: the ranking that produced `score`/`rank`, the mu dialect,
+        # versions. Plain JSON; whatever the adapter hands over.
+        self.run_meta = dict(run_meta) if run_meta else None
         # RESUME-SAFE: the eval loop is restartable (resume:true, save_every), so a writer is
         # re-created mid-campaign over a dir that already holds earlier problems' files. Rebuild the
         # index from the existing problem_*.npz (cheap: no array reads) so close()'s manifest covers
@@ -84,11 +87,35 @@ class CandidateStoreWriter:
         valid: Sequence[int] | None = None,
         fit_status: Sequence[int] | None = None,
         constants: Sequence[Sequence[float]] | None = None,
+        n_nodes: Sequence[int] | None = None,
+        n_constants: Sequence[int] | None = None,
+        mdl: Sequence[float] | None = None,
+        score: Sequence[float] | None = None,
+        pareto_rank: Sequence[int] | None = None,
+        rank: Sequence[int] | None = None,
+        fvu_val: Sequence[float] | None = None,
+        recovery_fit: Sequence[int] | None = None,
+        recovery_val: Sequence[int] | None = None,
     ) -> int:
-        """Flush ONE problem's full (deduped) candidate set. Returns bytes written."""
+        """Flush ONE problem's full (deduped) candidate set. Returns bytes written.
+
+        The ranking columns (``n_nodes`` .. ``rank``) come from flash-ansr's ledger; ``fvu_val`` and
+        the two recovery flags are computed by the adapter from every candidate's predictions. All
+        are optional so a timing-tier store stays as lean as before; an offline re-sort needs them.
+        """
         n = len(token_lists)
         if not (len(fvu) == len(log_prob) == n):
             raise ValueError("fvu / log_prob length must match token_lists")
+        ranking_columns: dict[str, tuple[Sequence | None, Any]] = {
+            "n_nodes": (n_nodes, np.int32), "n_constants": (n_constants, np.int32),
+            "mdl": (mdl, np.float64), "score": (score, np.float64),
+            "pareto_rank": (pareto_rank, np.int32), "rank": (rank, np.int32),
+            "fvu_val": (fvu_val, np.float64),
+            "recovery_fit": (recovery_fit, np.uint8), "recovery_val": (recovery_val, np.uint8),
+        }
+        for name, (values, _) in ranking_columns.items():
+            if values is not None and len(values) != n:
+                raise ValueError(f"{name} length {len(values)} must match token_lists ({n})")
 
         # CSR-pack the ragged token streams as flat uint16 + int64 offsets (no padding).
         offsets = np.empty(n + 1, dtype=np.int64)
@@ -117,6 +144,9 @@ class CandidateStoreWriter:
                 cvals[coff[i]:coff[i + 1]] = np.asarray(c, dtype=np.float64)
             cols["const_vals"] = cvals
             cols["const_off"] = coff
+        for name, (values, dtype) in ranking_columns.items():
+            if values is not None:
+                cols[name] = np.asarray(values, dtype=dtype)
 
         path = self.out_dir / f"problem_{problem_id:06d}.npz"
         # Atomic: write to a temp file then rename, so an interrupted write never leaves a truncated
@@ -145,6 +175,7 @@ class CandidateStoreWriter:
         index = sorted(self._index, key=lambda p: p["problem_id"])
         manifest = {
             "vocab_size": self.vocab_size,
+            "run_meta": self.run_meta,
             "n_problems": len(index),
             "total_candidates": sum((p["n_candidates"] or 0) for p in index),
             "total_bytes": sum(p["bytes"] for p in index),

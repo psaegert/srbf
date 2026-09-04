@@ -228,7 +228,7 @@ class TestRefineScopeConfig:
 
         monkeypatch.setattr(cfg_mod.FlashANSR, "load", staticmethod(fake_load))
         monkeypatch.setattr(cfg_mod, "create_generation_config", lambda method, **kw: object())
-        eval_cfg = {"n_restarts": 2, "refiner_p0_noise": "normal",
+        eval_cfg = {"n_restarts": 2, "refiner_p0_noise": "normal", "ranking": {"mode": "mdl"},
                     "generation_config": {"method": "softmax", "kwargs": {}}}
         eval_cfg.update(eval_extra or {})
         config = {"model_path": "/nowhere", "evaluation_config": eval_cfg}

@@ -29,12 +29,32 @@ from flash_ansr.utils.config_io import load_config
 from flash_ansr.utils.paths import substitute_root_path
 
 META_KEY = "__meta__"
-_REPO = Path(__file__).resolve().parents[3]
-_CACHE = _REPO / ".provenance_cache"
 
 
-def _git(*args: str) -> str:
-    root = _REPO if (_REPO / ".git").exists() else Path.cwd()
+def repo_root(start: str | Path) -> Path | None:
+    """The git checkout containing ``start`` (a module file or directory), or None for a wheel install.
+
+    Walks UP until a ``.git`` entry appears rather than counting a fixed number of parents: the
+    fixed count silently pointed one level above the srbf checkout (``parents[3]`` of
+    ``src/srbf/provenance.py`` is the directory holding the checkout), fell back to ``Path.cwd()``
+    -- an eval directory with no repository -- and every ``__meta__['git']`` written before
+    2026-09-04 came out empty."""
+    p = Path(start).resolve()
+    if p.is_file():
+        p = p.parent
+    for candidate in (p, *p.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return None
+
+
+_REPO = repo_root(__file__)
+_CACHE = (_REPO if _REPO is not None else Path(__file__).resolve().parent) / ".provenance_cache"
+
+
+def _git(root: Path | None, *args: str) -> str:
+    if root is None:
+        return ""
     try:
         return subprocess.run(["git", "-C", str(root), *args],
                               capture_output=True, text=True, timeout=15).stdout.strip()
@@ -42,17 +62,35 @@ def _git(*args: str) -> str:
         return ""
 
 
-def git_provenance() -> dict:
-    porcelain = _git("status", "--porcelain")
+def git_provenance(root: Path | None = None) -> dict:
+    """Commit / branch / dirty-state of a checkout (default: srbf's own). A package without a git
+    checkout (a wheel) reports ``installed_from_checkout: False`` and empty strings, never a guess."""
+    if root is None:
+        root = _REPO
+    porcelain = _git(root, "status", "--porcelain")
     dirty = bool(porcelain)
     return {
-        "commit": _git("rev-parse", "HEAD"),
-        "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
+        "installed_from_checkout": root is not None,
+        "root": str(root) if root is not None else None,
+        "commit": _git(root, "rev-parse", "HEAD"),
+        "branch": _git(root, "rev-parse", "--abbrev-ref", "HEAD"),
         "dirty": dirty,
-        "tracked_diff_sha": hashlib.sha256(_git("diff", "HEAD").encode()).hexdigest()[:16] if dirty else None,
+        "tracked_diff_sha": hashlib.sha256(_git(root, "diff", "HEAD").encode()).hexdigest()[:16] if dirty else None,
         "worktree_fingerprint": hashlib.sha256(porcelain.encode()).hexdigest()[:16] if dirty else None,
         "n_dirty_or_untracked": len(porcelain.splitlines()) if porcelain else 0,
     }
+
+
+def _module_git_provenance(module_name: str) -> dict | None:
+    """git_provenance for another installed package's checkout (editable install), else None."""
+    try:
+        module = __import__(module_name)
+    except Exception:
+        return None
+    file = getattr(module, "__file__", None)
+    if not file:
+        return None
+    return git_provenance(repo_root(file))
 
 
 def hash_file(path: str | Path) -> dict | None:
@@ -92,8 +130,12 @@ def _resolve_inputs(config_path: str, experiment: str | None) -> dict[str, str]:
     mp = run.get("model_adapter", {}).get("model_path")
     if mp:
         mpr = Path(substitute_root_path(mp))
-        files["model/state_dict.pt"] = str(mpr / "state_dict.pt")
-        for extra in ("config.yaml", "tokenizer.yaml", "tokenizer.json"):
+        # v25 checkpoints carry model.safetensors; the pre-v24 ones state_dict.pt. Hash whichever
+        # exists (both if both do), and record a MISSING weights file explicitly rather than nothing.
+        weight_files = [w for w in ("model.safetensors", "state_dict.pt") if (mpr / w).exists()]
+        for w in weight_files or ["model.safetensors"]:
+            files[f"model/{w}"] = str(mpr / w)
+        for extra in ("config.yaml", "model.yaml", "train.yaml", "tokenizer.yaml", "tokenizer.json"):
             if (mpr / extra).exists():
                 files[f"model/{extra}"] = str(mpr / extra)
     ds = run.get("data_source", {})
@@ -130,7 +172,7 @@ def system_provenance() -> dict:
 
 def env_provenance() -> dict:
     out = {}
-    for mod in ("torch", "numpy", "scipy"):
+    for mod in ("torch", "numpy", "scipy", "flash_ansr", "simplipy", "symbolic_data", "srbf"):
         try:
             out[mod] = __import__(mod).__version__
         except Exception:
@@ -151,6 +193,9 @@ def collect_provenance(config_path: str | None = None, experiment: str | None = 
         "timestamp": datetime.now().isoformat(timespec="seconds"),
         "experiment": experiment,
         "git": git_provenance(),
+        # The model's code is a separate checkout in every deployment so far (editable installs of
+        # both repos); its commit decides the ranking/refinement semantics as much as srbf's does.
+        "git_flash_ansr": _module_git_provenance("flash_ansr"),
         "system": system_provenance(),
         "env": env_provenance(),
         "inputs": {},
@@ -170,6 +215,13 @@ def format_provenance(prov: dict) -> str:
     git_state = (f"DIRTY tracked_diff={g.get('tracked_diff_sha')} wt_fp={g.get('worktree_fingerprint')} "
                  f"({g.get('n_dirty_or_untracked')} files)") if g.get("dirty") else "clean"
     lines.append(f"  git    : {str(g.get('commit'))[:12]} ({g.get('branch')}) {git_state}")
+    fa = prov.get("git_flash_ansr") or {}
+    if fa:
+        fa_state = (f"DIRTY ({fa.get('n_dirty_or_untracked')} files)" if fa.get("dirty")
+                    else ("clean" if fa.get("installed_from_checkout") else "wheel"))
+        lines.append(f"  flash-ansr git: {str(fa.get('commit'))[:12]} ({fa.get('branch')}) {fa_state}")
+    if prov.get("ranking") is not None:
+        lines.append(f"  ranking: {prov['ranking']}")
     lines.append(f"  system : {s.get('hostname')} | {s.get('gpu')} | {s.get('platform')} | {s.get('cpu_count')} cpu")
     lines.append(f"  env    : python {e.get('python')}  torch {e.get('torch')}  cuda {e.get('cuda')}  "
                  f"numpy {e.get('numpy')}  scipy {e.get('scipy')}")

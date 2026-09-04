@@ -252,8 +252,9 @@ def _patch_flash_ansr(monkeypatch, captured):
 def test_build_flash_ansr_adapter_generation_overrides(tmp_path, monkeypatch):
     eval_cfg = {"evaluation": {
         "n_restarts": 1, "refiner_method": "curve_fit_lm", "refiner_p0_noise": "normal",
-        "refiner_p0_noise_kwargs": {"loc": 0.0, "scale": 1.0}, "node_penalty": 0.2,
-        "constants_penalty": 0.01, "likelihood_penalty": 0.0, "device": "cuda", "refiner_workers": None,
+        "refiner_p0_noise_kwargs": {"loc": 0.0, "scale": 1.0},
+        "ranking": {"mode": "weighted", "weights": {"n_nodes": 0.2, "n_constants": 0.01}},
+        "device": "cuda", "refiner_workers": None,
         "generation_config": {"method": "softmax_sampling", "kwargs": {"choices": 8, "max_len": 16}}}}
     eval_path = tmp_path / "evaluation.yaml"
     with eval_path.open("w", encoding="utf-8") as handle:
@@ -271,7 +272,9 @@ def test_build_flash_ansr_adapter_generation_overrides(tmp_path, monkeypatch):
     assert captured["method"] == "softmax_sampling"
     assert captured["kwargs"]["choices"] == 2
     assert captured["flash_ansr_gen"]["kwargs"]["choices"] == 2
-    assert captured["flash_ansr_kwargs"]["node_penalty"] == 0.2
+    assert captured["flash_ansr_kwargs"]["ranking_mode"] == "weighted"
+    assert captured["flash_ansr_kwargs"]["ranking_weights"] == {"n_nodes": 0.2, "n_constants": 0.01}
+    assert captured["flash_ansr_kwargs"]["mdl_strength"] is None
 
 
 def test_build_flash_ansr_adapter_inline_evaluation_config(monkeypatch):
@@ -280,8 +283,8 @@ def test_build_flash_ansr_adapter_inline_evaluation_config(monkeypatch):
 
     inline_cfg = {
         "n_restarts": 2, "refiner_method": "curve_fit_lm", "refiner_p0_noise": "normal",
-        "refiner_p0_noise_kwargs": {"loc": 0.0, "scale": 1.0}, "node_penalty": 0.15,
-        "constants_penalty": 0.0, "likelihood_penalty": 0.0, "device": "cuda",
+        "refiner_p0_noise_kwargs": {"loc": 0.0, "scale": 1.0},
+        "ranking": {"mode": "weighted", "weights": {"n_nodes": 0.15}}, "device": "cuda",
         "generation_config": {"method": "softmax_sampling", "kwargs": {"choices": 4, "max_len": 16}}}
 
     adapter = run_config.build_model_adapter(
@@ -292,7 +295,67 @@ def test_build_flash_ansr_adapter_inline_evaluation_config(monkeypatch):
     assert isinstance(adapter, DummyAdapter)
     assert captured["kwargs"]["choices"] == 4
     assert captured["flash_ansr_kwargs"]["n_restarts"] == 2
-    assert captured["flash_ansr_kwargs"]["node_penalty"] == 0.15
+    assert captured["flash_ansr_kwargs"]["ranking_weights"] == {"n_nodes": 0.15}
+
+
+def _inline_eval_cfg(**extra):
+    cfg = {"n_restarts": 2, "refiner_method": "curve_fit_lm", "refiner_p0_noise": "normal",
+           "refiner_p0_noise_kwargs": {"loc": 0.0, "scale": 1.0}, "device": "cpu",
+           "generation_config": {"method": "softmax_sampling", "kwargs": {"choices": 4, "max_len": 16}}}
+    cfg.update(extra)
+    return cfg
+
+
+def test_flash_ansr_ranking_block_is_required(monkeypatch):
+    _patch_flash_ansr(monkeypatch, {})
+    with pytest.raises(ValueError, match="model_adapter.ranking is required"):
+        run_config.build_model_adapter(
+            {"type": "flash_ansr", "model_path": "./m", "evaluation_config": _inline_eval_cfg()})
+
+
+@pytest.mark.parametrize("dead", ["parsimony", "length_penalty", "node_penalty", "constants_penalty",
+                                  "likelihood_penalty", "mdl_penalty"])
+@pytest.mark.parametrize("layer", ["adapter", "evaluation_config", "ranking"])
+def test_flash_ansr_loose_penalties_raise_at_every_layer(monkeypatch, dead, layer):
+    """The historical doctrine configs set `parsimony: 0.05` INSIDE the evaluation config while the
+    adapter read another key: every run ranked at 0.0. Every loose penalty now raises wherever it sits."""
+    _patch_flash_ansr(monkeypatch, {})
+    adapter = {"type": "flash_ansr", "model_path": "./m", "evaluation_config": _inline_eval_cfg(ranking={"mode": "mdl"})}
+    if layer == "adapter":
+        adapter[dead] = 0.05
+    elif layer == "evaluation_config":
+        adapter["evaluation_config"][dead] = 0.05
+    else:
+        adapter["ranking"] = {"mode": "mdl", dead: 0.05}
+    with pytest.raises(ValueError, match=dead):
+        run_config.build_model_adapter(adapter)
+
+
+def test_flash_ansr_adapter_ranking_block_replaces_the_evaluation_configs(monkeypatch):
+    captured = {}
+    _patch_flash_ansr(monkeypatch, captured)
+    run_config.build_model_adapter({
+        "type": "flash_ansr", "model_path": "./m",
+        "evaluation_config": _inline_eval_cfg(ranking={"mode": "weighted", "weights": {"n_nodes": 0.05}}),
+        "ranking": {"mode": "pareto", "metrics": ["fvu", "mdl"], "tie_break": "n_nodes"},
+    })
+    kw = captured["flash_ansr_kwargs"]
+    assert kw["ranking_mode"] == "pareto"
+    assert kw["ranking_metrics"] == ("fvu", "mdl") and kw["ranking_tie_break"] == "n_nodes"
+    assert kw["ranking_weights"] is None and kw["mdl_strength"] is None
+
+
+def test_flash_ansr_ranking_block_is_strict(monkeypatch):
+    _patch_flash_ansr(monkeypatch, {})
+    base = {"type": "flash_ansr", "model_path": "./m", "evaluation_config": _inline_eval_cfg()}
+    with pytest.raises(ValueError, match="unknown keys"):
+        run_config.build_model_adapter({**base, "ranking": {"mode": "mdl", "strength": 1e-3}})
+    with pytest.raises(ValueError, match="'mode' is required"):
+        run_config.build_model_adapter({**base, "ranking": {"mdl_strength": 1e-3}})
+    with pytest.raises(ValueError, match="belongs to ranking_mode"):
+        run_config.build_model_adapter({**base, "ranking": {"mode": "mdl", "weights": {"n_nodes": 1.0}}})
+    with pytest.raises(ValueError, match="ranking.mdl_strength"):
+        run_config.build_model_adapter({**base, "ranking": {"mode": "mdl", "mdl_strength": "high"}})
 
 
 def test_build_pysr_adapter_requires_explicit_engine(monkeypatch):
@@ -533,8 +596,11 @@ def test_build_flash_ansr_adapter_defaults_follow_the_doctrine(monkeypatch):
     _patch_flash_ansr(monkeypatch, captured)
     adapter = run_config.build_model_adapter(
         {"type": "flash_ansr", "model_path": "/nowhere", "evaluation_config": {
-            "n_restarts": 1, "refiner_p0_noise": "normal",
+            "n_restarts": 1, "refiner_p0_noise": "normal", "ranking": {"mode": "mdl"},
             "generation_config": {"method": "softmax_sampling", "kwargs": {}}}}
     )
     assert adapter.emission == "fittable"
+    # and the default ranking resolves to the engineered mdl strength, stated in full
+    assert captured["flash_ansr_kwargs"]["ranking_mode"] == "mdl"
+    assert captured["flash_ansr_kwargs"]["mdl_strength"] == 4.5e-3
     assert captured["flash_ansr_kwargs"]["refiner_scope"] == "fittable"

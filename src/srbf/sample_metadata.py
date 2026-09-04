@@ -7,15 +7,18 @@ import numpy as np
 
 
 COMMON_PREDICTION_FIELDS: Mapping[str, Any] = {
-    "node_penalty": None,
-    "constants_penalty": None,
-    "likelihood_penalty": None,
+    # The resolved candidate ranking the adapter used (flash-ansr's RankingConfig.as_dict(), or the
+    # refiner baselines' weighted equivalent); None for adapters that rank their own way.
+    "ranking": None,
     "fit_time": None,
     "predicted_expression": None,
     "predicted_expression_prefix": None,
     "predicted_skeleton_prefix": None,
     "predicted_constants": None,
-    "predicted_score": None,
+    "predicted_score": None,        # scalar ranking score; nan under a pareto ranking
+    "predicted_mdl": None,          # milli-bits of the REALIZED expression; None if unpriced
+    "predicted_n_nodes": None,
+    "predicted_pareto_rank": None,  # -1 unless ranked by pareto
     "predicted_log_prob": None,
     "y_pred": None,
     "y_pred_val": None,

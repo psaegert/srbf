@@ -44,6 +44,18 @@ else:
     NesymresModel = Any
 
 
+def _baseline_ranking_config(model: Any) -> dict[str, Any] | None:
+    """The refiner baselines rank with the three loose penalties; spell that as the weighted mode so
+    every row's `ranking` column reads the same way. None when the model has none of them."""
+    names = (("node_penalty", "n_nodes"), ("constants_penalty", "n_constants"),
+             ("likelihood_penalty", "neg_log_prob"))
+    if not any(getattr(model, attr, None) is not None for attr, _ in names):
+        return None
+    weights = {metric: float(getattr(model, attr)) for attr, metric in names
+               if getattr(model, attr, None) is not None}
+    return {"mode": "weighted", "weights": {k: v for k, v in weights.items() if v != 0.0}}
+
+
 class FlashANSRAdapter(EvaluationModelAdapter):
     """Wrap the `FlashANSR` model with the evaluation adapter protocol."""
 
@@ -90,6 +102,12 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         """Return the SimpliPy engine backing this adapter's model."""
         return self.model.simplipy_engine
 
+    def ranking_config(self) -> dict[str, Any] | None:
+        """The resolved candidate ranking in force (flash-ansr's ``RankingConfig.as_dict()``): what
+        goes into ``__meta__`` and every per-sample row."""
+        fn = getattr(self.model, "ranking_config", None)
+        return fn() if callable(fn) else None
+
     def prepare(self, *, data_source: Any | None = None) -> None:  # type: ignore[override]
         self.model.to(self.device).eval()
         if self.refiner_workers is not None:
@@ -116,9 +134,7 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         / ``get_expression`` / a generate-refine phase split. ``np.errstate`` restores the model's
         ``numpy_errors`` policy around the call (single-threaded; benign)."""
         record = sample.clone_metadata()
-        record["node_penalty"] = getattr(self.model, "node_penalty", None)
-        record["constants_penalty"] = getattr(self.model, "constants_penalty", None)
-        record["likelihood_penalty"] = getattr(self.model, "likelihood_penalty", None)
+        record["ranking"] = self.ranking_config()
 
         y_fit = sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support
         complexity_value = self._resolve_complexity(record)
@@ -136,7 +152,9 @@ class FlashANSRAdapter(EvaluationModelAdapter):
                     complexity=complexity_value,
                     emission=self.emission,
                     predict_val=True,
-                    top_k=1,
+                    # The save-all tier needs every candidate's predictions (per-candidate validation
+                    # FVU and recovery go into the store); timing runs keep the best-only path.
+                    top_k='all' if self.candidate_store_dir is not None else 1,
                 )
         except (ConvergenceError, OverflowError, TypeError, ValueError) as exc:
             record["error"] = str(exc)
@@ -149,7 +167,7 @@ class FlashANSRAdapter(EvaluationModelAdapter):
 
         # Full candidate ledger -> compact columnar store (save-all tier); off (None) => zero overhead.
         if self.candidate_store_dir is not None:
-            self._capture_ledger(record, result)
+            self._capture_ledger(record, result, sample)
 
         best = result.best
         if best is None:
@@ -167,6 +185,9 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         record["predicted_constants"] = list(best.constants) if best.constants is not None else None
         record["predicted_score"] = best.score
         record["predicted_log_prob"] = best.log_prob
+        record["predicted_mdl"] = best.mdl
+        record["predicted_n_nodes"] = best.n_nodes
+        record["predicted_pareto_rank"] = best.pareto_rank
 
         y_pred = best.y_pred
         y_pred_val = best.y_pred_val if best.y_pred_val is not None else np.empty_like(sample.y_validation)
@@ -176,11 +197,14 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         return EvaluationResult(record)
 
     # ------------------------------------------------------------------
-    def _capture_ledger(self, record: dict[str, Any], result: Any) -> None:
+    def _capture_ledger(self, record: dict[str, Any], result: Any, sample: EvaluationSample | None = None) -> None:
         """Stream this problem's FULL candidate ledger (from infer()) to the compact columnar store.
 
         The ledger is built by ``FlashANSR.infer`` (``result.ledger``: the generation pool U refined
-        survivors, classified FIT_OK/FAILED/INVALID). Best-effort, keyed by the resume-stable
+        survivors, classified FIT_OK/FAILED/INVALID, with the ranking columns copied from the refined
+        rows). Per-candidate validation FVU and recovery are added HERE from each candidate's
+        ``y_pred`` / ``y_pred_val`` (``top_k='all'``) with the shared ``srbf.metrics.numeric``
+        definitions -- never a hand-rolled copy. Best-effort, keyed by the resume-stable
         ``eval_row_index`` the data source stamped on the sample; failures warn and are swallowed --
         candidate capture must never abort an eval row."""
         try:
@@ -195,17 +219,59 @@ class FlashANSRAdapter(EvaluationModelAdapter):
             if self._candidate_store is None:
                 assert self.candidate_store_dir is not None  # _capture_ledger only runs when set
                 self._candidate_store = CandidateStoreWriter(
-                    self.candidate_store_dir, vocab_size=len(self.model.tokenizer)
+                    self.candidate_store_dir, vocab_size=len(self.model.tokenizer),
+                    run_meta=self._store_run_meta(),
                 )
             if self._candidate_store.has_problem(int(problem_id)):
                 return  # already written (resume)
             led = result.ledger
+            extra: dict[str, Any] = {}
+            for col in ("n_nodes", "n_constants", "mdl", "score", "pareto_rank", "rank"):
+                values = getattr(led, col, None)
+                if values is not None and len(values) == len(led):
+                    extra[col] = values
+            result_index = getattr(led, "result_index", None)
+            candidates = getattr(result, "candidates", None)
+            if sample is not None and result_index is not None and candidates is not None and len(result_index) == len(led):
+                from srbf.metrics.numeric import fvu as _fvu, is_perfect_fit as _perfect
+                fvu_val = [float("nan")] * len(led)
+                rec_fit = [0] * len(led)
+                rec_val = [0] * len(led)
+                for i, ri in enumerate(result_index):
+                    if ri < 0:
+                        continue
+                    cand = candidates[ri]
+                    if cand.y_pred is not None:
+                        rec_fit[i] = int(bool(_perfect(sample.y_support, np.asarray(cand.y_pred))))
+                    if cand.y_pred_val is not None and sample.y_validation.size:
+                        yv = np.asarray(cand.y_pred_val)
+                        fvu_val[i] = float(_fvu(sample.y_validation, yv))
+                        rec_val[i] = int(bool(_perfect(sample.y_validation, yv)))
+                extra.update(fvu_val=fvu_val, recovery_fit=rec_fit, recovery_val=rec_val)
             self._candidate_store.write_problem(
                 int(problem_id), led.token_lists, led.fvu, led.log_prob,
-                valid=led.valid, fit_status=led.fit_status, constants=led.constants,
+                valid=led.valid, fit_status=led.fit_status, constants=led.constants, **extra,
             )
         except Exception as exc:  # noqa: BLE001 - capture is auxiliary; never break the eval row
             warnings.warn(f"Candidate-ledger capture failed for this problem: {exc}", RuntimeWarning)
+
+    def _store_run_meta(self) -> dict[str, Any]:
+        """What a later reader of the candidate store needs once per run: the ranking that produced
+        `score`/`rank`, and the dialect `mdl` was priced in (mu moves up to 1.8x between dialects, so a
+        bare number is unusable later)."""
+        meta: dict[str, Any] = {"ranking": self.ranking_config(),
+                                "mdl_dialect": {"certified": True, "mode": "f64", "canon": "default", "unit": "milli-bits"}}
+        try:
+            import simplipy
+            meta["simplipy"] = simplipy.__version__
+        except Exception:  # pragma: no cover - version is advisory
+            pass
+        engine = getattr(self.model, "simplipy_engine", None)
+        for attr in ("name", "artifact", "artifact_name"):
+            if getattr(engine, attr, None):
+                meta["simplipy_engine"] = str(getattr(engine, attr))
+                break
+        return meta
 
     # ------------------------------------------------------------------
 
@@ -226,9 +292,7 @@ def _evaluate_refiner_baseline(model: Any, sample: EvaluationSample) -> Evaluati
     """Shared evaluation logic for refiner-backed baseline models."""
 
     record = sample.clone_metadata()
-    record["node_penalty"] = getattr(model, "node_penalty", None)
-    record["constants_penalty"] = getattr(model, "constants_penalty", None)
-    record["likelihood_penalty"] = getattr(model, "likelihood_penalty", None)
+    record["ranking"] = _baseline_ranking_config(model)
 
     y_fit = sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support
 
@@ -547,9 +611,7 @@ class E2EAdapter(EvaluationModelAdapter):
             raise RuntimeError("E2EAdapter.prepare must be called before evaluation")
 
         record = sample.clone_metadata()
-        record["node_penalty"] = getattr(self._estimator, "node_penalty", None)
-        record["constants_penalty"] = getattr(self._estimator, "constants_penalty", None)
-        record["likelihood_penalty"] = getattr(self._estimator, "likelihood_penalty", None)
+        record["ranking"] = _baseline_ranking_config(self._estimator)
 
         X_support = sample.x_support.copy()
         X_val = sample.x_validation.copy()
@@ -681,9 +743,7 @@ class NeSymReSAdapter(EvaluationModelAdapter):
 
     def evaluate_sample(self, sample: EvaluationSample) -> EvaluationResult:
         record = sample.clone_metadata()
-        record["node_penalty"] = getattr(self.model, "node_penalty", None)
-        record["constants_penalty"] = getattr(self.model, "constants_penalty", None)
-        record["likelihood_penalty"] = getattr(self.model, "likelihood_penalty", None)
+        record["ranking"] = _baseline_ranking_config(self.model)
 
         X_support = sample.x_support.copy()
         X_validation = sample.x_validation.copy()

@@ -69,9 +69,13 @@ model_adapter:
     refiner_method: curve_fit_lm
     refiner_p0_noise: normal
     refiner_p0_noise_kwargs: {loc: 0.0, scale: 5}
-    node_penalty: 0.05
-    constants_penalty: 0.0
-    likelihood_penalty: 0.0
+    # REQUIRED on a flash_ansr adapter, strict inside. Three modes (flash-ansr's RankingConfig):
+    #   {mode: mdl, mdl_strength: 4.5e-3}                    log10(FVU) + strength per bit of the refined expression
+    #   {mode: weighted, weights: {n_nodes: 0.05}}            log10(FVU) + weighted metrics (the pre-0.14 ranking)
+    #   {mode: pareto, metrics: [fvu, n_nodes], tie_break: fvu}
+    # A block under model_adapter replaces one under evaluation_config. The loose keys
+    # node_penalty / constants_penalty / likelihood_penalty / parsimony / length_penalty are refused.
+    ranking: {mode: mdl}
     generation_config:
       method: softmax_sampling
       kwargs: {choices: 32, top_k: 0, top_p: 1, max_len: 64, batch_size: 128, temperature: 1, valid_only: true, simplify: true, unique: true}

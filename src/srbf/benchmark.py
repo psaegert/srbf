@@ -240,6 +240,10 @@ class Benchmark:
             provenance = run_config.coerce_config_provenance(
                 dict(meta).get("config_provenance") if meta else None)
         meta = {**(meta or {}), "config_provenance": provenance}
+        # The RESOLVED ranking (values, not a hash) beside the label: the check whose absence let
+        # every earlier flash_ansr run rank at 0.0 while its config said 0.05.
+        ranking_fn = getattr(self.model_adapter, "ranking_config", None)
+        meta["ranking"] = ranking_fn() if callable(ranking_fn) else None
 
         # Fall back to the parameters `from_config` resolved when the caller leaves them unset.
         limit = limit if limit is not None else self.limit
