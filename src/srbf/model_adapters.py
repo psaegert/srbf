@@ -123,7 +123,9 @@ class FlashANSRAdapter(EvaluationModelAdapter):
             vocab_size = len(self.model.tokenizer)
             probe = Path(self.candidate_store_dir)
             probe.mkdir(parents=True, exist_ok=True)
-            CandidateStoreWriter(probe, vocab_size=vocab_size).close()
+            # The probe's manifest is the FIRST one on disk; give it the run meta too, or a run
+            # killed before the writer's first periodic manifest leaves a manifest without it.
+            CandidateStoreWriter(probe, vocab_size=vocab_size, run_meta=self._store_run_meta()).close()
 
     def evaluate_sample(self, sample: EvaluationSample) -> EvaluationResult:
         """Serial fit + evaluate via the model's own public inference API.

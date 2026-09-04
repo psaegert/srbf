@@ -189,3 +189,12 @@ def test_adapter_capture_computes_validation_metrics_from_every_candidate(tmp_pa
     assert is_perfect_fit(y_val, y_val)
     manifest = json.loads((tmp_path / "manifest.json").read_text()) if (tmp_path / "manifest.json").exists() else adapter._candidate_store.close()
     assert "mdl_dialect" in manifest["run_meta"]
+
+
+def test_manifest_carries_run_meta_from_the_first_problem(tmp_path):
+    """A run killed before the 64th problem must still leave the ranking / dialect on disk."""
+    w = CandidateStoreWriter(tmp_path, vocab_size=335, run_meta={"ranking": {"mode": "mdl"}})
+    w.write_problem(0, [[1, 2]], [0.1], [-1.0])
+    manifest = json.loads((tmp_path / "manifest.json").read_text())
+    assert manifest["run_meta"] == {"ranking": {"mode": "mdl"}}
+    assert manifest["n_problems"] == 1

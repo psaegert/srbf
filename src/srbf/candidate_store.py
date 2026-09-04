@@ -165,7 +165,7 @@ class CandidateStoreWriter:
         # Refresh the (advisory) manifest periodically so one exists even if the run is killed before
         # close() -- there is no eval teardown hook. The reader globs the dir regardless, so this is
         # convenience, not correctness.
-        if len(self._index) % 64 == 0:
+        if len(self._index) == 1 or len(self._index) % 64 == 0:
             self._write_manifest()
         return nbytes
 
