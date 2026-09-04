@@ -148,6 +148,11 @@ def _build_flash_ansr_adapter(config: Mapping[str, Any]) -> FlashANSRAdapter:
             raise ValueError("generation_overrides must be a mapping")
         generation_section = merge_mappings(generation_section, generation_overrides)
 
+    # A retired ranking key in EITHER layer would be silently ignored and the run would rank at the
+    # default -- the defect that left every srbf run to date at penalty 0.0. Check both.
+    reject_retired_ranking_keys(config, where="model_adapter (flash_ansr)")
+    reject_retired_ranking_keys(eval_cfg, where="model_adapter.evaluation_config (flash_ansr)")
+
     generation_config = create_generation_config(
         method=generation_section["method"],
         **generation_section.get("kwargs", {}),
@@ -164,7 +169,7 @@ def _build_flash_ansr_adapter(config: Mapping[str, Any]) -> FlashANSRAdapter:
         # exponents, rootn indices -- stay as the model spelled them), 'placeholders' (only the
         # <constant> slots) or 'all' (every literal). A model knob, so it rides on FlashANSR.load.
         refiner_scope=config.get("refine_scope", eval_cfg.get("refine_scope", "fittable")),
-        length_penalty=eval_cfg.get("length_penalty", 0.0),
+        node_penalty=eval_cfg.get("node_penalty", 0.0),
         constants_penalty=eval_cfg.get("constants_penalty", 0.0),
         likelihood_penalty=eval_cfg.get("likelihood_penalty", 0.0),
         device=eval_cfg.get("device", config.get("device", "cpu")),
@@ -297,6 +302,7 @@ def _build_e2e_adapter(config: Mapping[str, Any]) -> E2EAdapter:
 
 
 def _build_lample_charton_adapter(config: Mapping[str, Any]) -> LampleChartonAdapter:
+    reject_retired_ranking_keys(config, where="model_adapter (lample_charton)")
     simplipy_engine = resolve_simplipy_engine(config, adapter_name="lample_charton")
 
     catalog = _resolve_catalog_ref(config, adapter_name="lample_charton")
@@ -312,7 +318,7 @@ def _build_lample_charton_adapter(config: Mapping[str, Any]) -> LampleChartonAda
         refiner_p0_noise=config.get("refiner_p0_noise", "normal"),
         refiner_p0_noise_kwargs=config.get("refiner_p0_noise_kwargs", "default"),
         numpy_errors=config.get("numpy_errors", "ignore"),
-        length_penalty=coerce_float(config.get("length_penalty", 0.05), "model_adapter.length_penalty"),
+        node_penalty=coerce_float(config.get("node_penalty", 0.05), "model_adapter.node_penalty"),
         constants_penalty=coerce_float(config.get("constants_penalty", 0.0), "model_adapter.constants_penalty"),
         likelihood_penalty=coerce_float(config.get("likelihood_penalty", 0.0), "model_adapter.likelihood_penalty"),
     )
@@ -320,6 +326,7 @@ def _build_lample_charton_adapter(config: Mapping[str, Any]) -> LampleChartonAda
 
 
 def _build_brute_force_adapter(config: Mapping[str, Any]) -> BruteForceAdapter:
+    reject_retired_ranking_keys(config, where="model_adapter (brute_force)")
     simplipy_engine = resolve_simplipy_engine(config, adapter_name="brute_force")
 
     catalog = _resolve_catalog_ref(config, adapter_name="brute_force")
@@ -335,11 +342,33 @@ def _build_brute_force_adapter(config: Mapping[str, Any]) -> BruteForceAdapter:
         refiner_p0_noise=config.get("refiner_p0_noise", "normal"),
         refiner_p0_noise_kwargs=config.get("refiner_p0_noise_kwargs", "default"),
         numpy_errors=config.get("numpy_errors", "ignore"),
-        length_penalty=coerce_float(config.get("length_penalty", 0.05), "model_adapter.length_penalty"),
+        node_penalty=coerce_float(config.get("node_penalty", 0.05), "model_adapter.node_penalty"),
         constants_penalty=coerce_float(config.get("constants_penalty", 0.0), "model_adapter.constants_penalty"),
         likelihood_penalty=coerce_float(config.get("likelihood_penalty", 0.0), "model_adapter.likelihood_penalty"),
     )
     return BruteForceAdapter(model)
+
+
+#: Keys that a ranking config must NOT carry any more. `parsimony` was never read by the flash_ansr
+#: adapter at all (it is a PySR key), and `length_penalty` was renamed to `node_penalty` on
+#: 2026-09-04. Both are silent-default hazards: a config carrying either would be ignored and the
+#: run would rank at whatever the default happens to be -- which is exactly how every srbf run to
+#: date came to rank at penalty 0.0. Refuse them loudly instead.
+_RETIRED_RANKING_KEYS = {
+    "length_penalty": "node_penalty",
+    "parsimony": "node_penalty",
+}
+
+
+def reject_retired_ranking_keys(config: Mapping[str, Any], *, where: str) -> None:
+    """Raise if ``config`` carries a retired ranking key. Clean break: no alias, no warning."""
+    for dead, replacement in _RETIRED_RANKING_KEYS.items():
+        if dead in config:
+            raise ValueError(
+                f"{where}: '{dead}' is no longer read (renamed to '{replacement}' on 2026-09-04). "
+                f"Leaving it in place would silently rank at the default instead of your value. "
+                f"Rename it to '{replacement}'."
+            )
 
 
 def resolve_simplipy_engine(config: Mapping[str, Any], *, adapter_name: str) -> SimpliPyEngine:

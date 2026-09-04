@@ -116,7 +116,7 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         / ``get_expression`` / a generate-refine phase split. ``np.errstate`` restores the model's
         ``numpy_errors`` policy around the call (single-threaded; benign)."""
         record = sample.clone_metadata()
-        record["length_penalty"] = getattr(self.model, "length_penalty", None)
+        record["node_penalty"] = getattr(self.model, "node_penalty", None)
         record["constants_penalty"] = getattr(self.model, "constants_penalty", None)
         record["likelihood_penalty"] = getattr(self.model, "likelihood_penalty", None)
 
@@ -226,7 +226,7 @@ def _evaluate_refiner_baseline(model: Any, sample: EvaluationSample) -> Evaluati
     """Shared evaluation logic for refiner-backed baseline models."""
 
     record = sample.clone_metadata()
-    record["length_penalty"] = getattr(model, "length_penalty", None)
+    record["node_penalty"] = getattr(model, "node_penalty", None)
     record["constants_penalty"] = getattr(model, "constants_penalty", None)
     record["likelihood_penalty"] = getattr(model, "likelihood_penalty", None)
 
@@ -547,7 +547,7 @@ class E2EAdapter(EvaluationModelAdapter):
             raise RuntimeError("E2EAdapter.prepare must be called before evaluation")
 
         record = sample.clone_metadata()
-        record["length_penalty"] = getattr(self._estimator, "length_penalty", None)
+        record["node_penalty"] = getattr(self._estimator, "node_penalty", None)
         record["constants_penalty"] = getattr(self._estimator, "constants_penalty", None)
         record["likelihood_penalty"] = getattr(self._estimator, "likelihood_penalty", None)
 
@@ -681,7 +681,7 @@ class NeSymReSAdapter(EvaluationModelAdapter):
 
     def evaluate_sample(self, sample: EvaluationSample) -> EvaluationResult:
         record = sample.clone_metadata()
-        record["length_penalty"] = getattr(self.model, "length_penalty", None)
+        record["node_penalty"] = getattr(self.model, "node_penalty", None)
         record["constants_penalty"] = getattr(self.model, "constants_penalty", None)
         record["likelihood_penalty"] = getattr(self.model, "likelihood_penalty", None)
 

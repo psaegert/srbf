@@ -69,7 +69,7 @@ model_adapter:
     refiner_method: curve_fit_lm
     refiner_p0_noise: normal
     refiner_p0_noise_kwargs: {loc: 0.0, scale: 5}
-    length_penalty: 0.05
+    node_penalty: 0.05
     constants_penalty: 0.0
     likelihood_penalty: 0.0
     generation_config:
@@ -237,7 +237,7 @@ model_adapter:
   refiner_p0_noise: normal
   refiner_p0_noise_kwargs: {loc: 0.0, scale: 5}
   numpy_errors: ignore
-  length_penalty: 0.05
+  node_penalty: 0.05
   constants_penalty: 0.0
   likelihood_penalty: 0.0
 ```

@@ -35,7 +35,7 @@ class BruteForceModel(_RefiningBaselineModel):
         refiner_p0_noise: Literal['uniform', 'normal'] | None = 'normal',
         refiner_p0_noise_kwargs: dict | Literal['default'] | None = 'default',
         numpy_errors: Literal['ignore', 'warn', 'raise', 'call', 'print', 'log'] | None = 'ignore',
-        length_penalty: float = 0.05,
+        node_penalty: float = 0.05,
         constants_penalty: float = 0.0,
         likelihood_penalty: float = 0.0,
     ) -> None:
@@ -51,7 +51,7 @@ class BruteForceModel(_RefiningBaselineModel):
             refiner_p0_noise=refiner_p0_noise,
             refiner_p0_noise_kwargs=refiner_p0_noise_kwargs,
             numpy_errors=numpy_errors,
-            length_penalty=length_penalty,
+            node_penalty=node_penalty,
             constants_penalty=constants_penalty,
             likelihood_penalty=likelihood_penalty,
         )

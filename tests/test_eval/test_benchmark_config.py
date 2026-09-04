@@ -252,7 +252,7 @@ def _patch_flash_ansr(monkeypatch, captured):
 def test_build_flash_ansr_adapter_generation_overrides(tmp_path, monkeypatch):
     eval_cfg = {"evaluation": {
         "n_restarts": 1, "refiner_method": "curve_fit_lm", "refiner_p0_noise": "normal",
-        "refiner_p0_noise_kwargs": {"loc": 0.0, "scale": 1.0}, "length_penalty": 0.2,
+        "refiner_p0_noise_kwargs": {"loc": 0.0, "scale": 1.0}, "node_penalty": 0.2,
         "constants_penalty": 0.01, "likelihood_penalty": 0.0, "device": "cuda", "refiner_workers": None,
         "generation_config": {"method": "softmax_sampling", "kwargs": {"choices": 8, "max_len": 16}}}}
     eval_path = tmp_path / "evaluation.yaml"
@@ -271,7 +271,7 @@ def test_build_flash_ansr_adapter_generation_overrides(tmp_path, monkeypatch):
     assert captured["method"] == "softmax_sampling"
     assert captured["kwargs"]["choices"] == 2
     assert captured["flash_ansr_gen"]["kwargs"]["choices"] == 2
-    assert captured["flash_ansr_kwargs"]["length_penalty"] == 0.2
+    assert captured["flash_ansr_kwargs"]["node_penalty"] == 0.2
 
 
 def test_build_flash_ansr_adapter_inline_evaluation_config(monkeypatch):
@@ -280,7 +280,7 @@ def test_build_flash_ansr_adapter_inline_evaluation_config(monkeypatch):
 
     inline_cfg = {
         "n_restarts": 2, "refiner_method": "curve_fit_lm", "refiner_p0_noise": "normal",
-        "refiner_p0_noise_kwargs": {"loc": 0.0, "scale": 1.0}, "length_penalty": 0.15,
+        "refiner_p0_noise_kwargs": {"loc": 0.0, "scale": 1.0}, "node_penalty": 0.15,
         "constants_penalty": 0.0, "likelihood_penalty": 0.0, "device": "cuda",
         "generation_config": {"method": "softmax_sampling", "kwargs": {"choices": 4, "max_len": 16}}}
 
@@ -292,7 +292,7 @@ def test_build_flash_ansr_adapter_inline_evaluation_config(monkeypatch):
     assert isinstance(adapter, DummyAdapter)
     assert captured["kwargs"]["choices"] == 4
     assert captured["flash_ansr_kwargs"]["n_restarts"] == 2
-    assert captured["flash_ansr_kwargs"]["length_penalty"] == 0.15
+    assert captured["flash_ansr_kwargs"]["node_penalty"] == 0.15
 
 
 def test_build_pysr_adapter_requires_explicit_engine(monkeypatch):

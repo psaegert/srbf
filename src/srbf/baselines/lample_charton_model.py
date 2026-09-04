@@ -43,7 +43,7 @@ class LampleChartonModel(_RefiningBaselineModel):
         refiner_p0_noise: Literal['uniform', 'normal'] | None = 'normal',
         refiner_p0_noise_kwargs: dict | Literal['default'] | None = 'default',
         numpy_errors: Literal['ignore', 'warn', 'raise', 'call', 'print', 'log'] | None = 'ignore',
-        length_penalty: float = 0.05,
+        node_penalty: float = 0.05,
         constants_penalty: float = 0.0,
         likelihood_penalty: float = 0.0,
     ) -> None:
@@ -59,7 +59,7 @@ class LampleChartonModel(_RefiningBaselineModel):
             refiner_p0_noise=refiner_p0_noise,
             refiner_p0_noise_kwargs=refiner_p0_noise_kwargs,
             numpy_errors=numpy_errors,
-            length_penalty=length_penalty,
+            node_penalty=node_penalty,
             constants_penalty=constants_penalty,
             likelihood_penalty=likelihood_penalty,
         )
@@ -149,7 +149,7 @@ class LampleChartonModel(_RefiningBaselineModel):
         input_dim = self._input_dim if self._input_dim is not None else self.n_variables
         metadata = {
             "format_version": RESULTS_FORMAT_VERSION,
-            "length_penalty": self.length_penalty,
+            "node_penalty": self.node_penalty,
             "constants_penalty": self.constants_penalty,
             "likelihood_penalty": self.likelihood_penalty,
             "n_variables": self.n_variables,
@@ -172,7 +172,7 @@ class LampleChartonModel(_RefiningBaselineModel):
                 f"Results payload version {version} does not match expected {RESULTS_FORMAT_VERSION}; attempting to proceed anyway."
             )
 
-        self.length_penalty = float(metadata.get("length_penalty", self.length_penalty))
+        self.node_penalty = float(metadata.get("node_penalty", self.node_penalty))
         self.constants_penalty = float(metadata.get("constants_penalty", self.constants_penalty))
         self.likelihood_penalty = float(metadata.get("likelihood_penalty", self.likelihood_penalty))
         n_variables = int(metadata.get("n_variables", self.n_variables))

@@ -52,7 +52,7 @@ class _RefiningBaselineModel(BaseEstimator):
         refiner_p0_noise: Literal['uniform', 'normal'] | None,
         refiner_p0_noise_kwargs: dict | Literal['default'] | None,
         numpy_errors: Literal['ignore', 'warn', 'raise', 'call', 'print', 'log'] | None,
-        length_penalty: float,
+        node_penalty: float,
         constants_penalty: float,
         likelihood_penalty: float,
     ) -> None:
@@ -66,7 +66,7 @@ class _RefiningBaselineModel(BaseEstimator):
             refiner_p0_noise_kwargs = {'loc': 0.0, 'scale': 5.0}
         self.refiner_p0_noise_kwargs = copy.deepcopy(refiner_p0_noise_kwargs) if refiner_p0_noise_kwargs is not None else None
         self.numpy_errors = numpy_errors
-        self.length_penalty = float(length_penalty)
+        self.node_penalty = float(node_penalty)
         self.constants_penalty = float(constants_penalty)
         self.likelihood_penalty = float(likelihood_penalty)
 
@@ -128,12 +128,12 @@ class _RefiningBaselineModel(BaseEstimator):
             complexity: int,
             constant_count: int,
             log_prob: float | None,
-            length_penalty: float,
+            node_penalty: float,
             constants_penalty: float,
             likelihood_penalty: float) -> float:
         return score_from_fvu(
             fvu, complexity, constant_count, log_prob,
-            length_penalty, constants_penalty, likelihood_penalty)
+            node_penalty, constants_penalty, likelihood_penalty)
 
     def _coerce_xy(self, X: np.ndarray | torch.Tensor | pd.DataFrame, y: np.ndarray | torch.Tensor | pd.DataFrame | Sequence[float]) -> tuple[np.ndarray, np.ndarray, int, float]:
         '''Coerce ``X``/``y`` to ``float`` numpy (truncate/pad X to ``n_variables``, single-column y),
@@ -212,7 +212,7 @@ class _RefiningBaselineModel(BaseEstimator):
             len(expression_tokens),
             constant_count,
             None,
-            self.length_penalty,
+            self.node_penalty,
             self.constants_penalty,
             self.likelihood_penalty,
         )

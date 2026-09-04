@@ -89,7 +89,7 @@ run:
       refiner_method: curve_fit_lm
       refiner_p0_noise: normal
       refiner_p0_noise_kwargs: {loc: 0.0, scale: 5}
-      length_penalty: 0.05
+      node_penalty: 0.05
       generation_config:
         method: softmax_sampling
         kwargs: {choices: 32, max_len: 64, batch_size: 128, temperature: 1, simplify: true}
