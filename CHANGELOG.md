@@ -6,6 +6,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **`ranking:` is REQUIRED on a flash_ansr adapter** (under `model_adapter`, else under its
+  `evaluation_config`; an adapter-level block replaces the other outright), strict inside:
+  `mode` (`mdl` | `weighted` | `pareto`) plus that mode's knobs (`mdl_strength`; `weights`;
+  `metrics` + `tie_break`), validated through flash-ansr's own `resolve_ranking`. **Breaking:**
+  `node_penalty`, `constants_penalty`, `likelihood_penalty`, `mdl_penalty` and the never-read
+  `parsimony` / `length_penalty` now raise at every layer, naming the replacement. Every srbf
+  flash_ansr run before this release ranked at an effective length penalty of 0.0 while its
+  config said `parsimony: 0.05` (a key the adapter never read); the block exists so a run has to
+  say how it ranks. The resolved values are written to `__meta__['ranking']` and to every row's
+  `ranking` column (the three penalty columns are gone); rows also carry `predicted_mdl`,
+  `predicted_n_nodes` and `predicted_pareto_rank`. The refiner baselines keep their own
+  `node_penalty` / `constants_penalty` / `likelihood_penalty` and report them as a `weighted`
+  ranking record.
+- **Provenance names both checkouts.** The srbf checkout is found by walking up to `.git` (the
+  fixed `parents[3]` pointed above the repo, so every `__meta__['git']` written so far was
+  empty); `git_flash_ansr` records the model code's checkout; `env` carries the flash-ansr,
+  simplipy and symbolic-data versions; the model's `model.safetensors` is hashed (v25
+  checkpoints have no `state_dict.pt`).
+- **The save-all candidate store carries the re-ranking substrate.** With `candidate_store_dir`
+  set the adapter asks `infer(top_k='all')` and writes, per candidate, `n_nodes`, `n_constants`,
+  `mdl`, `score`, `pareto_rank`, `rank` (from flash-ansr's ledger) and `fvu_val`,
+  `recovery_fit`, `recovery_val` (from every candidate's predictions through
+  `srbf.metrics.numeric`); the manifest's `run_meta` holds the run's ranking, the mu dialect and
+  the simplipy version. A store written without the flag is unchanged.
+
 ### Added
 - **`refine_scope` on the flash_ansr adapter config** (adapter key, falling back to the
   evaluation config): which literals of a candidate the refiner may move. `'fittable'`
