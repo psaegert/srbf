@@ -37,7 +37,7 @@ The four provisioned models have **mutually incompatible runtime dependencies**,
 
 Installing these side by side leads to version clashes and a `torch was imported before juliacall` warning at best, and broken imports at worst. One environment per baseline keeps each reproducible. `srbf` itself plus `flash-ansr`, `simplipy`, and `symbolic-data` install cleanly into each.
 
-> **SimpliPy engine.** Every adapter except `flash_ansr` requires an explicit `model_adapter.simplipy_engine` (a SimpliPy engine config name or path, e.g. `dev_7-3`): there is no loaded dataset to borrow an engine from, so the adapter raises if it is omitted. `flash_ansr` is the exception, it loads its engine from the model.
+> **SimpliPy engine.** Every adapter except `flash_ansr` requires an explicit `model_adapter.simplipy_engine` (a SimpliPy engine config name or path, e.g. `acj-5-4-llm`): there is no loaded dataset to borrow an engine from, so the adapter raises if it is omitted. `flash_ansr` is the exception, it loads its engine from the model.
 
 ## The `model_adapter` config block
 
@@ -50,19 +50,21 @@ In a run config, the model is described by a `model_adapter` block (anchored und
 The main `flash-ansr` checkpoints are installed from the Hugging Face Hub with the `flash-ansr` CLI (installed as a dependency of `srbf`):
 
 ```bash
-flash_ansr install psaegert/flash-ansr-v23.0-20M
+flash_ansr install psaegert/flash-ansr-v25.0-T7-3M
 ```
 
-This downloads the checkpoint to `<FLASH_ANSR_ROOT>/models/<owner>/<name>`, that is `models/psaegert/flash-ansr-v23.0-20M`.
+This downloads the checkpoint to `<FLASH_ANSR_ROOT>/models/<owner>/<name>`, that is `models/psaegert/flash-ansr-v25.0-T7-3M`, the `model_path` the shipped configuration uses.
 
-> The shipped configs reference a curated path, for example `model_path: "{{ROOT}}/models/ansr-models/v23.0-20M"`. That is **not** the directory `flash_ansr install` writes to. After installing, point `model_adapter.model_path` at wherever the checkpoint actually landed (or symlink / move it under `models/ansr-models/`). There is no auto-wiring between the install location and the config.
-
-`model_adapter` block (`configs/evaluation/scaling/v23.0-20M_fastsrb.yaml`):
+`model_adapter` block (`configs/evaluation/scaling/flash-ansr-v25.0-T7-3M_fastsrb.yaml`):
 
 ```yaml
 model_adapter:
+  config_provenance: author_blessed
   type: flash_ansr
-  model_path: "{{ROOT}}/models/ansr-models/v23.0-20M"
+  model_path: "{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M"
+  emission: fittable        # the model spells typed literals, the refiner fits every other constant
+  refine_scope: fittable    # typed literals (pow exponents, rootn indices) stay as spelled
+  complexity: none
   evaluation_config:
     n_support: 512
     n_restarts: 8
@@ -75,10 +77,10 @@ model_adapter:
     #   {mode: pareto, metrics: [fvu, n_nodes], tie_break: fvu}
     # A block under model_adapter replaces one under evaluation_config. The loose keys
     # node_penalty / constants_penalty / likelihood_penalty / parsimony / length_penalty are refused.
-    ranking: {mode: mdl}
+    ranking: {mode: mdl, mdl_strength: 1.0e-2}
     generation_config:
       method: softmax_sampling
-      kwargs: {choices: 32, top_k: 0, top_p: 1, max_len: 64, batch_size: 128, temperature: 1, valid_only: true, simplify: true, unique: true}
+      kwargs: {choices: 1024, top_k: 0, top_p: 1, max_len: 160, batch_size: 128, temperature: 1, valid_only: true, simplify: true, unique: true}
     device: cuda
   device: cuda
 ```
@@ -107,7 +109,7 @@ model_adapter:
   niterations: 1
   padding: false
   use_mult_div_operators: false
-  simplipy_engine: "dev_7-3"
+  simplipy_engine: acj-5-4-llm
 ```
 
 Key fields: `niterations` (the compute-scaling axis, swept per run), `timeout_in_seconds`, and `simplipy_engine` (the SimpliPy engine name; `dev_7-3` is installed on demand; required). No model weights to download: PySR fits each problem from scratch.
@@ -167,7 +169,7 @@ model_adapter:
   eq_setting_path: "{{ROOT}}/models/nesymres/eq_setting.json"
   config_path: "{{ROOT}}/models/nesymres/config.yaml"
   weights_path: "{{ROOT}}/models/nesymres/100M.ckpt"
-  simplipy_engine: "dev_7-3"
+  simplipy_engine: acj-5-4-llm
   n_restarts: 4
   device: cuda
   remove_padding: true
@@ -206,7 +208,7 @@ Then download the E2E weights (`model1.pt`) into `models/e2e/` separately, per u
 model_adapter:
   type: e2e
   model_path: "{{ROOT}}/models/e2e/model1.pt"
-  simplipy_engine: "dev_7-3"
+  simplipy_engine: acj-5-4-llm
   device: cuda
   candidates_per_bag: 1
   max_input_points: 200
@@ -223,15 +225,13 @@ Required fields: `model_path` and `simplipy_engine` (the adapter raises if eithe
 
 `lample_charton` and `brute_force` are **synthetic** baselines: they fit candidate expressions drawn from (or enumerated over) a generative `symbolic-data` catalog rather than calling a trained network, so there are no weights to download. They need a generative `catalog` to draw candidates from and an explicit `simplipy_engine`.
 
-> **Migration note.** The former `skeleton_pool` adapter is now `lample_charton`; its `skeleton_pool:` field is now `catalog:`, pointing at a generative catalog (e.g. `lample-charton-v23`).
-
 `lample_charton` block (`configs/evaluation/scaling/lample_charton_fastsrb.yaml`):
 
 ```yaml
 model_adapter:
   type: lample_charton
-  simplipy_engine: "dev_7-3"
-  catalog: lample-charton-v23   # the generative catalog to sample candidate expressions from
+  simplipy_engine: acj-5-4-llm
+  catalog: "{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M/catalog_train.yaml"   # the generative catalog to sample candidate expressions from (here: the reference checkpoint's training prior)
   samples: 32                   # candidate expressions sampled per problem (the compute-scaling axis)
   unique: true
   ignore_holdouts: true
@@ -246,7 +246,7 @@ model_adapter:
   likelihood_penalty: 0.0
 ```
 
-Note the **two** distinct `catalog` fields when this adapter is used: `data_source.catalog` is the evaluation set (e.g. `fastsrb` / `v23-val`), while `model_adapter.catalog` is the generative catalog the baseline samples its candidate expressions from (e.g. `lample-charton-v23`).
+Note the **two** distinct `catalog` fields when this adapter is used: `data_source.catalog` is the evaluation set (e.g. `fastsrb`), while `model_adapter.catalog` is the generative catalog the baseline samples its candidate expressions from (e.g. `lample-charton-v23`).
 
 `brute_force` takes the same required `catalog` and `simplipy_engine`, plus enumeration limits: `max_expressions` (default 10000), `max_length`, `include_constant_token` (default true), and the same refiner / penalty fields. No shipped scaling config defines a `brute_force` run; build one by copying the `lample_charton` block, changing `type: brute_force`, and adding `max_expressions`.
 

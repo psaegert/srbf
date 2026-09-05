@@ -14,7 +14,7 @@ run:
     eq_setting_path: '{{ROOT}}/models/nesymres/eq_setting.json'
     config_path: '{{ROOT}}/models/nesymres/config.yaml'
     weights_path: '{{ROOT}}/models/nesymres/100M.ckpt'
-    simplipy_engine: dev_7-3
+    simplipy_engine: acj-5-4-llm
     n_restarts: 4
     device: cuda
     remove_padding: true

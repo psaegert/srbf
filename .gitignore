@@ -43,3 +43,4 @@ site/
 results-site/tests/node_modules/
 results-site/tests/test-results/
 results-site/tests/package-lock.json
+/.provenance_cache/

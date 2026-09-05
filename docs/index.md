@@ -28,8 +28,8 @@ baseline. The example configs and benchmarks live in the
 
 ```bash
 export FLASH_ANSR_ROOT=$(pwd)                       # a tree holding configs/, models/, results/
-flash_ansr install psaegert/flash-ansr-v23.0-3M     # flash-ansr's CLI ships with srbf
-srbf run -c configs/evaluation/scaling/v23.0-3M_fastsrb.yaml --sweep-filter ladder=32 --limit 50 -v
+flash_ansr install psaegert/flash-ansr-v25.0-T7-3M  # flash-ansr's CLI ships with srbf
+srbf run -c configs/evaluation/scaling/flash-ansr-v25.0-T7-3M_fastsrb.yaml --sweep-filter ladder=32 --limit 50 -v
 ```
 
 The config names a `symbolic-data` catalog (here `fastsrb`); it is fetched from Hugging Face on first

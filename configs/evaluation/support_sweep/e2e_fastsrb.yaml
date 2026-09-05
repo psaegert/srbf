@@ -12,7 +12,7 @@ run:
     config_provenance: upstream_default
     type: e2e
     model_path: '{{ROOT}}/models/e2e/model1.pt'
-    simplipy_engine: dev_7-3
+    simplipy_engine: acj-5-4-llm
     device: cuda
     candidates_per_bag: 256
     max_input_points: 200

@@ -60,12 +60,12 @@ out-of-band; see [docs/models.md](docs/models.md).
 export FLASH_ANSR_ROOT=$(pwd)
 
 # 2. get a model to evaluate (flash-ansr's CLI ships with srbf)
-flash_ansr install psaegert/flash-ansr-v23.0-3M
+flash_ansr install psaegert/flash-ansr-v25.0-T7-3M
 
-# 3. run an evaluation. The config names a symbolic-data catalog (`fastsrb` / `v23-val`); it is
-#    fetched from Hugging Face on first use and cached, so there is no local data-build step.
-#    The config is a sweep over candidate counts; --sweep-filter picks one rung for a smoke test.
-srbf run -c configs/evaluation/scaling/v23.0-3M_fastsrb.yaml --sweep-filter ladder=32 --limit 50 -v
+# 3. run an evaluation. The config names a symbolic-data catalog (`fastsrb`); it is fetched from
+#    Hugging Face on first use and cached, so there is no local data-build step. The config is a
+#    sweep over candidate counts; --sweep-filter picks one rung for a smoke test.
+srbf run -c configs/evaluation/scaling/flash-ansr-v25.0-T7-3M_fastsrb.yaml --sweep-filter ladder=32 --limit 50 -v
 ```
 
 Outputs land under `results/evaluation/.../*.pkl`, one row per evaluated problem with the raw
@@ -76,7 +76,7 @@ prediction columns (derive FVU / recovery / F1 in a separate step; see
 from srbf import Benchmark
 
 # A config with inline !sweep / experiments expands to several runs; expand and run each one.
-for benchmark in Benchmark.runs_from_config("configs/evaluation/scaling/v23.0-3M_fastsrb.yaml"):
+for benchmark in Benchmark.runs_from_config("configs/evaluation/scaling/flash-ansr-v25.0-T7-3M_fastsrb.yaml"):
     benchmark.run()  # resume-aware; a no-op if that run's configured target is already reached
 
 # For a single, fully-resolved run (no !sweep / experiments), use from_config directly:
@@ -88,7 +88,7 @@ for benchmark in Benchmark.runs_from_config("configs/evaluation/scaling/v23.0-3M
 | Guide | What it covers |
 |---|---|
 | [Running evaluations](docs/running.md) | the `srbf run` CLI, config anatomy (data_source / model_adapter / runner / experiments / `!sweep`), outputs, resume, reporting |
-| [Benchmarks & datasets](docs/benchmarks.md) | the `data_source` catalog block, the shipped catalogs (`v23-val`, `fastsrb`, `lample-charton-v23`), custom catalogs |
+| [Benchmarks & datasets](docs/benchmarks.md) | the `data_source` catalog block, the shipped catalog (`fastsrb`), custom catalogs |
 | [Models & provisioning](docs/models.md) | installing/patching the built-in models; the `model_adapter` block per type |
 | [Fairness & provenance](docs/fairness.md) | one protocol for every method, the upstream-defaults policy, config-provenance labels, blessed configs |
 | [**Adding your model**](docs/adapters.md) | the adapter protocol + registry, and the PR flow to contribute a new SR method |

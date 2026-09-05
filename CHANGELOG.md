@@ -6,77 +6,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-09-05
+
+The release that pairs with flash-ansr 0.14: the third model generation, its reference checkpoint
+`psaegert/flash-ansr-v25.0-T7-3M`, and the three candidate-ranking modes. Requires
+`flash-ansr>=0.14,<0.15`, `simplipy>=0.14.6,<0.15` and `symbolic-data>=0.18,<0.19`.
+
+### Added
+- **A shipped evaluation of the reference checkpoint**:
+  `configs/evaluation/scaling/flash-ansr-v25.0-T7-3M_fastsrb.yaml` sweeps the sampling budget on
+  FastSRB with the application-mode settings (fittable emission and refine scope, MDL ranking at
+  1e-2 per bit, 8 restarts, a decode cap of 160 tokens) and reads the model from the directory
+  `flash_ansr install` writes to.
+- **`refine_scope` on the flash_ansr adapter config** (adapter key, falling back to the
+  evaluation config): which literals of a candidate the refiner may move. `'fittable'` (default)
+  fits every `<constant>` slot plus every spelled literal a constant optimizer can move and keeps
+  the typed literals, `pow` exponents and `rootn` indices, as the model spelled them;
+  `'placeholders'` fits only the slots; `'all'` frees every literal. Rides on
+  `FlashANSR.load(refiner_scope=)`.
+- **Decontamination verification** (`python -m srbf decontamination -t <training catalog yaml>
+  [-b name ...] [-o report.json]`; library: `srbf.decontamination.verify_decontamination`): probes
+  every benchmark problem against the training catalog's registered holdout via `is_held_out`
+  (the training-time sampler's own family quotient) and reports per-catalog coverage (total /
+  held / missed / black-box / unparseable). Fail-closed: a problem whose tokens cannot be probed
+  counts as unverified, never as covered; exit code 0 only when every probe-able benchmark problem
+  is verified held out.
+
 ### Changed
-- **`ranking:` is REQUIRED on a flash_ansr adapter** (under `model_adapter`, else under its
-  `evaluation_config`; an adapter-level block replaces the other outright), strict inside:
-  `mode` (`mdl` | `weighted` | `pareto`) plus that mode's knobs (`mdl_strength`; `weights`;
-  `metrics` + `tie_break`), validated through flash-ansr's own `resolve_ranking`. **Breaking:**
+- **`ranking:` is required on a flash_ansr adapter** (under `model_adapter`, else under its
+  `evaluation_config`; an adapter-level block replaces the other outright), strict inside: `mode`
+  (`mdl` | `weighted` | `pareto`) plus that mode's knobs (`mdl_strength`; `weights`; `metrics` +
+  `tie_break`), validated through flash-ansr's own `resolve_ranking`. **Breaking:**
   `node_penalty`, `constants_penalty`, `likelihood_penalty`, `mdl_penalty` and the never-read
   `parsimony` / `length_penalty` now raise at every layer, naming the replacement. Every srbf
-  flash_ansr run before this release ranked at an effective length penalty of 0.0 while its
-  config said `parsimony: 0.05` (a key the adapter never read); the block exists so a run has to
-  say how it ranks. The resolved values are written to `__meta__['ranking']` and to every row's
-  `ranking` column (the three penalty columns are gone); rows also carry `predicted_mdl`,
+  flash_ansr run before this release ranked at an effective length penalty of 0.0 while its config
+  said `parsimony: 0.05` (a key the adapter never read); the block exists so a run has to say how
+  it ranks. The resolved values are written to `__meta__['ranking']` and to every row's `ranking`
+  column (the three penalty columns are gone); rows also carry `predicted_mdl`,
   `predicted_n_nodes` and `predicted_pareto_rank`. The refiner baselines keep their own
   `node_penalty` / `constants_penalty` / `likelihood_penalty` and report them as a `weighted`
   ranking record.
+- **The default `emission` is `'fittable'`** (was `'constants'`): the application mode, in which
+  the model spells the typed literals and leaves every fittable constant as a placeholder that
+  the refiner fits from random inits. Configs that want the unflagged format say
+  `emission: constants` explicitly.
 - **Provenance names both checkouts.** The srbf checkout is found by walking up to `.git` (the
   fixed `parents[3]` pointed above the repo, so every `__meta__['git']` written so far was
   empty); `git_flash_ansr` records the model code's checkout; `env` carries the flash-ansr,
-  simplipy and symbolic-data versions; the model's `model.safetensors` is hashed (v25
-  checkpoints have no `state_dict.pt`).
+  simplipy and symbolic-data versions; the model's `model.safetensors` is hashed.
 - **The save-all candidate store carries the re-ranking substrate.** With `candidate_store_dir`
   set the adapter asks `infer(top_k='all')` and writes, per candidate, `n_nodes`, `n_constants`,
   `mdl`, `score`, `pareto_rank`, `rank` (from flash-ansr's ledger) and `fvu_val`,
   `recovery_fit`, `recovery_val` (from every candidate's predictions through
   `srbf.metrics.numeric`); the manifest's `run_meta` holds the run's ranking, the mu dialect and
   the simplipy version. A store written without the flag is unchanged.
-
-### Added
-- **`refine_scope` on the flash_ansr adapter config** (adapter key, falling back to the
-  evaluation config): which literals of a candidate the refiner may move. `'fittable'`
-  (default) fits every `<constant>` slot plus every spelled literal a constant optimizer can
-  move and keeps the typed literals -- `pow` exponents, `rootn` indices -- as the model
-  spelled them; `'placeholders'` fits only the slots; `'all'` frees every literal (the old
-  behaviour). Rides on `FlashANSR.load(refiner_scope=)`.
-
-### Changed
-- **The default `emission` is `'fittable'`** (was `'constants'`): the application mode --
-  the model spells the typed literals and leaves every fittable constant as a placeholder,
-  which the refiner fits from random inits. Configs that want the unflagged format say
-  `emission: constants` explicitly.
-
-### Changed
-- **Dependency floors rise to the qualified v25 stack**: `simplipy>=0.14.1,<0.15` and
-  `symbolic-data>=0.16,<0.17` (the decontamination verb probes through symbolic-data's 0.16
-  holdout family key). Publishing this as 0.12.0 waits on the simplipy-0.14-compatible
-  flash-ansr release: PyPI flash-ansr (<=0.13.0) pins `simplipy<0.14`, so the set cannot
-  resolve from PyPI until then.
-
-### Added
-- **Decontamination verification** (`python -m srbf decontamination -t <training catalog yaml>
-  [-b name ...] [-o report.json]`; library: `srbf.decontamination.verify_decontamination`): probes
-  every benchmark problem against the training catalog's registered holdout via `is_held_out` (the
-  training-time sampler's own family quotient) and reports per-catalog coverage
-  (total / held / missed / black-box / unparseable). Fail-closed: a problem whose tokens cannot be
-  probed counts as UNVERIFIED, never as covered; exit code 0 only when every probe-able benchmark
-  problem is verified held out.
-
-### Removed
-- **Retired evaluation configs cut from `configs/evaluation/`** (91 files; git history is the
-  archive): every config referencing a retired catalog (`v23-val`, `lample-charton-v23` — both
-  unresolvable under the pinned `simplipy>=0.14` / `symbolic-data>=0.15`), pinning a flash-ansr
-  v23 checkpoint (current flash-ansr refuses these at load), or requesting the retired
-  `method: beam_search`. The 33 surviving configs are the `fastsrb` baseline arms (PySR,
-  NeSymReS, E2E). The schema gate (`tests/test_eval/test_scaling_configs.py`) now accepts
-  `fastsrb` as the only shipped catalog.
-
-### Changed
 - **Constants reach the evaluation record at float64.** The coercion between a
   `symbolic_data.Problem` and the eval record matches the generator's storage width, so a
   constant is benchmarked at the precision it was realized at. Fit-quality tolerances are
-  unchanged: `is_perfect_fit` and the reference-FVU noise floor still use float32 epsilon,
-  which is a bar on agreement, not a storage width.
+  unchanged: `is_perfect_fit` and the reference-FVU noise floor still use float32 epsilon, which
+  is a bar on agreement, not a storage width.
+- **The shipped baseline configs pin the `acj-5-4-llm` SimpliPy engine** (was `dev_7-3`, a
+  generation-1 artifact that `simplipy>=0.14` refuses to load). The engine canonicalizes and
+  simplifies every method's predictions for the recovery metrics, so it is part of the protocol:
+  one engine for the reference checkpoint and the baselines alike. Results produced under
+  `dev_7-3` are not comparable with new runs without re-running.
+- **Dependencies.** `flash-ansr>=0.14,<0.15` (the ranking modes, `refiner_scope`, safetensors
+  checkpoints), `simplipy>=0.14.6,<0.15`, `symbolic-data>=0.18,<0.19`.
+
+### Removed
+- **Retired evaluation configs cut from `configs/evaluation/`** (91 files; git history is the
+  archive): every config referencing a retired catalog (`v23-val`, `lample-charton-v23`), pinning
+  a flash-ansr v23 checkpoint (flash-ansr 0.14 refuses these at load), or requesting the retired
+  `method: beam_search`. The shipped configs are the FastSRB arms: the reference checkpoint and
+  the PySR, NeSymReS and E2E baselines. The schema gate
+  (`tests/test_eval/test_scaling_configs.py`) accepts `fastsrb` as the only shipped catalog.
 
 ## [0.11.1] - 2026-07-10
 

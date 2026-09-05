@@ -5,8 +5,8 @@ on:
 
 name: pytest
 
-# srbf depends one-way on flash-ansr (>=0.6, published on PyPI). `pip install -e .` resolves the
-# `flash-ansr~=0.6` pin and the runtime deps from PyPI; pytest is added separately. The heavy optional
+# srbf depends one-way on flash-ansr (published on PyPI). `pip install -e .` resolves the
+# `flash-ansr` pin and the runtime deps from PyPI; pytest is added separately. The heavy optional
 # baselines (PySR/Julia, sympy for E2E/NeSymReS) are kept OUT of CI: the eval tests mock or skip those
 # adapter paths. Some eval tests need provisioned assets (models, skeleton-pool fixtures) under
 # FLASH_ANSR_ROOT and skip when absent.
