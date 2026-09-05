@@ -24,15 +24,15 @@ export FLASH_ANSR_ROOT=/path/to/srbf
 
 You also need:
 
-- A model to evaluate (e.g. a flash-ansr checkpoint: `flash_ansr install psaegert/flash-ansr-v23.0-120M`). See [models.md](models.md).
-- The benchmark the config names. The `data_source.catalog` field is a `symbolic-data` catalog (e.g. `v23-val`, `fastsrb`); it is fetched from Hugging Face on first use and cached, so there is no local data-build step. See [benchmarks.md](benchmarks.md).
+- A model to evaluate (e.g. a flash-ansr checkpoint: `flash_ansr install psaegert/flash-ansr-v25.0-T7-3M`). See [models.md](models.md).
+- The benchmark the config names. The `data_source.catalog` field is a `symbolic-data` catalog (e.g. `fastsrb`); it is fetched from Hugging Face on first use and cached, so there is no local data-build step. See [benchmarks.md](benchmarks.md).
 
 ## The `srbf run` command
 
 There is exactly one subcommand, `run`:
 
 ```bash
-srbf run -c configs/evaluation/scaling/v23.0-20M_fastsrb.yaml -v
+srbf run -c configs/evaluation/scaling/flash-ansr-v25.0-T7-3M_fastsrb.yaml -v
 ```
 
 ### Flags
@@ -45,14 +45,14 @@ srbf run -c configs/evaluation/scaling/v23.0-20M_fastsrb.yaml -v
 | `--save-every` | Override how often (in samples) results are flushed to disk. |
 | `--no-resume` | Ignore any existing output pickle and start fresh (default behavior resumes). |
 | `--experiment` | Name of a single experiment to run when the config defines an `experiments:` map. |
-| `--sweep-filter` | Run only the `!sweep` runs whose axis labels match, e.g. `--sweep-filter ladder=256` (comma-separate several: `AXIS=VALUE,AXIS=VALUE`). |
+| `--sweep-filter` | Run only the `!sweep` runs whose axis labels match, e.g. `--sweep-filter ladder=256` (comma-separate several: `AXIS=VALUE,AXIS=VALUE`). A zipped axis is labelled by the value that tells its rungs apart (the `choices` / `samples` / `niterations` ladder, not a `problems_per_expression` column that repeats). |
 | `-v`, `--verbose` | Print a progress bar and per-run status. |
 
 A quick smoke test of a single sweep rung:
 
 ```bash
 srbf run \
-  -c configs/evaluation/scaling/v23.0-20M_fastsrb.yaml \
+  -c configs/evaluation/scaling/flash-ansr-v25.0-T7-3M_fastsrb.yaml \
   --sweep-filter ladder=32 \
   --limit 2 -v
 ```
@@ -69,7 +69,7 @@ A config has a top-level `run:` block with three sub-blocks: `data_source`,
 `run:` blocks; see [Selecting experiments](#selecting-experiments).)
 
 Here is the structure, abridged from
-[`configs/evaluation/scaling/v23.0-3M_fastsrb.yaml`](https://github.com/psaegert/srbf/blob/main/configs/evaluation/scaling/v23.0-3M_fastsrb.yaml):
+[`configs/evaluation/scaling/flash-ansr-v25.0-T7-3M_fastsrb.yaml`](https://github.com/psaegert/srbf/blob/main/configs/evaluation/scaling/flash-ansr-v25.0-T7-3M_fastsrb.yaml):
 
 ```yaml
 run:
@@ -81,25 +81,28 @@ run:
       noise: 0.0                  # Gaussian noise as a fraction of the target std (0 = clean)
       problems_per_expression: 10 # distinct sampled problems per ground-truth expression
   model_adapter:
+    config_provenance: author_blessed   # fairness label (docs/fairness.md); every shipped config declares one
     type: flash_ansr
-    model_path: "{{ROOT}}/models/ansr-models/v23.0-3M"
+    model_path: "{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M"   # where `flash_ansr install` puts it
+    emission: fittable          # the model spells typed literals, the refiner fits the other constants
+    refine_scope: fittable
     evaluation_config:
       n_support: 512
       n_restarts: 8
       refiner_method: curve_fit_lm
       refiner_p0_noise: normal
       refiner_p0_noise_kwargs: {loc: 0.0, scale: 5}
-      ranking: {mode: mdl}          # REQUIRED. mdl (default strength 1e-2 per bit) | weighted | pareto
+      ranking: {mode: mdl, mdl_strength: 1.0e-2}   # REQUIRED. mdl | weighted | pareto
       generation_config:
         method: softmax_sampling
-        kwargs: {choices: 32, max_len: 64, batch_size: 128, temperature: 1, simplify: true}
+        kwargs: {choices: 1024, max_len: 160, batch_size: 128, temperature: 1, simplify: true}
       device: cuda
     device: cuda
   runner:
     limit: null
     save_every: 64
     resume: true
-    output: "{{ROOT}}/results/evaluation/scaling/v23.0-3M/fastsrb/choices_00032.pkl"
+    output: "{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_001024.pkl"
 ```
 
 ### `data_source`
@@ -111,7 +114,7 @@ all generation, fixed-set iteration, noise injection, and decontamination.
 
 ```yaml
 data_source:
-  catalog: v23-val              # a catalog name/ref, an HF 'user/repo:name' ref, a local path, or an inline config
+  catalog: fastsrb              # a catalog name/ref, an HF 'user/repo:name' ref, a local path, or an inline config
   sampling:                     # the per-run usage policy (all fields optional)
     n_support: 512
     n_validation: 1024
@@ -119,13 +122,13 @@ data_source:
     problems_per_expression: 10
     method: iterate             # frozen catalog -> 'iterate'; open generative catalog -> 'procedural'
   holdouts:                     # optional decontamination / filters
-    - exclude: lample-charton-v23
+    - exclude: "{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M/catalog_train.yaml"   # a catalog whose expressions are removed, e.g. the model's training prior
     - filter: {finite: true}
   target_size: 1000             # cap the number of rows (also honoured as the run total)
 ```
 
-The shipped catalogs are `v23-val` (the frozen, sha-pinned validation set), `fastsrb` (the FastSRB
-benchmark), and `lample-charton-v23` (the generative v23 training recipe). See
+The shipped catalog is `fastsrb` (the FastSRB benchmark); any other `symbolic-data` catalog
+reference, local catalog config or inline config works in its place. See
 [benchmarks.md](benchmarks.md) for catalog references, the shipped catalogs, and pointing at your
 own.
 
@@ -173,7 +176,7 @@ ladder=<value>` runs exactly one rung.
 ```yaml
 run:
   data_source:
-    catalog: v23-val
+    catalog: fastsrb
     sampling:
       n_support: 512
       n_validation: 512
@@ -217,7 +220,7 @@ problem. The row count equals the number of expressions in the catalog times
 
 ```python
 import pandas as pd
-df = pd.read_pickle("results/evaluation/scaling/v23.0-3M/fastsrb/choices_00032.pkl")
+df = pd.read_pickle("results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_001024.pkl")
 print(len(df), df.columns.tolist())
 ```
 
@@ -251,7 +254,7 @@ The columns a `Benchmark.run()` snapshot actually contains:
 
 ### Deriving metrics
 
-The derived metrics (`fvu_fit`, `fvu_val`, `log10_fvu_*`, `numeric_recovery_fit`,
+The derived metrics (`fvu_fit`, `fvu_val`, `log10_fvu_*`, `r2_fit`, `r2_val`, `numeric_recovery_fit`,
 `numeric_recovery_val`, `symbolic_recovery`, `f1_score`, `n_constants`,
 `predicted_n_constants`, skeleton lengths, edit distances, unique-variable
 precision/recall, ...) are computed **after** the run by `srbf.derive_metrics`. It takes one
@@ -353,7 +356,7 @@ math per run. Run each:
 from srbf import Benchmark
 
 for benchmark in Benchmark.runs_from_config(
-    "configs/evaluation/scaling/v23.0-20M_fastsrb.yaml",
+    "configs/evaluation/scaling/flash-ansr-v25.0-T7-3M_fastsrb.yaml",
     sweep_filter={"ladder": 32},   # optional: keep only matching sweep rungs
 ):
     benchmark.run()                # resume-aware; a no-op when that run is already complete

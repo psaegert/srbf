@@ -1,6 +1,6 @@
 # Flash-ANSR reference checkpoint (psaegert/flash-ansr-v25.0-T7-3M) on FastSRB: recovery as a
-# function of the sampling budget. One rung per candidate count; `--sweep-filter ladder=<choices>`
-# selects a single rung. The model directory is where `flash_ansr install` puts the checkpoint.
+# function of the sampling budget, 1 to 16,384 choices (about two minutes per problem at the top
+# rung). One rung per candidate count; `--sweep-filter ladder=<choices>` selects a single rung. The model directory is where `flash_ansr install` puts the checkpoint.
 run:
   data_source:
     catalog: fastsrb
@@ -10,7 +10,7 @@ run:
       noise: 0.0
       problems_per_expression: !sweep
         name: ladder
-        values: [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 5, 5]
+        values: [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10]
   model_adapter:
     config_provenance: author_blessed
     type: flash_ansr
@@ -48,11 +48,11 @@ run:
       kwargs:
         choices: !sweep
           name: ladder
-          values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536, 262144]
+          values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
   runner:
     limit: null
     save_every: 64
     resume: true
     output: !sweep
       name: ladder
-      values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_065536.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_262144.pkl']
+      values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M/fastsrb/choices_016384.pkl']

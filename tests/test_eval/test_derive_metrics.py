@@ -54,3 +54,14 @@ def test_composes_with_bootstrap_report():
 def test_requires_engine_or_operator_arity():
     with pytest.raises(ValueError, match="engine.*operator_arity|operator_arity"):
         derive_metrics(_raw_snapshot())
+
+
+def test_r2_is_one_minus_fvu_clipped():
+    snapshot = _raw_snapshot()
+    derived = derive_metrics(snapshot, operator_arity=ARITY)
+    r2 = np.asarray(derived['r2_val'], dtype=float)
+    fvu = np.asarray(derived['fvu_val'], dtype=float)
+    assert r2.shape == fvu.shape
+    assert np.allclose(r2, np.clip(1.0 - fvu, 0.0, 1.0))
+    assert r2[0] == 1.0 and r2[2] == 1.0      # the perfect fits
+    assert 0.0 <= r2[1] < 1.0                  # the offset fit explains some variance, not all

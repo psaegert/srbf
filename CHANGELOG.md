@@ -6,6 +6,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-05
+
+### Added
+- **`r2_fit` / `r2_val`**, the coefficient of determination, and "R² (val)" among the default
+  summary metrics. Defined as `1 - fvu` under FVU's own numerics (a recovered fit reads exactly
+  1.0) and clipped to [0, 1], with a failed or non-finite prediction counting 0, which is the
+  convention under which the literature reports a mean R² across problems. It separates methods
+  far less than recovery or log FVU, and is reported because readers expect it.
+
+### Changed
+- **The shipped scaling ladder stops at 16,384 choices** (was 262,144), ten draws per expression
+  on every rung: about two minutes per problem at the top rung, the budget the full-suite
+  campaign runs at. The longer rungs are deferred.
+
+### Fixed
+- **`--sweep-filter` matches the rung it names.** A zipped `!sweep` axis was labelled by its
+  first co-named sweep in document order, which in every shipped scaling config is the
+  `problems_per_expression` column (`10` on all but the last rungs), so `--sweep-filter ladder=32`
+  resolved zero runs. The label is now the value that tells the rungs apart (the `choices` /
+  `samples` / `niterations` ladder); an axis without such a node keeps its first sweep's value.
+
 ## [0.12.0] - 2026-09-05
 
 The release that pairs with flash-ansr 0.14: the third model generation, its reference checkpoint

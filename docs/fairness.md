@@ -86,7 +86,7 @@ that is the conservative reading. The shipped configs declare their labels expli
   the same people; the label states exactly that, and any method's authors get the same slot on the
   same terms (below).
 - **Benchmark-native references: `harness_tuned`.** The training-prior sampler (the
-  `lample_charton` adapter drawing skeletons from the v23 training recipe; shown as *Prior* in the
+  `lample_charton` adapter drawing skeletons from the training prior; shown as *Prior* in the
   results explorer) and the brute-force reference have no third-party upstream whose defaults could
   apply; the benchmark maintainers assembled them.
 

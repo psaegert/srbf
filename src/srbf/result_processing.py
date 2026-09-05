@@ -12,6 +12,7 @@ from srbf.metrics.numeric import (
     fvu,
     is_perfect_fit,
     log10_fvu,
+    r2,
     safe_divide,
 )
 from srbf.metrics.symbolic import total_nestedness
@@ -69,6 +70,8 @@ DEFAULT_NEGATIVES: dict[str, Any] = {
     'predicted_skeleton_prefix_length': np.inf,
     'fvu_fit': np.inf,
     'fvu_val': np.inf,
+    'r2_fit': 0.0,
+    'r2_val': 0.0,
     'log10_fvu_fit': np.inf,
     'log10_fvu_val': np.inf,
     'only_approx_fvu_fit': np.inf,
@@ -182,7 +185,7 @@ def compute_derived_metrics(
     This adds the following keys to each ``results[model]['results'][test_set][scaling_value]``
     dict:
 
-    - ``fvu_fit``, ``fvu_val``, ``log10_fvu_fit``, ``log10_fvu_val``
+    - ``fvu_fit``, ``fvu_val``, ``log10_fvu_fit``, ``log10_fvu_val``, ``r2_fit``, ``r2_val``
     - ``numeric_recovery_fit``, ``numeric_recovery_val``
     - ``only_approx_fvu_*``, ``only_approx_log10_fvu_*``
     - ``skeleton_simplified``, ``f1_score``, ``skeleton_length``,
@@ -227,6 +230,9 @@ def compute_derived_metrics(
                     ])
                     r[f'log10_fvu_{split}'] = np.array([
                         log10_fvu(yt, yp) for yt, yp in zip(r[y_key], r[yp_key])
+                    ])
+                    r[f'r2_{split}'] = np.array([
+                        r2(yt, yp) for yt, yp in zip(r[y_key], r[yp_key])
                     ])
                     r[f'numeric_recovery_{split}'] = np.array([
                         is_perfect_fit(yt, yp) for yt, yp in zip(r[y_key], r[yp_key])

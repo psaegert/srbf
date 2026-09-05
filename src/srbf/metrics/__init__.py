@@ -5,7 +5,7 @@ from srbf.metrics.numeric import (
     fvu,
     fvu_exact,
     is_perfect_fit,
-    log10_fvu,
+    log10_fvu, r2,
     naninfmean,
     safe_divide,
 )

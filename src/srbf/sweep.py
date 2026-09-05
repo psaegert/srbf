@@ -90,12 +90,21 @@ def _substitute(node: Any, picks: Mapping[int, int]) -> Any:
     return copy.deepcopy(node)
 
 
+def _identifies_rungs(sweep: Sweep) -> bool:
+    """True when every rung of ``sweep`` carries a different value, so the value names the rung."""
+    seen = {repr(v) for v in sweep.values}
+    return len(seen) == len(sweep.values)
+
+
 def resolve_sweeps(config: Mapping[str, Any]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
     """Expand ``!sweep`` markers into ``[(resolved_config, axis_labels), ...]``.
 
     Named axes zip (equal length required); anonymous axes form the cross-product. ``axis_labels``
-    maps each axis name to the value selected for that run (anonymous axes are omitted from labels,
-    since they have no stable name). A config with no sweeps yields a single ``(config, {})``.
+    maps each axis name to the value that identifies the run on that axis: the value of the first
+    co-named sweep whose values differ from rung to rung (the ``choices`` ladder rather than a
+    ``problems_per_expression`` column that repeats ``10``), falling back to the first co-named
+    sweep when none does. Anonymous axes are omitted from labels, since they have no stable name.
+    A config with no sweeps yields a single ``(config, {})``.
     """
     sweeps: list[Sweep] = []
     _collect(config, sweeps)
@@ -120,6 +129,8 @@ def resolve_sweeps(config: Mapping[str, Any]) -> list[tuple[dict[str, Any], dict
                     f"!sweep axis '{key}' has inconsistent lengths ({axis_len[key]} vs {len(sweep.values)}); "
                     f"co-named sweeps zip element-wise and must be equal length"
                 )
+            if not _identifies_rungs(axis_repr[key]) and _identifies_rungs(sweep):
+                axis_repr[key] = sweep
         else:
             axis_len[key] = len(sweep.values)
             axis_repr[key] = sweep

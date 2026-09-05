@@ -83,3 +83,19 @@ def test_yaml_sweep_mapping_requires_values():
     register_sweep_yaml()
     with pytest.raises(Exception):  # noqa: B017 - yaml wraps the ValueError from the constructor
         yaml.safe_load("bad: !sweep {name: x}\n")
+
+
+def test_zipped_axis_label_is_the_identifying_node():
+    # The scaling configs zip a repeating draw column with the compute ladder under one name; the
+    # label (what --sweep-filter matches) must be the value that tells the rungs apart.
+    cfg = {
+        "draws": Sweep([10, 10, 5], name="ladder"),
+        "choices": Sweep([32, 64, 128], name="ladder"),
+        "out": Sweep(["a", "b", "c"], name="ladder"),
+    }
+    runs = resolve_sweeps(cfg)
+    assert [labels["ladder"] for _, labels in runs] == [32, 64, 128]
+    assert [r["draws"] for r, _ in runs] == [10, 10, 5]
+    # No identifying node at all: the first co-named sweep labels the axis, as before.
+    cfg2 = {"a": Sweep([1, 1], name="k"), "b": Sweep([2, 2], name="k")}
+    assert [labels["k"] for _, labels in resolve_sweeps(cfg2)] == [1, 1]

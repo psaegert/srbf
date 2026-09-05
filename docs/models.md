@@ -85,7 +85,7 @@ model_adapter:
   device: cuda
 ```
 
-Key fields: `model_path` (checkpoint directory), `evaluation_config` (refiner + generation settings, including the nested `generation_config`), and `device`. The full block is ~30 lines; read the shipped config rather than retyping it. The compute-scaling knob (the candidate count `choices`) is swept with `generation_overrides` (and `evaluation_overrides` for refiner knobs). The `*_val.yaml` variants point the same adapter at the `v23-val` catalog.
+Key fields: `model_path` (checkpoint directory), `evaluation_config` (refiner + generation settings, including the nested `generation_config`), and `device`. The full block is ~30 lines; read the shipped config rather than retyping it. The compute-scaling knob (the candidate count `choices`) is swept with `generation_overrides` (and `evaluation_overrides` for refiner knobs).
 
 `flash_ansr` is the only adapter where the wheel both ships the adapter and can fetch the model, so no extra `srbf` extra is needed.
 
@@ -112,14 +112,14 @@ model_adapter:
   simplipy_engine: acj-5-4-llm
 ```
 
-Key fields: `niterations` (the compute-scaling axis, swept per run), `timeout_in_seconds`, and `simplipy_engine` (the SimpliPy engine name; `dev_7-3` is installed on demand; required). No model weights to download: PySR fits each problem from scratch.
+Key fields: `niterations` (the compute-scaling axis, swept per run), `timeout_in_seconds`, and `simplipy_engine` (the SimpliPy engine name; `acj-5-4-llm` is installed on demand; required). No model weights to download: PySR fits each problem from scratch.
 
 Two properties of the adapter worth knowing:
 
 - **Complexity budget = PySR's own default.** [Benchmark policy](./fairness.md): baselines run
   at their upstream defaults — a method's default hyperparameters are part of the method. The
   default is version-dependent: `maxsize=30` since pysr 1.x (the version srbf's results use),
-  `maxsize=20` in pysr ≤0.x. At `maxsize=30`, 7/120 FastSRB (5.8%) and 102/1000 v23-val (10.2%)
+  `maxsize=20` in pysr ≤0.x. At `maxsize=30`, 7/120 FastSRB (5.8%)
   ground truths are not representable under the adapter vocabulary at all (largest ground truth =
   40 nodes; measure it against your installed pysr with `python scripts/audit_pysr_maxsize.py`,
   which reads the installed default). This is a documented property of running
@@ -175,7 +175,7 @@ model_adapter:
   remove_padding: true
 ```
 
-Required fields: `eq_setting_path`, `config_path`, `weights_path`, and `simplipy_engine` (the adapter raises if any is missing). `beam_width` is the compute-scaling axis, swept per run. The `nesymres_val.yaml` variant points the same adapter at the `v23-val` catalog.
+Required fields: `eq_setting_path`, `config_path`, `weights_path`, and `simplipy_engine` (the adapter raises if any is missing). `beam_width` is the compute-scaling axis, swept per run.
 
 > Lightning warns that the checkpoint was saved with an older release. Inference works regardless; optionally upgrade it in place with `python -m pytorch_lightning.utilities.upgrade_checkpoint models/nesymres/100M.ckpt`.
 
@@ -217,7 +217,7 @@ model_adapter:
   rescale: true
 ```
 
-Required fields: `model_path` and `simplipy_engine` (the adapter raises if either is missing). `candidates_per_bag` is the compute-scaling axis, swept per run (some configs also tune `max_generated_output_len`). The `e2e_val.yaml` variant targets the `v23-val` catalog.
+Required fields: `model_path` and `simplipy_engine` (the adapter raises if either is missing). `candidates_per_bag` is the compute-scaling axis, swept per run (some configs also tune `max_generated_output_len`).
 
 ---
 
@@ -246,7 +246,7 @@ model_adapter:
   likelihood_penalty: 0.0
 ```
 
-Note the **two** distinct `catalog` fields when this adapter is used: `data_source.catalog` is the evaluation set (e.g. `fastsrb`), while `model_adapter.catalog` is the generative catalog the baseline samples its candidate expressions from (e.g. `lample-charton-v23`).
+Note the **two** distinct `catalog` fields when this adapter is used: `data_source.catalog` is the evaluation set (e.g. `fastsrb`), while `model_adapter.catalog` is the generative catalog the baseline samples its candidate expressions from (e.g. the reference checkpoint's `catalog_train.yaml`).
 
 `brute_force` takes the same required `catalog` and `simplipy_engine`, plus enumeration limits: `max_expressions` (default 10000), `max_length`, `include_constant_token` (default true), and the same refiner / penalty fields. No shipped scaling config defines a `brute_force` run; build one by copying the `lample_charton` block, changing `type: brute_force`, and adding `max_expressions`.
 
