@@ -415,7 +415,7 @@ def resolve_ranking_block(config: Mapping[str, Any], eval_cfg: Mapping[str, Any]
         raise ValueError(
             "model_adapter.ranking is required for a flash_ansr adapter and neither the adapter nor "
             "its evaluation_config carries one. State the candidate ranking, e.g. "
-            "`ranking: {mode: mdl}` (the library default: log10(FVU) + 4.5e-3 per bit of the refined "
+            "`ranking: {mode: mdl}` (the library default: log10(FVU) + 1e-2 per bit of the refined "
             "expression's description length), `ranking: {mode: weighted, weights: {n_nodes: 0.05}}` "
             "(the pre-0.14 length penalty) or `ranking: {mode: pareto, metrics: [fvu, n_nodes]}`. "
             "The historical effective value of every srbf flash_ansr run was penalty 0.0.")

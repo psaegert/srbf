@@ -602,5 +602,5 @@ def test_build_flash_ansr_adapter_defaults_follow_the_doctrine(monkeypatch):
     assert adapter.emission == "fittable"
     # and the default ranking resolves to the engineered mdl strength, stated in full
     assert captured["flash_ansr_kwargs"]["ranking_mode"] == "mdl"
-    assert captured["flash_ansr_kwargs"]["mdl_strength"] == 4.5e-3
+    assert captured["flash_ansr_kwargs"]["mdl_strength"] == 1e-2
     assert captured["flash_ansr_kwargs"]["refiner_scope"] == "fittable"

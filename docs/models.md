@@ -70,7 +70,7 @@ model_adapter:
     refiner_p0_noise: normal
     refiner_p0_noise_kwargs: {loc: 0.0, scale: 5}
     # REQUIRED on a flash_ansr adapter, strict inside. Three modes (flash-ansr's RankingConfig):
-    #   {mode: mdl, mdl_strength: 4.5e-3}                    log10(FVU) + strength per bit of the refined expression
+    #   {mode: mdl, mdl_strength: 1e-2}                      log10(FVU) + strength per bit of the refined expression
     #   {mode: weighted, weights: {n_nodes: 0.05}}            log10(FVU) + weighted metrics (the pre-0.14 ranking)
     #   {mode: pareto, metrics: [fvu, n_nodes], tie_break: fvu}
     # A block under model_adapter replaces one under evaluation_config. The loose keys

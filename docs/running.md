@@ -89,7 +89,7 @@ run:
       refiner_method: curve_fit_lm
       refiner_p0_noise: normal
       refiner_p0_noise_kwargs: {loc: 0.0, scale: 5}
-      ranking: {mode: mdl}          # REQUIRED. mdl (default strength 4.5e-3 per bit) | weighted | pareto
+      ranking: {mode: mdl}          # REQUIRED. mdl (default strength 1e-2 per bit) | weighted | pareto
       generation_config:
         method: softmax_sampling
         kwargs: {choices: 32, max_len: 64, batch_size: 128, temperature: 1, simplify: true}
