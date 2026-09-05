@@ -10,10 +10,18 @@ import pytest
 import yaml
 
 from srbf.sweep import Sweep, register_sweep_yaml, resolve_sweeps
+from srbf.config import select_experiment
 
 EVAL_CONFIG_DIR = Path(__file__).resolve().parents[2] / "configs" / "evaluation"
 VALID_ADAPTERS = {"flash_ansr", "pysr", "nesymres", "e2e", "lample_charton", "brute_force"}
-VALID_CATALOGS = {"fastsrb"}
+VALID_CATALOGS = {
+    "fastsrb", "feynman", "feynman-bonus", "srsd-dummy",
+    "erbench-syneq", "erbench-densities", "erbench-phybench",
+    "soose-fc", "soose-nc", "soose-wc",
+    "physo-astro", "physo-class",
+    "nguyen", "keijzer", "korns", "koza", "livermore", "livermore2", "vladislavleva", "jin", "neat",
+    "pagie", "poly", "nonic", "sine", "meier", "r-rationals", "constant", "grammarvae",
+}
 # The fairness policy, enforced structurally (docs/fairness.md): third-party baselines ship at
 # their upstream defaults; flash-ansr configs are author-blessed (the benchmark and Flash-ANSR
 # share authors, which is exactly what the label discloses); benchmark-native references are
@@ -51,7 +59,11 @@ def test_eval_config_uses_catalog_schema_and_resolves(config_path):
         assert token not in text, f"{config_path}: removed schema / banned term {token!r} present"
 
     config = yaml.safe_load(text) or {}
-    runs = resolve_sweeps(config)
+    # An `experiments:` map expands per experiment, exactly as Benchmark.runs_from_config does.
+    if isinstance(config, dict) and config.get("experiments"):
+        runs = [run for name in config["experiments"] for run in resolve_sweeps(select_experiment(config, name))]
+    else:
+        runs = resolve_sweeps(config)
     assert runs, f"{config_path}: no runs"
 
     # configs/evaluation/panels/ = pre-registered side-experiment arms where the maintainers set
