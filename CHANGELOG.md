@@ -4,6 +4,16 @@ All notable changes to srbf are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **MDL ratio.** The derived metrics carry `predicted_mdl`, `ground_truth_mdl` and `mdl_ratio`:
+  the description length of the realized predicted expression over that of the ground truth, in
+  the engine's own measure (`complexity`, milli-bits: certified, f64 parse, Default canon; the
+  price the flash-ansr ranking modes score with). A prefix that still carries a `<constant>`
+  placeholder is not priced, and "MDL ratio" is among the report's default metrics.
+  `derive_metrics`/`compute_derived_metrics` take `mdl_fn` for a pricer other than the engine's.
+
 ## [0.14.0] - 2026-09-07
 
 ### Added

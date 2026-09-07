@@ -284,7 +284,8 @@ The columns a `Benchmark.run()` snapshot actually contains:
 ### Deriving metrics
 
 The derived metrics (`fvu_fit`, `fvu_val`, `log10_fvu_*`, `r2_fit`, `r2_val`, `numeric_recovery_fit`,
-`numeric_recovery_val`, `symbolic_recovery`, `f1_score`, `n_constants`,
+`numeric_recovery_val`, `symbolic_recovery`, `f1_score`, `mdl_ratio` (the description length of
+the realized prediction over the ground truth's, in the engine's measure), `n_constants`,
 `predicted_n_constants`, skeleton lengths, edit distances, unique-variable
 precision/recall, ...) are computed **after** the run by `srbf.derive_metrics`. It takes one
 raw run snapshot and returns a **new** snapshot with the metric columns added, without mutating

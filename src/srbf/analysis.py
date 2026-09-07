@@ -63,6 +63,7 @@ DEFAULT_METRICS: tuple[Metric, ...] = (
     Metric("numeric_recovery_val", "Numeric recovery (val)", True),
     Metric("symbolic_recovery", "Symbolic recovery", True),
     Metric("f1_score", "Skeleton F1", True),
+    Metric("mdl_ratio", "MDL ratio", False),
     Metric("log10_fvu_val", "log10 FVU (val)", False),
     Metric("r2_val", "R² (val)", True),
 )

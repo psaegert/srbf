@@ -86,6 +86,8 @@ DEFAULT_NEGATIVES: dict[str, Any] = {
     'n_constants_delta': np.inf,
     'symbolic_recovery': 0.0,
     'skeleton_length_ratio': np.inf,
+    'predicted_mdl': np.inf,
+    'mdl_ratio': np.inf,
     'edit_distance': np.inf,
     'zss_edit_distance': np.inf,
     'unique_variables': np.nan,
@@ -174,11 +176,26 @@ def fill_none_with_defaults(
 
 # ── Derived metric computation ────────────────────────────────────────────
 
+def _price_mdl(mdl_fn: Callable[[list[str]], float], tokens: Any) -> float | None:
+    """``mdl_fn`` on a realized prefix; None for a missing prefix, a placeholder-carrying one, or a pricing failure."""
+    if tokens is None:
+        return None
+    tokens = list(tokens)
+    if not tokens or any(tok == '<constant>' for tok in tokens):
+        return None
+    try:
+        value = float(mdl_fn(tokens))
+    except Exception:  # noqa: BLE001 - an unpriceable expression has no price, not a wrong one
+        return None
+    return value if np.isfinite(value) else None
+
+
 def compute_derived_metrics(
     results: dict[str, Any],
     test_sets: Sequence[str],
     operator_arity: Mapping[str, int],
     simplify_fn: Callable[[list[str]], list[str] | None] | None = None,
+    mdl_fn: Callable[[list[str]], float] | None = None,
 ) -> None:
     """Compute derived evaluation metrics in-place on *results*.
 
@@ -192,6 +209,7 @@ def compute_derived_metrics(
       ``predicted_skeleton_prefix_length``
     - ``n_variables``, ``n_constants``, ``predicted_n_constants``, ``n_constants_delta``
     - ``symbolic_recovery``, ``skeleton_length_ratio``
+    - ``predicted_mdl``, ``ground_truth_mdl``, ``mdl_ratio`` (when ``mdl_fn`` is given)
     - ``edit_distance``, ``zss_edit_distance``
     - ``unique_variables``, ``predicted_unique_variables``
     - ``f1_score_unique_variables``, ``precision_unique_variables``,
@@ -318,6 +336,24 @@ def compute_derived_metrics(
                     )
                 ])
 
+                # ── MDL: the description length of the REALIZED expressions ──
+                # ``mdl_fn`` is the engine's complexity (milli-bits, simplipy's native unit; the
+                # same pricing the flash-ansr ranking modes score with). Priced on the realized
+                # expressions, numeric constants inlined: a prefix that still carries a
+                # ``<constant>`` placeholder is not priced (a skeleton price would masquerade as a
+                # realized one), and an unpriceable expression is None, never a made-up number.
+                if mdl_fn is not None:
+                    r['predicted_mdl'] = np.array([
+                        _price_mdl(mdl_fn, pe) for pe in r.get('predicted_expression_prefix', [None] * len(pred_skel))
+                    ], dtype=object)
+                    r['ground_truth_mdl'] = np.array([
+                        _price_mdl(mdl_fn, ge) for ge in r.get('ground_truth_prefix', [None] * len(pred_skel))
+                    ], dtype=object)
+                    r['mdl_ratio'] = np.array([
+                        safe_divide(pm, gm) if pm is not None and gm is not None else None
+                        for pm, gm in zip(r['predicted_mdl'], r['ground_truth_mdl'])
+                    ])
+
                 # ── Edit distances ────────────────────────────────
                 r['edit_distance'] = np.array([
                     edit_distance(ps, sk)
@@ -385,6 +421,7 @@ def derive_metrics(
     engine: Any = None,
     operator_arity: Mapping[str, int] | None = None,
     simplify_fn: Callable[[list[str]], list[str] | None] | None = None,
+    mdl_fn: Callable[[list[str]], float] | None = None,
 ) -> dict[str, Any]:
     """Compute the standardized derived metrics for one raw ``Benchmark.run()`` snapshot.
 
@@ -424,10 +461,14 @@ def derive_metrics(
         operator_arity = engine.operator_arity
     if simplify_fn is None and engine is not None:
         simplify_fn = engine.simplify
+    if mdl_fn is None and engine is not None:
+        # The price the flash-ansr ranking modes use: certified, f64 parse, the public Default canon.
+        def mdl_fn(tokens: list[str], _engine: Any = engine) -> float:
+            return float(_engine.complexity(list(tokens), certified=True, mode='f64', canon='default'))
 
     # Shallow-copy the snapshot as the nested leaf: compute_derived_metrics only ADDS derived keys to
     # the leaf, so the derived columns land in this copy and the caller's snapshot stays untouched.
     leaf = dict(snapshot)
     results = {"model": {"results": {"test": {0: leaf}}}}
-    compute_derived_metrics(results, test_sets=["test"], operator_arity=operator_arity, simplify_fn=simplify_fn)
+    compute_derived_metrics(results, test_sets=["test"], operator_arity=operator_arity, simplify_fn=simplify_fn, mdl_fn=mdl_fn)
     return results["model"]["results"]["test"][0]

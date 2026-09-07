@@ -65,3 +65,50 @@ def test_r2_is_one_minus_fvu_clipped():
     assert np.allclose(r2, np.clip(1.0 - fvu, 0.0, 1.0))
     assert r2[0] == 1.0 and r2[2] == 1.0      # the perfect fits
     assert 0.0 <= r2[1] < 1.0                  # the offset fit explains some variance, not all
+
+
+def _mdl_snapshot():
+    snapshot = _raw_snapshot()
+    snapshot['predicted_expression_prefix'] = [['add', 'x1', 'x1'], ['mul', '2.5', 'x1'], ['add', '<constant>', 'x1'], None]
+    snapshot['ground_truth_prefix'] = [['add', 'x1', 'x1']] * 4
+    return snapshot
+
+
+def test_mdl_ratio_prices_realized_expressions_only():
+    priced = []
+
+    def mdl_fn(tokens):
+        priced.append(list(tokens))
+        return 1000.0 * len(tokens)
+
+    scored = derive_metrics(_mdl_snapshot(), operator_arity=ARITY, mdl_fn=mdl_fn)
+    assert list(scored['ground_truth_mdl']) == [3000.0] * 4
+    assert list(scored['predicted_mdl']) == [3000.0, 3000.0, None, None]  # a <constant> placeholder and a missing prefix are not priced
+    assert list(scored['mdl_ratio']) == [1.0, 1.0, None, None]
+    assert ['<constant>' in t for t in priced] == [False] * len(priced)
+
+
+def test_mdl_ratio_absent_without_a_pricer_and_inf_on_failure():
+    scored = derive_metrics(_mdl_snapshot(), operator_arity=ARITY)
+    assert 'mdl_ratio' not in scored
+
+    def failing(tokens):
+        raise RuntimeError("unpriceable")
+
+    scored = derive_metrics(_mdl_snapshot(), operator_arity=ARITY, mdl_fn=failing)
+    assert list(scored['mdl_ratio']) == [None] * 4
+
+
+def test_mdl_ratio_through_the_engine():
+    from simplipy import SimpliPyEngine
+
+    engine = SimpliPyEngine.load("acj-4-3", install=True)
+    snapshot = _mdl_snapshot()
+    snapshot['skeleton'] = [['*', '<constant>', 'x1']] * 4  # the engine's vocabulary, not the fake arity map's
+    snapshot['predicted_skeleton_prefix'] = [['+', 'x1', 'x1'], ['*', '<constant>', 'x1'], ['+', 'x1', 'x1'], ['+', 'x1', 'x1']]
+    snapshot['predicted_expression_prefix'] = [['+', 'x1', 'x1'], ['*', '2.5', 'x1'], ['+', 'x1', 'x1'], ['+', 'x1', 'x1']]
+    snapshot['ground_truth_prefix'] = [['*', '2', 'x1']] * 4
+    scored = derive_metrics(snapshot, engine=engine)
+    expected = float(engine.complexity(['*', '2', 'x1'], certified=True, mode='f64', canon='default'))
+    assert list(scored['ground_truth_mdl']) == [expected] * 4
+    assert scored['mdl_ratio'][1] > scored['mdl_ratio'][0] > 0  # a literal 2.5 costs more than the integer 2
