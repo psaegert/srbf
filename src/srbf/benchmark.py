@@ -20,6 +20,7 @@ from typing import Any, Callable, Iterable, Mapping, Optional
 from tqdm import tqdm
 
 from srbf.store import ResultStore
+from srbf.shards import shard_output_path, shard_share
 from flash_ansr.utils.paths import substitute_root_path
 
 
@@ -40,8 +41,11 @@ class Benchmark:
         existing_results: int = 0,
         label: Optional[Mapping[str, Any]] = None,
         config_provenance: Optional[str] = None,
+        shard: Optional[tuple[int, int]] = None,
     ) -> None:
         self.source = source
+        # (index, count) when this run is one shard of a unit (`srbf run --shard`); stamped into __meta__.
+        self.shard = (int(shard[0]), int(shard[1])) if shard is not None else None
         self.model_adapter = model_adapter
         self.result_store = result_store or ResultStore()
         # Run identity for a sweep/experiment (e.g. {"experiment": ..., "ladder": 256}); display-only.
@@ -70,6 +74,7 @@ class Benchmark:
         save_every_override: int | None = None,
         resume: bool | None = None,
         experiment: str | None = None,
+        shard: tuple[int, int] | None = None,
     ) -> "Benchmark":
         """Build a ready-to-run `Benchmark` from a unified run config.
 
@@ -99,6 +104,8 @@ class Benchmark:
         save_every = run_config.coerce_optional_int(save_every, "runner.save_every")
 
         output_path = output_override or runner_cfg.get("output")
+        if shard is not None and output_path:
+            output_path = shard_output_path(output_path, *shard)  # each shard owns its file (and its resume)
         if save_every is not None and output_path is None:
             raise ValueError("runner.output must be provided when save_every is set")
 
@@ -118,6 +125,8 @@ class Benchmark:
         limit_value = run_config.coerce_optional_int(limit_value, "runner.limit")
         if limit_value is None:
             limit_value = run_config.coerce_optional_int(data_cfg.get("target_size"), "data_source.target_size")
+        if shard is not None and limit_value is not None:
+            limit_value = shard_share(limit_value, *shard)  # the shard's share of an explicit total
 
         total_limit: int | None
         remaining: int | None
@@ -128,21 +137,22 @@ class Benchmark:
             if remaining == 0:
                 return cls(None, None, result_store=store, output_path=output_path,
                            save_every=save_every, completed=True, total_limit=total_limit,
-                           existing_results=existing, config_provenance=config_provenance)
+                           existing_results=existing, config_provenance=config_provenance, shard=shard)
             target_override = remaining
         else:
             total_limit = None
             remaining = None
             target_override = None
 
-        source = run_config.build_catalog_source(data_cfg, target_size=target_override, skip=existing)
+        source_kwargs = {"shard": shard} if shard is not None else {}  # unsharded calls keep the old signature
+        source = run_config.build_catalog_source(data_cfg, target_size=target_override, skip=existing, **source_kwargs)
 
         size_hint = getattr(source, "size_hint", None)
         pending = size_hint() if callable(size_hint) else None
         if pending is not None and pending <= 0:
             return cls(None, None, result_store=store, output_path=output_path, save_every=save_every,
                        completed=True, total_limit=total_limit if total_limit is not None else existing,
-                       existing_results=existing, config_provenance=config_provenance)
+                       existing_results=existing, config_provenance=config_provenance, shard=shard)
         if total_limit is None and pending is not None:
             # Frozen catalog with no explicit total: the source's own count is the total. Set an explicit
             # remaining cap too (belt-and-braces with the source's bound). An OPEN generative source has
@@ -153,7 +163,8 @@ class Benchmark:
         adapter = run_config.build_model_adapter(model_cfg)  # LAST: loads the model
 
         return cls(source, adapter, result_store=store, output_path=output_path, save_every=save_every,
-                   limit=remaining, completed=False, total_limit=total_limit, existing_results=existing, config_provenance=config_provenance)
+                   limit=remaining, completed=False, total_limit=total_limit, existing_results=existing,
+                   config_provenance=config_provenance, shard=shard)
 
     @classmethod
     def runs_from_config(
@@ -166,6 +177,7 @@ class Benchmark:
         resume: bool | None = None,
         experiment: str | None = None,
         sweep_filter: Mapping[str, Any] | None = None,
+        shard: tuple[int, int] | None = None,
     ) -> "list[Benchmark]":
         """Expand a config (``experiments:`` map and/or inline ``!sweep``) into a list of Benchmarks.
 
@@ -201,6 +213,7 @@ class Benchmark:
                     save_every_override=save_every_override,
                     resume=resume,
                     experiment=None,
+                    shard=shard,
                 )
                 run_label: dict[str, Any] = {}
                 if exp_name is not None:
@@ -240,6 +253,8 @@ class Benchmark:
             provenance = run_config.coerce_config_provenance(
                 dict(meta).get("config_provenance") if meta else None)
         meta = {**(meta or {}), "config_provenance": provenance}
+        if self.shard is not None:
+            meta["shard"] = {"index": self.shard[0], "count": self.shard[1]}
         # The RESOLVED ranking (values, not a hash) beside the label: the check whose absence let
         # every earlier flash_ansr run rank at 0.0 while its config said 0.05.
         ranking_fn = getattr(self.model_adapter, "ranking_config", None)

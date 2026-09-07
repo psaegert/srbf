@@ -21,6 +21,7 @@ import numpy as np
 from symbolic_data.token_ops import normalize_skeleton
 
 from srbf.core import EvaluationDataSource, EvaluationSample
+from srbf.shards import shard_share
 from srbf.sample_metadata import build_base_metadata
 
 
@@ -36,12 +37,21 @@ class CatalogSource(EvaluationDataSource):
         skip: int = 0,
         tokenizer_oov: str = "unk",
         resume_state: Mapping[str, Any] | None = None,
+        shard: tuple[int, int] | None = None,
     ) -> None:
         self.problem_source = problem_source
         self.tokenizer = tokenizer
         self.tokenizer_oov = tokenizer_oov
         self._target_size = None if target_size is None else max(0, int(target_size))
         self._skip = max(0, int(skip))
+        # (index, count): this source yields every count-th problem starting at index (see srbf.shards);
+        # `skip` and `target_size` then count the shard's own problems.
+        if shard is not None:
+            index, count = int(shard[0]), int(shard[1])
+            if count < 1 or not 0 <= index < count:
+                raise ValueError(f"shard needs 0 <= index < count, got {shard!r}")
+            shard = (index, count)
+        self._shard = shard
         self._engine: Any | None = None
         self._produced = 0
         if resume_state is not None:
@@ -74,7 +84,8 @@ class CatalogSource(EvaluationDataSource):
         hint = self.problem_source.size_hint()
         if hint is None:
             return self._target_size  # unbounded generative source; only `target_size` bounds it
-        available = max(0, int(hint) - self._skip)
+        kept = int(hint) if self._shard is None else shard_share(int(hint), *self._shard)
+        available = max(0, kept - self._skip)
         return available if self._target_size is None else min(self._target_size, available)
 
     def prepare(self, *, adapter: Any | None = None) -> None:  # type: ignore[override]
@@ -92,12 +103,16 @@ class CatalogSource(EvaluationDataSource):
     def __iter__(self) -> Iterator[EvaluationSample]:
         target = self.size_hint()
         self._produced = 0
+        kept_seen = 0
         for index, problem in enumerate(self.problem_source):
-            if index < self._skip:
+            if self._shard is not None and index % self._shard[1] != self._shard[0]:
+                continue
+            if kept_seen < self._skip:  # `skip` counts this source's own (shard) rows
+                kept_seen += 1
                 continue
             if target is not None and self._produced >= target:
                 break
-            row_index = index  # absolute, resume-stable (skip-aware)
+            row_index = index  # absolute in the catalog, resume-stable, shared by every shard
             if getattr(problem, "is_placeholder", False):
                 sample = self._bridge_placeholder(problem, row_index)
             else:

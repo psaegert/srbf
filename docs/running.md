@@ -46,6 +46,7 @@ srbf run -c configs/evaluation/scaling/flash-ansr-v25.0-T7-3M_fastsrb.yaml -v
 | `--no-resume` | Ignore any existing output pickle and start fresh (default behavior resumes). |
 | `--experiment` | Name of a single experiment to run when the config defines an `experiments:` map. |
 | `--sweep-filter` | Run only the `!sweep` runs whose axis labels match, e.g. `--sweep-filter ladder=256` (comma-separate several: `AXIS=VALUE,AXIS=VALUE`). A zipped axis is labelled by the value that tells its rungs apart (the `choices` / `samples` / `niterations` ladder, not a `problems_per_expression` column that repeats). |
+- `--shard K/N`: evaluate every N-th problem from K and write `<output>.shard-K-of-N.<ext>`; see [Sharding a run across GPUs](#sharding-a-run-across-gpus).
 | `-v`, `--verbose` | Print a progress bar and per-run status. |
 
 A quick smoke test of a single sweep rung:
@@ -303,6 +304,25 @@ how many rows are already present, and evaluates only the remaining samples befo
 again. A run interrupted partway resumes from where it stopped; a completed run is a no-op
 (its model is never loaded). Use `--no-resume` to ignore any existing output and recompute
 from scratch.
+
+## Sharding a run across GPUs
+
+One `(experiment, rung)` unit can be too long for a single GPU (erbench-syneq at 16,384 choices is
+5,301 problems at two to three minutes each). `--shard K/N` makes a run evaluate every N-th problem
+starting at K (0-based, interleaved so the shards balance), write its own
+`<output>.shard-K-of-N.<ext>` and resume on its own; each shard stamps `shard: {index, count}` into
+its `__meta__`. Submit the N shards as N jobs, then put them back together:
+
+```bash
+srbf run -c config.yaml --experiment erbench-syneq --sweep-filter ladder=16384 --shard 0/8
+...                                                                             --shard 7/8
+srbf merge -o results/.../erbench-syneq/choices_016384.pkl results/.../erbench-syneq/choices_016384.shard-*-of-8.pkl
+```
+
+`srbf merge` checks that the shards belong together (one `count`, distinct indices, identical
+columns, disjoint `eval_row_index`), orders the rows by `eval_row_index`, and writes the unsharded
+file the reports read, with `shards: {count, merged, partial, sources}` in its `__meta__`. Missing
+shards are an error unless `--allow-partial` is given, which records the gap in `__meta__`.
 
 ## Reporting
 

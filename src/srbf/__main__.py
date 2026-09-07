@@ -23,7 +23,15 @@ def main(argv: list[str] | None = None) -> None:
     run_parser.add_argument('--experiment', type=str, default=None, help='Name of the experiment defined in the config to execute')
     run_parser.add_argument('--sweep-filter', type=str, default=None, metavar='AXIS=VALUE[,AXIS=VALUE]',
                             help='Run only the !sweep runs whose axis labels match (e.g. ladder=256)')
+    run_parser.add_argument('--shard', type=str, default=None, metavar='K/N',
+                            help='Evaluate every N-th problem starting at K (0-based) and write <output>.shard-K-of-N.<ext>; '
+                                 'put the shards back together with `srbf merge`')
     run_parser.add_argument('-v', '--verbose', action='store_true', help='Print a progress bar')
+
+    merge_parser = subparsers.add_parser("merge", help="Merge the shard result files of one run into its unsharded output")
+    merge_parser.add_argument('shards', type=str, nargs='+', help='The <output>.shard-K-of-N.<ext> files of one run')
+    merge_parser.add_argument('-o', '--output', type=str, required=True, help='The unsharded output path to write')
+    merge_parser.add_argument('--allow-partial', action='store_true', help='Merge even if some shards are missing (marked in __meta__)')
 
     analyze_parser = subparsers.add_parser("analyze", help="Render the standardized results page from a run manifest")
     analyze_parser.add_argument('manifest', type=str, help='Path to the run manifest yaml (runs: [{model, benchmark, scaling?, path}])')
@@ -51,6 +59,12 @@ def main(argv: list[str] | None = None) -> None:
             sweep_filter = None
             if args.sweep_filter:
                 sweep_filter = dict(pair.split('=', 1) for pair in args.sweep_filter.split(',') if '=' in pair)
+            shard = None
+            if args.shard:
+                from srbf.shards import parse_shard
+                shard = parse_shard(args.shard)
+                if args.verbose:
+                    print(f"Shard {shard[0]} of {shard[1]}: every {shard[1]}-th problem from {shard[0]}")
 
             from srbf.provenance import collect_provenance, format_provenance
             base_prov = collect_provenance(config_path, None)
@@ -66,6 +80,7 @@ def main(argv: list[str] | None = None) -> None:
                 resume=None if not args.no_resume else False,
                 experiment=args.experiment,
                 sweep_filter=sweep_filter,
+                shard=shard,
             )
             if args.verbose:
                 print(f"Resolved {len(benchmarks)} run(s) from config.")
@@ -85,6 +100,12 @@ def main(argv: list[str] | None = None) -> None:
                     destination = benchmark.output_path or 'memory'
                     print(f"{label}Evaluation finished with {benchmark.result_store.size} samples "
                           f"(saved to {destination}).")
+        case 'merge':
+            from srbf.shards import merge_shards
+
+            summary = merge_shards(args.shards, args.output, allow_partial=args.allow_partial)
+            missing = f", missing {summary['missing']}" if summary['missing'] else ""
+            print(f"Merged shards {summary['shards']} of {summary['count']} ({summary['rows']} rows{missing}) into {summary['output']}")
         case 'analyze':
             from srbf.analysis import load_runs, build_report
             from simplipy import SimpliPyEngine

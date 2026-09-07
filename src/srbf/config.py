@@ -46,6 +46,7 @@ def build_catalog_source(
     *,
     target_size: int | None,
     skip: int,
+    shard: tuple[int, int] | None = None,
 ) -> CatalogSource:
     """Build a `CatalogSource` (over a `symbolic_data` catalog) from a ``data_source`` config.
 
@@ -65,7 +66,8 @@ def build_catalog_source(
           target_size: 1000           # cap (also honoured as the run total_limit upstream)
 
     ``target_size`` / ``skip`` are the resume-aware bounds the runner computes; they override any
-    ``data_source.target_size`` here.
+    ``data_source.target_size`` here. ``shard`` = (index, count) keeps every count-th problem
+    from index (``srbf run --shard``).
     """
     catalog = config.get("catalog")
     if catalog is None:
@@ -80,6 +82,7 @@ def build_catalog_source(
         target_size=target_size,
         skip=skip,
         tokenizer_oov=str(config.get("tokenizer_oov", "unk")),
+        shard=shard,
     )
 
 

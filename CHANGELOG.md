@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   vocabulary and renders prefix tokens as infix. The benchmark loop closes the worker however
   the run ends.
 
+- **Sharded runs.** `srbf run --shard K/N` evaluates every N-th problem from K, writes
+  `<output>.shard-K-of-N.<ext>` and resumes on its own; `srbf merge -o <output> <shards...>` puts
+  the shards back into the unsharded file (one `count`, distinct indices, identical columns,
+  disjoint `eval_row_index`, rows ordered by it; `--allow-partial` records a gap in `__meta__`).
+  `CatalogSource` takes `shard=(index, count)`; `Benchmark.from_config` scales an explicit total by
+  the shard's share and stamps `shard` into `__meta__`.
+
 ### Changed
 - **PySR runs as a worker.** `type: pysr` keeps its keys and now launches the shipped
   `srbf/worker/models/pysr_worker.py` in a subprocess (`python:` names the environment that has pysr
