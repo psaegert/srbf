@@ -42,6 +42,8 @@ Installing these side by side leads to version clashes and a `torch was imported
 
 ## Out-of-process adapters: any environment
 
+`srbf new <name>` writes a worker, its whole-suite config, an environment recipe and a smoke test; `srbf check -c <config>` runs them on real problems step by step. The contract in full: [adapters.md](adapters.md).
+
 A method does not have to share `srbf`'s environment. With `type: subprocess`, `srbf` starts a
 small **worker** inside the interpreter you name (the method's own venv, with whatever versions of
 torch, simplipy or anything else it was built against) and exchanges one problem at a time with

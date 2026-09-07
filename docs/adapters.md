@@ -3,24 +3,34 @@
 srbf is a community benchmark framework. To evaluate **your** symbolic-regression method on the same
 benchmarks and metrics as everyone else, you add an **adapter** and open a pull request. We merge it,
 run the evaluation on the calibrated reference machine, and publish the numbers. The same config runs
-on your own hardware, so you can evaluate first and submit the numbers you already know.
+on your own hardware, so you can evaluate first and submit numbers you already know.
 
-There are two ways to write an adapter. The first fits almost every method and needs no srbf code:
+## The short version
 
-1. **A worker** (recommended): one Python file with a `fit` function that runs **in your own
-   environment**, whatever versions of torch, simplipy or anything else your method was built
-   against. srbf starts it in the interpreter you name and hands it one problem at a time.
-2. **An in-process adapter**: a class inside srbf's own environment, for methods whose dependencies
-   are compatible with srbf's pins (`simplipy>=0.14.6`, `flash-ansr>=0.14`, `torch>=2`).
+```bash
+pip install srbf
+export FLASH_ANSR_ROOT=$PWD/bench       # models, results, environments and adapters live under here
+srbf new mymethod                       # bench/adapters/mymethod/: worker.py, config.yaml, requirements.txt, test_worker.py
+python -m venv bench/envs/mymethod && bench/envs/mymethod/bin/pip install -r bench/adapters/mymethod/requirements.txt
+$EDITOR bench/adapters/mymethod/worker.py            # put your method into fit()
+srbf check   -c bench/adapters/mymethod/config.yaml  # a few real problems end to end; names the failing step
+srbf run     -c bench/adapters/mymethod/config.yaml -v            # the whole suite (--experiment fastsrb for one catalog)
+srbf analyze -c bench/adapters/mymethod/config.yaml -o report     # the standardized report
+```
+
+The worker runs in **your own environment**, whatever torch, simplipy or Julia your method was built
+against; srbf never imports it. The rest of this page is the detail behind those commands, and the
+second route for methods that can live inside srbf's environment.
 
 ## Route 1: a worker in your own environment
 
 ### The contract
 
-Your worker is a Python file that defines one required function and two optional ones:
+Your worker is a Python file (`srbf new` writes one) that defines one required function and two
+optional ones:
 
 ```python
-# mymethod_worker.py  -- runs in YOUR venv; srbf is not installed there and need not be
+# worker.py  -- runs in YOUR venv; srbf is not installed there and need not be
 import numpy as np
 from mymethod import Model                       # your package, your versions
 
@@ -55,7 +65,8 @@ judges every other adapter's output. Optional keys:
 
 Anything the worker prints goes to a log file, never into the protocol. A worker that raises records
 the traceback on that problem and continues; a worker that crashes or exceeds `timeout` is restarted
-(`max_restarts` times per run) and the problem is recorded as an error.
+(`max_restarts` times per run) and the problem is recorded as an error. The worker interpreter can be
+any Python from 3.8 up; the protocol side is standard library only.
 
 If your method was trained against a simplipy older than 0.12 (the `mult2`/`pow1_3` vocabulary), do
 `import srbf_worker_helpers` inside the worker (srbf puts it on the path; standard library only) and
@@ -66,62 +77,57 @@ respell your prefix tokens with `respell_legacy_prefix` before rendering them wi
 
 ### The config
 
+`srbf new` writes this; the whole srbf suite through your worker, one experiment per catalog:
+
 ```yaml
-# configs/evaluation/mymethod_fastsrb.yaml
+suite: srbf                           # every srbf catalog; or a list, e.g. [fastsrb, feynman]
 run:
   data_source:
-    catalog: fastsrb
-    sampling: {n_support: 512, n_validation: 1024, noise: 0.0}
+    sampling: {n_support: 512, n_validation: 512, noise: 0.0, problems_per_expression: 1}
   model_adapter:
     type: subprocess
-    config_provenance: upstream_default          # see fairness.md
-    worker: "{{ROOT}}/adapters/mymethod_worker.py"   # or a built-in name: example, pysr
-    python: "{{ROOT}}/envs/mymethod/bin/python"       # the interpreter of YOUR environment
-    options:                                          # forwarded verbatim to load()/fit()
-      checkpoint: "{{ROOT}}/models/mymethod/best.pt"
-      n_samples: 64
-    simplipy_engine: acj-5-4-llm
-    timeout: 3600                                     # seconds per problem (default: unlimited)
-    drop_unused_variables: true                       # hand over only the columns the ground truth uses
-    worker_log: "{{ROOT}}/results/mymethod_worker.log"
+    config_provenance: upstream_default   # see fairness.md
+    worker: '{{ROOT}}/adapters/mymethod/worker.py'   # or a built-in name: example, pysr
+    python: '{{ROOT}}/envs/mymethod/bin/python'      # the interpreter of YOUR environment
+    options: {checkpoint: '{{ROOT}}/models/mymethod/best.pt'}   # forwarded verbatim to load()/fit()
+    simplipy_engine: acj-5-4-llm          # the engine the catalogs are judged with; keep it
+    timeout: 3600                         # seconds per problem (default: unlimited)
+    drop_unused_variables: true           # hand over only the columns the ground truth uses
+    worker_log: '{{ROOT}}/results/evaluation/mymethod/worker.log'
   runner:
-    output: "{{ROOT}}/results/evaluation/mymethod/fastsrb.pkl"
+    output: '{{ROOT}}/results/evaluation/mymethod/{catalog}.pkl'
     save_every: 20
 ```
 
-Run it with `pip install srbf` in any environment (srbf's own pins), then:
-
-```bash
-export FLASH_ANSR_ROOT=/path/to/your/bench
-srbf run -c configs/evaluation/mymethod_fastsrb.yaml -v
-srbf analyze manifest.yaml -o results/          # the standardized report, see running.md
-```
-
-`{{ROOT}}` is substituted from `FLASH_ANSR_ROOT`, so one config runs on your machine and on ours.
-Inline `!sweep` blocks give you the inference-time scaling ladder
-([running.md](running.md#inline-sweeps-sweep)); `--experiment`, `--sweep-filter` and `--shard`
-select and split the work across a cluster.
+`{{ROOT}}` is substituted from `FLASH_ANSR_ROOT`, so one config runs on your machine and on ours;
+`{catalog}` is filled in per experiment. A single-catalog config replaces `suite:` with
+`data_source.catalog: fastsrb` inside `run:`. Inline `!sweep` blocks give you an inference-time
+scaling ladder ([running.md](running.md#inline-sweeps-sweep)); `--experiment`, `--sweep-filter` and
+`--shard` select and split the work across a cluster. `srbf check` runs the first experiment on two
+real problems and reports every step (interpreter, worker, engine, catalog, fit, metrics) as `ok` or
+`FAIL` with the fix beside it.
 
 ### What you submit in a PR
 
-1. The **worker script**, under `src/srbf/worker/models/<name>_worker.py` when it is short glue, or
-   in your own repository referenced by a pinned commit in the provisioning instructions.
-2. A **provisioning script or instructions**: how to create the environment the worker runs in
-   (a `requirements.txt`, `environment.yml` or lock file with the exact versions your method needs,
-   and where the weights come from). One environment per method is the norm, not the exception.
-3. An **example config** under `configs/evaluation/` with the `model_adapter: {type: subprocess, ...}`
-   block above, including its [`config_provenance` label](fairness.md).
-4. A section in [docs/models.md](models.md) (the per-model provisioning and config reference).
-5. A small **test**: run your worker's `fit` on a toy problem through
-   `srbf.subprocess_adapter.SubprocessAdapter`, skipped when your dependencies are not importable.
+Inside an srbf checkout, `srbf new mymethod --repo` writes the same four files where the pull
+request wants them:
 
-No registry entry and no srbf code changes are needed for the worker route.
+1. the **worker**, `src/srbf/worker/models/mymethod_worker.py` (referenced as `worker: mymethod`),
+2. the **environment recipe**, `envs/mymethod/requirements.txt` (or a lock file) with the exact
+   versions your method needs and where the weights come from,
+3. the **config**, `configs/evaluation/mymethod_srbf.yaml`, with its
+   [`config_provenance` label](fairness.md),
+4. the **smoke test**, `tests/test_workers/test_mymethod_worker.py` (one toy problem through the
+   adapter; it skips where the environment is not provisioned),
+
+plus a section in [docs/models.md](models.md). No registry entry and no srbf code changes are needed.
+See [CONTRIBUTING.md](../CONTRIBUTING.md) for the flow after the PR.
 
 ## Route 2: an in-process adapter
 
-If your method installs into srbf's environment without conflicts, an adapter class avoids the
-subprocess. The contract is `srbf.core.EvaluationModelAdapter`, a `@runtime_checkable` `Protocol`:
-two methods, no base class to subclass.
+If your method installs into srbf's environment without conflicts (`simplipy>=0.14.6`,
+`flash-ansr>=0.14`, `torch>=2`), an adapter class avoids the subprocess. The contract is
+`srbf.core.EvaluationModelAdapter`, a `@runtime_checkable` `Protocol`: two methods, no base class.
 
 ```python
 class EvaluationModelAdapter(Protocol):
@@ -240,5 +246,6 @@ A wheel cannot carry submodules or weights, so anything beyond pip is a *bench-s
 - [ ] an example `configs/evaluation/...yaml` declaring [`config_provenance`](fairness.md)
 - [ ] provisioning: the environment recipe with pinned versions and where the weights come from,
       documented in [docs/models.md](models.md)
+- [ ] `srbf check -c <config>` passes on your machine
 - [ ] a smoke test under `tests/`, skipped when the method's dependencies are absent
 - [ ] `pre-commit run --all-files` and `pytest tests` pass

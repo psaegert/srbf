@@ -27,6 +27,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `CatalogSource` takes `shard=(index, count)`; `Benchmark.from_config` scales an explicit total by
   the shard's share and stamps `shard` into `__meta__`.
 
+- **The contributor path is four commands.** `srbf new <name>` scaffolds an adapter (a worker
+  with a placeholder `fit`, its whole-suite config, an environment recipe and a smoke test; `--repo`
+  writes them into the checkout layout a pull request wants, `--python` names the interpreter);
+  `srbf check -c <config>` walks the config end to end on a few real problems, one step at a time
+  (provenance label, output directory, worker and interpreter, engine, catalog, adapter, fit,
+  derived metrics), printing `ok`/`FAIL` with the fix beside each step and exiting non-zero on any
+  failure; `srbf analyze -c <config> [--model NAME]` derives the report's runs from the config
+  (experiments x sweep rungs whose outputs exist) instead of a hand-written manifest, and several
+  `-c` render side by side. `srbf.testing.fit_once` runs one toy problem through a worker for its test.
+
+- **`suite:` config shorthand.** One `run:` template plus `suite: srbf` (or a catalog list) expands
+  into `experiments:` with one entry per catalog, `data_source.catalog` filled in and `{catalog}`
+  substituted in every string, sweep values included; `srbf.suites.SRBF_CATALOGS` is the suite.
+
+- The worker registry is a scan of `srbf/worker/models/*_worker.py`, so a merged
+  `<name>_worker.py` is `worker: <name>` without a code change. `CONTRIBUTING.md` and a pull-request
+  template carry the checklist.
+
+### Fixed
+- `srbf analyze` defaulted to the retired `dev_7-3` engine, which simplipy 0.14 refuses to load;
+  the default is `acj-5-4-llm`.
+- A worker log under a directory that did not exist yet failed the first run; the directory is
+  created.
+
 ### Changed
 - **PySR runs as a worker.** `type: pysr` keeps its keys and now launches the shipped
   `srbf/worker/models/pysr_worker.py` in a subprocess (`python:` names the environment that has pysr

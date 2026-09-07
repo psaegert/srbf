@@ -429,6 +429,64 @@ def load_runs(manifest_path: str) -> list[RunResult]:
     return runs
 
 
+def _model_name(model_cfg: Mapping[str, Any]) -> str:
+    """A report name for an adapter block: the checkpoint directory, the worker's name, or the type."""
+    kind = str(model_cfg.get("type", "flash_ansr")).lower()
+    if kind == "flash_ansr":
+        return os.path.basename(str(model_cfg.get("model_path", "flash_ansr")).rstrip("/"))
+    if kind == "subprocess":
+        worker = str(model_cfg.get("worker", "worker")).rstrip("/")
+        stem = os.path.splitext(os.path.basename(worker))[0]
+        if stem == "worker" and os.path.basename(os.path.dirname(worker)):
+            return os.path.basename(os.path.dirname(worker))  # adapters/<name>/worker.py, the scaffold's layout
+        return stem[: -len("_worker")] if stem.endswith("_worker") else stem
+    return kind
+
+
+def runs_from_config(config: str, *, model: str | None = None, warn: Any = None) -> list[RunResult]:
+    """The RunResult of every (experiment, sweep rung) of a run config whose output exists.
+
+    The manifest ``srbf analyze`` otherwise reads is derived from the config: ``benchmark`` is the
+    experiment name (the catalog), ``scaling`` the rung's numeric sweep label (``ladder=128`` ->
+    128), ``model`` the given name or one derived from the adapter block (the checkpoint directory,
+    the worker's name). Outputs that do not exist yet are skipped and reported through ``warn``.
+    """
+    import pickle
+
+    from flash_ansr.utils.paths import substitute_root_path
+
+    from srbf.config import extract_run_section, load_run_config, select_experiment
+    from srbf.sweep import resolve_sweeps
+
+    raw = load_run_config(substitute_root_path(config))
+    experiments = raw.get("experiments")
+    names: list[str | None] = list(experiments) if experiments else [None]
+    runs: list[RunResult] = []
+    for name in names:
+        section = select_experiment(raw, name) if name is not None else dict(raw)
+        for resolved, labels in resolve_sweeps(section):
+            run_cfg = extract_run_section(resolved)
+            output = (run_cfg.get("runner") or {}).get("output")
+            if not output:
+                continue
+            path = substitute_root_path(str(output))
+            if not os.path.isfile(path):
+                if warn is not None:
+                    warn(f"no results yet: {path}")
+                continue
+            axis, scaling = "scaling", None
+            for key, value in labels.items():
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    axis, scaling = str(key), float(value)
+                    break
+            with open(path, "rb") as handle:
+                snapshot = pickle.load(handle)
+            benchmark = name or str((run_cfg.get("data_source") or {}).get("catalog", "run"))
+            runs.append(RunResult(model=model or _model_name(run_cfg.get("model_adapter") or {}),
+                                  benchmark=benchmark, snapshot=snapshot, scaling=scaling, axis=axis))
+    return runs
+
+
 def _json_num(x: Any) -> float | None:
     """A JSON-safe number: non-finite (NaN/inf) -> None."""
     if x is None:

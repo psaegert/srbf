@@ -130,8 +130,8 @@ def serve(worker, target, rfile, wfile):
                 out = fit(msg["x"], msg["y"], x_val=msg.get("x_val") or [], variables=msg.get("variables") or [],
                           meta=msg.get("meta") or {}, options=options, state=state)
                 elapsed = time.perf_counter() - started
-                if not isinstance(out, dict) or "expression" not in out:
-                    raise TypeError("fit() must return a dict with an 'expression' key, got %r" % type(out).__name__)
+                if not isinstance(out, dict) or ("expression" not in out and "error" not in out):
+                    raise TypeError("fit() must return a dict with an 'expression' key (or an 'error' key to fail the problem), got %r" % type(out).__name__)
                 for key in ("expression", "y_pred", "y_pred_val", "constants"):
                     reply[key] = _jsonable(out.get(key))
                 if reply["expression"] is not None:

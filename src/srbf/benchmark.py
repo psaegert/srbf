@@ -85,7 +85,7 @@ class Benchmark:
         """
         from srbf import config as run_config
 
-        raw_config = run_config.load_config(config) if isinstance(config, str) else dict(config)
+        raw_config = run_config.load_run_config(config)
         config_dict = run_config.select_experiment(raw_config, experiment)
         run_cfg = run_config.extract_run_section(config_dict)
 
@@ -188,10 +188,9 @@ class Benchmark:
         ``sweep_filter`` keeps only runs whose axis labels match (e.g. ``{"ladder": 256}``).
         """
         from srbf import config as run_config
-        from srbf.sweep import register_sweep_yaml, resolve_sweeps
+        from srbf.sweep import resolve_sweeps
 
-        register_sweep_yaml()
-        raw = run_config.load_config(config) if isinstance(config, str) else dict(config)
+        raw = run_config.load_run_config(config)
 
         experiments = raw.get("experiments") if isinstance(raw, Mapping) else None
         base: list[tuple[str | None, Mapping[str, Any]]]

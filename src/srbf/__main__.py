@@ -1,4 +1,4 @@
-"""srbf command-line interface: the ``run``, ``analyze`` and ``decontamination`` subcommands.
+"""srbf command-line interface: ``run``, ``new``, ``check``, ``merge``, ``analyze`` and ``decontamination``.
 
 ``run`` executes an evaluation from a unified config (the raw stage); ``analyze`` renders the
 standardized results page from run outputs (the analysis stage); ``decontamination`` verifies a
@@ -7,6 +7,7 @@ CLI (train / import-data / install / ...); only these evaluation-bound commands 
 benchmark imports are ``srbf.*``; the flash-ansr ``utils`` imports are the cross-repo contract.
 """
 import argparse
+import sys
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -33,11 +34,27 @@ def main(argv: list[str] | None = None) -> None:
     merge_parser.add_argument('-o', '--output', type=str, required=True, help='The unsharded output path to write')
     merge_parser.add_argument('--allow-partial', action='store_true', help='Merge even if some shards are missing (marked in __meta__)')
 
-    analyze_parser = subparsers.add_parser("analyze", help="Render the standardized results page from a run manifest")
-    analyze_parser.add_argument('manifest', type=str, help='Path to the run manifest yaml (runs: [{model, benchmark, scaling?, path}])')
+    analyze_parser = subparsers.add_parser("analyze", help="Render the standardized results page from run configs or a run manifest")
+    analyze_parser.add_argument('manifest', type=str, nargs='?', default=None, help='A run manifest yaml (runs: [{model, benchmark, scaling?, path}]); or give -c')
+    analyze_parser.add_argument('-c', '--config', action='append', default=None, help='A run config: its experiments and sweep rungs whose outputs exist become the runs (repeat for several methods)')
+    analyze_parser.add_argument('--model', action='append', default=None, help='The model name for the -c config in the same position (default: derived from its adapter block)')
     analyze_parser.add_argument('-o', '--out-dir', type=str, required=True, help='Output directory for results.md + figures/')
-    analyze_parser.add_argument('--engine', type=str, default='dev_7-3', help='SimpliPy engine used for skeleton simplification + operator arities')
+    analyze_parser.add_argument('--engine', type=str, default='acj-5-4-llm', help='SimpliPy engine used for skeleton simplification + operator arities')
     analyze_parser.add_argument('--title', type=str, default='Results', help='Title of the rendered results page')
+
+    new_parser = subparsers.add_parser("new", help="Scaffold an adapter: a worker, its suite config, requirements and a smoke test")
+    new_parser.add_argument('name', type=str, help='The method name, a lowercase identifier (e.g. mymethod)')
+    new_parser.add_argument('--dir', type=str, default=None, help='Where the adapter directory goes (default: $FLASH_ANSR_ROOT/adapters, else ./adapters)')
+    new_parser.add_argument('--python', type=str, default=None, help="The method's interpreter to write into the config (default: {{ROOT}}/envs/<name>/bin/python)")
+    new_parser.add_argument('--repo', action='store_true', help='Write into the srbf checkout layout (src/srbf/worker/models, configs/evaluation, envs/, tests/test_workers) for a pull request')
+    new_parser.add_argument('--force', action='store_true', help='Overwrite files that exist')
+
+    check_parser = subparsers.add_parser("check", help="Check a config end to end on a few real problems before the long run")
+    check_parser.add_argument('-c', '--config', type=str, required=True, help='The evaluation config to check')
+    check_parser.add_argument('--experiment', type=str, default=None, help='The experiment to check (default: the first)')
+    check_parser.add_argument('--all', action='store_true', help='Check every experiment, not only the first')
+    check_parser.add_argument('--sweep-filter', type=str, default=None, help='As for run (default: the first sweep rung)')
+    check_parser.add_argument('-n', '--problems', type=int, default=2, help='Problems to fit per experiment (default: 2)')
 
     decon_parser = subparsers.add_parser("decontamination", help="Verify the training-time holdout covers the benchmark set (fail-closed)")
     decon_parser.add_argument('-t', '--training-catalog', type=str, required=True, help='Path to the training catalog yaml (the generative config a run trains on)')
@@ -107,13 +124,50 @@ def main(argv: list[str] | None = None) -> None:
             missing = f", missing {summary['missing']}" if summary['missing'] else ""
             print(f"Merged shards {summary['shards']} of {summary['count']} ({summary['rows']} rows{missing}) into {summary['output']}")
         case 'analyze':
-            from srbf.analysis import load_runs, build_report
+            from srbf.analysis import build_report, load_runs, runs_from_config
             from simplipy import SimpliPyEngine
 
-            runs = load_runs(args.manifest)
+            if bool(args.manifest) == bool(args.config):
+                parser.error("analyze takes either a manifest or -c config(s)")
+            if args.manifest:
+                runs = load_runs(args.manifest)
+            else:
+                names = list(args.model or [])
+                if len(names) > len(args.config):
+                    parser.error("more --model names than -c configs")
+                runs = []
+                for index, config_path in enumerate(args.config):
+                    model_name = names[index] if index < len(names) else None
+                    runs.extend(runs_from_config(config_path, model=model_name, warn=lambda text: print(f"skip: {text}")))
+            if not runs:
+                sys.exit("analyze: no run outputs found")
             engine = SimpliPyEngine.load(args.engine, install=True)
             out = build_report(runs, args.out_dir, engine=engine, title=args.title)
             print(f"Wrote {out}")
+        case 'new':
+            from srbf.scaffold import scaffold_adapter
+
+            try:
+                scaffold = scaffold_adapter(args.name, directory=args.dir, python=args.python, repo=args.repo, force=args.force)
+            except (ValueError, FileExistsError) as exc:
+                sys.exit(f"new: {exc}")
+            print(f"Scaffolded the {scaffold.name} adapter:")
+            for path in scaffold.files:
+                print(f"  {path}")
+            print("Next:")
+            for index, text in enumerate(scaffold.next_steps, 1):
+                print(f"  {index}. {text}")
+        case 'check':
+            from srbf.check import check_config
+            from flash_ansr.utils.paths import substitute_root_path
+
+            sweep_filter = None
+            if args.sweep_filter:
+                sweep_filter = dict(pair.split('=', 1) for pair in args.sweep_filter.split(',') if '=' in pair)
+            report = check_config(substitute_root_path(args.config), experiment=args.experiment, all_experiments=args.all,
+                                  n_problems=args.problems, sweep_filter=sweep_filter)
+            if not report.ok:
+                sys.exit(1)
         case 'decontamination':
             import json
 

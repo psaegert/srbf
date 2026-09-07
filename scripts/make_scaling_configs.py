@@ -10,14 +10,9 @@ from __future__ import annotations
 
 import pathlib
 
-CATALOGS = [
-    'fastsrb', 'feynman', 'feynman-bonus', 'srsd-dummy',
-    'erbench-syneq', 'erbench-densities', 'erbench-phybench',
-    'soose-fc', 'soose-nc', 'soose-wc',
-    'physo-astro', 'physo-class',
-    'nguyen', 'keijzer', 'korns', 'koza', 'livermore', 'livermore2', 'vladislavleva', 'jin', 'neat',
-    'pagie', 'poly', 'nonic', 'sine', 'meier', 'r-rationals', 'constant', 'grammarvae',
-]
+from srbf.suites import SRBF_CATALOGS
+
+CATALOGS = list(SRBF_CATALOGS)
 LADDER = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
 MODELS = {
     'flash-ansr-v25.0-T7-3M': 'psaegert/flash-ansr-v25.0-T7-3M',

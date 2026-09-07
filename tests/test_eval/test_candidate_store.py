@@ -169,7 +169,8 @@ def test_adapter_capture_computes_validation_metrics_from_every_candidate(tmp_pa
     validation FVU and recovery with the shared srbf metrics, aligned through result_index."""
     from srbf.metrics.numeric import fvu, is_perfect_fit
     adapter = FlashANSRAdapter(_mock_model(), candidate_store_dir=str(tmp_path))
-    y_sup = np.array([1.0, 2.0, 3.0]); y_val = np.array([4.0, 5.0])
+    y_sup = np.array([1.0, 2.0, 3.0])
+    y_val = np.array([4.0, 5.0])
     exact = types.SimpleNamespace(y_pred=y_sup.copy(), y_pred_val=y_val.copy())
     off = types.SimpleNamespace(y_pred=y_sup + 0.5, y_pred_val=y_val + 1.0)
     ledger = CandidateLedger(

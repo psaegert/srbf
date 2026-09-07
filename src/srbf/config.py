@@ -538,6 +538,22 @@ def extract_run_section(config: Mapping[str, Any]) -> MutableMapping[str, Any]:
     return dict(config)
 
 
+def load_run_config(config: "str | Mapping[str, Any]") -> dict[str, Any]:
+    """Load a run config (a path; a mapping is taken as is) and expand the ``suite:`` shorthand.
+
+    The ``!sweep`` tag is registered first, so a path loads with its sweeps intact; see
+    :mod:`srbf.suites` for the shorthand.
+    """
+    from srbf.suites import expand_suite
+    from srbf.sweep import register_sweep_yaml
+
+    register_sweep_yaml()
+    raw = load_config(config) if isinstance(config, str) else dict(config)
+    if not isinstance(raw, Mapping):
+        raise ValueError("a run config must be a mapping")
+    return expand_suite(raw)
+
+
 def select_experiment(config: Mapping[str, Any], experiment: str | None) -> MutableMapping[str, Any]:
     """Return the named (or ``default_experiment``) entry from ``config.experiments``, else the config itself."""
     experiments = config.get("experiments")

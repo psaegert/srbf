@@ -35,9 +35,10 @@ from srbf.model_adapters import _compute_fvu_from_predictions, _compute_variable
 from srbf.worker import MODELS_DIR, RUNNER_PATH
 
 BUILTIN_WORKERS: dict[str, Path] = {
-    "example": MODELS_DIR / "example_worker.py",
-    "pysr": MODELS_DIR / "pysr_worker.py",
+    path.stem[: -len("_worker")]: path for path in sorted(MODELS_DIR.glob("*_worker.py"))
 }
+"""The shipped workers by name: every ``<name>_worker.py`` under ``srbf/worker/models`` (``example``,
+``pysr``, and whatever a PR adds there)."""
 
 
 class WorkerError(RuntimeError):
@@ -138,6 +139,7 @@ class WorkerProcess:
         env.update(self.env)
         env.setdefault("PYTHONUNBUFFERED", "1")
         if self.log_path:
+            os.makedirs(os.path.dirname(os.path.abspath(self.log_path)) or ".", exist_ok=True)
             self._log = open(self.log_path, "a", encoding="utf-8")
         self._listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._listener.bind(("127.0.0.1", 0))
