@@ -8,7 +8,7 @@ import warnings
 import functools
 import re
 from contextlib import nullcontext
-from typing import Any, Callable, Iterable, Mapping, Optional, TYPE_CHECKING
+from typing import Any, Callable, Iterable, Mapping, TYPE_CHECKING
 
 import numpy as np
 from srbf.baselines import BruteForceModel, LampleChartonModel
@@ -385,144 +385,10 @@ class BruteForceAdapter(EvaluationModelAdapter):
 __all__ = [
     "FlashANSRAdapter",
     "E2EAdapter",
-    "PySRAdapter",
     "NeSymReSAdapter",
     "LampleChartonAdapter",
     "BruteForceAdapter",
 ]
-
-
-class PySRAdapter(EvaluationModelAdapter):
-    """Adapter that wraps a PySRRegressor for evaluation."""
-
-    def __init__(
-        self,
-        *,
-        timeout_in_seconds: int,
-        niterations: int,
-        padding: bool,
-        simplipy_engine: Any,
-        warmup: bool = True,
-        maxsize: int | None = None,
-        model_selection: str = "best",
-        parsimony: float | None = None,
-    ) -> None:
-        _require_pysr()  # import lazily to avoid initializing Julia unless needed
-
-        self.timeout_in_seconds = timeout_in_seconds
-        self.niterations = niterations
-        self.padding = padding
-        self.simplipy_engine = simplipy_engine
-        self.warmup = warmup
-        # Selection rule for get_best()/predict(); never touches the search. 'best' = PySR's own
-        # default. With the persisted hall of fame (record['equations']) other rules are also
-        # free offline re-scores; a config-driven arm remains the deployment-matched measurement.
-        self.model_selection = model_selection
-        # Parsimony changes the SEARCH loss; None = upstream default (version-dependent).
-        self.parsimony = parsimony
-        # Benchmark policy: baselines run at their upstream defaults. maxsize=None leaves PySR's
-        # own default in place (which cannot represent 23/120 FastSRB / 743/1000 v23-val ground
-        # truths -- a documented property of the method, not ours to fix; see
-        # scripts/audit_pysr_maxsize.py). The knob exists for side experiments only.
-        self.maxsize = maxsize
-
-        self._model: Optional[Any] = None
-
-    def prepare(self, *, data_source: Any | None = None) -> None:  # type: ignore[override]
-        self._model = _create_pysr_model(
-            timeout_in_seconds=self.timeout_in_seconds,
-            niterations=self.niterations,
-            maxsize=self.maxsize,
-            model_selection=self.model_selection,
-            parsimony=self.parsimony,
-        )
-        if self.warmup:
-            self._run_warmup_fit()
-
-    def _run_warmup_fit(self) -> None:
-        """Pay the one-off Julia startup + SymbolicRegression.jl compile cost OUTSIDE timing.
-
-        The first ``fit`` in a Julia session is an order-of-magnitude outlier (precompile),
-        which would otherwise land in problem 0's ``fit_time`` and skew per-problem timing.
-        The compile cost is per-process, so fitting a THROWAWAY minimal model here leaves
-        ``self._model``'s timed fits warm and its search state untouched. Best-effort: a
-        failing warmup only forfeits the warmup; real fits surface real errors.
-        """
-        warmup_model = _create_pysr_model(
-            timeout_in_seconds=self.timeout_in_seconds,
-            niterations=1,
-            maxsize=self.maxsize,
-            model_selection=self.model_selection,
-            parsimony=self.parsimony,
-        )
-        x = np.linspace(-1.0, 1.0, 32).reshape(-1, 1)
-        y = 2.0 * x[:, 0] + 1.0
-        try:
-            warmup_model.fit(x, y, variable_names=["x0"])
-        except Exception:  # pragma: no cover - warmup must never block evaluation
-            pass
-
-    def evaluate_sample(self, sample: EvaluationSample) -> EvaluationResult:
-        if self._model is None:
-            raise RuntimeError("PySRAdapter.prepare must be called before evaluation")
-
-        record = sample.clone_metadata()
-
-        X_support = sample.x_support.copy()
-        X_val = sample.x_validation.copy()
-        y_support = (sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support).copy()
-        y_val = sample.y_validation.copy()
-
-        used_variables: list[str] | None = None
-        if not self.padding:
-            mask, used_variables = _compute_variable_mask(record.get("variables"), record.get("skeleton"))
-            if mask is not None:
-                X_support = X_support[:, mask]
-                X_val = X_val[:, mask] if X_val.size else X_val
-
-        fit_time_start = time.time()
-        try:
-            self._model.fit(X_support, y_support.ravel(), variable_names=used_variables)
-            record["fit_time"] = time.time() - fit_time_start
-            record["prediction_success"] = True
-        except Exception as exc:  # pragma: no cover - PySR exceptions vary
-            record["error"] = str(exc)
-            record["prediction_success"] = False
-            return EvaluationResult(record)
-
-        try:
-            y_pred = self._model.predict(X_support).reshape(-1, 1)
-            y_pred_val = self._model.predict(X_val).reshape(-1, 1) if X_val.size else np.empty_like(y_val)
-        except Exception as exc:  # pragma: no cover - PySR exceptions vary
-            record["error"] = str(exc)
-            record["prediction_success"] = False
-            return EvaluationResult(record)
-
-        record["y_pred"] = y_pred.copy()
-        record["y_pred_val"] = y_pred_val.copy()
-
-        try:
-            # Persist the full Pareto hall of fame (plain columns only; sympy_format/
-            # lambda_format hold unpicklable lambdas). equations_ lives in memory and is
-            # overwritten by the next fit, so capture it here. ~3-15 KB per problem; makes
-            # every selection rule an offline re-score against the stored raw arrays.
-            hof = self._model.equations_
-            record["equations"] = hof[["complexity", "loss", "score", "equation"]].to_dict("records")
-        except Exception:  # pragma: no cover - persistence is best-effort, never blocks scoring
-            pass
-
-        try:
-            best = self._model.get_best()
-            predicted_expression = str(best["equation"])
-            record["predicted_expression"] = predicted_expression
-            predicted_prefix = self.simplipy_engine.infix_to_prefix(predicted_expression)
-            record["predicted_expression_prefix"] = normalize_expression(predicted_prefix)
-            record["predicted_skeleton_prefix"] = normalize_skeleton(predicted_prefix)
-        except Exception as exc:  # pragma: no cover - defensive
-            record["error"] = f"Failed to parse PySR expression: {exc}"
-            record["prediction_success"] = False
-
-        return EvaluationResult(record)
 
 
 class E2EAdapter(EvaluationModelAdapter):
@@ -857,73 +723,6 @@ class NeSymReSAdapter(EvaluationModelAdapter):
 # ---------------------------------------------------------------------------
 # Helper utilities
 
-def _create_pysr_model(
-    *,
-    timeout_in_seconds: int,
-    niterations: int,
-    maxsize: int | None = None,
-    model_selection: str = "best",
-    parsimony: float | None = None,
-) -> Any:
-
-    PySR = _require_pysr()
-
-    # maxsize/parsimony are only forwarded when explicitly set; None = PySR's own default
-    # (benchmark policy: baselines run at upstream defaults, and the upstream default is
-    # version-dependent -- never hardcode it here). model_selection defaults to PySR's own
-    # 'best'; non-default values are panel knobs (config_provenance: harness_tuned).
-    optional_kwargs: dict[str, Any] = {}
-    if maxsize is not None:
-        optional_kwargs["maxsize"] = maxsize
-    if parsimony is not None:
-        optional_kwargs["parsimony"] = parsimony
-
-    return PySR(
-        temp_equation_file=True,
-        delete_tempfiles=True,
-        timeout_in_seconds=timeout_in_seconds,
-        niterations=niterations,
-        model_selection=model_selection,
-        **optional_kwargs,
-        # The operator set is flash-ansr v24.0's 23-operator vocabulary, exactly
-        # (owner ruling 2026-08-17): 17 unaries + {+, -, *, /, pow, rootn}. The
-        # legacy hyper-operator families (multN/divN, powN/pow1_N) existed only
-        # for parity with the pre-v24 flash-ansr vocabulary and are gone.
-        unary_operators=[
-            "neg",
-            "abs",
-            "inv",
-            "sin",
-            "cos",
-            "tan",
-            "asin",
-            "acos",
-            "atan",
-            "sinh",
-            "cosh",
-            "tanh",
-            "asinh",
-            "acosh",
-            "atanh",
-            "exp",
-            "log",
-        ],
-        binary_operators=[
-            "+", "-", "*", "/", "^",
-            # IEEE-754 rootn, matching simplipy.operators.rootn's table: odd
-            # integer index = signed root (total on R), even = principal (NaN on
-            # negatives), negative index = reciprocal (via the negative exponent),
-            # index 0 or non-integer = NaN.
-            r"rootn(x::T, n::T) where {T} = (isfinite(n) && n == round(n) && n != 0) ? ((x >= 0) ? abs(x)^(one(T)/n) : (isodd(Int(abs(n))) ? -(abs(x)^(one(T)/n)) : T(NaN))) : T(NaN)",
-        ],
-        extra_sympy_mappings={
-            # principal branch on export, following this file's existing
-            # convention for fractional powers
-            "rootn": lambda x, n: x ** (1 / n),
-        },
-    )
-
-
 def _compute_variable_mask(
     variables: Iterable[str] | None,
     skeleton_tokens: Iterable[str] | None,
@@ -997,18 +796,6 @@ def _first_non_none(value: Any) -> Any:
                 return item
         return None
     return value
-
-
-def _require_pysr() -> type[Any]:
-    global PySRRegressor
-    if PySRRegressor is not None:
-        return PySRRegressor
-    try:  # pragma: no cover - optional dependency
-        from pysr import PySRRegressor as _PySRRegressor  # type: ignore
-    except Exception as exc:  # pragma: no cover - import guard
-        raise ImportError("PySR is not installed; please install pysr to use PySRAdapter") from exc
-    PySRRegressor = _PySRRegressor
-    return PySRRegressor
 
 
 def _require_torch() -> Any:

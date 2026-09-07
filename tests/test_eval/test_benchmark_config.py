@@ -369,7 +369,7 @@ def test_build_pysr_adapter_requires_explicit_engine(monkeypatch):
             self.kwargs = kwargs
 
     monkeypatch.setattr(run_config, "SimpliPyEngine", DummyEngineLoader)
-    monkeypatch.setattr(run_config, "PySRAdapter", DummyAdapter)
+    monkeypatch.setattr(run_config, "SubprocessAdapter", DummyAdapter)
 
     adapter = run_config.build_model_adapter({"type": "pysr", "niterations": 2, "simplipy_engine": "dev_7-3"})
     assert isinstance(adapter, DummyAdapter)
@@ -380,6 +380,7 @@ def test_build_pysr_adapter_requires_explicit_engine(monkeypatch):
 
 
 def test_build_pysr_adapter_panel_knobs_and_defaults(monkeypatch):
+    # type: pysr builds the worker-backed adapter; the historical keys land in its options.
     class DummyEngineLoader:
         @staticmethod
         def load(path, install=True):
@@ -390,24 +391,24 @@ def test_build_pysr_adapter_panel_knobs_and_defaults(monkeypatch):
             self.kwargs = kwargs
 
     monkeypatch.setattr(run_config, "SimpliPyEngine", DummyEngineLoader)
-    monkeypatch.setattr(run_config, "PySRAdapter", DummyAdapter)
+    monkeypatch.setattr(run_config, "SubprocessAdapter", DummyAdapter)
 
     # defaults: upstream everything (None/None/'best'), warmup on
     plain = run_config.build_model_adapter({"type": "pysr", "niterations": 2, "simplipy_engine": "dev_7-3"})
-    assert plain.kwargs["maxsize"] is None
-    assert plain.kwargs["parsimony"] is None
-    assert plain.kwargs["model_selection"] == "best"
-    assert plain.kwargs["warmup"] is True
+    assert plain.kwargs["options"]["maxsize"] is None
+    assert plain.kwargs["options"]["parsimony"] is None
+    assert plain.kwargs["options"]["model_selection"] == "best"
+    assert plain.kwargs["options"]["warmup"] is True
 
     # panel knobs plumbed through; parsimony coerced to float
     panel = run_config.build_model_adapter({
         "type": "pysr", "niterations": 2, "simplipy_engine": "dev_7-3",
         "maxsize": 45, "parsimony": "0.0032", "model_selection": "accuracy", "warmup": False,
     })
-    assert panel.kwargs["maxsize"] == 45
-    assert panel.kwargs["parsimony"] == 0.0032
-    assert panel.kwargs["model_selection"] == "accuracy"
-    assert panel.kwargs["warmup"] is False
+    assert panel.kwargs["options"]["maxsize"] == 45
+    assert panel.kwargs["options"]["parsimony"] == 0.0032
+    assert panel.kwargs["options"]["model_selection"] == "accuracy"
+    assert panel.kwargs["options"]["warmup"] is False
 
     with pytest.raises(ValueError, match="model_adapter.parsimony"):
         run_config.build_model_adapter({

@@ -63,7 +63,7 @@ no_implicit_optional = false
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
 explicit_package_bases = true
-exclude = "(.venv|tests/|src/srbf/compat/nesymres.py)"   # vendored nesymres types unavailable (carried over from flash-ansr)
+exclude = "(.venv|tests/|(src/)?srbf/compat/nesymres.py|(src/)?srbf/worker/)"  # worker/: standard-library code run by foreign interpreters, untyped by design   # vendored nesymres types unavailable (carried over from flash-ansr)
 ignore_missing_imports = true
 
 [tool.flake8]

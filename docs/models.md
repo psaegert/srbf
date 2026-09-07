@@ -12,6 +12,7 @@ How to provision the symbolic-regression models that `srbf` evaluates, and how e
 | `e2e`            | clone + patch (research baseline)    | [E2E / symbolicregression](#e2e-symbolicregression-clone-patch) |
 | `lample_charton` | none (synthetic baseline)            | [No-provisioning baselines](#no-provisioning-baselines) |
 | `brute_force`    | none (synthetic baseline)            | [No-provisioning baselines](#no-provisioning-baselines) |
+| `subprocess`     | any: your own environment            | [Out-of-process adapters](#out-of-process-adapters-any-environment) |
 
 `srbf` is a community framework: new SR methods are contributed by PR with their own adapter plus install instructions. The built-ins below show the pattern; to add your own model, see [docs/adapters.md](./adapters.md).
 
@@ -38,6 +39,68 @@ The four provisioned models have **mutually incompatible runtime dependencies**,
 Installing these side by side leads to version clashes and a `torch was imported before juliacall` warning at best, and broken imports at worst. One environment per baseline keeps each reproducible. `srbf` itself plus `flash-ansr`, `simplipy`, and `symbolic-data` install cleanly into each.
 
 > **SimpliPy engine.** Every adapter except `flash_ansr` requires an explicit `model_adapter.simplipy_engine` (a SimpliPy engine config name or path, e.g. `acj-5-4-llm`): there is no loaded dataset to borrow an engine from, so the adapter raises if it is omitted. `flash_ansr` is the exception, it loads its engine from the model.
+
+## Out-of-process adapters: any environment
+
+A method does not have to share `srbf`'s environment. With `type: subprocess`, `srbf` starts a
+small **worker** inside the interpreter you name (the method's own venv, with whatever versions of
+torch, simplipy or anything else it was built against) and exchanges one problem at a time with
+it over a local socket (the worker's own stdin/stdout/stderr are captured into the log and never carry the protocol). `srbf` itself stays on its pins; the worker needs neither `srbf` nor any of
+its dependencies installed. This is the route for a method trained against an older `simplipy`
+(the pre-0.12 `mult2`/`pow1_3` vocabulary cannot even load on the current engine), and the route
+the PySR baseline takes since 0.14.0.
+
+```yaml
+model_adapter:
+  type: subprocess
+  worker: "{{ROOT}}/adapters/my_method_worker.py"   # a script, or a built-in name: example, pysr
+  python: /path/to/my-method-venv/bin/python        # default: srbf's own interpreter
+  options:                                          # forwarded verbatim to the worker
+    checkpoint: "{{ROOT}}/models/my_method/best.pt"
+    n_samples: 64
+  simplipy_engine: acj-5-4-llm                      # the engine the expressions are judged with
+  timeout: 3600            # seconds per problem (default: unlimited); on expiry the worker is
+                           # killed, the problem recorded as an error, the worker restarted
+  max_restarts: 1          # restarts over the run after a crash or timeout, then fail fast
+  drop_unused_variables: true   # hand the worker only the columns the ground truth uses
+  env: {CUDA_VISIBLE_DEVICES: "0"}
+  worker_log: "{{ROOT}}/results/my_method_worker.log"   # the worker's stderr, appended
+```
+
+The **worker** is a Python file defining one function, optionally three:
+
+```python
+def load(options):                       # optional: once per run, returns the state fit() sees
+    return {"model": Model.load(options["checkpoint"])}
+
+def info(state):                         # optional: versions for the run's provenance
+    return {"my_method": "1.2.0"}
+
+def fit(x, y, *, x_val, variables, meta, options, state):
+    # x: list of rows (support points), y: targets, x_val: validation rows (may be empty),
+    # variables: the column names of x, in order -- the expression must use exactly these.
+    expression = state["model"].fit(x, y)          # e.g. "2.0*x1 + sin(x2)"
+    return {"expression": expression}
+```
+
+`fit` returns at least `"expression"`: an infix string in plain arithmetic notation with numeric
+constants (`2*x1 + x2**3`, function calls for unary operators) in the operator vocabulary of the
+run's SimpliPy engine. `srbf` parses it with that engine, evaluates it on the support and
+validation points, and judges it exactly as it judges every other adapter's output. Optional keys:
+`y_pred` / `y_pred_val` (the method's own predictions, used instead of evaluating the expression),
+`constants`, `fit_time` (seconds, measured around the call otherwise), `extra` (a JSON-serializable
+dict merged into the result record, e.g. a Pareto front), `error` (a message; the problem counts as
+failed and the worker stays up). Whatever the worker prints goes to the log, never into the protocol.
+
+Inside the worker interpreter, `import srbf_worker_helpers` (the runner puts it on the path) gives
+you `respell_legacy_prefix` (the pre-0.12 vocabulary respelled: `mult_k t -> * k t`,
+`pow_k t -> pow t k`, `pow1_k t -> rootn t k`), `prefix_to_infix` and `substitute_placeholders`,
+all standard library only. `srbf/worker/models/example_worker.py` is the reference worker (ordinary least
+squares, runs in a bare venv) and `srbf/worker/models/pysr_worker.py` the PySR baseline; the protocol
+itself is documented in `srbf/worker/runner.py`.
+
+The full contract test is `tests/test_eval/test_subprocess_adapter.py`, which runs the example
+worker in a throwaway venv.
 
 ## The `model_adapter` config block
 
@@ -110,7 +173,14 @@ model_adapter:
   padding: false
   use_mult_div_operators: false
   simplipy_engine: acj-5-4-llm
+  # python: /path/to/pysr-venv/bin/python   # run PySR in its own environment (see the
+  #                                          # out-of-process section); default: this one
 ```
+
+`type: pysr` runs the shipped PySR worker (`srbf/worker/models/pysr_worker.py`) in a subprocess, so the
+`pysr` package and its Julia backend only have to exist in the interpreter named by `python`. The
+generic keys `python`, `env`, `timeout`, `max_restarts` and `worker_log` apply as for
+`type: subprocess`.
 
 Key fields: `niterations` (the compute-scaling axis, swept per run), `timeout_in_seconds`, and `simplipy_engine` (the SimpliPy engine name; `acj-5-4-llm` is installed on demand; required). No model weights to download: PySR fits each problem from scratch.
 

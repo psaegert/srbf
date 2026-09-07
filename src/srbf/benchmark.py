@@ -325,6 +325,10 @@ class Benchmark:
         finally:
             if progress_bar is not None:
                 progress_bar.close()
+            # Out-of-process adapters hold a worker interpreter; release it however the loop ended.
+            close_adapter = getattr(self.model_adapter, "close", None)
+            if callable(close_adapter):
+                close_adapter()
 
         final_snapshot = self.result_store.snapshot()
 

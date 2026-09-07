@@ -6,6 +6,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Out-of-process model adapters** (`model_adapter.type: subprocess`). `srbf` starts a
+  standard-library-only worker (`srbf/worker/runner.py`) inside the interpreter you name and
+  exchanges one problem at a time with it over a local socket (the worker's stdio is captured, never parsed), so a method runs against its own
+  package versions while `srbf` stays on its pins. A worker is a Python file with
+  `fit(x, y, *, x_val, variables, meta, options, state) -> {"expression": ...}` and optional
+  `load`/`info`; `srbf` parses, evaluates and judges the returned expression with the run's
+  engine, restarts a crashed or timed-out worker within `max_restarts`, and records every
+  failure as an error row. Keys: `worker`, `python`, `options`, `simplipy_engine`, `timeout`,
+  `startup_timeout`, `env`, `cwd`, `drop_unused_variables`, `max_restarts`, `worker_log`.
+  `srbf_worker_helpers` (importable in the worker interpreter) respells the pre-0.12 simplipy
+  vocabulary and renders prefix tokens as infix. The benchmark loop closes the worker however
+  the run ends.
+
+### Changed
+- **PySR runs as a worker.** `type: pysr` keeps its keys and now launches the shipped
+  `srbf/worker/models/pysr_worker.py` in a subprocess (`python:` names the environment that has pysr
+  and Julia); the in-process `PySRAdapter` is gone.
+
 ## [0.13.0] - 2026-09-05
 
 ### Added

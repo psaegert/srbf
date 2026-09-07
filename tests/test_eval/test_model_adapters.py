@@ -141,6 +141,7 @@ class _FakePySRModel:
 
 
 def _patch_pysr_factory(monkeypatch):
+    from srbf.worker.models import pysr_worker
     created: list[_FakePySRModel] = []
 
     def fake_create(*, timeout_in_seconds, niterations, maxsize=None,
@@ -149,39 +150,51 @@ def _patch_pysr_factory(monkeypatch):
         created.append(model)
         return model
 
-    monkeypatch.setattr(model_adapters, "_require_pysr", lambda: object)
-    monkeypatch.setattr(model_adapters, "_create_pysr_model", fake_create)
+    monkeypatch.setattr(pysr_worker, "create_model", fake_create)
     return created
 
 
-def test_pysr_adapter_prepare_runs_a_warmup_fit_by_default(monkeypatch):
-    # Julia precompile makes the first fit an order-of-magnitude timing outlier; prepare()
+def test_pysr_worker_load_runs_a_warmup_fit_by_default(monkeypatch):
+    # Julia precompile makes the first fit an order-of-magnitude timing outlier; load()
     # must pay it on a THROWAWAY model so problem 0's fit_time starts warm.
+    from srbf.worker.models import pysr_worker
     created = _patch_pysr_factory(monkeypatch)
-    adapter = model_adapters.PySRAdapter(
-        timeout_in_seconds=10, niterations=5,
-        padding=True, simplipy_engine=_DummyEngine())
-    adapter.prepare()
+    state = pysr_worker.load({"timeout_in_seconds": 10, "niterations": 5})
 
     assert len(created) == 2                      # the timed model + the warmup model
     timed, warmup = created
     assert timed.niterations == 5 and timed.n_fits == 0   # timed model untouched
     assert warmup.niterations == 1 and warmup.n_fits == 1  # warmup fit happened
-    assert adapter._model is timed
+    assert state["model"] is timed
     # Benchmark policy: baselines run at their upstream defaults -- maxsize is NOT overridden.
     assert timed.maxsize is None
     assert warmup.maxsize is None
 
 
-def test_pysr_adapter_warmup_can_be_disabled(monkeypatch):
+def test_pysr_worker_warmup_can_be_disabled(monkeypatch):
+    from srbf.worker.models import pysr_worker
     created = _patch_pysr_factory(monkeypatch)
-    adapter = model_adapters.PySRAdapter(
-        timeout_in_seconds=10, niterations=5,
-        padding=True, simplipy_engine=_DummyEngine(), warmup=False)
-    adapter.prepare()
+    pysr_worker.load({"timeout_in_seconds": 10, "niterations": 5, "warmup": False})
 
     assert len(created) == 1
     assert created[0].n_fits == 0
+
+
+def test_pysr_config_builds_a_worker_backed_adapter(monkeypatch):
+    # type: pysr keeps its historical keys and now runs the shipped worker in a subprocess.
+    from srbf import config as run_config
+    from srbf.subprocess_adapter import SubprocessAdapter
+    monkeypatch.setattr(run_config, "resolve_simplipy_engine", lambda cfg, adapter_name: _DummyEngine())
+    adapter = run_config.build_model_adapter({
+        "type": "pysr", "timeout_in_seconds": 30, "niterations": 3, "padding": False,
+        "simplipy_engine": "unused", "python": "/opt/pysr-venv/bin/python", "timeout": 120})
+    assert isinstance(adapter, SubprocessAdapter)
+    assert adapter.worker.name == "pysr_worker.py"
+    assert adapter.python == "/opt/pysr-venv/bin/python"
+    assert adapter.timeout == 120.0
+    assert adapter.drop_unused_variables is True          # padding: false
+    assert adapter.options["timeout_in_seconds"] == 30 and adapter.options["niterations"] == 3
+    assert adapter.options["maxsize"] is None and adapter.options["warmup"] is True
 
 
 class TestEmissionConfig:

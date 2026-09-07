@@ -28,8 +28,8 @@ from srbf.model_adapters import (
     FlashANSRAdapter,
     LampleChartonAdapter,
     NeSymReSAdapter,
-    PySRAdapter,
 )
+from srbf.subprocess_adapter import BUILTIN_WORKERS, SubprocessAdapter
 from srbf.baselines import BruteForceModel, LampleChartonModel
 from flash_ansr.flash_ansr import FlashANSR
 from flash_ansr.scoring import RankingConfig, resolve_ranking
@@ -209,10 +209,54 @@ def _build_flash_ansr_adapter(config: Mapping[str, Any]) -> FlashANSRAdapter:
     )
 
 
-def _build_pysr_adapter(config: Mapping[str, Any]) -> PySRAdapter:
-    timeout = coerce_int(config.get("timeout_in_seconds", 60), "model_adapter.timeout_in_seconds")
-    niterations = coerce_int(config.get("niterations", 100), "model_adapter.niterations")
-    padding = bool(config.get("padding", True))
+def _subprocess_common_kwargs(config: Mapping[str, Any]) -> dict[str, Any]:
+    """The keys every worker-backed adapter shares: where and how the worker process runs."""
+    python = config.get("python")
+    options = config.get("options") or {}
+    if not isinstance(options, Mapping):
+        raise ValueError("model_adapter.options must be a mapping of worker options")
+    timeout = config.get("timeout")
+    env = config.get("env") or {}
+    if not isinstance(env, Mapping):
+        raise ValueError("model_adapter.env must be a mapping of environment variables")
+    cwd = config.get("cwd")
+    worker_log = config.get("worker_log")
+    return dict(
+        python=substitute_root_path(str(python)) if python else None,
+        options=dict(options),
+        timeout=None if timeout is None else coerce_float(timeout, "model_adapter.timeout"),
+        startup_timeout=coerce_float(config.get("startup_timeout", 600), "model_adapter.startup_timeout"),
+        env={str(k): str(v) for k, v in env.items()},
+        cwd=substitute_root_path(str(cwd)) if cwd else None,
+        drop_unused_variables=bool(config.get("drop_unused_variables", True)),
+        max_restarts=coerce_int(config.get("max_restarts", 1), "model_adapter.max_restarts"),
+        worker_log=substitute_root_path(str(worker_log)) if worker_log else None,
+    )
+
+
+def _resolve_worker_ref(worker: Any) -> str:
+    """A built-in worker name stays a name; anything else is a path with ``{{ROOT}}`` substituted."""
+    name = str(worker)
+    return name if name in BUILTIN_WORKERS else substitute_root_path(name)
+
+
+def _build_subprocess_adapter(config: Mapping[str, Any]) -> SubprocessAdapter:
+    worker = config.get("worker")
+    if worker is None:
+        raise ValueError(
+            "subprocess adapter requires 'worker': a worker script path or a built-in name "
+            f"({', '.join(sorted(BUILTIN_WORKERS))})")
+    return SubprocessAdapter(
+        worker=_resolve_worker_ref(worker),
+        simplipy_engine=resolve_simplipy_engine(config, adapter_name="subprocess"),
+        **_subprocess_common_kwargs(config),
+    )
+
+
+def _build_pysr_adapter(config: Mapping[str, Any]) -> SubprocessAdapter:
+    """The PySR baseline as a worker (``worker: pysr``, see srbf/worker/models/pysr_worker.py). The
+    historical keys map onto the worker's options; ``python``, ``env``, ``timeout`` and
+    ``worker_log`` place it in its own environment (see docs/models.md)."""
     if bool(config.get("use_mult_div_operators", False)):
         raise ValueError(
             "model_adapter.use_mult_div_operators: the hyper-operator families were "
@@ -220,22 +264,24 @@ def _build_pysr_adapter(config: Mapping[str, Any]) -> PySRAdapter:
             "vocabulary); the PySR operator set is now flash-ansr v24.0's, fixed")
     # Panel/side-experiment knobs (docs/fairness.md): None/'best' = upstream defaults. Setting
     # maxsize or parsimony makes a config harness_tuned; headline baselines never set them.
-    maxsize = coerce_optional_int(config.get("maxsize"), "model_adapter.maxsize")
     parsimony = config.get("parsimony")
-    if parsimony is not None:
-        parsimony = coerce_float(parsimony, "model_adapter.parsimony")
-    model_selection = str(config.get("model_selection", "best"))
-    warmup = bool(config.get("warmup", True))
-
-    return PySRAdapter(
-        timeout_in_seconds=timeout,
-        niterations=niterations,
-        padding=padding,
+    options = {
+        "timeout_in_seconds": coerce_int(config.get("timeout_in_seconds", 60), "model_adapter.timeout_in_seconds"),
+        "niterations": coerce_int(config.get("niterations", 100), "model_adapter.niterations"),
+        "maxsize": coerce_optional_int(config.get("maxsize"), "model_adapter.maxsize"),
+        "parsimony": None if parsimony is None else coerce_float(parsimony, "model_adapter.parsimony"),
+        "model_selection": str(config.get("model_selection", "best")),
+        "warmup": bool(config.get("warmup", True)),
+    }
+    common = _subprocess_common_kwargs(config)
+    common["options"] = {**options, **common["options"]}
+    if "drop_unused_variables" not in config:
+        # PySR's historical key: padding=True keeps every column, padding=False drops the unused ones.
+        common["drop_unused_variables"] = not bool(config.get("padding", True))
+    return SubprocessAdapter(
+        worker="pysr",
         simplipy_engine=resolve_simplipy_engine(config, adapter_name="pysr"),
-        warmup=warmup,
-        maxsize=maxsize,
-        model_selection=model_selection,
-        parsimony=parsimony,
+        **common,
     )
 
 
@@ -469,6 +515,7 @@ def _resolve_catalog_ref(config: Mapping[str, Any], *, adapter_name: str) -> str
 _ADAPTER_REGISTRY: dict[str, AdapterBuilder] = {
     "flash_ansr": _build_flash_ansr_adapter,
     "pysr": _build_pysr_adapter,
+    "subprocess": _build_subprocess_adapter,
     "nesymres": _build_nesymres_adapter,
     "lample_charton": _build_lample_charton_adapter,
     "brute_force": _build_brute_force_adapter,
