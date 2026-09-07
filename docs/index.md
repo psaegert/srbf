@@ -6,10 +6,12 @@ Symbolic Regression Benchmark Framework carved out of
 `Benchmark` driver, model adapters, and metrics, over `symbolic-data` catalogs. It depends one-way on
 `flash-ansr` (`srbf` imports `flash-ansr`; `flash-ansr` never imports `srbf`).
 
-**Built for contributions.** Developers of SR methods add their model by opening a pull request with
-an **adapter** (two methods plus a registered builder) plus install instructions. The built-in adapters (`flash_ansr`, `pysr`,
-`nesymres`, `e2e`, `lample_charton`, `brute_force`) are reference examples, not a closed set. See the
-[adapter contribution guide](adapters.md).
+**Built for contributions.** Developers of SR methods add their model by opening a PR with an
+**adapter**: a worker script with one `fit` function that runs in the method's own environment (any
+torch, simplipy or Julia version), an example config and the environment recipe. Methods compatible
+with srbf's pins can instead register an in-process adapter class. The built-in adapters (`flash_ansr`,
+`pysr`, `nesymres`, `e2e`, `lample_charton`, `brute_force`) are reference examples, not a closed set.
+See the [adapter contribution guide](adapters.md).
 
 ## Install
 

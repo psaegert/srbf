@@ -1,43 +1,140 @@
 # Adding your model: the adapter contribution guide
 
 srbf is a community benchmark framework. To evaluate **your** symbolic-regression method on the same
-benchmarks and metrics as everyone else, you add an **adapter** and open a pull request. The built-in
-adapters (`flash_ansr`, `pysr`, `nesymres`, `e2e`, `lample_charton`, `brute_force`) are reference
-examples, not a closed set: pick the one closest to your model and copy it.
+benchmarks and metrics as everyone else, you add an **adapter** and open a pull request. We merge it,
+run the evaluation on the calibrated reference machine, and publish the numbers. The same config runs
+on your own hardware, so you can evaluate first and submit the numbers you already know.
 
-An adapter is the thin layer that teaches the `srbf` benchmark driver how to drive your model on one
-problem at a time. You implement two methods and register a builder. That is the whole contract.
+There are two ways to write an adapter. The first fits almost every method and needs no srbf code:
 
-## What you submit in a PR
+1. **A worker** (recommended): one Python file with a `fit` function that runs **in your own
+   environment**, whatever versions of torch, simplipy or anything else your method was built
+   against. srbf starts it in the interpreter you name and hands it one problem at a time.
+2. **An in-process adapter**: a class inside srbf's own environment, for methods whose dependencies
+   are compatible with srbf's pins (`simplipy>=0.14.6`, `flash-ansr>=0.14`, `torch>=2`).
 
-1. An **adapter class** in `src/srbf/model_adapters.py` (or a new module) implementing the
-   `EvaluationModelAdapter` protocol.
-2. A **builder function** `_build_<name>_adapter(config)` and a one-line entry in the
-   `_ADAPTER_REGISTRY` in `src/srbf/config.py`.
-3. An **example config** under `configs/evaluation/` with a `model_adapter: {type: <name>, ...}`
-   block, including its [`config_provenance` label](fairness.md) (`upstream_default` for a
-   method's own defaults; `author_blessed` if you tuned it as the method's author).
-4. **Install instructions** for your model's dependencies (see [Provisioning](#provisioning-your-models-dependencies)).
-5. Ideally a small **test** under `tests/` and a note in [docs/models.md](models.md).
+## Route 1: a worker in your own environment
 
-## The adapter contract
+### The contract
 
-An adapter implements `srbf.core.EvaluationModelAdapter`, a `@runtime_checkable` `Protocol`. You do
-**not** need to subclass anything: structural typing means any object with the right methods
-qualifies. The two methods:
+Your worker is a Python file that defines one required function and two optional ones:
+
+```python
+# mymethod_worker.py  -- runs in YOUR venv; srbf is not installed there and need not be
+import numpy as np
+from mymethod import Model                       # your package, your versions
+
+def load(options):                               # optional: once per run
+    return {"model": Model.load(options["checkpoint"], device=options.get("device", "cuda"))}
+
+def info(state):                                 # optional: provenance stored in the run's metadata
+    import mymethod
+    return {"mymethod": mymethod.__version__}
+
+def fit(x, y, *, x_val, variables, meta, options, state):
+    # x: list of rows (one list of floats per support point); y: targets; x_val: validation rows
+    # (may be empty); variables: the column names of x, in order; the expression must use them.
+    X, Y = np.asarray(x), np.asarray(y)
+    expression = state["model"].fit(X, Y, variable_names=variables)   # e.g. "2.0*x1 + sin(x2)"
+    return {"expression": expression}
+```
+
+`fit` returns at least `"expression"`: an infix string with numeric constants, using the operator
+vocabulary of the SimpliPy engine the run is judged with (`+ - * / abs inv neg pow rootn sin cos tan
+asin acos atan sinh cosh tanh asinh acosh atanh exp log`; `**` and `sqrt` are read too). srbf parses
+it with that engine, evaluates it on the support and validation points, and judges it exactly as it
+judges every other adapter's output. Optional keys:
+
+| key | meaning |
+|---|---|
+| `y_pred`, `y_pred_val` | your method's own predictions, used instead of evaluating the expression |
+| `constants` | the fitted constants, recorded as `predicted_constants` |
+| `fit_time` | seconds; measured around the call when absent (timing never includes the protocol) |
+| `extra` | a JSON-serializable dict merged into the result record (a Pareto front, diagnostics) |
+| `error` | a message; the problem counts as failed and the worker stays up for the next one |
+
+Anything the worker prints goes to a log file, never into the protocol. A worker that raises records
+the traceback on that problem and continues; a worker that crashes or exceeds `timeout` is restarted
+(`max_restarts` times per run) and the problem is recorded as an error.
+
+If your method was trained against a simplipy older than 0.12 (the `mult2`/`pow1_3` vocabulary), do
+`import srbf_worker_helpers` inside the worker (srbf puts it on the path; standard library only) and
+respell your prefix tokens with `respell_legacy_prefix` before rendering them with `prefix_to_infix`.
+`src/srbf/worker/models/example_worker.py` is the reference worker (it runs in a bare venv),
+`pysr_worker.py` is the PySR baseline, and the protocol itself is documented in
+`src/srbf/worker/runner.py`.
+
+### The config
+
+```yaml
+# configs/evaluation/mymethod_fastsrb.yaml
+run:
+  data_source:
+    catalog: fastsrb
+    sampling: {n_support: 512, n_validation: 1024, noise: 0.0}
+  model_adapter:
+    type: subprocess
+    config_provenance: upstream_default          # see fairness.md
+    worker: "{{ROOT}}/adapters/mymethod_worker.py"   # or a built-in name: example, pysr
+    python: "{{ROOT}}/envs/mymethod/bin/python"       # the interpreter of YOUR environment
+    options:                                          # forwarded verbatim to load()/fit()
+      checkpoint: "{{ROOT}}/models/mymethod/best.pt"
+      n_samples: 64
+    simplipy_engine: acj-5-4-llm
+    timeout: 3600                                     # seconds per problem (default: unlimited)
+    drop_unused_variables: true                       # hand over only the columns the ground truth uses
+    worker_log: "{{ROOT}}/results/mymethod_worker.log"
+  runner:
+    output: "{{ROOT}}/results/evaluation/mymethod/fastsrb.pkl"
+    save_every: 20
+```
+
+Run it with `pip install srbf` in any environment (srbf's own pins), then:
+
+```bash
+export FLASH_ANSR_ROOT=/path/to/your/bench
+srbf run -c configs/evaluation/mymethod_fastsrb.yaml -v
+srbf analyze manifest.yaml -o results/          # the standardized report, see running.md
+```
+
+`{{ROOT}}` is substituted from `FLASH_ANSR_ROOT`, so one config runs on your machine and on ours.
+Inline `!sweep` blocks give you the inference-time scaling ladder
+([running.md](running.md#inline-sweeps-sweep)); `--experiment`, `--sweep-filter` and `--shard`
+select and split the work across a cluster.
+
+### What you submit in a PR
+
+1. The **worker script**, under `src/srbf/worker/models/<name>_worker.py` when it is short glue, or
+   in your own repository referenced by a pinned commit in the provisioning instructions.
+2. A **provisioning script or instructions**: how to create the environment the worker runs in
+   (a `requirements.txt`, `environment.yml` or lock file with the exact versions your method needs,
+   and where the weights come from). One environment per method is the norm, not the exception.
+3. An **example config** under `configs/evaluation/` with the `model_adapter: {type: subprocess, ...}`
+   block above, including its [`config_provenance` label](fairness.md).
+4. A section in [docs/models.md](models.md) (the per-model provisioning and config reference).
+5. A small **test**: run your worker's `fit` on a toy problem through
+   `srbf.subprocess_adapter.SubprocessAdapter`, skipped when your dependencies are not importable.
+
+No registry entry and no srbf code changes are needed for the worker route.
+
+## Route 2: an in-process adapter
+
+If your method installs into srbf's environment without conflicts, an adapter class avoids the
+subprocess. The contract is `srbf.core.EvaluationModelAdapter`, a `@runtime_checkable` `Protocol`:
+two methods, no base class to subclass.
 
 ```python
 class EvaluationModelAdapter(Protocol):
     def prepare(self, *, data_source: EvaluationDataSource | None = None) -> None:
-        """Run once before the first sample (load weights, start a Julia process, ...)."""
+        """Run once before the first sample (load weights, start a backend, ...)."""
 
     def evaluate_sample(self, sample: EvaluationSample) -> EvaluationResult:
         """Fit + predict on ONE problem; return a normalized result."""
 ```
 
-### What you receive: `EvaluationSample`
+An optional `close()` is called when the run ends, however it ends.
 
-Each call to `evaluate_sample` gets one problem (`srbf.core.EvaluationSample`):
+### What you receive: `EvaluationSample`
 
 | field | shape / type | meaning |
 |---|---|---|
@@ -54,11 +151,10 @@ metadata to seed your result).
 
 ### What you return: `EvaluationResult`
 
-Return `EvaluationResult(record)`, where `record` is a plain `dict`. Start it from
-`sample.clone_metadata()` so the ground truth travels with the result, then add your outputs. A
-run records these keys **raw** (it does not compute metrics); the separate, offline
-`srbf.compute_derived_metrics` step (see [running.md](running.md#deriving-metrics)) later reads
-them to produce FVU / recovery / F1:
+Return `EvaluationResult(record)`, where `record` is a plain `dict` started from
+`sample.clone_metadata()` so the ground truth travels with the result. A run records these keys
+**raw**; the offline `srbf.result_processing.derive_metrics` step
+([running.md](running.md#deriving-metrics)) later turns them into FVU, recovery and F1:
 
 | key | type | consumed for |
 |---|---|---|
@@ -71,16 +167,7 @@ them to produce FVU / recovery / F1:
 | `error` | `str` | populated on failure |
 | `fit_time` | `float` | wall-clock fit time (timing comparisons) |
 
-You do not compute FVU or recovery yourself: emit predictions + the expression, and srbf's derived
-metrics (`compute_derived_metrics`, run as a separate post-processing step) do the rest.
-Prefix/skeleton normalization is available from `simplipy` (`normalize_expression`,
-`normalize_skeleton`); convert an infix string to prefix with the SimpliPy engine
-(`simplipy_engine.infix_to_prefix(expr)`).
-
-## A minimal adapter (copy this)
-
-This mirrors the built-in `PySRAdapter` (`src/srbf/model_adapters.py`), the cleanest template for
-any external `fit`/`predict` regressor:
+### A minimal in-process adapter
 
 ```python
 import time
@@ -91,31 +178,27 @@ from simplipy import normalize_expression, normalize_skeleton
 
 class MyModelAdapter(EvaluationModelAdapter):
     def __init__(self, *, simplipy_engine, **hyperparams):
-        # Import your model library lazily so importing srbf never requires it.
-        from mymodel import MyRegressor  # noqa: F401
+        from mymodel import MyRegressor  # noqa: F401  (lazy: importing srbf never needs it)
         self.hyperparams = hyperparams
         self.simplipy_engine = simplipy_engine
         self._model = None
 
     def prepare(self, *, data_source=None):
         from mymodel import MyRegressor
-        self._model = MyRegressor(**self.hyperparams)   # construct once, reuse across samples
+        self._model = MyRegressor(**self.hyperparams)
 
     def evaluate_sample(self, sample: EvaluationSample) -> EvaluationResult:
         record = sample.clone_metadata()
         X = sample.x_support.copy()
         y = (sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support).copy()
         X_val = sample.x_validation.copy()
-
         t0 = time.time()
         try:
             self._model.fit(X, y.ravel())
             record["fit_time"] = time.time() - t0
             record["y_pred"] = self._model.predict(X).reshape(-1, 1)
-            record["y_pred_val"] = (
-                self._model.predict(X_val).reshape(-1, 1) if X_val.size else np.empty((0, 1))
-            )
-            expr = str(self._model.get_expression())          # your model's symbolic output
+            record["y_pred_val"] = self._model.predict(X_val).reshape(-1, 1) if X_val.size else np.empty((0, 1))
+            expr = str(self._model.get_expression())
             record["predicted_expression"] = expr
             prefix = self.simplipy_engine.infix_to_prefix(expr)
             record["predicted_expression_prefix"] = normalize_expression(prefix).copy()
@@ -127,73 +210,35 @@ class MyModelAdapter(EvaluationModelAdapter):
         return EvaluationResult(record)
 ```
 
+Register it with a builder and a one-line entry in `_ADAPTER_REGISTRY` in `src/srbf/config.py`
+(`resolve_simplipy_engine(config, adapter_name="mymodel")` loads the engine), and a config selects it
+with `model_adapter: {type: mymodel, ...}`. The built-in `e2e` and `nesymres` adapters in
+`src/srbf/model_adapters.py` are the reference examples.
+
 > **The serial driver.** The `Benchmark` driver is a plain serial loop: it calls `evaluate_sample`
 > on one problem at a time, so per-problem wall-clock timing is uncontended. Any generate-then-refine
-> overlap belongs inside your model's own per-problem inference (as `flash_ansr` does internally), not
-> in the adapter; the adapter contract is just `prepare` + `evaluate_sample`.
-
-## Register your adapter
-
-Adapters are looked up by a `type` string through a registry in `src/srbf/config.py`. Add a builder
-that turns a config block into your adapter, then register it. For the SimpliPy engine, reuse the
-shared `resolve_simplipy_engine` helper (it loads `model_adapter.simplipy_engine` and raises if it is
-missing):
-
-```python
-from srbf.config import resolve_simplipy_engine
-
-def _build_mymodel_adapter(config):
-    return MyModelAdapter(
-        simplipy_engine=resolve_simplipy_engine(config, adapter_name="mymodel"),
-        **{k: v for k, v in config.items() if k not in {"type", "simplipy_engine"}},
-    )
-
-_ADAPTER_REGISTRY: dict[str, AdapterBuilder] = {
-    "flash_ansr": _build_flash_ansr_adapter,
-    # ...
-    "mymodel": _build_mymodel_adapter,   # <- your one-line addition
-}
-```
-
-Now a config can select your model:
-
-```yaml
-model_adapter:
-  type: mymodel
-  # ...your hyperparameters, read by _build_mymodel_adapter...
-```
-
-See [docs/running.md](running.md) for the full config anatomy and
-[docs/models.md](models.md) for the per-type `model_adapter` blocks of the built-in adapters.
+> overlap belongs inside your model's own per-problem inference, not in the adapter.
 
 ## Provisioning your model's dependencies
 
-How your model is installed is part of the contribution. srbf supports three patterns (the existing
-adapters are just defaults you can copy):
+How your model is installed is part of the contribution:
 
-- **pip dependency** (cleanest): if your model is `pip install`-able, gate the import lazily (a
-  `_require_<name>()` helper, like `_require_pysr`) so importing srbf never pulls it in, and document
-  `pip install <yourmodel>`. Pure-pip extras can go under the `[baselines]` optional-dependency group.
-- **clone + patch** (for unpackaged research code): ship a `scripts/patch_<name>.py` that pins and
-  patches an upstream clone to run on the current Python, plus instructions to download weights. This
-  is exactly how `nesymres` and `e2e` are provisioned today (`scripts/patch_nesymres.py`,
-  `scripts/patch_symbolicregression.py`, `scripts/patch_typing_io.py`). These are **one default
-  recipe**, not the only way.
-- **vendored**: only if there is no upstream to track.
+- **own environment** (the worker route): a `requirements.txt`, `environment.yml` or lock file with
+  the exact versions, a script that creates the environment and fetches the weights, and the
+  `python:` path in the config. This is the default for anything with its own torch, simplipy or Julia.
+- **pip dependency** (in-process route): gate the import lazily so importing srbf never pulls it in,
+  and document `pip install <yourmodel>`. Pure-pip extras can go under the `[baselines]` group.
+- **clone + patch** (unpackaged research code): a `scripts/patch_<name>.py` that pins and patches an
+  upstream clone, plus instructions to download weights; how `nesymres` and `e2e` are provisioned.
 
-A wheel cannot carry submodules or weights, so clone+patch models are a *bench-setup* flow (clone the
-repo, run setup), not `pip install srbf[...]`. Note that conflicting deps (Julia, old torch) often
-mean each baseline wants its **own environment**; document that for your model.
+A wheel cannot carry submodules or weights, so anything beyond pip is a *bench-setup* flow.
 
 ## PR checklist
 
-- [ ] adapter implements `prepare` + `evaluate_sample`, returns `EvaluationResult` with
-      `prediction_success`, `y_pred`/`y_pred_val`, and `predicted_*` keys
-- [ ] model library imported lazily (importing `srbf` stays light)
-- [ ] `_build_<name>_adapter` + one `_ADAPTER_REGISTRY` entry
-- [ ] an example `configs/evaluation/...yaml` selecting `type: <name>` and declaring
-      [`config_provenance`](fairness.md)
-- [ ] install/provisioning instructions (pip, or `scripts/patch_<name>.py` + weights), added to
-      [docs/models.md](models.md)
-- [ ] a small smoke test under `tests/`
+- [ ] a worker (`fit`, optionally `load`/`info`) **or** an in-process adapter (`prepare` +
+      `evaluate_sample`, plus a registered builder)
+- [ ] an example `configs/evaluation/...yaml` declaring [`config_provenance`](fairness.md)
+- [ ] provisioning: the environment recipe with pinned versions and where the weights come from,
+      documented in [docs/models.md](models.md)
+- [ ] a smoke test under `tests/`, skipped when the method's dependencies are absent
 - [ ] `pre-commit run --all-files` and `pytest tests` pass
