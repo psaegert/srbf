@@ -468,3 +468,21 @@ This is **one default recipe**, not the only way to wire those models in. See
 
 `srbf` is a community framework: a new SR method is added by PR with an adapter plus its own
 install instructions. See [adapters.md](adapters.md) for the contribution guide.
+
+## The calibrated protocol
+
+Fit times are only comparable when every method ran on the same machine, one unit at a time, with nothing
+else on it. `scripts/run_calibrated_ladder.py` runs a scaling config that way: every rung up to
+`--full-up-to` (default 4,096) on the whole suite, every rung above it on a stratified subset, shard 0 of N per
+catalog with N from the catalog's size (`--subset-rule "50:10,10:2"`: 50 or more problems take every 10th, 10 to
+49 every 2nd, smaller catalogs run whole). The subset is deterministic, so it is the same problems for every
+model and rung. `--refiner-workers` pins the refiner pool in a config copy that the runs record as their
+provenance. Finished units leave markers under `<root>/calibrated/<model>/`; a stopped run resumes.
+
+```bash
+FLASH_ANSR_ROOT=$(pwd) CUDA_VISIBLE_DEVICES=0 python scripts/run_calibrated_ladder.py \
+    -c configs/evaluation/scaling/flash-ansr-v25.0-T7-3M_srbf.yaml --refiner-workers 16
+```
+
+The subset rungs write shard files (`choices_065536.shard-0-of-10.pkl`); `srbf analyze` reads them like any
+run, with `__meta__.shard` recording the subset.

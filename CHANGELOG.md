@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   starves of unique draws stops instead of spinning.
 
 ### Added
+- `scripts/run_calibrated_ladder.py`: the calibrated protocol -- a scaling config's experiments x rungs run
+  sequentially on one machine, the whole suite up to a rung (default 4,096) and a deterministic stratified
+  subset above it (shard 0 of N per catalog, N by catalog size), `--refiner-workers` pinned into the recorded
+  config, markers and resume.
 - **MDL ratio.** The derived metrics carry `predicted_mdl`, `ground_truth_mdl` and `mdl_ratio`:
   the description length of the realized predicted expression over that of the ground truth, in
   the engine's own measure (`complexity`, milli-bits: certified, f64 parse, Default canon; the
