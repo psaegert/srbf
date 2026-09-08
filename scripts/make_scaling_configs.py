@@ -13,10 +13,12 @@ import pathlib
 from srbf.suites import SRBF_CATALOGS
 
 CATALOGS = list(SRBF_CATALOGS)
-LADDER = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+LADDER = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
 MODELS = {
     'flash-ansr-v25.0-T7-3M': 'psaegert/flash-ansr-v25.0-T7-3M',
     'flash-ansr-v25.0-T7-20M': 'psaegert/flash-ansr-v25.0-T7-20M',
+    'flash-ansr-v25.0-T8-20M': 'psaegert/flash-ansr-v25.0-T8-20M',
+    'flash-ansr-v25.0-T8-120M': 'psaegert/flash-ansr-v25.0-T8-120M',
 }
 # The prior baseline: the same harness (refinement, MDL ranking, ladder) fed candidates drawn from the
 # checkpoint's own training prior (catalog_train.yaml beside it) instead of the decoder -- what the
@@ -46,7 +48,8 @@ PRIOR_GENERATION = """        generation_config:
             unique: true
             valid_only: true
             decontaminate: true
-            match_variables: true"""
+            match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here"""
 
 
 def experiment(model: str, repo: str, catalog: str, *, prior: bool = False) -> str:

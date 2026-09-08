@@ -40,19 +40,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/fastsrb/choices_065536.pkl']
 
   feynman:
     data_source:
@@ -90,19 +91,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman/choices_065536.pkl']
 
   feynman-bonus:
     data_source:
@@ -140,19 +142,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/feynman-bonus/choices_065536.pkl']
 
   srsd-dummy:
     data_source:
@@ -190,19 +193,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/srsd-dummy/choices_065536.pkl']
 
   erbench-syneq:
     data_source:
@@ -240,19 +244,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-syneq/choices_065536.pkl']
 
   erbench-densities:
     data_source:
@@ -290,19 +295,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-densities/choices_065536.pkl']
 
   erbench-phybench:
     data_source:
@@ -340,19 +346,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/erbench-phybench/choices_065536.pkl']
 
   soose-fc:
     data_source:
@@ -390,19 +397,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-fc/choices_065536.pkl']
 
   soose-nc:
     data_source:
@@ -440,19 +448,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-nc/choices_065536.pkl']
 
   soose-wc:
     data_source:
@@ -490,19 +499,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/soose-wc/choices_065536.pkl']
 
   physo-astro:
     data_source:
@@ -540,19 +550,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-astro/choices_065536.pkl']
 
   physo-class:
     data_source:
@@ -590,19 +601,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/physo-class/choices_065536.pkl']
 
   nguyen:
     data_source:
@@ -640,19 +652,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nguyen/choices_065536.pkl']
 
   keijzer:
     data_source:
@@ -690,19 +703,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/keijzer/choices_065536.pkl']
 
   korns:
     data_source:
@@ -740,19 +754,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/korns/choices_065536.pkl']
 
   koza:
     data_source:
@@ -790,19 +805,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/koza/choices_065536.pkl']
 
   livermore:
     data_source:
@@ -840,19 +856,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore/choices_065536.pkl']
 
   livermore2:
     data_source:
@@ -890,19 +907,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/livermore2/choices_065536.pkl']
 
   vladislavleva:
     data_source:
@@ -940,19 +958,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/vladislavleva/choices_065536.pkl']
 
   jin:
     data_source:
@@ -990,19 +1009,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/jin/choices_065536.pkl']
 
   neat:
     data_source:
@@ -1040,19 +1060,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/neat/choices_065536.pkl']
 
   pagie:
     data_source:
@@ -1090,19 +1111,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/pagie/choices_065536.pkl']
 
   poly:
     data_source:
@@ -1140,19 +1162,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/poly/choices_065536.pkl']
 
   nonic:
     data_source:
@@ -1190,19 +1213,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/nonic/choices_065536.pkl']
 
   sine:
     data_source:
@@ -1240,19 +1264,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/sine/choices_065536.pkl']
 
   meier:
     data_source:
@@ -1290,19 +1315,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/meier/choices_065536.pkl']
 
   r-rationals:
     data_source:
@@ -1340,19 +1366,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/r-rationals/choices_065536.pkl']
 
   constant:
     data_source:
@@ -1390,19 +1417,20 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/constant/choices_065536.pkl']
 
   grammarvae:
     data_source:
@@ -1440,16 +1468,17 @@ experiments:
             valid_only: true
             decontaminate: true
             match_variables: true
+            max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here
         device: cpu
       generation_overrides:
         kwargs:
           choices: !sweep
             name: ladder
-            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+            values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
       limit: null
       save_every: 64
       resume: true
       output: !sweep
         name: ladder
-        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_016384.pkl']
+        values: ['{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_000001.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_000002.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_000004.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_000008.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_000016.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_000032.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_000064.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_000128.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_000256.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_000512.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_001024.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_002048.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_004096.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_008192.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_016384.pkl', '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T7-3M-prior/grammarvae/choices_065536.pkl']

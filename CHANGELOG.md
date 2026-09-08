@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The shipped scaling ladder gains the 65,536 rung (powers of two to 16,384, then 65,536) for every
+  arm; `flash-ansr-v25.0-T8-20M` and `flash-ansr-v25.0-T8-120M` join the generated model arms; the
+  prior arm caps its attempts at 524,288 per problem (`max_tries`), so a one-column problem that
+  starves of unique draws stops instead of spinning.
+
 ### Added
 - **MDL ratio.** The derived metrics carry `predicted_mdl`, `ground_truth_mdl` and `mdl_ratio`:
   the description length of the realized predicted expression over that of the ground truth, in
