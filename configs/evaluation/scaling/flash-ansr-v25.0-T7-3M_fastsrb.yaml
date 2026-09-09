@@ -17,6 +17,7 @@ run:
     model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
     emission: fittable        # the model spells typed literals, the refiner fits every other constant
     refine_scope: fittable    # typed literals (pow exponents, rootn indices) stay as spelled
+    constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
     complexity: none
     device: cuda
     evaluation_config:

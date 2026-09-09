@@ -129,6 +129,11 @@ model_adapter:
   model_path: "{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M"
   emission: fittable        # the model spells typed literals, the refiner fits every other constant
   refine_scope: fittable    # typed literals (pow exponents, rootn indices) stay as spelled
+  constant_ladder: true     # flash-ansr's default (on): re-spell every fitted candidate's constants
+                            # (integer, surprising fraction, rounding, pi/e multiple, zero) and let the
+                            # ranking choose; `false` turns it off; a mapping overrides the flash-ansr
+                            # defaults (e.g. `pool_bound: true` for rank-0-only, time-budgeted runs);
+                            # adds `spelling`/`parent` rows to the candidate store
   complexity: none
   evaluation_config:
     n_support: 512

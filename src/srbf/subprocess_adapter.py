@@ -396,7 +396,9 @@ class SubprocessAdapter(EvaluationModelAdapter):
             self._dead_reason = str(exc)
 
     # -- evaluation --------------------------------------------------------------------------
-    def evaluate_sample(self, sample: EvaluationSample) -> EvaluationResult:
+    def evaluate_sample(self, sample: EvaluationSample, *, extra_meta: Mapping[str, Any] | None = None) -> EvaluationResult:
+        """``extra_meta`` rides along in the fit payload's ``meta`` (per-problem worker inputs such as
+        the hybrid arm's seeds and iteration budget); the worker decides what to do with them."""
         record = sample.clone_metadata()
         if self._process is None:
             if self._dead_reason is not None:
@@ -423,7 +425,7 @@ class SubprocessAdapter(EvaluationModelAdapter):
                 record["variable_names"] = list(used)
 
         payload = {"x": X_support.tolist(), "y": y_support.tolist(), "x_val": X_val.tolist(),
-                   "variables": variables, "meta": _json_meta(record)}
+                   "variables": variables, "meta": {**_json_meta(record), **dict(extra_meta or {})}}
         try:
             reply = self._process.request(payload, self.timeout)
         except WorkerError as exc:

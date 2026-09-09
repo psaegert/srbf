@@ -6,6 +6,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **The hybrid arm: Flash-ANSR seeds + PySR at a fixed time budget** (`model_adapter.type:
+  flash_ansr_pysr`, `srbf/hybrid_adapter.py`). One budget T per problem is split by a ratio r:
+  Flash-ANSR gets (1 - r) T, PySR gets r T, both controlled by direct knobs from two measured time
+  laws (`scripts/hybrid_scaling_laws.py`: seconds = a + b * choices, seconds = a + b * niterations),
+  never by timeouts; the achieved seconds of both stages are recorded next to the targets. The
+  top-K refined Flash-ANSR candidates enter PySR as initial `guesses` in Julia syntax (the worker
+  reads per-problem `guesses` / `niterations` from the fit payload's `meta`; `SubprocessAdapter
+  .evaluate_sample(extra_meta=...)` carries them). One chunked generation pass per problem is
+  snapshotted at every ratio's candidate count and cached on disk, so the whole r-sweep pays the
+  generation once. Because the catalog source re-draws the support points on every iteration
+  (symbolic_data's `ProblemSource` is entropy-seeded; reproduction is a materialized source), the
+  sweep runner FREEZES the stratified subset once per catalog (`<root>/hybrid_data/<catalog>.npz`,
+  `meta.source_row_index` = the row in the source catalog) and every cell reads it through a
+  derived `<config>.frozen.yaml`; each snapshot records a fingerprint of the arrays it was
+  generated on (`hybrid_adapter.data_fingerprint`) and is regenerated, with a warning, on a
+  mismatch. `scripts/make_hybrid_config.py`, `scripts/run_hybrid_sweep.py` (the calibrated
+  protocol's stratified subset, one problem at a time) and `scripts/hybrid_curve.py` (the r-curve
+  with intervals and the pre-registered paired test) complete the kit.
+- **flash-ansr's constant ladder is configurable and its rows are stored.** A `constant_ladder`
+  block under `model_adapter` (or `evaluation_config`) is passed through to `FlashANSR.load`
+  (`true`, `false`, or a mapping; absent = flash-ansr's own default, which is ON with the surprise
+  rule, over every candidate). The candidate store gains two columns for the
+  re-spelled variant rows the ladder adds beside their parents: `spelling` (the re-spelling record,
+  `''` for a fitted draw) and `parent` (the store row of the beam the variant came from, `-1`
+  otherwise); the store's `run_meta` records the ladder settings so a reader knows whether such
+  rows can exist. Skeleton, MDL and constants of a variant flow through the existing columns.
+
 ### Changed
 - The shipped scaling ladder gains the 65,536 rung (powers of two to 16,384, then 65,536) for every
   arm; `flash-ansr-v25.0-T8-20M` and `flash-ansr-v25.0-T8-120M` join the generated model arms; the

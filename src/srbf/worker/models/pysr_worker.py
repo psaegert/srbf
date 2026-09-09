@@ -33,14 +33,17 @@ UNARY_OPERATORS = [
 # IEEE-754 rootn, matching simplipy.operators.rootn's table: odd integer index = signed root
 # (total on R), even = principal (NaN on negatives), negative index = reciprocal (via the
 # negative exponent), index 0 or non-integer = NaN.
+# `abs(n) < 2^53`: every float beyond that is "an integer", and `Int(abs(n))` overflows Int64 for
+# |n| >= 2^63 (InexactError) -- a GP mutation or a seed can put 1e33 into the index slot.
 ROOTN_JULIA = (
-    r"rootn(x::T, n::T) where {T} = (isfinite(n) && n == round(n) && n != 0) ? "
+    r"rootn(x::T, n::T) where {T} = (isfinite(n) && n == round(n) && n != 0 && abs(n) < 9.007199254740992e15) ? "
     r"((x >= 0) ? abs(x)^(one(T)/n) : (isodd(Int(abs(n))) ? -abs(x)^(one(T)/n) : T(NaN))) : T(NaN)"
 )
 BINARY_OPERATORS = ["+", "-", "*", "/", "^", ROOTN_JULIA]
 
 
-def create_model(*, timeout_in_seconds, niterations, maxsize=None, model_selection="best", parsimony=None):
+def create_model(*, timeout_in_seconds, niterations, maxsize=None, model_selection="best", parsimony=None,
+                 guesses=None):
     """A PySRRegressor over flash-ansr v24.0's 23-operator vocabulary, exactly (owner ruling
     2026-08-17): 17 unaries + {+, -, *, /, pow, rootn}. maxsize/parsimony are forwarded only when
     set; None = PySR's own (version-dependent) defaults, never hardcoded here."""
@@ -50,6 +53,10 @@ def create_model(*, timeout_in_seconds, niterations, maxsize=None, model_selecti
         optional["maxsize"] = int(maxsize)
     if parsimony is not None:
         optional["parsimony"] = float(parsimony)
+    if guesses:
+        # initial guesses (PySR >= 2.0): the flash-ansr -> PySR seeding bridge hands Julia-syntax infix
+        # strings in the fit's variable names; PySR parses them into its initial populations
+        optional["guesses"] = [str(g) for g in guesses]
     return PySRRegressor(
         temp_equation_file=True,
         delete_tempfiles=True,
@@ -106,6 +113,14 @@ def info(state):
 
 def fit(x, y, *, x_val, variables, meta, options, state):
     model = state["model"]
+    # per-problem overrides ride in `meta` (the hybrid adapter sets them): seeds and the iteration
+    # budget of THIS fit. A fresh regressor is built for them; the warm Julia session is shared.
+    meta = meta or {}
+    overrides = {k: meta[k] for k in ("guesses", "niterations", "timeout_in_seconds") if meta.get(k) is not None}
+    if overrides:
+        kwargs = _model_kwargs(options)
+        kwargs.update(overrides)
+        model = create_model(**kwargs)
     X = np.asarray(x, dtype=float)
     X_val = np.asarray(x_val, dtype=float).reshape(-1, X.shape[1]) if x_val else np.empty((0, X.shape[1]))
     target = np.asarray(y, dtype=float).ravel()
@@ -118,5 +133,8 @@ def fit(x, y, *, x_val, variables, meta, options, state):
         extra["equations"] = hof[["complexity", "loss", "score", "equation"]].to_dict("records")
     except Exception:  # noqa: BLE001 - persistence is best-effort
         pass
+    if overrides:
+        extra["n_guesses"] = len(overrides.get("guesses") or [])
+        extra["niterations_used"] = int(overrides.get("niterations", options.get("niterations", 100)))
     best = model.get_best()
     return {"expression": str(best["equation"]), "y_pred": y_pred, "y_pred_val": y_pred_val, "extra": extra}

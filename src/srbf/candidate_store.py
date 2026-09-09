@@ -96,6 +96,8 @@ class CandidateStoreWriter:
         fvu_val: Sequence[float] | None = None,
         recovery_fit: Sequence[int] | None = None,
         recovery_val: Sequence[int] | None = None,
+        spelling: Sequence[str] | None = None,
+        parent: Sequence[int] | None = None,
     ) -> int:
         """Flush ONE problem's full (deduped) candidate set. Returns bytes written.
 
@@ -112,6 +114,9 @@ class CandidateStoreWriter:
             "pareto_rank": (pareto_rank, np.int32), "rank": (rank, np.int32),
             "fvu_val": (fvu_val, np.float64),
             "recovery_fit": (recovery_fit, np.uint8), "recovery_val": (recovery_val, np.uint8),
+            # flash-ansr's constant ladder: the re-spelling record of a variant row ('' otherwise) and
+            # the row of the beam it was re-spelled from (-1 otherwise)
+            "spelling": (spelling, np.str_), "parent": (parent, np.int32),
         }
         for name, (values, _) in ranking_columns.items():
             if values is not None and len(values) != n:

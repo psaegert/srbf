@@ -228,7 +228,7 @@ class FlashANSRAdapter(EvaluationModelAdapter):
                 return  # already written (resume)
             led = result.ledger
             extra: dict[str, Any] = {}
-            for col in ("n_nodes", "n_constants", "mdl", "score", "pareto_rank", "rank"):
+            for col in ("n_nodes", "n_constants", "mdl", "score", "pareto_rank", "rank", "spelling", "parent"):
                 values = getattr(led, col, None)
                 if values is not None and len(values) == len(led):
                     extra[col] = values
@@ -257,11 +257,21 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         except Exception as exc:  # noqa: BLE001 - capture is auxiliary; never break the eval row
             warnings.warn(f"Candidate-ledger capture failed for this problem: {exc}", RuntimeWarning)
 
+    def _constant_ladder_config(self) -> dict[str, Any] | None:
+        """The constant re-spelling settings the model refines under (flash-ansr ``constant_ladder``),
+        or None when off -- a store reader must know whether ``spelling``/``parent`` rows can exist."""
+        ladder = getattr(self.model, "constant_ladder", None)
+        if ladder is None:
+            return None
+        to_dict = getattr(ladder, "to_dict", None)
+        return dict(to_dict()) if callable(to_dict) else dict(ladder)
+
     def _store_run_meta(self) -> dict[str, Any]:
         """What a later reader of the candidate store needs once per run: the ranking that produced
         `score`/`rank`, and the dialect `mdl` was priced in (mu moves up to 1.8x between dialects, so a
         bare number is unusable later)."""
         meta: dict[str, Any] = {"ranking": self.ranking_config(),
+                                "constant_ladder": self._constant_ladder_config(),
                                 "mdl_dialect": {"certified": True, "mode": "f64", "canon": "default", "unit": "milli-bits"}}
         try:
             import simplipy

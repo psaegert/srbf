@@ -199,3 +199,19 @@ def test_manifest_carries_run_meta_from_the_first_problem(tmp_path):
     manifest = json.loads((tmp_path / "manifest.json").read_text())
     assert manifest["run_meta"] == {"ranking": {"mode": "mdl"}}
     assert manifest["n_problems"] == 1
+
+
+def test_ladder_columns_round_trip(tmp_path):
+    # flash-ansr's constant ladder adds a re-spelled variant row that shares its parent's beam: the
+    # `spelling` record and the `parent` row index travel through the store as their own columns.
+    A = [1, 2, 3]
+    w = CandidateStoreWriter(tmp_path, vocab_size=83)
+    w.write_problem(
+        0, [A, A], [1e-9, 1e-9], [-1.0, -1.0],
+        valid=[1, 1], fit_status=[FIT_OK, FIT_OK], constants=[[2.0000000001], []],
+        spelling=["", "c0=2"], parent=[-1, 0],
+    )
+    w.close()
+    block = next(iter(CandidateStoreReader(tmp_path)))
+    assert list(block["spelling"]) == ["", "c0=2"]
+    np.testing.assert_array_equal(block["parent"], np.array([-1, 0], np.int32))

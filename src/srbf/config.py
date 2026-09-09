@@ -175,6 +175,10 @@ def _build_flash_ansr_adapter(config: Mapping[str, Any]) -> FlashANSRAdapter:
         # exponents, rootn indices -- stay as the model spelled them), 'placeholders' (only the
         # <constant> slots) or 'all' (every literal). A model knob, so it rides on FlashANSR.load.
         refiner_scope=config.get("refine_scope", eval_cfg.get("refine_scope", "fittable")),
+        # The constant ladder (flash-ansr `constant_ladder`): forwarded only when the config says
+        # something, so an absent key leaves flash-ansr's own default (on) in force; `false` turns it off.
+        **({"constant_ladder": config["constant_ladder"]} if "constant_ladder" in config
+           else ({"constant_ladder": eval_cfg["constant_ladder"]} if "constant_ladder" in eval_cfg else {})),
         # The resolved ranking, knob by knob for ITS mode (the others stay None: the library
         # refuses a knob of another mode rather than ignoring it).
         ranking_mode=ranking.mode,
@@ -285,6 +289,40 @@ def _build_pysr_adapter(config: Mapping[str, Any]) -> SubprocessAdapter:
         worker="pysr",
         simplipy_engine=resolve_simplipy_engine(config, adapter_name="pysr"),
         **common,
+    )
+
+
+def _build_flash_ansr_pysr_adapter(config: Mapping[str, Any]):
+    """The hybrid arm (srbf/hybrid_adapter.py): ``flash_ansr:`` (a full flash_ansr adapter block),
+    ``pysr:`` (a full pysr adapter block, its own environment) and ``hybrid:`` with ``budget_s``,
+    ``ratio`` (this cell), ``ratios`` (every cell of the sweep, so one generation pass serves all),
+    ``choices_law`` / ``niterations_law`` (``{a, b, minimum}``: seconds = a + b * units, measured
+    on the target machine), ``snapshot_dir``, ``k_seeds`` (100), ``max_seed_complexity``."""
+    from srbf.hybrid_adapter import FlashANSRPySRAdapter, TimeLaw
+    flash_cfg = config.get("flash_ansr")
+    pysr_cfg = config.get("pysr")
+    hybrid = config.get("hybrid")
+    if not isinstance(flash_cfg, Mapping) or not isinstance(pysr_cfg, Mapping) or not isinstance(hybrid, Mapping):
+        raise ValueError("flash_ansr_pysr needs 'flash_ansr', 'pysr' and 'hybrid' mappings")
+
+    def law(block: Any, name: str) -> TimeLaw:
+        if not isinstance(block, Mapping):
+            raise ValueError(f"hybrid.{name} must be a mapping {{a, b, minimum}}")
+        return TimeLaw(coerce_float(block["a"], f"hybrid.{name}.a"), coerce_float(block["b"], f"hybrid.{name}.b"),
+                       coerce_int(block.get("minimum", 1), f"hybrid.{name}.minimum"))
+
+    ratio = coerce_float(hybrid["ratio"], "hybrid.ratio")
+    ratios = [coerce_float(r, "hybrid.ratios") for r in (hybrid.get("ratios") or [ratio])]
+    return FlashANSRPySRAdapter(
+        flash=_build_flash_ansr_adapter(flash_cfg),
+        pysr=_build_pysr_adapter(pysr_cfg),
+        budget_s=coerce_float(hybrid["budget_s"], "hybrid.budget_s"),
+        ratio=ratio, ratios=ratios,
+        choices_law=law(hybrid.get("choices_law"), "choices_law"),
+        niterations_law=law(hybrid.get("niterations_law"), "niterations_law"),
+        snapshot_dir=substitute_root_path(str(hybrid["snapshot_dir"])),
+        k_seeds=coerce_int(hybrid.get("k_seeds", 100), "hybrid.k_seeds"),
+        max_seed_complexity=coerce_optional_int(hybrid.get("max_seed_complexity"), "hybrid.max_seed_complexity"),
     )
 
 
@@ -517,6 +555,7 @@ def _resolve_catalog_ref(config: Mapping[str, Any], *, adapter_name: str) -> str
 
 _ADAPTER_REGISTRY: dict[str, AdapterBuilder] = {
     "flash_ansr": _build_flash_ansr_adapter,
+    "flash_ansr_pysr": _build_flash_ansr_pysr_adapter,
     "pysr": _build_pysr_adapter,
     "subprocess": _build_subprocess_adapter,
     "nesymres": _build_nesymres_adapter,
