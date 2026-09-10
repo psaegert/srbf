@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-09-10
+
+### Changed
+- Requires `flash-ansr>=0.15,<0.16` (the constant ladder and the shared prefill in the sampler).
+
 ### Added
 - **The hybrid arm: Flash-ANSR seeds + PySR at a fixed time budget** (`model_adapter.type:
   flash_ansr_pysr`, `srbf/hybrid_adapter.py`). One budget T per problem is split by a ratio r:
