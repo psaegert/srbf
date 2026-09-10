@@ -22,8 +22,7 @@ from pathlib import Path
 
 import numpy as np
 
-from srbf.config import _build_flash_ansr_adapter, _build_pysr_adapter, load_config, select_experiment
-from srbf.data_sources import build_catalog_source
+from srbf.config import _build_flash_ansr_adapter, _build_pysr_adapter, build_catalog_source, load_config, select_experiment
 
 
 def fit_law(levels: list[int], seconds: list[list[float]]) -> dict:
@@ -65,6 +64,9 @@ def main() -> int:
         flash.prepare(data_source=source)
         levels = [int(v) for v in a.choices.split(",")]
         config = flash.model.generation_config
+        # one untimed call first: CUDA init, engine load and compiles must not land in the smallest level
+        config.choices = levels[0]
+        flash.evaluate_sample(samples[0])
         rows = []
         for c in levels:
             config.choices = c
