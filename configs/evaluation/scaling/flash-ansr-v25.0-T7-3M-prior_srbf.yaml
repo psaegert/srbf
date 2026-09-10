@@ -70,6 +70,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -121,6 +122,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -172,6 +174,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -223,6 +226,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -274,6 +278,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -325,6 +330,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -376,6 +382,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -427,6 +434,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -478,6 +486,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -529,6 +538,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -580,6 +590,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -631,6 +642,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -682,6 +694,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -733,6 +746,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -784,6 +798,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -835,6 +850,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -886,6 +902,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -937,6 +954,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -988,6 +1006,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -1039,6 +1058,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -1090,6 +1110,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -1141,6 +1162,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -1192,6 +1214,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -1243,6 +1266,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -1294,6 +1318,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -1345,6 +1370,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -1396,6 +1422,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:
@@ -1447,6 +1474,7 @@ experiments:
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: cpu
       evaluation_config:

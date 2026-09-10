@@ -19,12 +19,16 @@ MODELS = {
     'flash-ansr-v25.0-T7-20M': 'psaegert/flash-ansr-v25.0-T7-20M',
     'flash-ansr-v25.0-T8-20M': 'psaegert/flash-ansr-v25.0-T8-20M',
     'flash-ansr-v25.0-T8-120M': 'psaegert/flash-ansr-v25.0-T8-120M',
+    'flash-ansr-v25.0-T8-3M': 'psaegert/flash-ansr-v25.0-T8-3M',
 }
 # The prior baseline: the same harness (refinement, MDL ranking, ladder) fed candidates drawn from the
 # checkpoint's own training prior (catalog_train.yaml beside it) instead of the decoder -- what the
 # posterior is worth. Needs no GPU: the sampler and the refiner are CPU work.
 PRIOR_ARMS = {
     'flash-ansr-v25.0-T7-3M-prior': 'psaegert/flash-ansr-v25.0-T7-3M',
+    # The T8 models train on the T7 data pins verbatim (catalog_train.yaml identical), so one prior arm
+    # serves the whole T8 family; it is read from the T8-20M bundle.
+    'flash-ansr-v25.0-T8-prior': 'psaegert/flash-ansr-v25.0-T8-20M',
 }
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -72,6 +76,7 @@ def experiment(model: str, repo: str, catalog: str, *, prior: bool = False) -> s
       model_path: '{{{{ROOT}}}}/models/{repo}'
       emission: fittable
       refine_scope: fittable
+      constant_ladder: true     # re-spell fitted constants after the fit (surprise-gated fractions, pool bound); the pinned default
       complexity: none
       device: {device}
       evaluation_config:
