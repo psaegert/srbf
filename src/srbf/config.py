@@ -292,36 +292,33 @@ def _build_pysr_adapter(config: Mapping[str, Any]) -> SubprocessAdapter:
     )
 
 
-def _build_flash_ansr_pysr_adapter(config: Mapping[str, Any]):
-    """The hybrid arm (srbf/hybrid_adapter.py): ``flash_ansr:`` (a full flash_ansr adapter block),
-    ``pysr:`` (a full pysr adapter block, its own environment) and ``hybrid:`` with ``budget_s``,
-    ``ratio`` (this cell), ``ratios`` (every cell of the sweep, so one generation pass serves all),
-    ``snapshot_dir``, ``k_seeds`` (100), ``max_seed_complexity``, and the clock's knobs:
-    ``landing_tolerance`` (0.01, a fraction of the budget the generation may stop short of its
-    share), ``pysr_overhead_s`` (4.0) and ``pricing_reserve_s`` (0.2), the seeds of the running means of
-    PySR's fixed cost and of the added candidates' pricing that PySR's share pays besides the search
-    (carried across cells in ``clock_state.json`` beside the snapshot directories)."""
-    from srbf.hybrid_adapter import FlashANSRPySRAdapter
+def _build_flash_ansr_hybrid_adapter(config: Mapping[str, Any]):
+    """The hybrid arm -- Flash-ANSR seeding PySR at a time budget. The METHOD lives in the
+    ``flash-ansr-hybrid`` package (``HybridRegressor``); srbf carries only this adapter. Blocks:
+    ``flash_ansr:`` (a full flash_ansr adapter block: the model, its refinement and ranking
+    settings, the device), ``hybrid:`` (flash-ansr-hybrid's ``HybridConfig`` fields -- ``budget_s``,
+    ``ratio``, ``ratios``, ``k_seeds``, the clock knobs -- plus ``snapshot_dir``, the per-problem
+    generation cache) and optionally ``pysr:`` (its ``PySRSettings``: ``maxsize``, ``parsimony``,
+    ``model_selection``, ``warmup``, further ``PySRRegressor`` kwargs)."""
     flash_cfg = config.get("flash_ansr")
-    pysr_cfg = config.get("pysr")
     hybrid = config.get("hybrid")
-    if not isinstance(flash_cfg, Mapping) or not isinstance(pysr_cfg, Mapping) or not isinstance(hybrid, Mapping):
-        raise ValueError("flash_ansr_pysr needs 'flash_ansr', 'pysr' and 'hybrid' mappings")
+    pysr_cfg = config.get("pysr") or {}
+    if not isinstance(flash_cfg, Mapping) or not isinstance(hybrid, Mapping) or not isinstance(pysr_cfg, Mapping):
+        raise ValueError("flash_ansr_hybrid needs 'flash_ansr' and 'hybrid' mappings (and an optional 'pysr' mapping)")
+    try:
+        from flash_ansr_hybrid import HybridConfig, HybridRegressor
+    except ImportError as exc:  # pragma: no cover - environment dependent
+        raise ImportError("the flash_ansr_hybrid adapter needs the flash-ansr-hybrid package: pip install flash-ansr-hybrid") from exc
+    from srbf.model_adapters import FlashANSRHybridAdapter
 
-    ratio = coerce_float(hybrid["ratio"], "hybrid.ratio")
-    ratios = [coerce_float(r, "hybrid.ratios") for r in (hybrid.get("ratios") or [ratio])]
-    return FlashANSRPySRAdapter(
-        flash=_build_flash_ansr_adapter(flash_cfg),
-        pysr=_build_pysr_adapter(pysr_cfg),
-        budget_s=coerce_float(hybrid["budget_s"], "hybrid.budget_s"),
-        ratio=ratio, ratios=ratios,
-        snapshot_dir=substitute_root_path(str(hybrid["snapshot_dir"])),
-        k_seeds=coerce_int(hybrid.get("k_seeds", 100), "hybrid.k_seeds"),
-        max_seed_complexity=coerce_optional_int(hybrid.get("max_seed_complexity"), "hybrid.max_seed_complexity"),
-        landing_tolerance=coerce_float(hybrid.get("landing_tolerance", 0.01), "hybrid.landing_tolerance"),
-        pysr_overhead_s=coerce_float(hybrid.get("pysr_overhead_s", 4.0), "hybrid.pysr_overhead_s"),
-        pricing_reserve_s=coerce_float(hybrid.get("pricing_reserve_s", 0.2), "hybrid.pricing_reserve_s"),
-    )
+    options = dict(hybrid)
+    snapshot_dir = options.pop("snapshot_dir", None)
+    flash = _build_flash_ansr_adapter(flash_cfg)
+    options.setdefault("emission", flash.emission)
+    regressor = HybridRegressor(
+        flash.model, HybridConfig.from_mapping({**options, "pysr": dict(pysr_cfg)}),
+        snapshot_dir=substitute_root_path(str(snapshot_dir)) if snapshot_dir else None)
+    return FlashANSRHybridAdapter(flash, regressor)
 
 
 def _build_nesymres_adapter(config: Mapping[str, Any]) -> NeSymReSAdapter:
@@ -553,7 +550,7 @@ def _resolve_catalog_ref(config: Mapping[str, Any], *, adapter_name: str) -> str
 
 _ADAPTER_REGISTRY: dict[str, AdapterBuilder] = {
     "flash_ansr": _build_flash_ansr_adapter,
-    "flash_ansr_pysr": _build_flash_ansr_pysr_adapter,
+    "flash_ansr_hybrid": _build_flash_ansr_hybrid_adapter,
     "pysr": _build_pysr_adapter,
     "subprocess": _build_subprocess_adapter,
     "nesymres": _build_nesymres_adapter,

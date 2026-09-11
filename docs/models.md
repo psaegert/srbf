@@ -2,12 +2,13 @@
 
 How to provision the symbolic-regression models that `srbf` evaluates, and how each is wired into a run config.
 
-`srbf` does not bundle model weights. Each model is reached through a **model adapter**: a small wrapper, selected by `model_adapter.type` in the config, that loads a model and turns its predictions into the metrics the benchmark records. The adapters described here are the **built-in reference examples**. They live in a registry (`srbf.config._ADAPTER_REGISTRY`) with six entries:
+`srbf` does not bundle model weights. Each model is reached through a **model adapter**: a small wrapper, selected by `model_adapter.type` in the config, that loads a model and turns its predictions into the metrics the benchmark records. The adapters described here are the **built-in reference examples**. They live in a registry (`srbf.config._ADAPTER_REGISTRY`) with these entries:
 
 | `type`           | Provisioning                         | Section |
 | ---------------- | ------------------------------------ | ------- |
 | `flash_ansr`     | pip (`flash_ansr install <repo>`)    | [FlashANSR](#flashansr-pip) |
 | `pysr`           | pip (`pip install pysr` + Julia)     | [PySR](#pysr-pip) |
+| `flash_ansr_hybrid` | pip (`pip install "srbf[hybrid]"`)  | [Flash-ANSR + PySR hybrid](#flash-ansr--pysr-hybrid-pip) |
 | `nesymres`       | clone + patch (research baseline)    | [NeSymReS](#nesymres-clone-patch) |
 | `e2e`            | clone + patch (research baseline)    | [E2E / symbolicregression](#e2e-symbolicregression-clone-patch) |
 | `lample_charton` | none (synthetic baseline)            | [No-provisioning baselines](#no-provisioning-baselines) |
@@ -206,6 +207,36 @@ Two properties of the adapter worth knowing:
   Julia session pays a one-off precompile cost that is an order-of-magnitude timing outlier; the
   adapter burns it on a throwaway model before evaluation so problem 0's `fit_time` starts warm.
   This mirrors the other adapters, which pay their one-time model-load cost in `prepare()` too.
+
+## Flash-ANSR + PySR hybrid (pip)
+
+`type: flash_ansr_hybrid` evaluates the [flash-ansr-hybrid](https://github.com/psaegert/flash-ansr-hybrid)
+method: Flash-ANSR generates for its share of a time budget, its top-K candidates seed PySR for the
+rest, PySR's hall of fame joins the Flash-ANSR candidates and Flash-ANSR's ranking picks. The method
+lives in that package (`pip install "srbf[hybrid]"`; PySR runs in-process there, so its Julia backend
+must be importable in the srbf interpreter); srbf carries only the adapter, which hands each problem's
+arrays to the regressor and records its answer.
+
+```yaml
+model_adapter:
+  type: flash_ansr_hybrid
+  flash_ansr:                 # a full flash_ansr block: the model, its refinement and ranking settings
+    type: flash_ansr
+    model_path: "{{ROOT}}/models/flash-ansr-v25.0-T8-20M"
+    evaluation_config: ...
+  hybrid:
+    budget_s: 100             # T, per problem
+    ratio: 0.5                # r: PySR's share of T (the sweep axis)
+    ratios: [0, 0.5, 1]       # every r of the sweep: one generation pass per problem serves them all
+    k_seeds: 100
+    snapshot_dir: "{{ROOT}}/snapshots/fastsrb"   # the per-problem generation cache
+  pysr:                       # optional: PySR's own knobs (maxsize, parsimony, warmup, ...)
+    warmup: true
+```
+
+The `hybrid:` keys are the regressor's `HybridConfig` fields (see the package's documentation) plus
+`snapshot_dir`. `flash-ansr-hybrid-make-config` writes a whole sweep config in this shape and
+`flash-ansr-hybrid-run-sweep` runs it through `srbf run` on a frozen, stratified subset.
 
 ---
 

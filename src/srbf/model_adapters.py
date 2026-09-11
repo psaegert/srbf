@@ -300,6 +300,55 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         raise NotImplementedError(f"Unsupported complexity configuration: {mode}")
 
 
+class FlashANSRHybridAdapter(EvaluationModelAdapter):
+    """Flash-ANSR seeding PySR at a time budget. The method is ``flash_ansr_hybrid.HybridRegressor``
+    (Flash-ANSR generates by the clock, PySR searches from its seeds by the clock, PySR's hall of fame
+    joins the Flash-ANSR candidates and Flash-ANSR's ranking picks); this adapter hands it each
+    problem's arrays and records its answer the way every adapter does."""
+
+    def __init__(self, flash: FlashANSRAdapter, regressor: Any) -> None:
+        self.flash = flash
+        self.regressor = regressor
+
+    def get_simplipy_engine(self) -> Any:
+        return self.flash.get_simplipy_engine()
+
+    def ranking_config(self) -> dict[str, Any] | None:
+        return self.flash.ranking_config()
+
+    def prepare(self, *, data_source: Any | None = None) -> None:  # type: ignore[override]
+        self.flash.prepare(data_source=data_source)
+        self.regressor.prepare()
+
+    def evaluate_sample(self, sample: EvaluationSample) -> EvaluationResult:
+        record = sample.clone_metadata()
+        record["ranking"] = self.ranking_config()
+        y_fit = sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support
+        y_val = sample.y_validation_noisy if sample.y_validation_noisy is not None else sample.y_validation
+        variables = list(record.get("variables") or record.get("variable_names") or [])
+        problem_id = record.get("eval_row_index")
+        try:
+            result = self.regressor.fit(
+                sample.x_support, y_fit, X_val=sample.x_validation, variables=variables or None,
+                problem_id=None if problem_id is None else int(problem_id),
+                complexity=self.flash._resolve_complexity(dict(record)))
+        except Exception as exc:  # noqa: BLE001 - the method's failure is the row's error, never the run's
+            record["error"] = f"{type(exc).__name__}: {exc}"
+            record["prediction_success"] = False
+            return EvaluationResult(record)
+        record.update(result)
+        # the FVU columns every adapter records, from the method's own curves
+        y_pred = record.get("y_pred")
+        y_sup = np.asarray(y_fit, dtype=float).reshape(-1, 1)
+        if y_pred is not None and np.asarray(y_pred).shape[0] == y_sup.shape[0]:
+            record["support_fvu"] = _compute_fvu_from_predictions(y_sup, np.asarray(y_pred, dtype=float))
+        y_pred_val = record.get("y_pred_val")
+        y_v = np.asarray(y_val, dtype=float).reshape(-1, 1) if y_val is not None else np.empty((0, 1))
+        if y_v.size and y_pred_val is not None and np.asarray(y_pred_val).shape[0] == y_v.shape[0]:
+            record["validation_fvu"] = _compute_fvu_from_predictions(y_v, np.asarray(y_pred_val, dtype=float))
+        return EvaluationResult(record)
+
+
 def _evaluate_refiner_baseline(model: Any, sample: EvaluationSample) -> EvaluationResult:
     """Shared evaluation logic for refiner-backed baseline models."""
 

@@ -6,22 +6,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-- **The hybrid arm budgets by the clock.** Flash-ANSR generates in chunks until its wall time reaches
-  its share (1 - r) T, landing within `hybrid.landing_tolerance` (1 % of the budget) from the rate
-  measured on the problem so far; the candidate count is what the clock allowed and is recorded as
-  achieved. PySR runs its own `timeout_in_seconds`, its share r T minus the running means of two costs
-  the share also pays: PySR's fixed cost above its timeout (`hybrid.pysr_overhead_s`, initial 2.5) and
-  the pricing of the candidates it adds (`hybrid.pricing_reserve_s`, initial 0.5); PySR stops between
-  iterations, so the achieved share lands within one iteration. The two time laws, the count and
-  iteration knobs and `scripts/hybrid_scaling_laws.py` are gone. Snapshots are keyed by the share in
-  seconds.
-- **PySR's candidates go through the refiner and the constant ladder.** Each hall-of-fame entry's
-  fittable literals are re-fitted with flash-ansr's Refiner (warm at PySR's values, the doctrine's cold
-  fit as the fallback) and re-spelled by flash-ansr's ladder pass before pricing, as Flash-ANSR's own
-  candidates are; `refine_settings(model)` carries the model's settings. Measured on the r = 0.1 pass:
-  0.47 s per problem, MDL ratio median 1.00 with 78 % at or below the law's length (from 39 % with
-  PySR's spellings), exact recovery 17.6 %.
+## [0.16.0] - 2026-09-11
+
+### Removed
+- **The hybrid arm's method code.** srbf is the evaluation framework; a method does not live in it.
+  `srbf/hybrid_adapter.py` (`model_adapter.type: flash_ansr_pysr`), `scripts/make_hybrid_config.py`,
+  `scripts/run_hybrid_sweep.py`, `scripts/hybrid_rescore.py` and `scripts/hybrid_curve.py` are gone. The method -- Flash-ANSR
+  generating by the clock until its share (1 - r) T, its top-K candidates seeding PySR, PySR on its own
+  clock (its share minus the running means of its fixed cost and of the pricing that follows), its hall
+  of fame re-fitted with flash-ansr's refiner, re-spelled by the constant ladder, priced and scored like
+  Flash-ANSR's own candidates, Flash-ANSR's sorting picking rank 0 -- and its sweep tooling now live in
+  the `flash-ansr-hybrid` package (0.1.0: `HybridRegressor`, `flash-ansr-hybrid-make-config`,
+  `flash-ansr-hybrid-run-sweep`, `flash-ansr-hybrid-rescore`, `flash-ansr-hybrid-curve`). PySR runs in-process there, so the
+  `pysr:` block no longer names an interpreter.
+
+### Added
+- **`model_adapter.type: flash_ansr_hybrid`** (`FlashANSRHybridAdapter`): the thin adapter for the
+  flash-ansr-hybrid regressor -- `flash_ansr:` (the model block), `hybrid:` (the regressor's
+  `HybridConfig` fields plus `snapshot_dir`), optionally `pysr:` (its `PySRSettings`). It hands each
+  problem's arrays to the regressor and records its answer with the usual FVU columns; nothing of the
+  method is in srbf. The package is the `hybrid` extra (`pip install "srbf[hybrid]"`), imported lazily.
 
 ## [0.15.1] - 2026-09-11
 

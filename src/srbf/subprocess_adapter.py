@@ -398,7 +398,7 @@ class SubprocessAdapter(EvaluationModelAdapter):
     # -- evaluation --------------------------------------------------------------------------
     def evaluate_sample(self, sample: EvaluationSample, *, extra_meta: Mapping[str, Any] | None = None) -> EvaluationResult:
         """``extra_meta`` rides along in the fit payload's ``meta`` (per-problem worker inputs such as
-        the hybrid arm's seeds and iteration budget); the worker decides what to do with them."""
+        a caller's per-sample overrides such as initial guesses or an iteration budget); the worker decides what to do with them."""
         record = sample.clone_metadata()
         if self._process is None:
             if self._dead_reason is not None:
