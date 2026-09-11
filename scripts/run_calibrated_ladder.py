@@ -21,7 +21,6 @@ import time
 from pathlib import Path
 from typing import Any, Mapping
 
-import yaml
 
 from srbf.config import build_catalog_source, load_run_config, select_experiment
 
@@ -67,7 +66,8 @@ def main() -> int:
     cfg = load_run_config(a.config)
     experiments = list(cfg["experiments"])
     if a.experiments:
-        wanted = a.experiments.split(","); experiments = [e for e in experiments if e in wanted]
+        wanted = a.experiments.split(",")
+        experiments = [e for e in experiments if e in wanted]
     first = select_experiment(cfg, experiments[0])
     ladder_values = first["model_adapter"]["generation_overrides"]["kwargs"]["choices"]
     ladder = [int(c) for c in getattr(ladder_values, "values", ladder_values)]
@@ -75,7 +75,8 @@ def main() -> int:
         ladder = [int(c) for c in a.rungs.split(",")]
     rule = parse_rule(a.subset_rule)
     model = first["model_adapter"].get("model_path", "model").rstrip("/").split("/")[-1]
-    mark_dir = Path(a.root) / "calibrated" / model; mark_dir.mkdir(parents=True, exist_ok=True)
+    mark_dir = Path(a.root) / "calibrated" / model
+    mark_dir.mkdir(parents=True, exist_ok=True)
     # a config copy with refiner_workers pinned, so the recorded provenance carries the setting
     config_path = a.config
     if a.refiner_workers is not None:
@@ -100,18 +101,21 @@ def main() -> int:
         tag = f"{e}_{c:06d}" + (f".subset-1-of-{n}" if n > 1 else "")
         marker = mark_dir / f"{tag}.done"
         if marker.exists():
-            skipped += 1; continue
+            skipped += 1
+            continue
         cmd = ["srbf", "run", "-c", config_path, "--experiment", e, "--sweep-filter", f"ladder={c}", "-v"]
         if n > 1:
             cmd += ["--shard", f"0/{n}"]
         if a.dry_run:
-            print("  ", " ".join(cmd[1:]), f"({sizes[e]} problems{', 1 in ' + str(n) if n > 1 else ''})"); continue
+            print("  ", " ".join(cmd[1:]), f"({sizes[e]} problems{', 1 in ' + str(n) if n > 1 else ''})")
+            continue
         t0 = time.time()
         with open(mark_dir / f"{tag}.log", "a") as log:
             rc = subprocess.call(cmd, env=env, stdout=log, stderr=subprocess.STDOUT)
         print(time.strftime("%H:%M:%S"), f"{e} ladder={c}{' subset 1/' + str(n) if n > 1 else ''} rc={rc} {time.time() - t0:.0f}s", flush=True)
         if rc == 0:
-            marker.write_text(f"{rc}\n"); done += 1
+            marker.write_text(f"{rc}\n")
+            done += 1
         else:
             (mark_dir / f"{tag}.failed").write_text(f"{rc}\n")
     print(f"finished: {done} units run, {skipped} already done", flush=True)
