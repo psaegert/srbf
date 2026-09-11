@@ -455,7 +455,9 @@ class SubprocessAdapter(EvaluationModelAdapter):
             return EvaluationResult(record)
         record["predicted_expression"] = str(expression)
         try:
-            prefix = list(self.simplipy_engine.infix_to_prefix(str(expression)))
+            # read_infix, not the raw infix_to_prefix: the reader's own tokens ('**', 'neg' on a
+            # literal) are not the engine grammar, and simplify/complexity refuse them.
+            prefix = list(self.simplipy_engine.read_infix(str(expression)))
             record["predicted_expression_prefix"] = normalize_expression(prefix)
             record["predicted_skeleton_prefix"] = normalize_skeleton(prefix)
         except Exception as exc:  # noqa: BLE001 - parse errors vary by engine

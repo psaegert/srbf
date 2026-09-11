@@ -559,7 +559,7 @@ class E2EAdapter(EvaluationModelAdapter):
                 print("[E2EAdapter][debug] sympy infix:", predicted_expression, flush=True)
 
             record["predicted_expression"] = predicted_expression
-            predicted_prefix = self.simplipy_engine.infix_to_prefix(predicted_expression)
+            predicted_prefix = self.simplipy_engine.read_infix(predicted_expression)  # engine grammar, not the raw reader tokens
             record["predicted_expression_prefix"] = normalize_expression(predicted_prefix)
             record["predicted_skeleton_prefix"] = normalize_skeleton(predicted_prefix)
 
@@ -662,7 +662,7 @@ class NeSymReSAdapter(EvaluationModelAdapter):
         try:
             predicted_expression = str(predicted_expr)
             record["predicted_expression"] = predicted_expression
-            predicted_prefix = self.simplipy_engine.infix_to_prefix(predicted_expression)
+            predicted_prefix = self.simplipy_engine.read_infix(predicted_expression)  # engine grammar, not the raw reader tokens
             record["predicted_expression_prefix"] = normalize_expression(predicted_prefix)
             record["predicted_skeleton_prefix"] = normalize_skeleton(predicted_prefix)
         except Exception as exc:  # pragma: no cover - parse errors

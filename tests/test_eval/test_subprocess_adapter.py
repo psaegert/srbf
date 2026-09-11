@@ -134,6 +134,25 @@ class TestAdapterEndToEnd:
         finally:
             adapter.close()
 
+    def test_worker_powers_arrive_in_the_engine_grammar(self, engine, tmp_path) -> None:
+        # A worker speaks infix ('^', '**', a negative literal); the record must carry the engine's own
+        # grammar ('pow', signed literals), never the raw reader tokens, or simplify/complexity refuse it.
+        worker = _write_worker(tmp_path, '''
+            def fit(x, y, *, x_val, variables, meta, options, state):
+                return {"expression": "(%s ^ 2) - (%s ** 2) * -0.5" % (variables[0], variables[1])}
+        ''')
+        adapter = SubprocessAdapter(worker=worker, simplipy_engine=engine, drop_unused_variables=False)
+        adapter.prepare()
+        try:
+            record = adapter.evaluate_sample(_sample()).to_mapping()
+            assert record["prediction_success"] is True, record.get("error")
+            prefix = record["predicted_expression_prefix"]
+            assert "**" not in prefix and "neg" not in prefix and prefix.count("pow") == 2
+            assert engine.simplify(list(prefix))                  # the engine consumes what the adapter stored
+            assert "**" not in record["predicted_skeleton_prefix"]
+        finally:
+            adapter.close()
+
     def test_srbf_evaluates_the_expression_when_the_worker_gives_no_predictions(self, engine, tmp_path) -> None:
         worker = _write_worker(tmp_path, '''
             def fit(x, y, *, x_val, variables, meta, options, state):

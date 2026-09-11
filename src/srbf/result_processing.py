@@ -190,12 +190,23 @@ def _price_mdl(mdl_fn: Callable[[list[str]], float], tokens: Any) -> float | Non
     return value if np.isfinite(value) else None
 
 
+def _convert_prefix(convert_fn: Callable[[list[str]], list[str]], tokens: Any) -> list[str] | None:
+    """``convert_fn`` on a stored prefix; None stays None, an unconvertible prefix is judged as stored."""
+    if tokens is None:
+        return None
+    try:
+        return list(convert_fn(list(tokens)))
+    except Exception:  # noqa: BLE001 - conversion failures vary by engine
+        return list(tokens)
+
+
 def compute_derived_metrics(
     results: dict[str, Any],
     test_sets: Sequence[str],
     operator_arity: Mapping[str, int],
     simplify_fn: Callable[[list[str]], list[str] | None] | None = None,
     mdl_fn: Callable[[list[str]], float] | None = None,
+    convert_fn: Callable[[list[str]], list[str]] | None = None,
 ) -> None:
     """Compute derived evaluation metrics in-place on *results*.
 
@@ -229,6 +240,12 @@ def compute_derived_metrics(
         Function to simplify a skeleton token list (e.g.
         ``engine.simplify``).  If ``None``, simplified skeletons are
         set to the raw skeletons.
+    convert_fn : callable, optional
+        Converts a stored predicted prefix into the engine grammar before anything judges
+        or prices it (``engine.convert_expression``). Predictions that came back through an
+        infix string (the out-of-process adapters, E2E, NeSymReS) were stored, until srbf
+        0.15.1, as the raw reader output -- ``**`` for a power, ``neg`` on a literal -- which
+        the engine's simplify and complexity refuse.
     """
     for model in results:
         for test_set in test_sets:
@@ -236,6 +253,12 @@ def compute_derived_metrics(
                 continue
             for scaling_value in results[model]['results'][test_set]:
                 r = results[model]['results'][test_set][scaling_value]
+
+                # ── Stored prefixes into the engine grammar ────────
+                if convert_fn is not None:
+                    for key in ('predicted_expression_prefix', 'predicted_skeleton_prefix'):
+                        if key in r:
+                            r[key] = [_convert_prefix(convert_fn, p) for p in r[key]]
 
                 # ── FVU / NRR for fit and val splits ──────────────
                 for split, saved_split_name in [('fit', ''), ('val', '_val')]:
@@ -422,6 +445,7 @@ def derive_metrics(
     operator_arity: Mapping[str, int] | None = None,
     simplify_fn: Callable[[list[str]], list[str] | None] | None = None,
     mdl_fn: Callable[[list[str]], float] | None = None,
+    convert_fn: Callable[[list[str]], list[str]] | None = None,
 ) -> dict[str, Any]:
     """Compute the standardized derived metrics for one raw ``Benchmark.run()`` snapshot.
 
@@ -449,6 +473,10 @@ def derive_metrics(
     simplify_fn : callable, optional
         Skeleton simplifier; defaults to the engine's ``simplify`` when an ``engine`` is given, else
         ``None`` (simplified skeletons then fall back to the raw skeletons).
+    convert_fn : callable, optional
+        Converts the stored predicted prefixes into the engine grammar before they are judged or
+        priced; defaults to the engine's ``convert_expression`` when an ``engine`` is given (the
+        identity on prefixes already in that grammar), else ``None``.
 
     Returns
     -------
@@ -466,9 +494,14 @@ def derive_metrics(
         def mdl_fn(tokens: list[str], _engine: Any = engine) -> float:
             return float(_engine.complexity(list(tokens), certified=True, mode='f64', canon='default'))
 
+    if convert_fn is None and engine is not None:
+        convert_fn = engine.convert_expression
+
     # Shallow-copy the snapshot as the nested leaf: compute_derived_metrics only ADDS derived keys to
-    # the leaf, so the derived columns land in this copy and the caller's snapshot stays untouched.
+    # the leaf (and rebinds the converted prefix columns), so the derived columns land in this copy
+    # and the caller's snapshot stays untouched.
     leaf = dict(snapshot)
     results = {"model": {"results": {"test": {0: leaf}}}}
-    compute_derived_metrics(results, test_sets=["test"], operator_arity=operator_arity, simplify_fn=simplify_fn, mdl_fn=mdl_fn)
+    compute_derived_metrics(results, test_sets=["test"], operator_arity=operator_arity, simplify_fn=simplify_fn, mdl_fn=mdl_fn,
+                            convert_fn=convert_fn)
     return results["model"]["results"]["test"][0]

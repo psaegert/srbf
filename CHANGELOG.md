@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-09-11
+
+### Fixed
+- **Predictions read from infix carried the raw reader tokens.** The out-of-process adapters (PySR, the
+  hybrid arm's PySR stage), E2E and NeSymReS turned the method's infix string into a prefix with simplipy's
+  raw `infix_to_prefix`, whose output spells a power as `**` and a negative literal as `neg` -- tokens the
+  engine's `simplify` and `complexity` refuse as malformed. Numeric metrics were unaffected; exact symbolic
+  recovery and the MDL price silently dropped every such row (243 of the hybrid arm's 562 recovered answers
+  at r = 0.1). The adapters now use the engine's documented reader, `read_infix`, which returns the engine
+  grammar (`pow`, signed literals); `derive_metrics` converts the stored prefixes of results already on disk
+  through `engine.convert_expression` before judging or pricing them (`convert_fn`, the identity on prefixes
+  already in the grammar). Decontamination reads its alternate renderings the same way.
+
 ## [0.15.0] - 2026-09-10
 
 ### Changed

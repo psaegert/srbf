@@ -17,6 +17,9 @@ class _DummyEngine:
     def infix_to_prefix(self, expression):  # noqa: D401 - simple stub
         return [expression]
 
+    def read_infix(self, expression, convert_expression=True):  # noqa: D401 - simple stub
+        return [expression]
+
 
 @pytest.mark.parametrize(
     "pred_key",

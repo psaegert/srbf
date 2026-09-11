@@ -112,3 +112,25 @@ def test_mdl_ratio_through_the_engine():
     expected = float(engine.complexity(['*', '2', 'x1'], certified=True, mode='f64', canon='default'))
     assert list(scored['ground_truth_mdl']) == [expected] * 4
     assert scored['mdl_ratio'][1] > scored['mdl_ratio'][0] > 0  # a literal 2.5 costs more than the integer 2
+
+
+def test_converts_legacy_reader_prefixes_before_judging():
+    """Predictions stored through the infix path before 0.15.1 carry the raw reader tokens ('**' for a
+    power); with a ``convert_fn`` they are judged and priced in the engine grammar, the input untouched."""
+    snapshot = _raw_snapshot()
+    snapshot['skeleton'] = [['pow', 'x1', '2']] * 4
+    legacy = [['**', 'x1', '2'], ['**', 'x1', '3'], ['pow', 'x1', '2'], ['sin', 'x1']]
+    snapshot['predicted_skeleton_prefix'] = [list(p) for p in legacy]
+    snapshot['predicted_expression_prefix'] = [list(p) for p in legacy]
+    priced: list[list[str]] = []
+
+    def price(tokens):
+        priced.append(list(tokens))
+        return float(len(tokens))
+
+    scored = derive_metrics(snapshot, operator_arity={**ARITY, 'pow': 2},
+                            convert_fn=lambda toks: ['pow' if t == '**' else t for t in toks], mdl_fn=price)
+    assert list(scored['symbolic_recovery']) == [True, False, True, False]
+    assert list(scored['predicted_skeleton_prefix'][0]) == ['pow', 'x1', '2']
+    assert priced and all('**' not in p for p in priced)                 # the MDL price sees the converted prefix
+    assert list(snapshot['predicted_skeleton_prefix'][0]) == ['**', 'x1', '2']   # the caller's snapshot is not mutated

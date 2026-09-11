@@ -200,7 +200,7 @@ def _iter_problem_candidates(
                 candidates.append([str(token) for token in tokens])
             for alternate in (problem.meta or {}).get("alternate_renderings", []):
                 try:
-                    candidates.append(engine.infix_to_prefix(alternate))
+                    candidates.append(engine.read_infix(alternate))
                 except Exception as exc:  # noqa: BLE001 - an unreadable rendering is UNVERIFIED
                     failures.append(f"alternate rendering does not parse ({type(exc).__name__}): {alternate!r}")
             if not candidates and not failures:
@@ -214,7 +214,7 @@ def _iter_problem_candidates(
                 yield eq_id, False, [], ["entry has no expression"]
                 continue
             try:
-                prefix = engine.infix_to_prefix(expression)
+                prefix = engine.read_infix(expression)
             except Exception as exc:  # noqa: BLE001 - an unreadable entry is UNVERIFIED
                 yield eq_id, False, [], [f"infix does not parse ({type(exc).__name__}): {expression!r}"]
                 continue
