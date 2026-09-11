@@ -1,27 +1,13 @@
-"""The hybrid arm's pure parts: the time laws, the seed bridge to Julia syntax, the budget split
-and the snapshot targets, and the config builder's validation."""
+"""The hybrid arm's pure parts: the seed bridge to Julia syntax, the budget split by the clock and the
+snapshot targets, the clocked generation pass, the config builder's validation, PySR's candidates."""
 import math
 
 import pytest
 
-from srbf.hybrid_adapter import TimeLaw, prefix_to_julia
+from srbf.hybrid_adapter import prefix_to_julia
 
 ARITY = {"+": 2, "-": 2, "*": 2, "/": 2, "pow": 2, "rootn": 2, "neg": 1, "inv": 1, "abs": 1,
          "sin": 1, "cos": 1, "exp": 1, "log": 1}
-
-
-class TestTimeLaw:
-    def test_inverts_and_floors(self):
-        law = TimeLaw(0.5, 0.002)
-        assert law.units_for(0.0) == 0
-        assert law.units_for(0.3) == 1          # a positive share is worth at least one unit
-        assert law.units_for(10.5) == 5000
-        assert law.seconds_for(5000) == pytest.approx(10.5)
-        assert TimeLaw(2.0, 1.7, minimum=1).units_for(100.0) == round(98 / 1.7)
-
-    def test_rejects_a_flat_law(self):
-        with pytest.raises(ValueError):
-            TimeLaw(1.0, 0.0)
 
 
 class TestBridge:
@@ -44,26 +30,45 @@ class TestBridge:
 
 
 class TestSplit:
-    def _adapter(self, ratio, ratios):
+    def _adapter(self, ratio, ratios, **kw):
         from srbf.hybrid_adapter import FlashANSRPySRAdapter
-        adapter = FlashANSRPySRAdapter.__new__(FlashANSRPySRAdapter)
-        adapter.budget_s = 100.0
-        adapter.ratio = float(ratio)
-        adapter.ratios = sorted(set(ratios) | {float(ratio)})
-        adapter.choices_law = TimeLaw(0.5, 0.01)
-        adapter.niterations_law = TimeLaw(1.0, 2.0)
-        return adapter
+        snapshot_dir = kw.pop("snapshot_dir", "/nonexistent/unused")     # no clock_state.json to inherit
+        return FlashANSRPySRAdapter(flash=object(), pysr=object(), budget_s=100.0, ratio=ratio, ratios=ratios,
+                                    snapshot_dir=snapshot_dir, **kw)
 
-    def test_endpoints_and_targets(self):
+    def test_shares_and_targets(self):
         ratios = [i / 10 for i in range(11)]
         a = self._adapter(0.0, ratios)
-        assert a.choices_for(0.0) == round(99.5 / 0.01) and a.niterations_for(0.0) == 0
-        assert a.choices_for(1.0) == 0 and a.niterations_for(1.0) == round(99.0 / 2.0)
-        targets = a.choice_targets()
-        assert 0 not in targets and targets == sorted(targets) and len(targets) == 10
-        # the shares add up to the budget in target seconds
+        assert a.generation_seconds(0.0) == 100.0 and a.pysr_seconds(0.0) == 0.0
+        assert a.generation_seconds(1.0) == 0.0 and a.pysr_seconds(1.0) == 100.0
+        assert a.time_targets() == [10.0 * k for k in range(1, 11)]        # one snapshot per share, 0 excluded
         for r in ratios:
-            assert (1 - r) * 100 + r * 100 == pytest.approx(100.0)
+            assert a.generation_seconds(r) + a.pysr_seconds(r) == pytest.approx(100.0)
+
+    def test_pysr_runs_on_its_own_clock_minus_the_running_costs(self):
+        a = self._adapter(0.1, [0.1], pysr_overhead_s=2.5, pricing_reserve_s=0.5, snapshot_dir="/nonexistent/unused")
+        assert a.pysr_search_seconds(0.1) == pytest.approx(7.0)             # 10 s share - 2.5 - 0.5
+        a._pysr_overhead.observe(3.5)                                      # the configured value counts as one observation
+        a._pricing_reserve.observe(1.5)
+        assert a.pysr_search_seconds(0.1) == pytest.approx(10.0 - 3.0 - 1.0)
+        a._pysr_overhead.observe(float("nan"))                            # ignored
+        assert a.pysr_search_seconds(0.1) == pytest.approx(6.0)
+        assert a.pysr_search_seconds(0.01) == 0.0                          # a share the fixed costs eat: no search
+
+    def test_running_costs_persist_across_cells(self, tmp_path):
+        from srbf.hybrid_adapter import FlashANSRPySRAdapter
+        first = FlashANSRPySRAdapter(flash=object(), pysr=object(), budget_s=100.0, ratio=0.5, ratios=[0.5],
+                                     snapshot_dir=str(tmp_path / "snapshots" / "fastsrb"), pysr_overhead_s=4.0, pricing_reserve_s=0.2)
+        first._pysr_overhead.observe(6.0); first._pricing_reserve.observe(0.6); first.clock.save()
+        assert (tmp_path / "snapshots" / "clock_state.json").exists()
+        second = FlashANSRPySRAdapter(flash=object(), pysr=object(), budget_s=100.0, ratio=0.3, ratios=[0.3],
+                                      snapshot_dir=str(tmp_path / "snapshots" / "feynman"), pysr_overhead_s=4.0, pricing_reserve_s=0.2)
+        assert second._pysr_overhead.value == pytest.approx(5.0) and second._pysr_overhead.count == 2   # the next cell starts where the last one left off
+        assert second.pysr_search_seconds(0.3) == pytest.approx(30.0 - 5.0 - 0.4)
+
+    def test_rejects_a_bad_tolerance(self):
+        with pytest.raises(ValueError, match="landing_tolerance"):
+            self._adapter(0.5, [0.5], landing_tolerance=0.0)
 
 
 class TestConfig:
@@ -77,10 +82,9 @@ class TestSnapshotFingerprint:
     """A snapshot is only valid on the data it was generated on: the cache keys on a fingerprint."""
 
     def _adapter(self, tmp_path):
-        from srbf.hybrid_adapter import FlashANSRPySRAdapter, TimeLaw
+        from srbf.hybrid_adapter import FlashANSRPySRAdapter
         return FlashANSRPySRAdapter(
-            flash=object(), pysr=object(), budget_s=20.0, ratio=0.0, ratios=[0.0, 0.5, 1.0],
-            choices_law=TimeLaw(0.5, 0.01), niterations_law=TimeLaw(1.0, 0.5), snapshot_dir=str(tmp_path))
+            flash=object(), pysr=object(), budget_s=20.0, ratio=0.0, ratios=[0.0, 0.5, 1.0], snapshot_dir=str(tmp_path))
 
     def test_fingerprint_follows_the_arrays(self):
         from srbf.hybrid_adapter import data_fingerprint
@@ -97,8 +101,8 @@ class TestSnapshotFingerprint:
 
         def fake_generate(sample, record):
             calls.append(record["eval_row_index"])
-            return {t: {"choices": t, "cum_wall": 1.0, "cum_generation": 0.5, "cum_refinement": 0.5,
-                        "pool_size": 1, "best": None, "seeds": []} for t in adapter.choice_targets()}
+            return {t: {"seconds": t, "choices": 10, "cum_wall": t, "cum_generation": 0.5, "cum_refinement": 0.5,
+                        "pool_size": 1, "best": None, "seeds": []} for t in adapter.time_targets()}
 
         adapter._generate_snapshots = fake_generate
         same = toy_sample(0)
@@ -212,3 +216,54 @@ class TestPySRAddsCandidates:
         plain = pysr_candidates([{"equation": "(2.0000001 * (v1 ^ 2)) + 0.9999999"}], engine=engine, weights=weights,
                                 x_support=x, y_fit=y, x_val=x_val, variables=["v1", "v2"], refine={"constant_ladder": None})
         assert len(plain) == 1 and plain[0]["spelling"] is None and best["mdl"] < plain[0]["mdl"]
+
+
+class TestClockedGeneration:
+    """The generation pass runs by the clock: chunks until the wall time reaches each share, landing
+    within the tolerance; the candidate count is what the clock allowed."""
+
+    @staticmethod
+    def _fake_model(seconds_per_candidate: float, call_overhead: float):
+        import time as _time
+        from types import SimpleNamespace
+        import numpy as np
+
+        def infer(X, y, **kw):
+            n = int(model.generation_config.choices)
+            _time.sleep(call_overhead + seconds_per_candidate * n)
+            cands = []
+            for i in range(n):
+                cands.append(SimpleNamespace(
+                    raw_beam=[infer.counter + i], expression=["x1"], expression_prefix=["*", str(1.0 + 1e-3 * (infer.counter + i)), "x1"],
+                    expression_infix="c * x1", skeleton_prefix=["*", "<constant>", "x1"], constants=[1.0],
+                    score=-1.0 - 1e-6 * (infer.counter + i), fvu=1e-3, mdl=1000.0, n_nodes=3, log_prob=-1.0, pareto_rank=-1,
+                    spelling=None, y_pred=np.ones(X.shape[0]), y_pred_val=np.ones(0)))
+            infer.counter += n
+            return SimpleNamespace(candidates=cands, generation_time=seconds_per_candidate * n, refinement_time=0.0)
+
+        infer.counter = 0
+        model = SimpleNamespace(infer=infer, generation_config=SimpleNamespace(choices=1024),
+                                simplipy_engine=SimpleNamespace(operator_arity={"*": 2, "+": 2}))
+        return model
+
+    def test_lands_each_share_within_the_tolerance(self, tmp_path):
+        from types import SimpleNamespace
+        from srbf.hybrid_adapter import FlashANSRPySRAdapter
+        from srbf.testing import toy_sample
+        model = self._fake_model(seconds_per_candidate=0.0005, call_overhead=0.01)
+        flash = SimpleNamespace(model=model, emission="fittable", _resolve_complexity=lambda record: None)
+        budget = 1.2
+        adapter = FlashANSRPySRAdapter(flash=flash, pysr=object(), budget_s=budget, ratio=0.5, ratios=[0.0, 0.5, 1.0],
+                                       snapshot_dir=str(tmp_path), k_seeds=5, landing_tolerance=0.02, first_chunk=32, min_chunk=8)
+        sample = toy_sample(0)
+        record = {"eval_row_index": 0, "variables": ["v1", "v2"]}
+        targets = adapter._generate_snapshots(sample, record)
+        assert sorted(targets) == [0.6, 1.2]
+        tol = 0.02 * budget
+        for t, snap in targets.items():
+            assert snap["seconds"] == t
+            assert t - tol <= snap["cum_wall"] <= t + 0.15, (t, snap["cum_wall"])   # short by at most the tolerance, over by at most a chunk's slip
+            assert snap["choices"] == model.infer.counter or snap["choices"] < model.infer.counter
+            assert snap["best"] is not None and len(snap["seeds"]) == 5 and len(snap["candidates"]) == 5
+        assert targets[1.2]["choices"] > targets[0.6]["choices"] > 0
+        assert targets[1.2]["calls"] <= 8                                   # a big chunk and a landing chunk per share, not a dribble

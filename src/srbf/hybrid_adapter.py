@@ -1,9 +1,10 @@
 """Flash-ANSR seeding + PySR at a fixed time budget: the hybrid arm.
 
-One budget T per problem is split by a ratio r: Flash-ANSR gets (1 - r) T, PySR gets r T. The budget
-is controlled by DIRECT knobs, never by timeouts: two measured time laws turn a share of T into a
-number of Flash-ANSR candidates (``choices``) and a number of PySR iterations (``niterations``); the
-achieved wall time of both stages is recorded next to the target.
+One budget T per problem is split by a ratio r: Flash-ANSR gets (1 - r) T, PySR gets r T, both by
+the clock. Flash-ANSR generates in chunks until its wall time reaches its share (the candidate count
+is what the clock allowed); PySR runs its own ``timeout_in_seconds`` = its share minus the running
+means of its fixed cost and of the pricing of the candidates it adds, so every problem lands at T
+within a landing tolerance. The achieved wall time of every stage is recorded next to the target.
 
 r = 0: Flash-ANSR alone, its rank-0 answer. r = 1: PySR alone, cold. In between: the top-K refined
 Flash-ANSR candidates enter PySR as initial ``guesses``. PySR adds candidates: its whole hall of fame
@@ -11,11 +12,10 @@ joins the Flash-ANSR candidate pool, priced the way Flash-ANSR prices its own (f
 ranking's score), and Flash-ANSR's sorting picks the prediction from the extended pool.
 
 The snapshot design: iid draws compose, so ONE chunked generation pass per problem serves every
-ratio. The pass generates up to the largest target in chunks whose cumulative sizes are the
-targets c((1 - r) T) of all ratios; after each chunk the merged pool's rank 0 and its top-K seeds
-are snapshotted together with the cumulative wall time -- exactly what a run with that many
-candidates would have produced and cost. Snapshots are cached on disk per problem, so the cells
-for the other ratios reuse them.
+ratio. The pass generates until the wall clock reaches the largest share, snapshotting the merged
+pool's top-K (and the seeds) when it passes each ratio's share (1 - r) T -- exactly what a run with
+that much time would have produced. Snapshots are cached on disk per problem, so the cells for the
+other ratios reuse them.
 
 A snapshot is only valid for the exact (X, y) it was generated on. srbf's data source re-draws the
 support points on every iteration (symbolic_data's ProblemSource is entropy-seeded by design;
@@ -27,6 +27,7 @@ instance's predictions.
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import pickle
 import time
@@ -47,7 +48,7 @@ from srbf.metrics.numeric import fvu as fvu_array
 from srbf.model_adapters import FlashANSRAdapter
 from srbf.subprocess_adapter import SubprocessAdapter, _compute_fvu_from_predictions, evaluate_prefix
 
-__all__ = ["FlashANSRPySRAdapter", "TimeLaw", "prefix_to_julia", "data_fingerprint", "PYSR_OPERATORS",
+__all__ = ["FlashANSRPySRAdapter", "prefix_to_julia", "data_fingerprint", "PYSR_OPERATORS",
            "pysr_candidates", "rank_candidates", "pick_prediction", "refine_settings", "REFINE_DEFAULTS"]
 
 #: the PySR worker's vocabulary (srbf/worker/models/pysr_worker.py): a seed using anything else is dropped
@@ -58,28 +59,49 @@ PYSR_OPERATORS = PYSR_UNARY | PYSR_BINARY
 SPECIAL_LITERALS = {"np.pi": math.pi, "np.e": math.e, "pi": math.pi, "e": math.e}
 
 
-class TimeLaw:
-    """``t = a + b * x`` measured on the target machine; ``units_for(t)`` inverts it, floored at
-    ``minimum`` when the share of the budget is positive and 0 when it is not worth one unit."""
+class _RunningMean:
+    """A running mean seeded with a prior value (the configured estimate counts as one observation);
+    finite observations only."""
 
-    def __init__(self, a: float, b: float, minimum: int = 1):
-        self.a, self.b, self.minimum = float(a), float(b), int(minimum)
-        if self.b <= 0:
-            raise ValueError("a time law needs a positive slope")
+    def __init__(self, initial: float, count: int = 1):
+        self.value = float(initial)
+        self.count = max(1, int(count))
 
-    def units_for(self, seconds: float) -> int:
-        if seconds <= 0:
-            return 0
-        raw = (seconds - self.a) / self.b
-        if raw < 0.5:
-            return self.minimum if seconds > 0 else 0
-        return max(self.minimum, int(round(raw)))
+    def observe(self, x: float) -> None:
+        if x is None or not np.isfinite(x):
+            return
+        self.count += 1
+        self.value += (float(x) - self.value) / self.count
 
-    def seconds_for(self, units: int) -> float:
-        return 0.0 if units <= 0 else self.a + self.b * units
 
-    def as_dict(self) -> dict[str, float]:
-        return {"a": self.a, "b": self.b, "minimum": self.minimum}
+class ClockState:
+    """The two costs PySR's share pays besides the search, as running means over EVERY problem the
+    sweep has run so far -- they are properties of the machine, not of a cell -- persisted in
+    ``clock_state.json`` next to the snapshot directories (one cell runs at a time)."""
+
+    def __init__(self, path: Path | None, pysr_overhead_s: float, pricing_reserve_s: float):
+        self.path = path
+        self.pysr_overhead = _RunningMean(pysr_overhead_s)
+        self.pricing_reserve = _RunningMean(pricing_reserve_s)
+        if path is not None and path.exists():
+            try:
+                with path.open() as fh:
+                    stored = json.load(fh)
+                self.pysr_overhead = _RunningMean(stored["pysr_overhead"]["value"], stored["pysr_overhead"]["count"])
+                self.pricing_reserve = _RunningMean(stored["pricing_reserve"]["value"], stored["pricing_reserve"]["count"])
+            except Exception:  # noqa: BLE001 - an unreadable state file: start from the configured seeds
+                pass
+
+    def save(self) -> None:
+        if self.path is None:
+            return
+        payload = {"pysr_overhead": {"value": self.pysr_overhead.value, "count": self.pysr_overhead.count},
+                   "pricing_reserve": {"value": self.pricing_reserve.value, "count": self.pricing_reserve.count}}
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.path.with_suffix(".json.tmp")
+        with tmp.open("w") as fh:
+            json.dump(payload, fh)
+        tmp.replace(self.path)
 
 
 def _literal(token: str) -> str | None:
@@ -471,24 +493,41 @@ class FlashANSRPySRAdapter(EvaluationModelAdapter):
         budget_s: float,
         ratio: float,
         ratios: Sequence[float],
-        choices_law: TimeLaw,
-        niterations_law: TimeLaw,
         snapshot_dir: str,
         k_seeds: int = 100,
         max_seed_complexity: int | None = None,
+        landing_tolerance: float = 0.01,
+        pysr_overhead_s: float = 4.0,
+        pricing_reserve_s: float = 0.2,
+        first_chunk: int = 64,
+        min_chunk: int = 16,
+        pysr_niterations_ceiling: int = 1_000_000,
     ) -> None:
         if not 0.0 <= ratio <= 1.0:
             raise ValueError("ratio must lie in [0, 1]")
+        if not 0.0 < landing_tolerance < 0.5:
+            raise ValueError("landing_tolerance is a fraction of the budget in (0, 0.5)")
         self.flash = flash
         self.pysr = pysr
         self.budget_s = float(budget_s)
         self.ratio = float(ratio)
         self.ratios = sorted(set(float(r) for r in ratios) | {self.ratio})
-        self.choices_law = choices_law
-        self.niterations_law = niterations_law
         self.snapshot_dir = Path(snapshot_dir)
         self.k_seeds = int(k_seeds)
         self.max_seed_complexity = max_seed_complexity
+        self.landing_tolerance = float(landing_tolerance)
+        self.first_chunk = int(first_chunk)
+        self.min_chunk = int(min_chunk)
+        self.pysr_niterations_ceiling = int(pysr_niterations_ceiling)
+        self.min_search_s = 0.5
+        # the two costs PySR's share pays besides the search, as running means over every problem of
+        # the sweep so far (the configured values seed them; `clock_state.json` beside the snapshot
+        # directories carries them from cell to cell): PySR's fixed cost above its timeout (the
+        # Julia dispatch before the search clock starts, the return after it) and the pricing of
+        # the added candidates (refit, ladder, MDL, score) after the search
+        self.clock = ClockState(self.snapshot_dir.parent / "clock_state.json", pysr_overhead_s, pricing_reserve_s)
+        self._pysr_overhead = self.clock.pysr_overhead
+        self._pricing_reserve = self.clock.pricing_reserve
 
     # -- protocol -------------------------------------------------------------------------------
     def get_simplipy_engine(self) -> Any:
@@ -500,7 +539,7 @@ class FlashANSRPySRAdapter(EvaluationModelAdapter):
     def prepare(self, *, data_source: Any | None = None) -> None:  # type: ignore[override]
         self.snapshot_dir.mkdir(parents=True, exist_ok=True)
         self.flash.prepare(data_source=data_source)
-        if self.niterations_for(self.ratio) > 0:
+        if self.pysr_seconds(self.ratio) > 0:
             self.pysr.prepare(data_source=data_source)
 
     def close(self) -> None:
@@ -508,15 +547,26 @@ class FlashANSRPySRAdapter(EvaluationModelAdapter):
         if callable(close):
             close()
 
-    # -- the budget split ------------------------------------------------------------------------
-    def choices_for(self, ratio: float) -> int:
-        return self.choices_law.units_for((1.0 - ratio) * self.budget_s)
+    # -- the budget split, by the clock ---------------------------------------------------------
+    def generation_seconds(self, ratio: float) -> float:
+        """Flash-ANSR's share of the budget: (1 - r) T of wall time."""
+        return round((1.0 - ratio) * self.budget_s, 6)
 
-    def niterations_for(self, ratio: float) -> int:
-        return self.niterations_law.units_for(ratio * self.budget_s)
+    def pysr_seconds(self, ratio: float) -> float:
+        """PySR's share of the budget: r T of wall time (search + its fixed cost + the added
+        candidates' pricing)."""
+        return round(ratio * self.budget_s, 6)
 
-    def choice_targets(self) -> list[int]:
-        return sorted({self.choices_for(r) for r in self.ratios} - {0})
+    def time_targets(self) -> list[float]:
+        """The generation wall-time targets of every ratio in the sweep, ascending: one chunked
+        generation pass per problem snapshots at each of them."""
+        return sorted({self.generation_seconds(r) for r in self.ratios} - {0.0})
+
+    def pysr_search_seconds(self, ratio: float) -> float:
+        """PySR's own clock (``timeout_in_seconds``): its share minus the running means of its fixed
+        cost and of the added candidates' pricing; the search stops between iterations, so the
+        achieved share lands within one iteration of r T."""
+        return max(0.0, self.pysr_seconds(ratio) - self._pysr_overhead.value - self._pricing_reserve.value)
 
     # -- snapshots -------------------------------------------------------------------------------
     def _snapshot_path(self, record: Mapping[str, Any]) -> Path:
@@ -537,7 +587,7 @@ class FlashANSRPySRAdapter(EvaluationModelAdapter):
                         f"hybrid snapshot {path.name} was generated on different data than this sample "
                         "(the data source re-drew the problem); regenerating. Every cell must read the same "
                         "frozen subset -- scripts/run_hybrid_sweep.py materializes it.")
-                elif set(self.choice_targets()) <= set(stored["targets"]):
+                elif set(self.time_targets()) <= set(stored["targets"]):
                     return stored["targets"]
         targets = self._generate_snapshots(sample, record)
         tmp = path.with_suffix(".pkl.tmp")
@@ -557,52 +607,72 @@ class FlashANSRPySRAdapter(EvaluationModelAdapter):
         pysr_variables = self._pysr_variable_names(record, sample)
         arity = dict(getattr(engine, "operator_arity", {}) or {})
 
-        targets = self.choice_targets()
+        targets = self.time_targets()
         config = model.generation_config
         original_choices = getattr(config, "choices", None)
+        tolerance = self.landing_tolerance * self.budget_s
         pool: dict[tuple[int, ...], dict[str, Any]] = {}
-        snap: dict[int, dict[str, Any]] = {}
+        snap: dict[float, dict[str, Any]] = {}
         cum_wall = cum_gen = cum_ref = 0.0
-        previous = 0
-        try:
-            for target in targets:
-                delta = target - previous
-                previous = target
-                if delta <= 0:
-                    continue
-                config.choices = int(delta)
-                t0 = time.time()
-                try:
-                    if numpy_errors is not None:
-                        with np.errstate(all=numpy_errors):
-                            result = model.infer(
-                                sample.x_support, y_fit,
-                                variable_names=variable_names if variable_names is not None else "auto",
-                                X_val=x_val, complexity=complexity_value, emission=self.flash.emission,
-                                predict_val=True, top_k=max(1, self.k_seeds))
-                    else:
+        drawn = 0
+        calls = 0
+
+        def chunk(n: int) -> None:
+            nonlocal cum_wall, cum_gen, cum_ref, drawn, calls
+            config.choices = int(n)
+            t0 = time.time()
+            try:
+                if numpy_errors is not None:
+                    with np.errstate(all=numpy_errors):
                         result = model.infer(
                             sample.x_support, y_fit,
                             variable_names=variable_names if variable_names is not None else "auto",
                             X_val=x_val, complexity=complexity_value, emission=self.flash.emission,
                             predict_val=True, top_k=max(1, self.k_seeds))
-                except Exception as exc:  # noqa: BLE001 - a failed chunk leaves the pool as it was
-                    warnings.warn(f"hybrid generation chunk of {delta} failed: {exc}")
-                    result = None
-                cum_wall += time.time() - t0
-                if result is not None:
-                    cum_gen += float(getattr(result, "generation_time", 0.0) or 0.0)
-                    cum_ref += float(getattr(result, "refinement_time", 0.0) or 0.0)
-                    for cand in result.candidates:
-                        key = tuple(int(t) for t in cand.raw_beam) + ((cand.spelling,) if getattr(cand, "spelling", None) else ())
-                        entry = self._candidate_dict(cand)
-                        old = pool.get(key)
-                        if old is None or _score_key(entry) < _score_key(old):
-                            pool[key] = entry
+                else:
+                    result = model.infer(
+                        sample.x_support, y_fit,
+                        variable_names=variable_names if variable_names is not None else "auto",
+                        X_val=x_val, complexity=complexity_value, emission=self.flash.emission,
+                        predict_val=True, top_k=max(1, self.k_seeds))
+            except Exception as exc:  # noqa: BLE001 - a failed chunk leaves the pool as it was; its time is spent
+                warnings.warn(f"hybrid generation chunk of {n} failed: {exc}")
+                result = None
+            cum_wall += time.time() - t0
+            drawn += int(n)
+            calls += 1
+            if result is not None:
+                cum_gen += float(getattr(result, "generation_time", 0.0) or 0.0)
+                cum_ref += float(getattr(result, "refinement_time", 0.0) or 0.0)
+                for cand in result.candidates:
+                    key = tuple(int(t) for t in cand.raw_beam) + ((cand.spelling,) if getattr(cand, "spelling", None) else ())
+                    entry = self._candidate_dict(cand)
+                    old = pool.get(key)
+                    if old is None or _score_key(entry) < _score_key(old):
+                        pool[key] = entry
+
+        try:
+            for target in targets:
+                # generate until the wall clock reaches the target: a big chunk aimed at 97 % of the
+                # remaining seconds from the rate measured on THIS problem so far, then landing chunks;
+                # a chunk's time is spent whether or not it yields candidates (a failed chunk counts)
+                first_call = calls
+                while cum_wall < target - tolerance:
+                    remaining = target - cum_wall
+                    if drawn == 0 or cum_wall <= 0:
+                        n = self.first_chunk
+                    else:
+                        rate = drawn / cum_wall
+                        n = max(self.min_chunk, int(remaining * rate * (0.97 if remaining > 3 * tolerance else 1.0)))
+                    if calls - first_call >= 32:
+                        warnings.warn(f"hybrid generation: 32 chunks did not reach the {target:.1f} s target ({cum_wall:.1f} s); snapshotting as is")
+                        break
+                    chunk(n)
                 ranked = sorted(pool.values(), key=_score_key)
                 seeds = self._seeds(ranked, arity, pysr_variables, sample, engine)
                 snap[target] = {
-                    "choices": target, "cum_wall": cum_wall, "cum_generation": cum_gen, "cum_refinement": cum_ref,
+                    "seconds": target, "choices": drawn, "cum_wall": cum_wall, "cum_generation": cum_gen,
+                    "cum_refinement": cum_ref, "calls": calls,
                     "pool_size": len(pool), "best": ranked[0] if ranked else None, "seeds": seeds,
                     # the top-K of the ranked pool without their prediction curves: the candidates PySR's join
                     "candidates": [ranked[0]] + [{k: v for k, v in c.items() if k not in ("y_pred", "y_pred_val")}
@@ -670,27 +740,28 @@ class FlashANSRPySRAdapter(EvaluationModelAdapter):
     def evaluate_sample(self, sample: EvaluationSample) -> EvaluationResult:
         record = sample.clone_metadata()
         record["ranking"] = self.ranking_config()
-        choices = self.choices_for(self.ratio)
-        niterations = self.niterations_for(self.ratio)
+        gen_seconds = self.generation_seconds(self.ratio)
+        gp_seconds = self.pysr_seconds(self.ratio)
         hybrid = {
-            "hybrid_ratio": self.ratio, "hybrid_budget_s": self.budget_s, "hybrid_choices": choices,
-            "hybrid_niterations": niterations, "hybrid_k_seeds": self.k_seeds,
-            "hybrid_target_generation_s": (1.0 - self.ratio) * self.budget_s,
-            "hybrid_target_gp_s": self.ratio * self.budget_s,
+            "hybrid_ratio": self.ratio, "hybrid_budget_s": self.budget_s, "hybrid_k_seeds": self.k_seeds,
+            "hybrid_target_generation_s": gen_seconds, "hybrid_target_gp_s": gp_seconds,
+            "hybrid_choices": 0, "hybrid_niterations": 0,
         }
         seeds: list[str] = []
         gen_wall = 0.0
         best: Mapping[str, Any] | None = None
         flash_candidates: list[Mapping[str, Any]] = []
-        if choices > 0:
+        if gen_seconds > 0:
             try:
-                snap = self._snapshot(sample, record)[choices]
+                snap = self._snapshot(sample, record)[gen_seconds]
             except Exception as exc:  # noqa: BLE001
                 record.update(hybrid)
                 record["error"] = f"hybrid generation failed: {exc}"
                 record["prediction_success"] = False
                 return EvaluationResult(record)
             gen_wall = float(snap["cum_wall"])
+            hybrid["hybrid_choices"] = int(snap.get("choices") or 0)     # achieved: the draws the clock allowed
+            hybrid["hybrid_generation_calls"] = int(snap.get("calls") or 0)
             seeds = list(snap["seeds"])[: self.k_seeds]
             best = snap["best"]
             # the Flash-ANSR candidates PySR's join: the snapshot's top-K pool (rank 0 carries its
@@ -703,7 +774,7 @@ class FlashANSRPySRAdapter(EvaluationModelAdapter):
             if best is not None:
                 hybrid["hybrid_seed_best_expression"] = best.get("expression_infix")
 
-        if niterations <= 0:
+        if gp_seconds <= 0:
             # Flash-ANSR alone: the merged pool's rank 0 at this budget
             record.update(hybrid)
             if best is None:
@@ -740,17 +811,38 @@ class FlashANSRPySRAdapter(EvaluationModelAdapter):
                 record["validation_fvu"] = _compute_fvu_from_predictions(y_val, record["y_pred_val"])
             return EvaluationResult(record)
 
-        # the GP stage, seeded (or cold at r = 1)
+        # the GP stage, seeded (or cold at r = 1), on PySR's own clock: its share minus the running
+        # means of its fixed cost and of the added candidates' pricing that follows the search
+        search_s = self.pysr_search_seconds(self.ratio)
+        hybrid["hybrid_gp_timeout_s"] = search_s
+        hybrid["hybrid_pysr_overhead_estimate_s"] = self._pysr_overhead.value
+        hybrid["hybrid_pricing_reserve_s"] = self._pricing_reserve.value
+        if search_s < self.min_search_s:
+            # the share is eaten by the fixed costs: no search, the Flash-ANSR candidates rank alone
+            values: Any = record
+            values.update(hybrid)
+            values["hybrid_gp_s"] = 0.0
+            values["gp_fit_time"] = 0.0
+            values["fit_time"] = gen_wall
+            values["prediction_success"] = False
+            values["error"] = f"hybrid: PySR's share ({gp_seconds:.1f} s) leaves no search time"
+            self._pick(values, flash_candidates, sample)
+            return EvaluationResult(values)
         t0 = time.time()
-        result = self.pysr.evaluate_sample(sample, extra_meta={"guesses": seeds, "niterations": int(niterations)})
+        result = self.pysr.evaluate_sample(sample, extra_meta={
+            "guesses": seeds, "timeout_in_seconds": float(search_s), "niterations": int(self.pysr_niterations_ceiling)})
         gp_wall = time.time() - t0
+        self._pysr_overhead.observe(gp_wall - search_s)
         values = result.to_mapping()
         values["ranking"] = record["ranking"]
         values.update(hybrid)
         values["hybrid_gp_s"] = gp_wall
+        values["hybrid_niterations"] = int(values.get("niterations_used") or 0)
         values["gp_fit_time"] = values.get("fit_time")
-        values["fit_time"] = gen_wall + float(values.get("fit_time") or gp_wall)
+        values["fit_time"] = gen_wall + gp_wall
         self._pick(values, flash_candidates, sample)
+        self._pricing_reserve.observe(float(values.get("hybrid_ranking_s") or 0.0))
+        self.clock.save()
         return result
 
     def _pick(self, values: Any, flash: Sequence[Mapping[str, Any]], sample: EvaluationSample) -> None:

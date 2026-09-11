@@ -296,20 +296,17 @@ def _build_flash_ansr_pysr_adapter(config: Mapping[str, Any]):
     """The hybrid arm (srbf/hybrid_adapter.py): ``flash_ansr:`` (a full flash_ansr adapter block),
     ``pysr:`` (a full pysr adapter block, its own environment) and ``hybrid:`` with ``budget_s``,
     ``ratio`` (this cell), ``ratios`` (every cell of the sweep, so one generation pass serves all),
-    ``choices_law`` / ``niterations_law`` (``{a, b, minimum}``: seconds = a + b * units, measured
-    on the target machine), ``snapshot_dir``, ``k_seeds`` (100), ``max_seed_complexity``."""
-    from srbf.hybrid_adapter import FlashANSRPySRAdapter, TimeLaw
+    ``snapshot_dir``, ``k_seeds`` (100), ``max_seed_complexity``, and the clock's knobs:
+    ``landing_tolerance`` (0.01, a fraction of the budget the generation may stop short of its
+    share), ``pysr_overhead_s`` (4.0) and ``pricing_reserve_s`` (0.2), the seeds of the running means of
+    PySR's fixed cost and of the added candidates' pricing that PySR's share pays besides the search
+    (carried across cells in ``clock_state.json`` beside the snapshot directories)."""
+    from srbf.hybrid_adapter import FlashANSRPySRAdapter
     flash_cfg = config.get("flash_ansr")
     pysr_cfg = config.get("pysr")
     hybrid = config.get("hybrid")
     if not isinstance(flash_cfg, Mapping) or not isinstance(pysr_cfg, Mapping) or not isinstance(hybrid, Mapping):
         raise ValueError("flash_ansr_pysr needs 'flash_ansr', 'pysr' and 'hybrid' mappings")
-
-    def law(block: Any, name: str) -> TimeLaw:
-        if not isinstance(block, Mapping):
-            raise ValueError(f"hybrid.{name} must be a mapping {{a, b, minimum}}")
-        return TimeLaw(coerce_float(block["a"], f"hybrid.{name}.a"), coerce_float(block["b"], f"hybrid.{name}.b"),
-                       coerce_int(block.get("minimum", 1), f"hybrid.{name}.minimum"))
 
     ratio = coerce_float(hybrid["ratio"], "hybrid.ratio")
     ratios = [coerce_float(r, "hybrid.ratios") for r in (hybrid.get("ratios") or [ratio])]
@@ -318,11 +315,12 @@ def _build_flash_ansr_pysr_adapter(config: Mapping[str, Any]):
         pysr=_build_pysr_adapter(pysr_cfg),
         budget_s=coerce_float(hybrid["budget_s"], "hybrid.budget_s"),
         ratio=ratio, ratios=ratios,
-        choices_law=law(hybrid.get("choices_law"), "choices_law"),
-        niterations_law=law(hybrid.get("niterations_law"), "niterations_law"),
         snapshot_dir=substitute_root_path(str(hybrid["snapshot_dir"])),
         k_seeds=coerce_int(hybrid.get("k_seeds", 100), "hybrid.k_seeds"),
         max_seed_complexity=coerce_optional_int(hybrid.get("max_seed_complexity"), "hybrid.max_seed_complexity"),
+        landing_tolerance=coerce_float(hybrid.get("landing_tolerance", 0.01), "hybrid.landing_tolerance"),
+        pysr_overhead_s=coerce_float(hybrid.get("pysr_overhead_s", 4.0), "hybrid.pysr_overhead_s"),
+        pricing_reserve_s=coerce_float(hybrid.get("pricing_reserve_s", 0.2), "hybrid.pricing_reserve_s"),
     )
 
 

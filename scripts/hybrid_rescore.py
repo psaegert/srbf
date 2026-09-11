@@ -37,14 +37,18 @@ def rescore_file(path: Path, snapshots: Path, out: Path, engine: SimpliPyEngine,
         choices = int(row.get("hybrid_choices") or 0)
         if not equations and not choices:
             continue
-        if int(row.get("hybrid_niterations") or 0) <= 0:
+        if float(row.get("hybrid_target_gp_s") or 0.0) <= 0 and int(row.get("hybrid_niterations") or 0) <= 0:
             continue                                        # an r = 0 cell: Flash-ANSR alone, nothing to re-select
         flash: list = []
         if choices > 0:
             snap_path = snapshots / f"problem_{int(row['eval_row_index']):06d}.pkl"
             with snap_path.open("rb") as fh:
                 snap = pickle.load(fh)
-            target = snap["targets"][choices]
+            targets = snap["targets"]
+            # snapshots by the clock are keyed by the generation share in seconds; the count-law
+            # snapshots of the first sweep by the candidate count
+            key = round(float(row.get("hybrid_target_generation_s") or 0.0), 6)
+            target = targets.get(key) if key in targets else targets[choices]
             best = target["best"]
             flash = list(target.get("candidates") or ([best] if best is not None else []))
         ranking = row.get("ranking")

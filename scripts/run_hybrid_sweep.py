@@ -100,6 +100,7 @@ def main() -> int:
     ap.add_argument("--experiments", default=None)
     ap.add_argument("--subset-rule", default="50:10,10:2")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--freeze-only", action="store_true", help="freeze the subset and write the frozen config, run nothing")
     a = ap.parse_args()
 
     os.environ["FLASH_ANSR_ROOT"] = a.root
@@ -132,6 +133,9 @@ def main() -> int:
         print(time.strftime("%H:%M:%S"), f"frozen {e}: {count} problems (1 in {n} of {sizes[e]}) {time.time() - t0:.0f}s", flush=True)
     frozen_path = data_dir / (Path(a.config).stem + ".frozen.yaml")
     frozen_path.write_text(yaml.dump(frozen_config(cfg, experiments, data_dir), sort_keys=False, width=200))
+    if a.freeze_only:
+        print("frozen config:", frozen_path)
+        return 0
 
     env = dict(os.environ, PYTHONUNBUFFERED="1")
     for r, e, n in plan:
