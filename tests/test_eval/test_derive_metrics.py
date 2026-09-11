@@ -143,7 +143,8 @@ def test_judges_the_canonical_form_the_prediction_was_priced_as():
     import numpy as np
     from simplipy import SimpliPyEngine
     engine = SimpliPyEngine.load("acj-4-3", install=True)
-    x = np.linspace(-2, 2, 32).reshape(-1, 1); y = np.exp(-x[:, 0] ** 2)
+    x = np.linspace(-2, 2, 32).reshape(-1, 1)
+    y = np.exp(-x[:, 0] ** 2)
     law = ["exp", "neg", "pow", "x1", "<constant>"]
     emitted = "/ * exp neg pow x1 2.0 pow tanh x1 2.0 pow tanh x1 2.0".split()
     snapshot = {
