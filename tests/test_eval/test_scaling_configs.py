@@ -13,7 +13,7 @@ from srbf.sweep import Sweep, register_sweep_yaml, resolve_sweeps
 from srbf.config import select_experiment
 
 EVAL_CONFIG_DIR = Path(__file__).resolve().parents[2] / "configs" / "evaluation"
-VALID_ADAPTERS = {"flash_ansr", "pysr", "nesymres", "e2e", "lample_charton", "brute_force"}
+VALID_ADAPTERS = {"flash_ansr", "pysr", "nesymres", "e2e", "lample_charton", "brute_force", "subprocess"}
 VALID_CATALOGS = {
     "fastsrb", "feynman", "feynman-bonus", "srsd-dummy",
     "erbench-syneq", "erbench-densities", "erbench-phybench",
@@ -35,6 +35,9 @@ EXPECTED_PROVENANCE = {
     # upstream whose defaults could apply -- maintainer-assembled, like the brute-force reference
     "lample_charton": "harness_tuned",
     "brute_force": "harness_tuned",
+    # a worker in its own environment (docs/adapters.md): a third-party method run at the defaults
+    # its own CLI ships, exactly as the in-process third-party adapters are
+    "subprocess": "upstream_default",
 }
 BANNED = ["skeleton_pool", "skeleton dataset", "skeleton_dataset", "type: fastsrb",
           "benchmark_path", "datasets_per_expression", "noise_level", "support_points"]

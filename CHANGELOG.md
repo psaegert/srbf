@@ -6,6 +6,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **The diffsym worker** (`worker: diffsym`, `configs/evaluation/baselines/diffsym_fastsrb.yaml`):
+  Mara Eliana's discrete diffusion model (D3PM) conditioned on the support set, run out of process in
+  its own interpreter (it pins simplipy 0.2.15 and its own torch). Per problem it samples `n_samples`
+  token sequences, decodes/simplifies/validates them into prefix candidates, fits each candidate's
+  constants with diffsym's own ConstantFitter and returns the best by R^2. Two translations sit
+  between the two: the pre-0.12 vocabulary (`pow2`/`pow1_3`) is respelled with
+  `respell_legacy_prefix`, and diffsym's positional `x1..xn` become the catalog's own variable names.
+  A candidate naming a variable the problem does not have (the decoder's vocabulary is the
+  checkpoint's `x1..x8`, not the problem's) is dropped and counted in `diffsym_n_out_of_range` rather
+  than failing in the fitter. Smoked on the v4.0 checkpoint (119M parameters, step 1.7M): `srbf check`
+  green on fastsrb, II.38.14 recovered at 32 draws.
+
+
 ## [0.16.1] - 2026-09-11
 
 ### Fixed

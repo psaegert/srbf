@@ -1,0 +1,42 @@
+# diffsym (Mara Eliana): a discrete diffusion model (D3PM) conditioned on the support set, sampling
+# candidate prefix expressions and fitting their constants. Runs OUT OF PROCESS in diffsym's own
+# interpreter (it pins simplipy 0.2.15 and its own torch); srbf never imports it. `n_samples` is the
+# compute axis of a scaling sweep.
+experiments:
+  fastsrb:
+    data_source:
+      catalog: fastsrb
+      sampling: {n_support: 512, n_validation: 512, noise: 0.0, problems_per_expression: 1}
+    model_adapter:
+      # diffsym's own defaults: n_samples/seq_len from its sampling CLI, n_restarts and
+      # curve_fit_lm from its fit_constants stage; the n_samples ladder is the compute axis
+      config_provenance: upstream_default
+      type: subprocess
+      worker: diffsym
+      python: /home/psaegert/Projects/diffsym/.venv/bin/python
+      simplipy_engine: acj-5-4-llm       # the engine srbf JUDGES with (diffsym decodes with its own)
+      timeout: 3600
+      startup_timeout: 900
+      options:
+        model_path: /home/psaegert/models/diffsym-v4.0/best.pt
+        config_dir: /home/psaegert/Projects/diffsym/configs/v4.0
+        n_samples: !sweep {name: ladder, values: [1, 2, 4, 8, 16, 32, 64, 128]}
+        seq_len: 100
+        n_restarts: 8
+        method: curve_fit_lm
+        simplipy_engine: dev_7-3
+    runner:
+      limit: null
+      save_every: 8
+      resume: true
+      output: !sweep
+        name: ladder
+        values:
+          - '{{ROOT}}/results/evaluation/scaling/diffsym-v4.0/fastsrb/choices_000001.pkl'
+          - '{{ROOT}}/results/evaluation/scaling/diffsym-v4.0/fastsrb/choices_000002.pkl'
+          - '{{ROOT}}/results/evaluation/scaling/diffsym-v4.0/fastsrb/choices_000004.pkl'
+          - '{{ROOT}}/results/evaluation/scaling/diffsym-v4.0/fastsrb/choices_000008.pkl'
+          - '{{ROOT}}/results/evaluation/scaling/diffsym-v4.0/fastsrb/choices_000016.pkl'
+          - '{{ROOT}}/results/evaluation/scaling/diffsym-v4.0/fastsrb/choices_000032.pkl'
+          - '{{ROOT}}/results/evaluation/scaling/diffsym-v4.0/fastsrb/choices_000064.pkl'
+          - '{{ROOT}}/results/evaluation/scaling/diffsym-v4.0/fastsrb/choices_000128.pkl'
