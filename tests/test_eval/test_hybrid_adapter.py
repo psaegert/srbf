@@ -112,3 +112,86 @@ class TestSnapshotFingerprint:
             adapter._snapshot(other, record)
         assert calls == [0, 0]
         assert any("different data" in str(w.message) for w in caught)
+
+
+@pytest.fixture(scope="module")
+def engine():
+    from simplipy import SimpliPyEngine
+    return SimpliPyEngine.load("acj-4-3", install=True)
+
+
+class TestPySRAddsCandidates:
+    """PySR's hall of fame joins the Flash-ANSR candidates and Flash-ANSR's sorting picks rank 0: the same
+    score, the same MDL penalty, for every candidate; PySR's own choice is kept beside it for reference."""
+
+    @staticmethod
+    def _problem():
+        import numpy as np
+        rng = np.random.default_rng(0)
+        x = rng.uniform(0.5, 2.0, size=(64, 2)); x_val = rng.uniform(0.5, 2.0, size=(16, 2))
+        law = lambda a: 2.0 * a[:, 0] ** 2 + 1.0
+        return x, law(x), x_val, law(x_val)
+
+    @staticmethod
+    def _flash(engine, prefix, x, y, x_val, weights):
+        """A Flash-ANSR candidate dict as a snapshot stores it, scored the way the refine worker scores."""
+        import numpy as np
+        from flash_ansr.scoring import score_row, count_constants
+        from simplipy.engine import Mode
+        from srbf.metrics.numeric import fvu
+        from srbf.subprocess_adapter import evaluate_prefix
+        yp, ypv = evaluate_prefix(engine, list(prefix), ["x1", "x2"], x, x_val)
+        f = float(fvu(y, np.asarray(yp).reshape(-1)))
+        mdl = float(engine.complexity(list(prefix), certified=True, mode=Mode.f64, canon="default"))
+        return {"expression_prefix": list(prefix), "skeleton_prefix": list(prefix), "expression_infix": " ".join(prefix),
+                "constants": [], "fvu": f, "mdl": mdl, "n_nodes": len(prefix), "log_prob": -1.0, "pareto_rank": -1,
+                "score": score_row({"fvu": f, "expression": prefix, "constant_count": count_constants(prefix), "log_prob": -1.0, "mdl": mdl}, weights),
+                "y_pred": np.asarray(yp).reshape(-1), "y_pred_val": np.asarray(ypv).reshape(-1)}
+
+    def test_the_hall_of_fame_law_beats_a_worse_flash_answer(self, engine):
+        import numpy as np
+        from srbf.hybrid_adapter import pick_prediction
+        x, y, x_val, y_val = self._problem()
+        weights = {"mdl": 1e-2}
+        flash = self._flash(engine, ["*", "2.1", "pow", "x1", "2"], x, y, x_val, weights)   # close, not exact
+        hof = [{"complexity": 1, "loss": 9.0, "score": 0.0, "equation": "v1"},
+               {"complexity": 7, "loss": 0.0, "score": 1.0, "equation": "(2.0 * (v1 ^ 2)) + 1.0"},
+               {"complexity": 9, "loss": 0.0, "score": 0.1, "equation": "((2.0 * (v1 ^ 2)) + 1.0) + (0.0 * v2)"}]
+        values = {"predicted_expression": "v1", "predicted_expression_prefix": ["x1"], "prediction_success": True,
+                  "equations": hof, "variable_names": ["v1", "v2"]}
+        winner = pick_prediction(values, flash=[flash], equations=hof, engine=engine, weights=weights,
+                                       x_support=x, y_fit=y, x_val=x_val, y_val=y_val, variables=["v1", "v2"])
+        assert winner is not None and values["predicted_source"] == "pysr" and values["predicted_hof_index"] == 1
+        assert values["pysr_expression"] == "v1"                                  # PySR's own pick is kept
+        assert "**" not in values["predicted_expression_prefix"] and "pow" in values["predicted_expression_prefix"]
+        np.testing.assert_allclose(values["y_pred"].reshape(-1), y, rtol=1e-12)
+        np.testing.assert_allclose(values["y_pred_val"].reshape(-1), y_val, rtol=1e-12)
+        assert values["predicted_mdl"] is not None and values["prediction_success"] is True
+        scores = [e["score"] for e in values["hybrid_candidates"]]
+        assert scores == sorted(scores) and len(scores) == 4                         # 1 Flash-ANSR + 3 PySR candidates, ranked
+        # the exact law with a free 0 * v2 tail pays the MDL penalty and loses to the plain law
+        assert [e["hof_index"] for e in values["hybrid_candidates"]][:2] == [1, 2]
+
+    def test_flash_keeps_the_answer_when_it_scores_better(self, engine):
+        from srbf.hybrid_adapter import pick_prediction
+        x, y, x_val, y_val = self._problem()
+        weights = {"mdl": 1e-2}
+        flash = self._flash(engine, ["+", "*", "2", "pow", "x1", "2", "1"], x, y, x_val, weights)   # exact and short
+        hof = [{"equation": "v1"}, {"equation": "((2.0 * (v1 ^ 2)) + 1.0) + (0.0 * v2)"}, {"equation": "not an expression ("}]
+        values = {"predicted_expression": "v1", "predicted_expression_prefix": ["x1"], "prediction_success": True}
+        winner = pick_prediction(values, flash=[flash], equations=hof, engine=engine, weights=weights,
+                                       x_support=x, y_fit=y, x_val=x_val, y_val=y_val, variables=["v1", "v2"])
+        assert winner is not None and values["predicted_source"] == "flash-ansr"
+        assert values["predicted_expression_prefix"] == ["+", "*", "2", "pow", "x1", "2", "1"]
+        assert len(values["hybrid_candidates"]) == 3                                # the unreadable entry is dropped
+
+    def test_a_failed_gp_stage_falls_back_on_flash(self, engine):
+        from srbf.hybrid_adapter import pick_prediction
+        x, y, x_val, y_val = self._problem()
+        weights = {"mdl": 1e-2}
+        flash = self._flash(engine, ["+", "*", "2", "pow", "x1", "2", "1"], x, y, x_val, weights)
+        values = {"prediction_success": False, "error": "WorkerTimeout: no reply within 7200 s"}
+        pick_prediction(values, flash=[flash], equations=None, engine=engine, weights=weights,
+                              x_support=x, y_fit=y, x_val=x_val, y_val=y_val, variables=["v1", "v2"])
+        assert values["predicted_source"] == "flash-ansr" and values["prediction_success"] is True
+        assert values["pysr_error"].startswith("WorkerTimeout") and values["error"] is None

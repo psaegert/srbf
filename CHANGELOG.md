@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.15.1] - 2026-09-11
 
+### Changed
+- **In the hybrid arm, PySR adds candidates and Flash-ANSR's sorting picks.** After the GP stage,
+  PySR's whole hall of fame joins the Flash-ANSR candidate pool, each entry priced the way Flash-ANSR
+  prices its own (fit as FVU on the fitted target, MDL as the certified f64 default-canon price of the
+  realized expression, the ranking's `score_row` with its MDL penalty), and Flash-ANSR's sorting picks
+  rank 0 of the extended pool as the prediction. PySR's own choice (`model_selection`) no longer decides
+  anything; it is kept for reference (`pysr_expression`). The record stores the ranked pool
+  (`hybrid_candidates`) and the origin of rank 0 (`predicted_source`); a GP stage that failed leaves
+  the Flash-ANSR candidates to rank alone (`pysr_error`). Snapshots now store the top-K pool
+  (`candidates`); older snapshots contribute their rank 0, which the same sorting puts first either
+  way. `scripts/hybrid_rescore.py` applies the rule offline to results already on disk (the hall of
+  fame is stored in every row; the Flash-ANSR candidates come from the generation snapshots).
+
 ### Fixed
 - **Predictions read from infix carried the raw reader tokens.** The out-of-process adapters (PySR, the
   hybrid arm's PySR stage), E2E and NeSymReS turned the method's infix string into a prefix with simplipy's

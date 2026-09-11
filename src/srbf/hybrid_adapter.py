@@ -6,7 +6,9 @@ number of Flash-ANSR candidates (``choices``) and a number of PySR iterations (`
 achieved wall time of both stages is recorded next to the target.
 
 r = 0: Flash-ANSR alone, its rank-0 answer. r = 1: PySR alone, cold. In between: the top-K refined
-Flash-ANSR candidates enter PySR as initial ``guesses`` and PySR's own answer is returned.
+Flash-ANSR candidates enter PySR as initial ``guesses``. PySR adds candidates: its whole hall of fame
+joins the Flash-ANSR candidate pool, priced the way Flash-ANSR prices its own (fit, MDL, the
+ranking's score), and Flash-ANSR's sorting picks the prediction from the extended pool.
 
 The snapshot design: iid draws compose, so ONE chunked generation pass per problem serves every
 ratio. The pass generates up to the largest target in chunks whose cumulative sizes are the
@@ -33,13 +35,17 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 import numpy as np
-from symbolic_data.token_ops import normalize_expression
+from flash_ansr.scoring import RankingConfig, count_constants, score_row
+from simplipy.engine import Mode
+from symbolic_data.token_ops import normalize_expression, normalize_skeleton
 
 from srbf.core import EvaluationModelAdapter, EvaluationResult, EvaluationSample
+from srbf.metrics.numeric import fvu as fvu_array
 from srbf.model_adapters import FlashANSRAdapter
-from srbf.subprocess_adapter import SubprocessAdapter, evaluate_prefix
+from srbf.subprocess_adapter import SubprocessAdapter, _compute_fvu_from_predictions, evaluate_prefix
 
-__all__ = ["FlashANSRPySRAdapter", "TimeLaw", "prefix_to_julia", "data_fingerprint", "PYSR_OPERATORS"]
+__all__ = ["FlashANSRPySRAdapter", "TimeLaw", "prefix_to_julia", "data_fingerprint", "PYSR_OPERATORS",
+           "pysr_candidates", "rank_candidates", "pick_prediction"]
 
 #: the PySR worker's vocabulary (srbf/worker/models/pysr_worker.py): a seed using anything else is dropped
 PYSR_UNARY = {"neg", "abs", "inv", "sin", "cos", "tan", "asin", "acos", "atan",
@@ -154,6 +160,174 @@ def data_fingerprint(sample: EvaluationSample) -> str:
         h.update(str(a.shape).encode())
         h.update(a.tobytes())
     return h.hexdigest()
+
+
+def _sort_key(entry: Mapping[str, Any]) -> tuple[float, tuple[str, ...]]:
+    return _score_key({"score": entry.get("score"), "expression": entry.get("expression_prefix")})
+
+
+def _flash_candidate(cand: Mapping[str, Any]) -> dict[str, Any]:
+    """A Flash-ANSR candidate as a snapshot stores it (``best`` or a ``candidates`` row), as a pool
+    entry: its stored score is the ranking's own, computed by the refine worker on the same criterion."""
+    return {
+        "source": "flash-ansr", "hof_index": -1,
+        "expression_infix": str(cand.get("expression_infix")),
+        "expression_prefix": list(cand["expression_prefix"]), "skeleton_prefix": list(cand["skeleton_prefix"]),
+        "constants": cand.get("constants"), "fvu": cand.get("fvu"), "mdl": cand.get("mdl"), "score": cand.get("score"),
+        "n_nodes": cand.get("n_nodes"), "log_prob": cand.get("log_prob"), "pareto_rank": cand.get("pareto_rank", -1),
+        "y_pred": cand.get("y_pred"), "y_pred_val": cand.get("y_pred_val"),
+    }
+
+
+def pysr_candidates(
+    equations: Sequence[Mapping[str, Any] | str] | None,
+    *,
+    engine: Any,
+    weights: Mapping[str, float],
+    x_support: np.ndarray,
+    y_fit: np.ndarray,
+    x_val: np.ndarray | None,
+    variables: Sequence[str],
+) -> list[dict[str, Any]]:
+    """PySR's hall of fame as Flash-ANSR candidates.
+
+    Each equation (PySR's infix in the fit's variable names) goes through the engine's reader into the
+    engine grammar with ``x1..xn`` variables (by column position), is evaluated on the support and
+    validation rows with the engine's own realizations, gets its fit as srbf's FVU on the fitted target,
+    its MDL as the certified f64 default-canon price of the realized expression (the ranking currency
+    flash-ansr's refine worker uses) and its score from the ranking's own ``score_row`` under
+    ``weights`` (``RankingConfig.effective_weights``) -- the same pricing Flash-ANSR's own candidates
+    carry. An entry the engine cannot read or evaluate is dropped; an unpriceable one scores +inf under
+    a live MDL weight and sorts last."""
+    X = np.asarray(x_support, dtype=float)
+    Xv = np.asarray(x_val, dtype=float) if x_val is not None and np.size(x_val) else np.empty((0, X.shape[1]))
+    y = np.asarray(y_fit, dtype=float).reshape(-1)
+    names = [f"x{i + 1}" for i in range(X.shape[1])]
+    # `variables` names the columns of X in order; when the worker saw a reduced column set the
+    # names it used still map by their position in the FULL list. A list of another length cannot be
+    # placed and the reader's own canonical names (`v3` -> `x3`) are trusted instead.
+    rename = {str(v): names[i] for i, v in enumerate(variables)} if len(variables) == X.shape[1] else {}
+    out: list[dict[str, Any]] = []
+    for k, entry in enumerate(equations or []):
+        text = entry.get("equation") if isinstance(entry, Mapping) else entry
+        if not text:
+            continue
+        try:
+            raw = [rename.get(str(t), str(t)) for t in engine.read_infix(str(text))]
+            prefix = list(normalize_expression(raw) or [])
+            cols = evaluate_prefix(engine, prefix, names, X, Xv)
+        except Exception:  # noqa: BLE001 - an unreadable or unevaluable equation is not a candidate
+            continue
+        y_pred = np.asarray(cols[0], dtype=float).reshape(-1)
+        y_pred_val = np.asarray(cols[1], dtype=float).reshape(-1) if Xv.shape[0] else np.empty(0)
+        if y_pred.shape[0] != y.shape[0]:
+            continue
+        fit = float(fvu_array(y, y_pred))
+        try:
+            mdl: float | None = float(engine.complexity(prefix, certified=True, mode=Mode.f64, canon="default"))
+        except Exception:  # noqa: BLE001 - unpriceable: the scorer decides (+inf under a live mdl weight)
+            mdl = None
+        if mdl is not None and not np.isfinite(mdl):
+            mdl = None
+        score = score_row({"fvu": fit, "expression": prefix, "constant_count": count_constants(prefix),
+                           "log_prob": None, "mdl": mdl}, weights)
+        constants = []
+        for tok in prefix:
+            try:
+                constants.append(float(tok))
+            except ValueError:
+                pass
+        out.append({
+            "source": "pysr", "hof_index": k, "expression_infix": str(text),
+            "expression_prefix": prefix, "skeleton_prefix": list(normalize_skeleton(prefix) or []),
+            "constants": constants, "fvu": fit, "mdl": mdl, "score": float(score), "n_nodes": len(prefix),
+            "log_prob": None, "pareto_rank": -1, "y_pred": y_pred, "y_pred_val": y_pred_val,
+            "pysr_complexity": entry.get("complexity") if isinstance(entry, Mapping) else None,
+            "pysr_loss": entry.get("loss") if isinstance(entry, Mapping) else None,
+        })
+    return out
+
+
+def rank_candidates(flash: Sequence[Mapping[str, Any]], pysr: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """The extended candidate pool -- Flash-ANSR's candidates plus PySR's -- in Flash-ANSR's ranking
+    order: by score, ties broken on the expression tokens (flash-ansr's own deterministic tie-break).
+    Rank 0 is the prediction."""
+    entries: list[dict[str, Any]] = [_flash_candidate(c) for c in flash]
+    entries.extend(dict(p) for p in pysr)
+    return sorted(entries, key=_sort_key)
+
+
+def pick_prediction(
+    values: Any,
+    *,
+    flash: Sequence[Mapping[str, Any]],
+    equations: Sequence[Mapping[str, Any] | str] | None,
+    engine: Any,
+    weights: Mapping[str, float],
+    x_support: np.ndarray,
+    y_fit: np.ndarray,
+    x_val: np.ndarray | None,
+    y_val: np.ndarray | None,
+    variables: Sequence[str],
+) -> dict[str, Any] | None:
+    """Flash-ANSR's sorting picks the prediction from the extended pool (in place); returns rank 0.
+
+    PySR's own choice stays under ``pysr_expression`` / ``pysr_expression_prefix`` for reference; the
+    ranked pool (source, index, score, fvu, mdl, n_nodes) is stored as ``hybrid_candidates`` and
+    ``predicted_source`` names the origin of rank 0. When nothing could be priced the record keeps
+    PySR's answer and ``hybrid_ranking_error`` says so; a failed GP stage (no hall of fame) leaves the
+    Flash-ANSR candidates to rank alone, PySR's error kept under ``pysr_error``."""
+    values["pysr_expression"] = values.get("predicted_expression")
+    values["pysr_expression_prefix"] = values.get("predicted_expression_prefix")
+    added = pysr_candidates(equations, engine=engine, weights=weights, x_support=x_support, y_fit=y_fit,
+                            x_val=x_val, variables=variables)
+    ranked = rank_candidates(flash, added)
+    values["hybrid_candidates"] = [{k: e.get(k) for k in ("source", "hof_index", "score", "fvu", "mdl", "n_nodes")} for e in ranked]
+    if not ranked:
+        values["predicted_source"] = "pysr"
+        values["hybrid_ranking_error"] = "no candidate could be priced"
+        return None
+    best = ranked[0]
+    if best.get("y_pred") is None or not np.size(best.get("y_pred")):
+        # a Flash-ANSR candidate stored without its predictions (a snapshot's `candidates` row)
+        names = [f"x{i + 1}" for i in range(np.asarray(x_support).shape[1])]
+        try:
+            cols = evaluate_prefix(engine, list(best["expression_prefix"]), names, np.asarray(x_support, dtype=float),
+                                   np.asarray(x_val, dtype=float) if x_val is not None and np.size(x_val) else np.empty((0, len(names))))
+            best["y_pred"] = np.asarray(cols[0], dtype=float).reshape(-1)
+            best["y_pred_val"] = np.asarray(cols[1], dtype=float).reshape(-1)
+        except Exception:  # noqa: BLE001 - the prediction stays, its curve is missing
+            pass
+    values["predicted_source"] = best["source"]
+    values["predicted_hof_index"] = best["hof_index"]
+    values["predicted_expression"] = best["expression_infix"]
+    values["predicted_expression_prefix"] = list(best["expression_prefix"])
+    values["predicted_skeleton_prefix"] = list(best["skeleton_prefix"])
+    values["predicted_constants"] = best["constants"]
+    values["predicted_score"] = best["score"]
+    values["predicted_mdl"] = best["mdl"]
+    values["predicted_n_nodes"] = best["n_nodes"]
+    values["predicted_log_prob"] = best["log_prob"]
+    values["predicted_pareto_rank"] = best["pareto_rank"]
+    n_fit = int(np.asarray(y_fit).reshape(-1).shape[0])
+    y_pred = best.get("y_pred")
+    values["y_pred"] = (np.asarray(y_pred, dtype=float).reshape(-1, 1) if y_pred is not None and np.size(y_pred)
+                        else np.full((n_fit, 1), np.nan))
+    y_pred_val = best.get("y_pred_val")
+    values["y_pred_val"] = (np.asarray(y_pred_val, dtype=float).reshape(-1, 1)
+                            if y_pred_val is not None and np.size(y_pred_val) else np.empty((0, 1)))
+    if values.get("error") and not values.get("prediction_success"):
+        values["pysr_error"] = values.get("error")
+        values["error"] = None
+    values["prediction_success"] = True
+    y_sup = np.asarray(y_fit, dtype=float).reshape(-1, 1)
+    if values["y_pred"].shape[0] == y_sup.shape[0]:
+        values["support_fvu"] = _compute_fvu_from_predictions(y_sup, values["y_pred"])
+    if y_val is not None and np.size(y_val):
+        y_v = np.asarray(y_val, dtype=float).reshape(-1, 1)
+        if values["y_pred_val"].shape[0] == y_v.shape[0]:
+            values["validation_fvu"] = _compute_fvu_from_predictions(y_v, values["y_pred_val"])
+    return best
 
 
 class FlashANSRPySRAdapter(EvaluationModelAdapter):
@@ -300,6 +474,9 @@ class FlashANSRPySRAdapter(EvaluationModelAdapter):
                 snap[target] = {
                     "choices": target, "cum_wall": cum_wall, "cum_generation": cum_gen, "cum_refinement": cum_ref,
                     "pool_size": len(pool), "best": ranked[0] if ranked else None, "seeds": seeds,
+                    # the top-K of the ranked pool without their prediction curves: the candidates PySR's join
+                    "candidates": [ranked[0]] + [{k: v for k, v in c.items() if k not in ("y_pred", "y_pred_val")}
+                                                 for c in ranked[1:max(1, self.k_seeds)]] if ranked else [],
                 }
         finally:
             if original_choices is not None:
@@ -374,6 +551,7 @@ class FlashANSRPySRAdapter(EvaluationModelAdapter):
         seeds: list[str] = []
         gen_wall = 0.0
         best: Mapping[str, Any] | None = None
+        flash_candidates: list[Mapping[str, Any]] = []
         if choices > 0:
             try:
                 snap = self._snapshot(sample, record)[choices]
@@ -385,6 +563,10 @@ class FlashANSRPySRAdapter(EvaluationModelAdapter):
             gen_wall = float(snap["cum_wall"])
             seeds = list(snap["seeds"])[: self.k_seeds]
             best = snap["best"]
+            # the Flash-ANSR candidates PySR's join: the snapshot's top-K pool (rank 0 carries its
+            # predictions); a snapshot from before the pool was stored holds rank 0 alone, which the
+            # same sorting puts first either way
+            flash_candidates = list(snap.get("candidates") or ([best] if best is not None else []))
             hybrid.update(hybrid_generation_s=gen_wall, hybrid_pool_size=snap["pool_size"],
                           hybrid_generation_time=snap["cum_generation"], hybrid_refinement_time=snap["cum_refinement"],
                           hybrid_n_seeds=len(seeds))
@@ -401,6 +583,7 @@ class FlashANSRPySRAdapter(EvaluationModelAdapter):
             record["fit_time"] = gen_wall
             record["generation_time"] = hybrid.get("hybrid_generation_time")
             record["refinement_time"] = hybrid.get("hybrid_refinement_time")
+            record["predicted_source"] = "flash-ansr"
             record["prediction_success"] = True
             record["predicted_expression"] = best["expression_infix"]
             record["predicted_expression_prefix"] = normalize_expression(list(best["expression_prefix"]))
@@ -437,4 +620,26 @@ class FlashANSRPySRAdapter(EvaluationModelAdapter):
         values["hybrid_gp_s"] = gp_wall
         values["gp_fit_time"] = values.get("fit_time")
         values["fit_time"] = gen_wall + float(values.get("fit_time") or gp_wall)
+        self._pick(values, flash_candidates, sample)
         return result
+
+    def _pick(self, values: Any, flash: Sequence[Mapping[str, Any]], sample: EvaluationSample) -> None:
+        """PySR's hall of fame joins the Flash-ANSR candidates and Flash-ANSR's sorting picks the
+        prediction; the pricing time of the added candidates is part of the recorded fit time."""
+        ranking = self.ranking_config()
+        if not ranking:
+            values["predicted_source"] = "pysr"
+            values["hybrid_ranking_error"] = "no ranking config to price the candidates with"
+            return
+        t0 = time.time()
+        y_fit = sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support
+        y_val = sample.y_validation_noisy if sample.y_validation_noisy is not None else sample.y_validation
+        pick_prediction(
+            values, flash=flash, equations=values.get("equations"), engine=self.get_simplipy_engine(),
+            weights=RankingConfig.from_dict(dict(ranking)).effective_weights,
+            x_support=sample.x_support, y_fit=y_fit, x_val=sample.x_validation, y_val=y_val,
+            # the FULL variable list, by column of x_support: the PySR stage may have dropped unused
+            # columns (`variable_names` is then the reduced list); the candidates are priced on the full X
+            variables=list(values.get("variables") or values.get("variable_names") or self._pysr_variable_names(values, sample)))
+        values["hybrid_ranking_s"] = time.time() - t0
+        values["fit_time"] = float(values.get("fit_time") or 0.0) + values["hybrid_ranking_s"]
