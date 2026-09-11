@@ -26,6 +26,7 @@ from srbf.model_adapters import (
     BruteForceAdapter,
     E2EAdapter,
     FlashANSRAdapter,
+    FlashANSRHybridAdapter,
     LampleChartonAdapter,
     NeSymReSAdapter,
 )
@@ -292,7 +293,7 @@ def _build_pysr_adapter(config: Mapping[str, Any]) -> SubprocessAdapter:
     )
 
 
-def _build_flash_ansr_hybrid_adapter(config: Mapping[str, Any]):
+def _build_flash_ansr_hybrid_adapter(config: Mapping[str, Any]) -> FlashANSRHybridAdapter:
     """The hybrid arm -- Flash-ANSR seeding PySR at a time budget. The METHOD lives in the
     ``flash-ansr-hybrid`` package (``HybridRegressor``); srbf carries only this adapter. Blocks:
     ``flash_ansr:`` (a full flash_ansr adapter block: the model, its refinement and ranking
@@ -309,7 +310,6 @@ def _build_flash_ansr_hybrid_adapter(config: Mapping[str, Any]):
         from flash_ansr_hybrid import HybridConfig, HybridRegressor
     except ImportError as exc:  # pragma: no cover - environment dependent
         raise ImportError("the flash_ansr_hybrid adapter needs the flash-ansr-hybrid package: pip install flash-ansr-hybrid") from exc
-    from srbf.model_adapters import FlashANSRHybridAdapter
 
     options = dict(hybrid)
     snapshot_dir = options.pop("snapshot_dir", None)

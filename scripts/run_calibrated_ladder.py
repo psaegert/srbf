@@ -19,6 +19,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any, Mapping
 
 import yaml
 
@@ -41,7 +42,7 @@ def subset_count(n_problems: int, rule: list[tuple[int, int]]) -> int:
     return 1
 
 
-def catalog_size(experiment_cfg) -> int:
+def catalog_size(experiment_cfg: Mapping[str, Any]) -> int:
     source = build_catalog_source(experiment_cfg["data_source"], target_size=None, skip=0)
     hint = source.size_hint()
     if hint is None:
