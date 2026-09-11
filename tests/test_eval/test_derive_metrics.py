@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from srbf import derive_metrics, bootstrap_report
+from symbolic_data.token_ops import normalize_skeleton
 
 
 def _raw_snapshot():
@@ -134,3 +135,24 @@ def test_converts_legacy_reader_prefixes_before_judging():
     assert list(scored['predicted_skeleton_prefix'][0]) == ['pow', 'x1', '2']
     assert priced and all('**' not in p for p in priced)                 # the MDL price sees the converted prefix
     assert list(snapshot['predicted_skeleton_prefix'][0]) == ['**', 'x1', '2']   # the caller's snapshot is not mutated
+
+
+def test_judges_the_canonical_form_the_prediction_was_priced_as():
+    """A fitted spelling whose factor cancels (`exp(-x^2) * tanh(x)^2 / tanh(x)^2`) is judged as `exp(-x^2)`:
+    the exact recovery that flash-ansr < 0.15.2 hid behind the emitted spelling."""
+    import numpy as np
+    from simplipy import SimpliPyEngine
+    engine = SimpliPyEngine.load("acj-4-3", install=True)
+    x = np.linspace(-2, 2, 32).reshape(-1, 1); y = np.exp(-x[:, 0] ** 2)
+    law = ["exp", "neg", "pow", "x1", "<constant>"]
+    emitted = "/ * exp neg pow x1 2.0 pow tanh x1 2.0 pow tanh x1 2.0".split()
+    snapshot = {
+        "expression": [law], "skeleton": [law], "variables": [["x1"]],
+        "x": [x], "y": [y], "y_pred": [y.reshape(-1, 1)], "x_val": [x], "y_val": [y], "y_pred_val": [y.reshape(-1, 1)],
+        "predicted_expression_prefix": [emitted], "predicted_skeleton_prefix": [normalize_skeleton(emitted)],
+        "prediction_success": [True], "fit_time": [1.0],
+    }
+    scored = derive_metrics(snapshot, engine=engine)
+    assert scored["predicted_skeleton_prefix"][0] == engine.simplify(law)
+    assert scored["predicted_skeleton_prefix_as_emitted"][0] == normalize_skeleton(emitted)
+    assert bool(scored["symbolic_recovery"][0]) is True

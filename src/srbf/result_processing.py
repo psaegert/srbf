@@ -18,6 +18,7 @@ from srbf.metrics.numeric import (
 from srbf.metrics.symbolic import total_nestedness
 from srbf.metrics.token_prediction import f1_score, precision, recall
 from srbf.metrics.zss import zss_tree_edit_distance
+from symbolic_data.token_ops import normalize_skeleton
 
 
 # ── Default placeholder values for missing / failed predictions ───────────
@@ -200,6 +201,24 @@ def _convert_prefix(convert_fn: Callable[[list[str]], list[str]], tokens: Any) -
         return list(tokens)
 
 
+def _canonical_skeleton(simplify_fn: Callable[[list[str]], list[str] | None], realized: Any, skeleton: Any) -> Any:
+    """The skeleton of a prediction's strictly shorter canonical form (masked, then simplified as the
+    stored skeletons are); the stored skeleton when the canonical form is not shorter or fails."""
+    if realized is None or skeleton is None:
+        return skeleton
+    try:
+        canonical = simplify_fn(list(realized))
+        if canonical is None or len(canonical) >= len(realized):
+            return skeleton
+        masked = normalize_skeleton(list(canonical))
+        if masked is None:
+            return skeleton
+        simplified = simplify_fn(list(masked))
+        return list(simplified) if simplified is not None else list(masked)
+    except Exception:  # noqa: BLE001 - a prefix the engine refuses is judged as stored
+        return skeleton
+
+
 def compute_derived_metrics(
     results: dict[str, Any],
     test_sets: Sequence[str],
@@ -259,6 +278,22 @@ def compute_derived_metrics(
                     for key in ('predicted_expression_prefix', 'predicted_skeleton_prefix'):
                         if key in r:
                             r[key] = [_convert_prefix(convert_fn, p) for p in r[key]]
+
+                # ── The judged skeleton is the canonical form the prediction was priced as ──
+                # flash-ansr < 0.15.2 emitted a fitted candidate as its skeleton with the numbers filled
+                # in, so a factor the fit made cancel (`tanh(x)^2 / tanh(x)^2`) or a constant the fit
+                # made fold stayed in the spelling while the certified price had collapsed it. When the
+                # canonical form of the realized prediction is strictly shorter, its masked, simplified
+                # skeleton is what gets judged -- what flash-ansr 0.15.2 emits -- so files from before
+                # and after the fix are judged alike; the stored spelling stays under `_as_emitted`.
+                if simplify_fn is not None and 'predicted_expression_prefix' in r and 'predicted_skeleton_prefix' in r:
+                    emitted = list(r['predicted_skeleton_prefix'])
+                    r['predicted_skeleton_prefix'] = [
+                        _canonical_skeleton(simplify_fn, pe, ps)
+                        for pe, ps in zip(r['predicted_expression_prefix'], emitted)
+                    ]
+                    if any(a != b for a, b in zip(r['predicted_skeleton_prefix'], emitted)):
+                        r['predicted_skeleton_prefix_as_emitted'] = emitted
 
                 # ── FVU / NRR for fit and val splits ──────────────
                 for split, saved_split_name in [('fit', ''), ('val', '_val')]:

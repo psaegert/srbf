@@ -6,6 +6,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-09-11
+
+### Fixed
+- **The judged skeleton is the canonical form the prediction was priced as.** flash-ansr < 0.15.2
+  emitted a fitted candidate as its skeleton with the numbers filled in, so a factor the fit made
+  cancel (`exp(-x^2) * tanh(x)^2 / tanh(x)^2`) or a constant the fit made fold stayed in the spelling
+  while the certified price had collapsed it -- and `symbolic_recovery`, a masked-skeleton identity,
+  missed the recovery. `derive_metrics` now judges the masked, simplified skeleton of the prediction's
+  canonical form whenever that form is strictly shorter than the emitted one (the stored skeleton
+  stays under `predicted_skeleton_prefix_as_emitted`), so files from before and after flash-ansr
+  0.15.2 are judged alike. Measured on the T8-20M r = 0 readings (766 problems): symbolic recovery
+  9.3 % as emitted -> 13.2 % canonical. Numeric metrics and the MDL price are unaffected.
+
+
 ## [0.16.0] - 2026-09-11
 
 ### Removed
