@@ -35,7 +35,10 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 import numpy as np
+from flash_ansr.flash_ansr import FlashANSR, _price_realized, _respell_result
+from flash_ansr.refine import DEFAULT_REFINE_SCOPE, Refiner, refinement_slots
 from flash_ansr.scoring import RankingConfig, count_constants, score_row
+from flash_ansr.spelling import ConstantLadderConfig
 from simplipy.engine import Mode
 from symbolic_data.token_ops import normalize_expression, normalize_skeleton
 
@@ -45,7 +48,7 @@ from srbf.model_adapters import FlashANSRAdapter
 from srbf.subprocess_adapter import SubprocessAdapter, _compute_fvu_from_predictions, evaluate_prefix
 
 __all__ = ["FlashANSRPySRAdapter", "TimeLaw", "prefix_to_julia", "data_fingerprint", "PYSR_OPERATORS",
-           "pysr_candidates", "rank_candidates", "pick_prediction"]
+           "pysr_candidates", "rank_candidates", "pick_prediction", "refine_settings", "REFINE_DEFAULTS"]
 
 #: the PySR worker's vocabulary (srbf/worker/models/pysr_worker.py): a seed using anything else is dropped
 PYSR_UNARY = {"neg", "abs", "inv", "sin", "cos", "tan", "asin", "acos", "atan",
@@ -179,6 +182,123 @@ def _flash_candidate(cand: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+#: the refinement settings a PySR candidate is fitted and re-spelled with when the caller gives none:
+#: the doctrine arm's (8 restarts, LM, normal p0 noise of scale 5, the fittable scope, the ladder on)
+REFINE_DEFAULTS: dict[str, Any] = {
+    "n_restarts": 8, "method": "curve_fit_lm", "p0_noise": "normal", "p0_noise_kwargs": {"loc": 0.0, "scale": 5},
+    "refine_scope": DEFAULT_REFINE_SCOPE, "constant_ladder": True,
+}
+
+
+def refine_settings(model: Any) -> dict[str, Any]:
+    """The refinement settings of a loaded ``FlashANSR`` (what its own candidates are fitted and
+    re-spelled with), for the PySR candidates that join its pool."""
+    return {
+        "n_restarts": int(getattr(model, "n_restarts", REFINE_DEFAULTS["n_restarts"])),
+        "method": getattr(model, "refiner_method", REFINE_DEFAULTS["method"]),
+        "p0_noise": getattr(model, "refiner_p0_noise", REFINE_DEFAULTS["p0_noise"]),
+        "p0_noise_kwargs": getattr(model, "refiner_p0_noise_kwargs", REFINE_DEFAULTS["p0_noise_kwargs"]),
+        "refine_scope": getattr(model, "refine_scope", REFINE_DEFAULTS["refine_scope"]),
+        "constant_ladder": getattr(model, "constant_ladder", REFINE_DEFAULTS["constant_ladder"]),
+    }
+
+
+def _literal_value(token: str) -> float | None:
+    if token in SPECIAL_LITERALS:
+        return float(SPECIAL_LITERALS[token])
+    try:
+        return float(token)
+    except ValueError:
+        return None
+
+
+def _fit_pysr_candidate(prefix: list[str], X: np.ndarray, y: np.ndarray, *, engine: Any,
+                        fit: Mapping[str, Any]) -> tuple[Any, list[str]] | None:
+    """PySR's expression through flash-ansr's Refiner: its fittable literals become the slots
+    (the same scope policy Flash-ANSR's own candidates get), warm-started at PySR's values with
+    one restart, a cold fit at the doctrine's restarts when the warm start does not converge.
+    ``None`` when the expression has no fittable literal or no fit converged."""
+    slots = refinement_slots(list(prefix), engine, fit["refine_scope"])
+    if not slots:
+        return None
+    p0_values = [_literal_value(prefix[i]) for i in slots]
+    p0 = np.asarray(p0_values, dtype=float) if all(v is not None for v in p0_values) else None
+    refiner = Refiner(simplipy_engine=engine, n_variables=int(X.shape[1]))
+    try:
+        if p0 is not None:
+            refiner.fit(list(prefix), X, y, p0=p0, p0_noise=None, p0_noise_kwargs=None, n_restarts=1,
+                        method=fit["method"], converge_error="ignore", refine_scope=fit["refine_scope"])
+        if p0 is None or not refiner.valid_fit:
+            refiner = Refiner(simplipy_engine=engine, n_variables=int(X.shape[1]))
+            refiner.fit(list(prefix), X, y, p0=None, p0_noise=fit["p0_noise"], p0_noise_kwargs=fit["p0_noise_kwargs"],
+                        n_restarts=int(fit["n_restarts"]), method=fit["method"], converge_error="ignore",
+                        refine_scope=fit["refine_scope"])
+    except Exception:  # noqa: BLE001 - a candidate the refiner cannot fit is priced as spelled
+        return None
+    if not refiner.valid_fit or not refiner.all_constants_values:
+        return None
+    abstracted = ["<constant>" if i in set(slots) else tok for i, tok in enumerate(prefix)]
+    return refiner, abstracted
+
+
+def _row_from_prefix(prefix: list[str], *, engine: Any, names: Sequence[str], X: np.ndarray, Xv: np.ndarray,
+                     fvu: float, mdl: float | None, score: float, spelling: str | None = None) -> dict[str, Any] | None:
+    """A pool entry for a realized prefix (its curves from the engine's realizations)."""
+    try:
+        cols = evaluate_prefix(engine, list(prefix), list(names), X, Xv)
+    except Exception:  # noqa: BLE001 - unevaluable: not a candidate
+        return None
+    y_pred = np.asarray(cols[0], dtype=float).reshape(-1)
+    y_pred_val = np.asarray(cols[1], dtype=float).reshape(-1) if Xv.shape[0] else np.empty(0)
+    constants = [v for v in (_literal_value(tok) for tok in prefix) if v is not None]
+    return {
+        "expression_prefix": list(prefix), "skeleton_prefix": list(normalize_skeleton(prefix) or []),
+        "constants": constants, "fvu": float(fvu), "mdl": mdl, "score": float(score), "n_nodes": len(prefix),
+        "log_prob": None, "pareto_rank": -1, "y_pred": y_pred, "y_pred_val": y_pred_val, "spelling": spelling,
+    }
+
+
+def _fitted_rows(refiner: Any, abstracted: list[str], *, engine: Any, weights: Mapping[str, float], names: Sequence[str],
+                 X: np.ndarray, Xv: np.ndarray, y: np.ndarray, y_variance: float, fit: Mapping[str, Any],
+                 ladder: ConstantLadderConfig | None) -> list[dict[str, Any]]:
+    """The fitted PySR candidate as a pool entry and, when the constant ladder finds a better
+    spelling, its re-spelled variant -- through flash-ansr's own ladder pass (``_respell_result``):
+    a tie replaces the parent, a strict improvement stands beside it, as in Flash-ANSR's pool."""
+    n = int(y.shape[0])
+    fvu = FlashANSR._compute_fvu(float(refiner.loss), n, y_variance)
+    mdl = _price_realized(engine, refiner, abstracted)
+    constant_count = len(refiner.slot_indices)
+    score = score_row({"fvu": fvu, "expression": abstracted, "constant_count": constant_count, "log_prob": None, "mdl": mdl}, weights)
+    parent = {"fvu": float(fvu), "mdl": mdl, "score": float(score), "expression": list(abstracted), "constant_count": constant_count,
+              "fits": list(refiner.all_constants_values), "valid_fit": True, "log_prob": None, "spelling": None, "respelled": None}
+    realized = list(refiner.transform(list(abstracted), return_prefix=True))
+    parent_row = _row_from_prefix(list(normalize_expression(realized) or realized), engine=engine, names=names, X=X, Xv=Xv,
+                                  fvu=fvu, mdl=mdl, score=float(score))
+    rows = [parent_row] if parent_row is not None else []
+    if ladder is None or mdl is None:
+        return rows
+    payload = {"constant_ladder": ladder, "ranking_weights": dict(weights), "expression": list(abstracted), "log_prob": None,
+               "y_variance": y_variance, "n_variables": int(X.shape[1]), "method": fit["method"],
+               "n_restarts": int(fit["n_restarts"]), "p0_noise": fit["p0_noise"], "p0_noise_kwargs": fit["p0_noise_kwargs"]}
+    try:
+        child = _respell_result(payload, engine, refiner, X, y, parent)
+    except Exception:  # noqa: BLE001 - the ladder is best-effort, the fitted candidate stands
+        child = None
+    if child is None:
+        return rows
+    try:
+        child_refiner = Refiner.from_serialized(simplipy_engine=engine, n_variables=int(X.shape[1]), expression=list(child["expression"]),
+                                                n_inputs=int(X.shape[1]), fits=list(child["fits"]), refine_scope="placeholders")
+        child_realized = list(child_refiner.transform(list(child["expression"]), return_prefix=True))
+    except Exception:  # noqa: BLE001
+        return rows
+    child_row = _row_from_prefix(list(normalize_expression(child_realized) or child_realized), engine=engine, names=names, X=X, Xv=Xv,
+                                 fvu=float(child["fvu"]), mdl=child["mdl"], score=float(child["score"]), spelling=child.get("spelling"))
+    if child_row is None:
+        return rows
+    return [child_row] if child.get("replaces_parent") else rows + [child_row]
+
+
 def pysr_candidates(
     equations: Sequence[Mapping[str, Any] | str] | None,
     *,
@@ -188,25 +308,34 @@ def pysr_candidates(
     y_fit: np.ndarray,
     x_val: np.ndarray | None,
     variables: Sequence[str],
+    refine: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """PySR's hall of fame as Flash-ANSR candidates.
 
     Each equation (PySR's infix in the fit's variable names) goes through the engine's reader into the
-    engine grammar with ``x1..xn`` variables (by column position), is evaluated on the support and
-    validation rows with the engine's own realizations, gets its fit as srbf's FVU on the fitted target,
-    its MDL as the certified f64 default-canon price of the realized expression (the ranking currency
-    flash-ansr's refine worker uses) and its score from the ranking's own ``score_row`` under
-    ``weights`` (``RankingConfig.effective_weights``) -- the same pricing Flash-ANSR's own candidates
-    carry. An entry the engine cannot read or evaluate is dropped; an unpriceable one scores +inf under
+    engine grammar with ``x1..xn`` variables (by column position) and then through what Flash-ANSR's
+    own candidates go through: its fittable literals are re-fitted with flash-ansr's Refiner (warm at
+    PySR's values), the constant ladder re-spells them, the realized expression is priced (fit as
+    flash-ansr's FVU on the fitted target, MDL as the certified f64 default-canon price) and scored
+    with the ranking's own ``score_row`` under ``weights`` (``RankingConfig.effective_weights``).
+    ``refine`` carries the model's refinement settings (:func:`refine_settings`; the doctrine's when
+    None). An expression without a fittable literal, or one the refiner cannot fit, is priced as
+    spelled; one the engine cannot read or evaluate is dropped; an unpriceable one scores +inf under
     a live MDL weight and sorts last."""
     X = np.asarray(x_support, dtype=float)
     Xv = np.asarray(x_val, dtype=float) if x_val is not None and np.size(x_val) else np.empty((0, X.shape[1]))
     y = np.asarray(y_fit, dtype=float).reshape(-1)
+    finite = np.isfinite(y)
+    # ddof=0 over the finite targets: flash-ansr's own definition, so the selection FVU equals the evaluation FVU
+    y_variance = float(np.var(y[finite])) if int(finite.sum()) > 1 else float("nan")
     names = [f"x{i + 1}" for i in range(X.shape[1])]
     # `variables` names the columns of X in order; when the worker saw a reduced column set the
     # names it used still map by their position in the FULL list. A list of another length cannot be
     # placed and the reader's own canonical names (`v3` -> `x3`) are trusted instead.
     rename = {str(v): names[i] for i, v in enumerate(variables)} if len(variables) == X.shape[1] else {}
+    fit = dict(REFINE_DEFAULTS, **dict(refine or {}))
+    ladder_setting = fit.get("constant_ladder")
+    ladder = ladder_setting if isinstance(ladder_setting, ConstantLadderConfig) else ConstantLadderConfig.from_mapping(ladder_setting)
     out: list[dict[str, Any]] = []
     for k, entry in enumerate(equations or []):
         text = entry.get("equation") if isinstance(entry, Mapping) else entry
@@ -215,36 +344,36 @@ def pysr_candidates(
         try:
             raw = [rename.get(str(t), str(t)) for t in engine.read_infix(str(text))]
             prefix = list(normalize_expression(raw) or [])
-            cols = evaluate_prefix(engine, prefix, names, X, Xv)
-        except Exception:  # noqa: BLE001 - an unreadable or unevaluable equation is not a candidate
+        except Exception:  # noqa: BLE001 - an unreadable equation is not a candidate
             continue
-        y_pred = np.asarray(cols[0], dtype=float).reshape(-1)
-        y_pred_val = np.asarray(cols[1], dtype=float).reshape(-1) if Xv.shape[0] else np.empty(0)
-        if y_pred.shape[0] != y.shape[0]:
-            continue
-        fit = float(fvu_array(y, y_pred))
-        try:
-            mdl: float | None = float(engine.complexity(prefix, certified=True, mode=Mode.f64, canon="default"))
-        except Exception:  # noqa: BLE001 - unpriceable: the scorer decides (+inf under a live mdl weight)
-            mdl = None
-        if mdl is not None and not np.isfinite(mdl):
-            mdl = None
-        score = score_row({"fvu": fit, "expression": prefix, "constant_count": count_constants(prefix),
-                           "log_prob": None, "mdl": mdl}, weights)
-        constants = []
-        for tok in prefix:
+        fitted = _fit_pysr_candidate(prefix, X, y, engine=engine, fit=fit)
+        if fitted is not None:
+            rows = _fitted_rows(fitted[0], fitted[1], engine=engine, weights=weights, names=names, X=X, Xv=Xv, y=y,
+                                y_variance=y_variance, fit=fit, ladder=ladder)
+        else:
+            # no fittable literal (or no converged fit): the expression as PySR spelled it
             try:
-                constants.append(float(tok))
-            except ValueError:
-                pass
-        out.append({
-            "source": "pysr", "hof_index": k, "expression_infix": str(text),
-            "expression_prefix": prefix, "skeleton_prefix": list(normalize_skeleton(prefix) or []),
-            "constants": constants, "fvu": fit, "mdl": mdl, "score": float(score), "n_nodes": len(prefix),
-            "log_prob": None, "pareto_rank": -1, "y_pred": y_pred, "y_pred_val": y_pred_val,
-            "pysr_complexity": entry.get("complexity") if isinstance(entry, Mapping) else None,
-            "pysr_loss": entry.get("loss") if isinstance(entry, Mapping) else None,
-        })
+                mdl: float | None = float(engine.complexity(prefix, certified=True, mode=Mode.f64, canon="default"))
+            except Exception:  # noqa: BLE001 - unpriceable: the scorer decides (+inf under a live mdl weight)
+                mdl = None
+            if mdl is not None and not np.isfinite(mdl):
+                mdl = None
+            try:
+                cols = evaluate_prefix(engine, prefix, names, X, Xv)
+            except Exception:  # noqa: BLE001
+                continue
+            y_pred = np.asarray(cols[0], dtype=float).reshape(-1)
+            if y_pred.shape[0] != y.shape[0]:
+                continue
+            fvu = float(fvu_array(y, y_pred))
+            score = score_row({"fvu": fvu, "expression": prefix, "constant_count": count_constants(prefix), "log_prob": None, "mdl": mdl}, weights)
+            row = _row_from_prefix(prefix, engine=engine, names=names, X=X, Xv=Xv, fvu=fvu, mdl=mdl, score=float(score))
+            rows = [row] if row is not None else []
+        for row in rows:
+            row.update({"source": "pysr", "hof_index": k, "expression_infix": str(text),
+                        "pysr_complexity": entry.get("complexity") if isinstance(entry, Mapping) else None,
+                        "pysr_loss": entry.get("loss") if isinstance(entry, Mapping) else None})
+            out.append(row)
     return out
 
 
@@ -269,6 +398,7 @@ def pick_prediction(
     x_val: np.ndarray | None,
     y_val: np.ndarray | None,
     variables: Sequence[str],
+    refine: Mapping[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Flash-ANSR's sorting picks the prediction from the extended pool (in place); returns rank 0.
 
@@ -280,7 +410,7 @@ def pick_prediction(
     values["pysr_expression"] = values.get("predicted_expression")
     values["pysr_expression_prefix"] = values.get("predicted_expression_prefix")
     added = pysr_candidates(equations, engine=engine, weights=weights, x_support=x_support, y_fit=y_fit,
-                            x_val=x_val, variables=variables)
+                            x_val=x_val, variables=variables, refine=refine)
     ranked = rank_candidates(flash, added)
     values["hybrid_candidates"] = [{k: e.get(k) for k in ("source", "hof_index", "score", "fvu", "mdl", "n_nodes")} for e in ranked]
     if not ranked:
@@ -640,6 +770,7 @@ class FlashANSRPySRAdapter(EvaluationModelAdapter):
             x_support=sample.x_support, y_fit=y_fit, x_val=sample.x_validation, y_val=y_val,
             # the FULL variable list, by column of x_support: the PySR stage may have dropped unused
             # columns (`variable_names` is then the reduced list); the candidates are priced on the full X
-            variables=list(values.get("variables") or values.get("variable_names") or self._pysr_variable_names(values, sample)))
+            variables=list(values.get("variables") or values.get("variable_names") or self._pysr_variable_names(values, sample)),
+            refine=refine_settings(self.flash.model))
         values["hybrid_ranking_s"] = time.time() - t0
         values["fit_time"] = float(values.get("fit_time") or 0.0) + values["hybrid_ranking_s"]

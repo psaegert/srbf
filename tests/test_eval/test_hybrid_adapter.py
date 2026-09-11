@@ -195,3 +195,20 @@ class TestPySRAddsCandidates:
                               x_support=x, y_fit=y, x_val=x_val, y_val=y_val, variables=["v1", "v2"])
         assert values["predicted_source"] == "flash-ansr" and values["prediction_success"] is True
         assert values["pysr_error"].startswith("WorkerTimeout") and values["error"] is None
+
+    def test_pysr_candidates_go_through_the_ladder(self, engine):
+        """A PySR entry with almost-round constants is re-fitted and re-spelled like a Flash-ANSR
+        candidate: the pool entry carries integer constants, a lower MDL and a spelling record."""
+        from srbf.hybrid_adapter import pysr_candidates
+        x, y, x_val, y_val = self._problem()
+        weights = {"mdl": 1e-2}
+        rows = pysr_candidates([{"equation": "(2.0000001 * (v1 ^ 2)) + 0.9999999"}], engine=engine, weights=weights,
+                               x_support=x, y_fit=y, x_val=x_val, variables=["v1", "v2"])
+        assert rows, "the entry must enter the pool"
+        best = min(rows, key=lambda r: r["score"])
+        assert best["spelling"], "the ladder must have re-spelled the almost-round constants"
+        assert all(float(c).is_integer() for c in best["constants"]) and best["constants"]
+        assert "**" not in best["expression_prefix"]
+        plain = pysr_candidates([{"equation": "(2.0000001 * (v1 ^ 2)) + 0.9999999"}], engine=engine, weights=weights,
+                                x_support=x, y_fit=y, x_val=x_val, variables=["v1", "v2"], refine={"constant_ladder": None})
+        assert len(plain) == 1 and plain[0]["spelling"] is None and best["mdl"] < plain[0]["mdl"]

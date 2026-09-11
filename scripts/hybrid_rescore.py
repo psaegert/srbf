@@ -10,20 +10,22 @@ from __future__ import annotations
 
 import argparse
 import pickle
+import time
 from pathlib import Path
 
 import numpy as np
 from flash_ansr.scoring import RankingConfig
 from simplipy import SimpliPyEngine
 
-from srbf.hybrid_adapter import pick_prediction
+from srbf.hybrid_adapter import REFINE_DEFAULTS, pick_prediction
 
 
 def _row(columns: dict, i: int) -> dict:
     return {k: v[i] for k, v in columns.items() if k != "__meta__" and isinstance(v, (list, np.ndarray)) and len(v) == len(columns["expression"])}
 
 
-def rescore_file(path: Path, snapshots: Path, out: Path, engine: SimpliPyEngine) -> tuple[int, int, dict[str, int]]:
+def rescore_file(path: Path, snapshots: Path, out: Path, engine: SimpliPyEngine,
+                 refine: dict | None = None) -> tuple[int, int, dict[str, int]]:
     with path.open("rb") as fh:
         columns = pickle.load(fh)
     n = len(columns["expression"])
@@ -51,11 +53,14 @@ def rescore_file(path: Path, snapshots: Path, out: Path, engine: SimpliPyEngine)
         y_val = row.get("y_noisy_val") if row.get("y_noisy_val") is not None else row.get("y_val")
         variables = list(row.get("variables") or row.get("variable_names") or [])   # the full list, by column of x
         before = row.get("predicted_expression")
+        t0 = time.time()
         pick_prediction(row, flash=flash, equations=equations, engine=engine, weights=weights,
                         x_support=np.asarray(row["x"], dtype=float), y_fit=np.asarray(y_fit, dtype=float).reshape(-1),
                         x_val=np.asarray(row["x_val"], dtype=float) if row.get("x_val") is not None else None,
                         y_val=np.asarray(y_val, dtype=float).reshape(-1) if y_val is not None else None,
-                        variables=variables)
+                        variables=variables, refine=refine)
+        # the pricing of the added candidates (re-fit, ladder, MDL, score): what the live adapter adds to fit_time
+        row["hybrid_ranking_s"] = time.time() - t0
         winners[row["predicted_source"]] = winners.get(row["predicted_source"], 0) + 1
         changed += int(row.get("predicted_expression") != before)
         for k, v in row.items():
@@ -77,12 +82,15 @@ def main() -> None:
     ap.add_argument("--snapshots", required=True, type=Path, help="<root>/snapshots (one subdirectory per catalog)")
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--engine", default="acj-5-4-llm")
+    ap.add_argument("--no-ladder", action="store_true", help="price PySR's candidates as spelled (no re-fit, no ladder)")
     args = ap.parse_args()
     engine = SimpliPyEngine.load(args.engine, install=True)
+    refine = {**REFINE_DEFAULTS, "constant_ladder": None} if args.no_ladder else dict(REFINE_DEFAULTS)
     for path in sorted(args.results.glob("*/ratio_*.pkl")):
         catalog = path.parent.name
-        n, changed, winners = rescore_file(path, args.snapshots / catalog, args.out / catalog / path.name, engine)
-        print(f"{catalog:<18s} {path.name:<14s} rows {n:>4d}  changed {changed:>4d}  rank 0 from {winners}")
+        t0 = time.time()
+        n, changed, winners = rescore_file(path, args.snapshots / catalog, args.out / catalog / path.name, engine, refine=refine)
+        print(f"{catalog:<18s} {path.name:<14s} rows {n:>4d}  changed {changed:>4d}  rank 0 from {winners}  {time.time() - t0:6.1f} s")
 
 
 if __name__ == "__main__":
