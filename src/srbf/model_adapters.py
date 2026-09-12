@@ -190,6 +190,13 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         record["predicted_mdl"] = best.mdl
         record["predicted_n_nodes"] = best.n_nodes
         record["predicted_pareto_rank"] = best.pareto_rank
+        # Provenance of the answer (flash-ansr >= 0.16.1): how many predicted typed literals it kept
+        # frozen, whether it is a thawed duplicate (the typed token indices it re-fitted) and the
+        # constant ladder's re-spelling record. Without these a campaign cannot say where its rank-0
+        # answers come from (2026-09-12: the thaw lineage held 26 of 60 erbench-syneq answers).
+        record["predicted_typed_frozen"] = int(getattr(best, "typed_frozen", 0) or 0)
+        record["predicted_typed_thaw"] = getattr(best, "typed_thaw", None)
+        record["predicted_spelling"] = getattr(best, "spelling", None)
 
         y_pred = best.y_pred
         y_pred_val = best.y_pred_val if best.y_pred_val is not None else np.empty_like(sample.y_validation)

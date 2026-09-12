@@ -157,3 +157,34 @@ def test_judges_the_canonical_form_the_prediction_was_priced_as():
     assert scored["predicted_skeleton_prefix"][0] == engine.simplify(law)
     assert scored["predicted_skeleton_prefix_as_emitted"][0] == normalize_skeleton(emitted)
     assert bool(scored["symbolic_recovery"][0]) is True
+
+
+def _fake_simplify(tokens):
+    """A stand-in for the engine's simplify with the two moves the judge has to survive: a masked
+    rational folds to one slot (``/ <constant> <constant>`` -> ``<constant>``) and a unit factor drops
+    (``* 1.0 x1`` -> ``x1``); a REALIZED rational (``/ 2 3``) is kept, as the canon keeps it."""
+    out = list(tokens)
+    for i in range(len(out) - 2):
+        if out[i:i + 3] == ['/', '<constant>', '<constant>']:
+            return out[:i] + ['<constant>'] + out[i + 3:]
+    if out[:2] == ['*', '1.0']:
+        return out[2:]
+    return out
+
+
+def test_symbolic_recovery_judges_both_sides_through_the_same_simplify():
+    """A prediction byte-identical to the ground truth must be exact. The ground truth's skeleton is
+    simplified (``pow x1 / <c> <c>`` -> ``pow x1 <c>``); a prediction whose canonical form is not
+    shorter used to be judged by its stored skeleton UNsimplified (``pow x1 / <c> <c>``) and failed --
+    every law with a rational exponent was unjudgeable as exact (2026-09-12)."""
+    snapshot = {
+        'skeleton': [['pow', 'x1', '/', '<constant>', '<constant>']] * 2 + [['x1']],
+        'predicted_expression_prefix': [['pow', 'x1', '/', '2', '3'], ['rootn', 'x1', '3'], ['*', '1.0', 'x1']],
+        'predicted_skeleton_prefix': [['pow', 'x1', '/', '<constant>', '<constant>'], ['rootn', 'x1', '<constant>'], ['*', '<constant>', 'x1']],
+        'benchmark_eq_id': ['A', 'A', 'B'], 'placeholder': [False] * 3,
+    }
+    scored = derive_metrics(snapshot, operator_arity={'pow': 2, 'rootn': 2, '/': 2, '*': 2}, simplify_fn=_fake_simplify)
+    # identical spelling: exact; a different structure (the rootn spelling of the same function is the
+    # canon's business, not the judge's): not exact; the strictly-shorter canonical path is unchanged
+    assert list(scored['symbolic_recovery']) == [True, False, True]
+    assert scored['predicted_skeleton_prefix'][0] == ['pow', 'x1', '<constant>'] == scored['skeleton_simplified'][0]

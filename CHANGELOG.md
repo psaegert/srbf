@@ -6,6 +6,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-09-12
+
+### Fixed
+- **`symbolic_recovery` judges both sides through the same simplify.** The ground truth's skeleton is
+  simplified before the comparison (`pow x1 / <c> <c>` -> `pow x1 <c>`); a prediction whose canonical
+  form is not strictly shorter was judged by its stored skeleton UNsimplified, so a prediction
+  byte-identical to the ground truth (`pow x1 / 2 3`) was not exact. Every law with a rational
+  exponent -- 396 of 6,660, 7 % of erbench-syneq -- was unjudgeable as exact, whatever the answer. The
+  stored skeleton now goes through the same simplify on the fallback path. A second-stage metric over
+  stored prefixes: re-derive, nothing needs re-running. Results judged under 0.17.x and 0.18.x are not
+  comparable on those laws, which is what the minor bump marks.
+
+### Added
+- **Answer provenance in the flash_ansr adapter's rows:** `predicted_typed_frozen` (predicted typed
+  literals kept verbatim), `predicted_typed_thaw` (a thawed duplicate: the typed token indices it
+  re-fitted; None otherwise) and `predicted_spelling` (the constant ladder's re-spelling record) for
+  the rank-0 answer, from flash-ansr >= 0.16.1 (whose ladder children carry the thaw mark). Pin
+  `flash-ansr>=0.16.1,<0.17`.
+
 ## [0.17.0] - 2026-09-12
 
 ### Changed

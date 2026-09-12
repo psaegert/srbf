@@ -201,22 +201,41 @@ def _convert_prefix(convert_fn: Callable[[list[str]], list[str]], tokens: Any) -
         return list(tokens)
 
 
-def _canonical_skeleton(simplify_fn: Callable[[list[str]], list[str] | None], realized: Any, skeleton: Any) -> Any:
-    """The skeleton of a prediction's strictly shorter canonical form (masked, then simplified as the
-    stored skeletons are); the stored skeleton when the canonical form is not shorter or fails."""
-    if realized is None or skeleton is None:
+def _simplified_skeleton(simplify_fn: Callable[[list[str]], list[str] | None], skeleton: Any) -> Any:
+    """The stored (masked) skeleton through the same simplify the ground truth's skeleton goes through."""
+    if skeleton is None:
         return skeleton
+    try:
+        simplified = simplify_fn(list(skeleton))
+        return list(simplified) if simplified is not None else list(skeleton)
+    except Exception:  # noqa: BLE001 - a skeleton the engine refuses is judged as stored
+        return list(skeleton)
+
+
+def _canonical_skeleton(simplify_fn: Callable[[list[str]], list[str] | None], realized: Any, skeleton: Any) -> Any:
+    """The judged skeleton of a prediction: the skeleton of its strictly shorter canonical form (masked,
+    then simplified), otherwise the stored skeleton SIMPLIFIED -- the same treatment the ground truth's
+    skeleton gets (``skeleton_simplified``), so the two sides are compared through one function of the
+    masked form.
+
+    Returning the stored skeleton unsimplified made the judge asymmetric wherever simplify moves a masked
+    spelling: the ground truth ``pow x1 / <c> <c>`` simplifies to ``pow x1 <c>`` while a prediction that
+    is byte-identical to it (``pow x1 / 2 3``, not shorter in canonical form) stayed ``pow x1 / <c> <c>``
+    and was judged not exact -- every law with a rational exponent (396 of 6,660; 7 % of erbench-syneq)
+    was unjudgeable as exact, whatever the answer (2026-09-12)."""
+    if realized is None or skeleton is None:
+        return _simplified_skeleton(simplify_fn, skeleton)
     try:
         canonical = simplify_fn(list(realized))
         if canonical is None or len(canonical) >= len(realized):
-            return skeleton
+            return _simplified_skeleton(simplify_fn, skeleton)
         masked = normalize_skeleton(list(canonical))
         if masked is None:
-            return skeleton
+            return _simplified_skeleton(simplify_fn, skeleton)
         simplified = simplify_fn(list(masked))
         return list(simplified) if simplified is not None else list(masked)
     except Exception:  # noqa: BLE001 - a prefix the engine refuses is judged as stored
-        return skeleton
+        return _simplified_skeleton(simplify_fn, skeleton)
 
 
 def compute_derived_metrics(

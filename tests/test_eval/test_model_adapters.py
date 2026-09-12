@@ -261,3 +261,39 @@ class TestRefineScopeConfig:
 
     def test_evaluation_config_sets_the_scope(self, monkeypatch) -> None:
         assert self._build(monkeypatch, {}, {"refine_scope": "all"})["refiner_scope"] == "all"
+
+
+class TestAnswerProvenanceColumns:
+    """The flash_ansr adapter records where its rank-0 answer came from: how many predicted typed
+    literals it kept frozen, whether it is a thawed duplicate (which typed token indices it re-fitted)
+    and the constant ladder's re-spelling record. Without them a campaign cannot attribute its own
+    answers (2026-09-12: the thaw lineage held 26 of 60 erbench-syneq rank-0 answers, invisible)."""
+
+    def test_rank0_provenance_lands_in_the_row(self, monkeypatch) -> None:
+        import numpy as np
+        from flash_ansr.inference import Candidate, InferenceResult
+        from srbf.core import EvaluationSample
+        from srbf.model_adapters import FlashANSRAdapter
+
+        best = Candidate(raw_beam=[7, 8, 9], expression=["pow", "x1", "<constant>"], expression_prefix=["pow", "x1", "2.31"],
+                         expression_infix="pow(x1, 2.31)", skeleton_prefix=["pow", "x1", "<constant>"], constants=[2.31],
+                         constants_emitted=[2.0], log_prob=-1.0, score=-15.0, fvu=0.0, n_nodes=3, mu=None, mdl=19443.0,
+                         constant_count=1, pruned_variant=False, pareto_rank=-1, rank=0,
+                         spelling="c0=/ 231 100", typed_frozen=0, typed_thaw="2")
+
+        class FakeModel:
+            numpy_errors = "ignore"
+
+            def infer(self, X, y, **kwargs):
+                return InferenceResult(candidates=[best], ledger=None, generation_time=0.1, refinement_time=0.2)
+
+        adapter = FlashANSRAdapter(FakeModel(), device="cpu", complexity="none", emission="fittable")
+        monkeypatch.setattr(adapter, "ranking_config", lambda: {"mode": "mdl"})
+        x = np.linspace(1.0, 5.0, 16).reshape(-1, 1)
+        sample = EvaluationSample(x_support=x, y_support=x[:, 0] ** 2.31, x_validation=np.empty((0, 1)), y_validation=np.empty((0,)),
+                                  metadata={"variable_names": ["x1"]})
+        record = adapter.evaluate_sample(sample).to_mapping() if hasattr(adapter.evaluate_sample(sample), "to_mapping") else adapter.evaluate_sample(sample).record
+        assert record["predicted_expression_prefix"] == ["pow", "x1", "2.31"]
+        assert record["predicted_typed_frozen"] == 0
+        assert record["predicted_typed_thaw"] == "2"
+        assert record["predicted_spelling"] == "c0=/ 231 100"
