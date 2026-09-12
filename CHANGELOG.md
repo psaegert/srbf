@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-09-12
+
+### Changed
+- **Evaluates flash-ansr 0.16** (`flash-ansr>=0.16,<0.17`). flash-ansr 0.16.0 keeps the numbers a
+  model predicts in a mixed emission (0.15.x post-processing deleted them from 72 % of valid
+  candidates) and defaults to `refiner_typed_spans='freeze_then_free'`, so every flash-ansr arm
+  evaluated under this srbf draws from a different candidate pool than under 0.16.x; results
+  across the two are not comparable, which is what the minor bump marks. Nothing in the driver,
+  the metrics or the judge changed.
+
 ### Added
 - **The diffsym worker** (`worker: diffsym`, `configs/evaluation/baselines/diffsym_fastsrb.yaml`):
   Mara Eliana's discrete diffusion model (D3PM) conditioned on the support set, run out of process in
