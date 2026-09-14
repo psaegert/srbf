@@ -20,6 +20,7 @@ import os
 import socket
 import subprocess
 import sys
+from typing import Any
 import time
 from pathlib import Path
 
@@ -29,7 +30,7 @@ from srbf.config import load_config, select_experiment
 from srbf.sweep import Sweep
 
 
-def _sweep_representer(dumper, data):
+def _sweep_representer(dumper: Any, data: Any) -> Any:
     body = {"values": list(data.values)}
     if data.name is not None:
         body = {"name": data.name, **body}
@@ -39,12 +40,12 @@ def _sweep_representer(dumper, data):
 yaml.add_representer(Sweep, _sweep_representer)
 
 
-def ladder_of(cfg, experiment: str) -> list[int]:
+def ladder_of(cfg: Any, experiment: str) -> list[int]:
     choices = select_experiment(cfg, experiment)["model_adapter"]["generation_overrides"]["kwargs"]["choices"]
     return [int(c) for c in getattr(choices, "values", choices)]
 
 
-def timing_config(cfg, experiments: list[str], data_dir: Path, model_name: str, model_path: str | None,
+def timing_config(cfg: Any, experiments: list[str], data_dir: Path, model_name: str, model_path: str | None,
                   refiner_workers: int | None) -> dict:
     import copy
 
@@ -95,11 +96,13 @@ def main() -> int:
         sys.exit("the config must define `experiments:` (one per catalog)")
     experiments = list(cfg["experiments"])
     if a.experiments:
-        wanted = a.experiments.split(","); experiments = [e for e in experiments if e in wanted]
+        wanted = a.experiments.split(",")
+        experiments = [e for e in experiments if e in wanted]
     ladder = [int(c) for c in a.rungs.split(",")] if a.rungs else ladder_of(cfg, experiments[0])
     data_dir = Path(a.data_dir)
     work = Path(a.root) / "timing" / a.model_name
-    marks = work / "marks"; marks.mkdir(parents=True, exist_ok=True)
+    marks = work / "marks"
+    marks.mkdir(parents=True, exist_ok=True)
     derived = timing_config(cfg, experiments, data_dir, a.model_name, a.model_path, a.refiner_workers)
     config_path = work / (Path(a.config).stem + ".timing.yaml")
     header = (f"# Timing ladder of {a.model_name} on the frozen subset {data_dir}; derived from {a.config} by "
@@ -115,18 +118,22 @@ def main() -> int:
         tag = f"{e}_{c:06d}"
         marker = marks / f"{tag}.done"
         if marker.exists():
-            skipped += 1; continue
+            skipped += 1
+            continue
         cmd = ["srbf", "run", "-c", str(config_path), "--experiment", e, "--sweep-filter", f"ladder={c}", "-v"]
         if a.dry_run:
-            print("  ", " ".join(cmd[1:])); continue
+            print("  ", " ".join(cmd[1:]))
+            continue
         t0 = time.time()
         with open(marks / f"{tag}.log", "a") as log:
             rc = subprocess.call(cmd, env=env, stdout=log, stderr=subprocess.STDOUT)
         print(time.strftime("%H:%M:%S"), f"{e} ladder={c} rc={rc} {time.time() - t0:.0f}s", flush=True)
         if rc == 0:
-            marker.write_text(time.strftime("%Y-%m-%dT%H:%M:%S\n")); done += 1
+            marker.write_text(time.strftime("%Y-%m-%dT%H:%M:%S\n"))
+            done += 1
         else:
-            (marks / f"{tag}.failed").write_text(f"{rc}\n"); failed += 1
+            (marks / f"{tag}.failed").write_text(f"{rc}\n")
+            failed += 1
     print(f"finished: {done} units run, {skipped} already done, {failed} failed", flush=True)
     return 1 if failed else 0
 

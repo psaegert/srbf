@@ -21,8 +21,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
+from typing import Any
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -33,7 +33,7 @@ from run_calibrated_ladder import catalog_size, parse_rule, subset_count  # noqa
 DEFAULT_RULE = "50:40,20:4,10:2"
 
 
-def _rows(problems) -> list[int]:
+def _rows(problems: Any) -> list[int]:
     rows = []
     for p in problems:
         r = (p.meta or {}).get("source_row_index")
@@ -43,7 +43,7 @@ def _rows(problems) -> list[int]:
     return rows
 
 
-def freeze_from_frozen(src: Path, experiment: str, n: int, out: Path, sampling) -> list[int]:
+def freeze_from_frozen(src: Path, experiment: str, n: int, out: Path, sampling: Any) -> list[int]:
     """The r-sweep's frozen catalog filtered to ``source_row_index % n == 0`` (n a multiple of its shard)."""
     from symbolic_data.catalog import ProblemCatalog, load_catalog
 
@@ -64,7 +64,7 @@ def freeze_from_frozen(src: Path, experiment: str, n: int, out: Path, sampling) 
     return _rows(keep)
 
 
-def freeze_from_source(cfg, experiment: str, n: int, out: Path, engine_ref: str) -> list[int]:
+def freeze_from_source(cfg: Any, experiment: str, n: int, out: Path, engine_ref: str) -> list[int]:
     """Fresh instances: shard 0 of n of the experiment's catalog source (the hybrid driver's freeze)."""
     from simplipy import SimpliPyEngine
     from srbf.config import build_catalog_source, select_experiment
@@ -88,7 +88,7 @@ def freeze_from_source(cfg, experiment: str, n: int, out: Path, engine_ref: str)
     return _rows(keep)
 
 
-def _save(catalog, out: Path) -> None:
+def _save(catalog: Any, out: Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = out.with_suffix(".tmp.npz")
     catalog.save(tmp)
@@ -102,12 +102,17 @@ def verify(out_dir: Path, manifest: dict) -> int:
     for e, m in manifest["catalogs"].items():
         path = out_dir / f"{e}.npz"
         if not path.exists():
-            print(f"  MISSING {path}"); bad += 1; continue
-        cat = load_catalog(str(path)); rows = _rows(cat.problems or [])
+            print(f"  MISSING {path}")
+            bad += 1
+            continue
+        cat = load_catalog(str(path))
+        rows = _rows(cat.problems or [])
         if rows != list(m["source_row_index"]):
-            print(f"  ROWS DIFFER {e}: file {len(rows)} rows, manifest {len(m['source_row_index'])}"); bad += 1
+            print(f"  ROWS DIFFER {e}: file {len(rows)} rows, manifest {len(m['source_row_index'])}")
+            bad += 1
         elif any(r % m["shard"] for r in rows):
-            print(f"  NOT A 1-IN-{m['shard']} SHARD {e}"); bad += 1
+            print(f"  NOT A 1-IN-{m['shard']} SHARD {e}")
+            bad += 1
     total = sum(m["count"] for m in manifest["catalogs"].values())
     print(f"{'OK' if not bad else 'FAILED'}: {len(manifest['catalogs'])} catalogs, {total} problems, {bad} problems found")
     return 1 if bad else 0
@@ -134,7 +139,8 @@ def main() -> int:
     cfg = load_run_config(a.config)
     experiments = list(cfg["experiments"])
     if a.experiments:
-        wanted = a.experiments.split(","); experiments = [e for e in experiments if e in wanted]
+        wanted = a.experiments.split(",")
+        experiments = [e for e in experiments if e in wanted]
     rule = parse_rule(a.subset_rule)
     sizes = {e: catalog_size(select_experiment(cfg, e)) for e in experiments}
     suite = sum(sizes.values())

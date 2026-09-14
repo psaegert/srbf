@@ -18,18 +18,20 @@ import argparse
 import json
 import pickle
 import sys
+from typing import Any
 from pathlib import Path
 
 import numpy as np
 
 
-def load_rung(root: Path, results_dir: str, model: str, catalogs: dict, rung: int, pattern: str, strict: bool):
+def load_rung(root: Path, results_dir: str, model: str, catalogs: dict, rung: int, pattern: str, strict: bool) -> Any:
     """Per catalog: arrays of fit / generation / refinement time (NaN where missing) in eval_row_index order."""
     out, missing_files, short = {}, [], []
     for e, m in catalogs.items():
         path = root / results_dir / model / e / pattern.format(rung=rung)
         if not path.exists():
-            missing_files.append(e); continue
+            missing_files.append(e)
+            continue
         with open(path, "rb") as fh:
             snap = pickle.load(fh)
         n = int(m["count"])
@@ -55,8 +57,10 @@ def load_rung(root: Path, results_dir: str, model: str, catalogs: dict, rung: in
 
 
 def weighted_quantile(values: np.ndarray, weights: np.ndarray, q: float) -> float:
-    order = np.argsort(values); v, w = values[order], weights[order]
-    cum = np.cumsum(w); cum /= cum[-1]
+    order = np.argsort(values)
+    v, w = values[order], weights[order]
+    cum = np.cumsum(w)
+    cum /= cum[-1]
     return float(v[np.searchsorted(cum, q)])
 
 
@@ -74,24 +78,40 @@ def boot_estimates(cols_by_cat: dict, weights: dict, draws: dict) -> dict:
     """Per replicate (``draws[e]``: a (B, n_e) matrix of row indices into catalog e): the pooled mean, the
     size-weighted median, the macro mean, the subset mean and the generation share, as length-B arrays."""
     B = next(iter(draws.values())).shape[0]
-    pooled = np.zeros(B); wsum = np.zeros(B); macro = np.zeros(B); n_cat = np.zeros(B)
-    gen = np.zeros(B); tot = np.zeros(B); cnt = np.zeros(B)
+    pooled = np.zeros(B)
+    wsum = np.zeros(B)
+    macro = np.zeros(B)
+    n_cat = np.zeros(B)
+    gen = np.zeros(B)
+    tot = np.zeros(B)
+    cnt = np.zeros(B)
     vals, wts = [], []
     for e, cols in cols_by_cat.items():
         t = cols["fit_time"][draws[e]]                       # (B, n_e)
-        ok = np.isfinite(t); k = ok.sum(axis=1)               # rows with a finite fit time per replicate
+        ok = np.isfinite(t)
+        k = ok.sum(axis=1)               # rows with a finite fit time per replicate
         m = np.where(k > 0, np.nansum(np.where(ok, t, 0.0), axis=1) / np.maximum(k, 1), np.nan)
-        w = weights[e]; has = k > 0
-        pooled[has] += w * m[has]; wsum[has] += w; macro[has] += m[has]; n_cat[has] += 1
-        tot[has] += np.nansum(np.where(ok, t, 0.0), axis=1)[has]; cnt[has] += k[has]
-        g = cols["generation_time"][draws[e]]; gok = ok & np.isfinite(g)
+        w = weights[e]
+        has = k > 0
+        pooled[has] += w * m[has]
+        wsum[has] += w
+        macro[has] += m[has]
+        n_cat[has] += 1
+        tot[has] += np.nansum(np.where(ok, t, 0.0), axis=1)[has]
+        cnt[has] += k[has]
+        g = cols["generation_time"][draws[e]]
+        gok = ok & np.isfinite(g)
         gm = np.where(gok.sum(axis=1) > 0, np.nansum(np.where(gok, g, 0.0), axis=1) / np.maximum(gok.sum(axis=1), 1), 0.0)
         gen[has] += w * gm[has]
-        vals.append(np.where(ok, t, np.nan)); wts.append(np.where(ok, w / np.maximum(k, 1)[:, None], 0.0))
-    V = np.concatenate(vals, axis=1); W = np.concatenate(wts, axis=1)   # (B, N)
+        vals.append(np.where(ok, t, np.nan))
+        wts.append(np.where(ok, w / np.maximum(k, 1)[:, None], 0.0))
+    V = np.concatenate(vals, axis=1)
+    W = np.concatenate(wts, axis=1)   # (B, N)
     order = np.argsort(np.where(np.isfinite(V), V, np.inf), axis=1)
-    Vs = np.take_along_axis(V, order, axis=1); Ws = np.take_along_axis(W, order, axis=1)
-    cum = np.cumsum(Ws, axis=1); cum /= np.maximum(cum[:, -1:], 1e-300)
+    Vs = np.take_along_axis(V, order, axis=1)
+    Ws = np.take_along_axis(W, order, axis=1)
+    cum = np.cumsum(Ws, axis=1)
+    cum /= np.maximum(cum[:, -1:], 1e-300)
     pos = (cum >= 0.5).argmax(axis=1)
     median = Vs[np.arange(B), pos]
     with np.errstate(invalid="ignore", divide="ignore"):
@@ -143,7 +163,8 @@ def main() -> int:
                 notes.append(f"{model} rung {rung}: partial files {' '.join(short)}")
             data[(model, rung)] = cols
 
-    report, dump = [], {"manifest": a.manifest, "n_boot": a.n_boot, "models": {}, "ratios": {}, "notes": notes}
+    report: list[str] = []
+    dump: dict[str, Any] = {"manifest": a.manifest, "n_boot": a.n_boot, "models": {}, "ratios": {}, "notes": notes}
     lines = report.append
     lines(f"# Timing read-out: {len(models)} models, {manifest['total_problems']} frozen problems, {a.n_boot} joint resamples\n")
     lines("Pooled mean = catalog means weighted by the full catalog sizes (target: the whole suite's pooled mean); "
@@ -161,7 +182,8 @@ def main() -> int:
             est = estimates(cols, weights, ident)
             bo = boot_estimates(cols, weights, draws)
             boot = np.stack([bo["pooled_mean"], bo["median"], bo["macro_mean"]], axis=1)
-            lo, hi = ci(boot[:, 0]); mlo, mhi = ci(boot[:, 1])
+            lo, hi = ci(boot[:, 0])
+            mlo, mhi = ci(boot[:, 1])
             rel = 100 * (hi - lo) / 2 / est["pooled_mean"] if est["pooled_mean"] > 0 else np.nan
             point[(model, rung)] = (est, boot[:, 0])
             lines(f"| {rung} | {est['n_ok']} / {est['n']} | {est['pooled_mean']:.3f} | [{lo:.3f}, {hi:.3f}] | {rel:.1f} | "
@@ -172,12 +194,14 @@ def main() -> int:
         # secondary: pooled time ~ a * draws^beta across the rungs measured for this model (log-log least squares)
         rs = [r for r in rungs if (model, r) in point]
         if len(rs) >= 3:
-            x = np.log(np.array(rs, float)); y = np.log(np.array([point[(model, r)][0]["pooled_mean"] for r in rs]))
+            x = np.log(np.array(rs, float))
+            y = np.log(np.array([point[(model, r)][0]["pooled_mean"] for r in rs]))
             A = np.vstack([np.ones_like(x), x]).T
             (la, beta), *_ = np.linalg.lstsq(A, y, rcond=None)
             Y = np.log(np.stack([point[(model, r)][1] for r in rs], axis=1))   # (B, n_rungs)
             bs = np.linalg.lstsq(A, Y.T, rcond=None)[0].T
-            alo, ahi = ci(np.exp(bs[:, 0])); blo, bhi = ci(bs[:, 1])
+            alo, ahi = ci(np.exp(bs[:, 0]))
+            blo, bhi = ci(bs[:, 1])
             resid = 100 * np.abs(np.exp(y) - np.exp(la + beta * x)) / np.exp(y)
             lines(f"\nPooled time ~ a * draws^beta over rungs {rs[0]}..{rs[-1]}: a = {np.exp(la):.3f} s [{alo:.3f}, {ahi:.3f}], "
                   f"beta = {beta:.3f} [{blo:.3f}, {bhi:.3f}]; worst rung residual {resid.max():.1f} % "
@@ -207,11 +231,13 @@ def main() -> int:
             lines(f"- {n}")
     text = "\n".join(report)
     if a.out:
-        Path(a.out).write_text(text + "\n"); print("wrote", a.out)
+        Path(a.out).write_text(text + "\n")
+        print("wrote", a.out)
     else:
         print(text)
     if a.json:
-        Path(a.json).write_text(json.dumps(dump, indent=1, default=float)); print("wrote", a.json)
+        Path(a.json).write_text(json.dumps(dump, indent=1, default=float))
+        print("wrote", a.json)
     return 0
 
 

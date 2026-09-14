@@ -16,6 +16,7 @@ import argparse
 from pathlib import Path
 
 import yaml
+from typing import Any
 
 CATALOGS = ["fastsrb", "feynman", "feynman-bonus", "nguyen", "keijzer", "korns", "koza", "livermore", "livermore2",
             "vladislavleva", "jin", "neat", "constant", "sine", "nonic", "pagie", "poly", "r-rationals", "grammarvae",
@@ -24,11 +25,11 @@ CATALOGS = ["fastsrb", "feynman", "feynman-bonus", "nguyen", "keijzer", "korns",
 
 
 class Sweep:
-    def __init__(self, name, values):
+    def __init__(self, name: str, values: Any) -> None:
         self.name, self.values = name, values
 
 
-def sweep_representer(dumper, data):
+def sweep_representer(dumper: Any, data: Any) -> Any:
     return dumper.represent_mapping("!sweep", {"name": data.name, "values": data.values})
 
 
@@ -85,11 +86,12 @@ def main() -> int:
         pysr = {"type": "pysr", "python": a.pysr_python, "simplipy_engine": a.engine, "timeout_in_seconds": 100000,
                 "niterations": 100, "model_selection": "best", "warmup": True, "startup_timeout": 1800, "timeout": 600}  # worker protocol timeout: a stalled PySR is a failed row either way; 7,200 s cost 2 h of wall on 2026-09-12
         if a.worker_log:
-            a_log = Path(a.worker_log); a_log.mkdir(parents=True, exist_ok=True)
+            a_log = Path(a.worker_log)
+            a_log.mkdir(parents=True, exist_ok=True)
             pysr["worker_log"] = str(a_log / f"{cat}.log")
         experiments[cat] = {
             "data_source": {"catalog": cat, "sampling": {"n_support": a.n_support, "n_validation": 512, "noise": 0.0,
-                                                          "problems_per_expression": 1}},
+                                                         "problems_per_expression": 1}},
             "model_adapter": {
                 "config_provenance": "author_blessed", "type": "flash_ansr_pysr",
                 "flash_ansr": flash, "pysr": pysr,

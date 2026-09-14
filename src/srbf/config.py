@@ -160,54 +160,68 @@ def _build_flash_ansr_adapter(config: Mapping[str, Any]) -> FlashANSRAdapter:
     reject_retired_ranking_keys(eval_cfg, where="model_adapter.evaluation_config (flash_ansr)", retired=_RETIRED_FLASH_ANSR_RANKING_KEYS)
     ranking = resolve_ranking_block(config, eval_cfg)
 
-    generation_config = create_generation_config(
-        method=generation_section["method"],
-        **generation_section.get("kwargs", {}),
-    )
+    generation_kwargs = dict(generation_section.get("kwargs", {}))
+    if "choices" in generation_kwargs:
+        raise ValueError(
+            "generation_config.kwargs.choices was renamed to `draws` (flash-ansr 0.17 / srbf 0.19): "
+            "the number of expressions drawn from the model per problem. Rename the key (and the "
+            "`choices` ladder in generation_overrides).")
+    method = str(generation_section["method"])
+    if method == "softmax_sampling":
+        # The emission FORMAT is a sampling policy of the decoder (flash-ansr 0.17): 'fittable'
+        # (default) spells the typed literals and leaves every fittable constant to the refiner.
+        generation_kwargs.setdefault("emission", emission)
+    generation_config = create_generation_config(method=method, **generation_kwargs)
+
+    # The estimator's policy in flash-ansr's config objects (0.17): the refiner, the ranking (resolved
+    # above, knob by knob for ITS mode), the compute. Keys keep srbf's spelling in the YAML.
+    refine: dict[str, Any] = {
+        "n_restarts": eval_cfg["n_restarts"],
+        "method": eval_cfg.get("refiner_method", "curve_fit_lm"),
+        "p0_noise": eval_cfg["refiner_p0_noise"],
+        "p0_noise_kwargs": eval_cfg.get("refiner_p0_noise_kwargs"),
+        # Which literals the refiner may move: 'fittable' (default; typed literals -- pow
+        # exponents, rootn indices -- stay as the model spelled them), 'placeholders' (only the
+        # <constant> slots) or 'all' (every literal).
+        "scope": config.get("refine_scope", eval_cfg.get("refine_scope", "fittable")),
+        "prune_constant_budget": eval_cfg.get("prune_constant_budget", 0),
+    }
+    if "refine_typed_spans" in config or "refine_typed_spans" in eval_cfg:
+        refine["typed_spans"] = config.get("refine_typed_spans", eval_cfg.get("refine_typed_spans"))
+    # The constant ladder: forwarded only when the config says something, so an absent key leaves
+    # flash-ansr's own default (on) in force; `false` turns it off.
+    if "constant_ladder" in config:
+        refine["constant_ladder"] = config["constant_ladder"]
+    elif "constant_ladder" in eval_cfg:
+        refine["constant_ladder"] = eval_cfg["constant_ladder"]
+    if "numpy_errors" in eval_cfg:
+        refine["numpy_errors"] = eval_cfg["numpy_errors"]
+
+    compute = {
+        "device": eval_cfg.get("device", config.get("device", "cpu")),
+        "workers": config.get("refiner_workers", eval_cfg.get("refiner_workers")),
+        # A persistent fork pool (forked pre-CUDA) lets the model overlap generation(N+1) with constant
+        # refinement(N) inside its own per-problem inference. Self-degrades to fully-serial inference if
+        # fork is unavailable or workers <= 1, so default-on is safe (quality unchanged). The benchmark
+        # driver stays a plain serial loop regardless -- the overlap is the MODEL's, not ours.
+        "persistent_pool": bool(config.get("persistent_refine_pool", eval_cfg.get("persistent_refine_pool", True))),
+    }
 
     model = FlashANSR.load(
         directory=substitute_root_path(str(model_path)),
         generation_config=generation_config,
-        n_restarts=eval_cfg["n_restarts"],
-        refiner_method=eval_cfg.get("refiner_method", "curve_fit_lm"),
-        refiner_p0_noise=eval_cfg["refiner_p0_noise"],
-        refiner_p0_noise_kwargs=eval_cfg.get("refiner_p0_noise_kwargs"),
-        # Which literals the refiner may move: 'fittable' (default; typed literals -- pow
-        # exponents, rootn indices -- stay as the model spelled them), 'placeholders' (only the
-        # <constant> slots) or 'all' (every literal). A model knob, so it rides on FlashANSR.load.
-        refiner_scope=config.get("refine_scope", eval_cfg.get("refine_scope", "fittable")),
-        # The constant ladder (flash-ansr `constant_ladder`): forwarded only when the config says
-        # something, so an absent key leaves flash-ansr's own default (on) in force; `false` turns it off.
-        **({"constant_ladder": config["constant_ladder"]} if "constant_ladder" in config
-           else ({"constant_ladder": eval_cfg["constant_ladder"]} if "constant_ladder" in eval_cfg else {})),
-        # The resolved ranking, knob by knob for ITS mode (the others stay None: the library
-        # refuses a knob of another mode rather than ignoring it).
-        ranking_mode=ranking.mode,
-        mdl_strength=ranking.mdl_strength,
-        ranking_weights=dict(ranking.weights) if ranking.mode == "weighted" else None,
-        ranking_metrics=ranking.metrics if ranking.mode == "pareto" else None,
-        ranking_tie_break=ranking.tie_break if ranking.mode == "pareto" else None,
-        device=eval_cfg.get("device", config.get("device", "cpu")),
-        refiner_workers=config.get("refiner_workers", eval_cfg.get("refiner_workers")),
-        prune_constant_budget=eval_cfg.get("prune_constant_budget", 0),
-        # A persistent fork pool (forked pre-CUDA) lets the model overlap generation(N+1) with constant
-        # refinement(N) inside its own per-problem inference. Self-degrades to fully-serial inference if
-        # fork is unavailable or refiner_workers <= 1, so default-on is safe (quality unchanged). The
-        # benchmark driver stays a plain serial loop regardless -- the overlap is the MODEL's, not ours.
-        persistent_refine_pool=bool(config.get("persistent_refine_pool",
-                                               eval_cfg.get("persistent_refine_pool", True))),
+        refine=refine,
+        ranking=ranking,
+        compute=compute,
     )
 
     complexity = config.get("complexity", eval_cfg.get("complexity", "none"))
     adapter_device = config.get("device", eval_cfg.get("device", "cpu"))
-    refiner_workers = config.get("refiner_workers", eval_cfg.get("refiner_workers"))
 
     return FlashANSRAdapter(
         model,
         device=adapter_device,
         complexity=complexity,
-        emission=emission,
-        refiner_workers=refiner_workers,
         # substitute_root_path like every other path field (output/model_path/...); without it a
         # {{ROOT}}-relative candidate_store_dir silently writes to a literal "{{ROOT}}/" dir (the capture
         # is best-effort/error-swallowing). Production used an absolute SCRATCH path so never hit this.

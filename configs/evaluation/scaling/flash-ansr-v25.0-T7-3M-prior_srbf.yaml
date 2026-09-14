@@ -36,7 +36,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -45,7 +45,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -88,7 +88,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -97,7 +97,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -140,7 +140,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -149,7 +149,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -192,7 +192,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -201,7 +201,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -244,7 +244,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -253,7 +253,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -296,7 +296,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -305,7 +305,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -348,7 +348,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -357,7 +357,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -400,7 +400,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -409,7 +409,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -452,7 +452,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -461,7 +461,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -504,7 +504,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -513,7 +513,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -556,7 +556,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -565,7 +565,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -608,7 +608,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -617,7 +617,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -660,7 +660,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -669,7 +669,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -712,7 +712,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -721,7 +721,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -764,7 +764,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -773,7 +773,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -816,7 +816,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -825,7 +825,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -868,7 +868,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -877,7 +877,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -920,7 +920,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -929,7 +929,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -972,7 +972,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -981,7 +981,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -1024,7 +1024,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -1033,7 +1033,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -1076,7 +1076,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -1085,7 +1085,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -1128,7 +1128,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -1137,7 +1137,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -1180,7 +1180,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -1189,7 +1189,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -1232,7 +1232,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -1241,7 +1241,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -1284,7 +1284,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -1293,7 +1293,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -1336,7 +1336,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -1345,7 +1345,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -1388,7 +1388,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -1397,7 +1397,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -1440,7 +1440,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -1449,7 +1449,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -1492,7 +1492,7 @@ experiments:
         generation_config:
           method: prior_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             unique: true
             valid_only: true
             decontaminate: true
@@ -1501,7 +1501,7 @@ experiments:
         device: cpu
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:

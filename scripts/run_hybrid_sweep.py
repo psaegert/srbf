@@ -22,6 +22,7 @@ import copy
 import os
 import subprocess
 import sys
+from typing import Any
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -35,7 +36,7 @@ from srbf.config import build_catalog_source, load_config, select_experiment  # 
 from srbf.sweep import Sweep  # noqa: E402
 
 
-def _sweep_representer(dumper, data):
+def _sweep_representer(dumper: Any, data: Any) -> Any:
     body = {"values": list(data.values)}
     if data.name is not None:
         body = {"name": data.name, **body}
@@ -45,7 +46,7 @@ def _sweep_representer(dumper, data):
 yaml.add_representer(Sweep, _sweep_representer)
 
 
-def freeze_subset(cfg, experiment: str, n: int, path: Path, engine_ref: str) -> int:
+def freeze_subset(cfg: Any, experiment: str, n: int, path: Path, engine_ref: str) -> int:
     """Materialize shard 0 of ``n`` of the experiment's catalog into a frozen catalog at ``path``
     (once: an existing file is reused). Returns the number of problems in the subset."""
     from simplipy import SimpliPyEngine
@@ -74,7 +75,7 @@ def freeze_subset(cfg, experiment: str, n: int, path: Path, engine_ref: str) -> 
     return len(problems)
 
 
-def frozen_config(cfg, experiments: list[str], data_dir: Path) -> dict:
+def frozen_config(cfg: Any, experiments: list[str], data_dir: Path) -> dict:
     """The run config with every experiment's data source pointed at its frozen subset."""
     out = copy.deepcopy(cfg)
     for e in experiments:
@@ -86,7 +87,7 @@ def frozen_config(cfg, experiments: list[str], data_dir: Path) -> dict:
     return out
 
 
-def _engine_ref(cfg, experiment: str) -> str:
+def _engine_ref(cfg: Any, experiment: str) -> str:
     """The simplipy engine the cells share (the PySR block's, which the config generator sets)."""
     adapter = select_experiment(cfg, experiment)["model_adapter"]
     return str((adapter.get("pysr") or {}).get("simplipy_engine") or adapter.get("simplipy_engine") or "acj-5-4-llm")
