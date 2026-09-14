@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-09-14
+
+### Changed
+- **flash-ansr 0.17 API.** The Flash-ANSR adapter is built from `refine`, `ranking` and `compute`
+  mappings (`FlashANSR.load(..., refine=, ranking=, compute=)`), the sampling policy from a
+  `SoftmaxSamplingConfig` / `PriorSamplingConfig` (`draws`, `emission`, ...), and every problem runs
+  through `model.fit(X, y, variable_names=..., draws=..., complexity=...)`; candidate curves and the
+  per-rank ledger are read from the returned `FitResult` (`result.predict(X, rank=...)`). Requires
+  `flash-ansr>=0.17,<0.18`.
+- **`draws` replaces `choices`** in every evaluation config (`configs/evaluation/scaling/*.yaml`,
+  `scripts/make_scaling_configs.py`); a config still spelling `choices` is refused with a `ValueError`.
+
 ## [0.18.0] - 2026-09-12
 
 ### Fixed

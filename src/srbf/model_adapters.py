@@ -65,23 +65,10 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         *,
         device: str = "cpu",
         complexity: str | list[int | float] | int | float = "none",
-        emission: str = "fittable",
-        refiner_workers: int | None = None,
         candidate_store_dir: str | None = None,
     ) -> None:
         self.model = model
         self.device = device
-        # The promptable emission FORMAT the model is directed to use. 'fittable' (default,
-        # the application mode -- owner ruling 2026-09-02) sends <mask_fittable>: the model
-        # spells the typed literals and leaves every fittable constant as a placeholder for the
-        # refiner; 'skeleton' sends <mask_all> so the refiner fits every slot from p0 noise;
-        # 'constants' is the unflagged training format (the model spells everything). Validated
-        # here for the same
-        # reason as `complexity`: a bad string must not wait for the first problem.
-        if emission not in ("constants", "skeleton", "fittable"):
-            raise ValueError(
-                f"emission must be 'constants', 'skeleton' or 'fittable'; got {emission!r}")
-        self.emission = emission
         # Fail fast on an unknown mode: a bad string would otherwise only surface on the first problem,
         # AFTER the (slow) model load. Keep the accepted strings in sync with `_resolve_complexity`.
         if isinstance(complexity, str) and complexity not in ("none", "ground_truth"):
@@ -90,7 +77,6 @@ class FlashANSRAdapter(EvaluationModelAdapter):
                 f"got {complexity!r}"
             )
         self.complexity = complexity
-        self.refiner_workers = refiner_workers
         # Save-all-candidates (thorough-tier quality shards only): when set, every problem's FULL
         # candidate ledger is streamed to a compact columnar store. Off (None) -> zero overhead, so
         # timing runs are untouched. The writer is created lazily on first capture. See STANDARD_EVAL.md
@@ -105,13 +91,12 @@ class FlashANSRAdapter(EvaluationModelAdapter):
     def ranking_config(self) -> dict[str, Any] | None:
         """The resolved candidate ranking in force (flash-ansr's ``RankingConfig.as_dict()``): what
         goes into ``__meta__`` and every per-sample row."""
-        fn = getattr(self.model, "ranking_config", None)
-        return fn() if callable(fn) else None
+        ranking = getattr(self.model, "ranking", None)
+        as_dict = getattr(ranking, "as_dict", None)
+        return dict(as_dict()) if callable(as_dict) else None
 
     def prepare(self, *, data_source: Any | None = None) -> None:  # type: ignore[override]
         self.model.to(self.device).eval()
-        if self.refiner_workers is not None:
-            self.model.refiner_workers = self.refiner_workers
 
         # Fail HERE, once, before the campaign starts -- not per problem inside _capture_ledger,
         # whose `except Exception: warnings.warn(...)` would turn a store that cannot represent
@@ -128,13 +113,12 @@ class FlashANSRAdapter(EvaluationModelAdapter):
             CandidateStoreWriter(probe, vocab_size=vocab_size, run_meta=self._store_run_meta()).close()
 
     def evaluate_sample(self, sample: EvaluationSample) -> EvaluationResult:
-        """Serial fit + evaluate via the model's own public inference API.
+        """Serial fit + evaluate via the model's one public verb.
 
-        ``FlashANSR.infer`` runs generation + constant refinement on one problem and returns an
-        ``InferenceResult`` (the best candidate + the full classified candidate ledger), so this
-        adapter is a THIN mapper -- no reaching into ``model._results`` / ``predict(nth_best_beam=...)``
-        / ``get_expression`` / a generate-refine phase split. ``np.errstate`` restores the model's
-        ``numpy_errors`` policy around the call (single-threaded; benign)."""
+        ``FlashANSR.fit`` runs generation + constant refinement on one problem and returns a
+        ``FitResult`` (the score-sorted candidates + the full classified candidate ledger), so this
+        adapter is a THIN mapper: it evaluates the candidates it needs through the result.
+        ``np.errstate`` restores the model's ``numpy_errors`` policy around the call."""
         record = sample.clone_metadata()
         record["ranking"] = self.ranking_config()
 
@@ -147,16 +131,10 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         fit_t0 = time.time()
         try:
             with np.errstate(all=numpy_errors) if numpy_errors is not None else nullcontext():
-                result = self.model.infer(
+                result = self.model.fit(
                     sample.x_support, y_fit,
                     variable_names=variable_names if variable_names is not None else "auto",
-                    X_val=x_val,
                     complexity=complexity_value,
-                    emission=self.emission,
-                    predict_val=True,
-                    # The save-all tier needs every candidate's predictions (per-candidate validation
-                    # FVU and recovery go into the store); timing runs keep the best-only path.
-                    top_k='all' if self.candidate_store_dir is not None else 1,
                 )
         except (ConvergenceError, OverflowError, TypeError, ValueError) as exc:
             record["error"] = str(exc)
@@ -198,22 +176,23 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         record["predicted_typed_thaw"] = getattr(best, "typed_thaw", None)
         record["predicted_spelling"] = getattr(best, "spelling", None)
 
-        y_pred = best.y_pred
-        y_pred_val = best.y_pred_val if best.y_pred_val is not None else np.empty_like(sample.y_validation)
-        record["y_pred"] = np.asarray(y_pred).copy() if y_pred is not None else np.empty_like(sample.y_support)
-        record["y_pred_val"] = np.asarray(y_pred_val).copy()
+        # The answer's curves, evaluated through the result (a candidate carries no predictions):
+        # the support set as fitted and the validation split when the sample has one.
+        record["y_pred"] = np.asarray(result.predict(sample.x_support), dtype=float).copy()
+        record["y_pred_val"] = (np.asarray(result.predict(x_val), dtype=float).copy()
+                                if x_val is not None else np.empty_like(sample.y_validation))
 
         return EvaluationResult(record)
 
     # ------------------------------------------------------------------
     def _capture_ledger(self, record: dict[str, Any], result: Any, sample: EvaluationSample | None = None) -> None:
-        """Stream this problem's FULL candidate ledger (from infer()) to the compact columnar store.
+        """Stream this problem's FULL candidate ledger (from fit()) to the compact columnar store.
 
-        The ledger is built by ``FlashANSR.infer`` (``result.ledger``: the generation pool U refined
+        The ledger is built by ``FlashANSR.fit`` (``result.ledger``: the generation pool U refined
         survivors, classified FIT_OK/FAILED/INVALID, with the ranking columns copied from the refined
-        rows). Per-candidate validation FVU and recovery are added HERE from each candidate's
-        ``y_pred`` / ``y_pred_val`` (``top_k='all'``) with the shared ``srbf.metrics.numeric``
-        definitions -- never a hand-rolled copy. Best-effort, keyed by the resume-stable
+        rows). Per-candidate validation FVU and recovery are added HERE by evaluating every fitted
+        candidate through the result (``result.predict(X, rank)``) with the shared
+        ``srbf.metrics.numeric`` definitions -- never a hand-rolled copy. Best-effort, keyed by the resume-stable
         ``eval_row_index`` the data source stamped on the sample; failures warn and are swallowed --
         candidate capture must never abort an eval row."""
         try:
@@ -246,16 +225,19 @@ class FlashANSRAdapter(EvaluationModelAdapter):
                 fvu_val = [float("nan")] * len(led)
                 rec_fit = [0] * len(led)
                 rec_val = [0] * len(led)
+                has_val = bool(sample.y_validation.size) and sample.x_validation.shape[0] > 0
                 for i, ri in enumerate(result_index):
                     if ri < 0:
                         continue
-                    cand = candidates[ri]
-                    if cand.y_pred is not None:
-                        rec_fit[i] = int(bool(_perfect(sample.y_support, np.asarray(cand.y_pred))))
-                    if cand.y_pred_val is not None and sample.y_validation.size:
-                        yv = np.asarray(cand.y_pred_val)
-                        fvu_val[i] = float(_fvu(sample.y_validation, yv))
-                        rec_val[i] = int(bool(_perfect(sample.y_validation, yv)))
+                    try:
+                        y_fit_pred = np.asarray(result.predict(sample.x_support, rank=int(ri)), dtype=float)
+                        rec_fit[i] = int(bool(_perfect(sample.y_support, y_fit_pred)))
+                        if has_val:
+                            yv = np.asarray(result.predict(sample.x_validation, rank=int(ri)), dtype=float)
+                            fvu_val[i] = float(_fvu(sample.y_validation, yv))
+                            rec_val[i] = int(bool(_perfect(sample.y_validation, yv)))
+                    except Exception:  # noqa: BLE001 - one unevaluable candidate must not lose the ledger
+                        continue
                 extra.update(fvu_val=fvu_val, recovery_fit=rec_fit, recovery_val=rec_val)
             self._candidate_store.write_problem(
                 int(problem_id), led.token_lists, led.fvu, led.log_prob,

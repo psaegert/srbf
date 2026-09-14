@@ -238,10 +238,8 @@ def _patch_flash_ansr(monkeypatch, captured):
             return SimpleNamespace()
 
     class DummyAdapter:
-        def __init__(self, model, device, complexity, refiner_workers, candidate_store_dir=None,
-                     emission="fittable"):
+        def __init__(self, model, device, complexity, candidate_store_dir=None):
             self.model = model
-            self.emission = emission
 
     monkeypatch.setattr(run_config, "create_generation_config", fake_create_generation_config)
     monkeypatch.setattr(run_config, "FlashANSR", FakeFlashANSR)
@@ -255,7 +253,7 @@ def test_build_flash_ansr_adapter_generation_overrides(tmp_path, monkeypatch):
         "refiner_p0_noise_kwargs": {"loc": 0.0, "scale": 1.0},
         "ranking": {"mode": "weighted", "weights": {"n_nodes": 0.2, "n_constants": 0.01}},
         "device": "cuda", "refiner_workers": None,
-        "generation_config": {"method": "softmax_sampling", "kwargs": {"choices": 8, "max_len": 16}}}}
+        "generation_config": {"method": "softmax_sampling", "kwargs": {"draws": 8, "max_len": 16}}}}
     eval_path = tmp_path / "evaluation.yaml"
     with eval_path.open("w", encoding="utf-8") as handle:
         yaml.safe_dump(eval_cfg, handle)
@@ -265,16 +263,16 @@ def test_build_flash_ansr_adapter_generation_overrides(tmp_path, monkeypatch):
 
     adapter = run_config.build_model_adapter(
         {"type": "flash_ansr", "model_path": str(tmp_path), "evaluation_config": str(eval_path),
-         "generation_overrides": {"kwargs": {"choices": 2}}}
+         "generation_overrides": {"kwargs": {"draws": 2}}}
     )
 
     assert isinstance(adapter, DummyAdapter)
     assert captured["method"] == "softmax_sampling"
-    assert captured["kwargs"]["choices"] == 2
-    assert captured["flash_ansr_gen"]["kwargs"]["choices"] == 2
-    assert captured["flash_ansr_kwargs"]["ranking_mode"] == "weighted"
-    assert captured["flash_ansr_kwargs"]["ranking_weights"] == {"n_nodes": 0.2, "n_constants": 0.01}
-    assert captured["flash_ansr_kwargs"]["mdl_strength"] is None
+    assert captured["kwargs"]["draws"] == 2
+    assert captured["flash_ansr_gen"]["kwargs"]["draws"] == 2
+    assert captured["flash_ansr_kwargs"]["ranking"].mode == "weighted"
+    assert dict(captured["flash_ansr_kwargs"]["ranking"].weights) == {"n_nodes": 0.2, "n_constants": 0.01}
+    assert captured["flash_ansr_kwargs"]["ranking"].mdl_strength is None
 
 
 def test_build_flash_ansr_adapter_inline_evaluation_config(monkeypatch):
@@ -285,7 +283,7 @@ def test_build_flash_ansr_adapter_inline_evaluation_config(monkeypatch):
         "n_restarts": 2, "refiner_method": "curve_fit_lm", "refiner_p0_noise": "normal",
         "refiner_p0_noise_kwargs": {"loc": 0.0, "scale": 1.0},
         "ranking": {"mode": "weighted", "weights": {"n_nodes": 0.15}}, "device": "cuda",
-        "generation_config": {"method": "softmax_sampling", "kwargs": {"choices": 4, "max_len": 16}}}
+        "generation_config": {"method": "softmax_sampling", "kwargs": {"draws": 4, "max_len": 16}}}
 
     adapter = run_config.build_model_adapter(
         {"type": "flash_ansr", "model_path": "./models/v23", "evaluation_config": inline_cfg,
@@ -293,15 +291,15 @@ def test_build_flash_ansr_adapter_inline_evaluation_config(monkeypatch):
     )
 
     assert isinstance(adapter, DummyAdapter)
-    assert captured["kwargs"]["choices"] == 4
-    assert captured["flash_ansr_kwargs"]["n_restarts"] == 2
-    assert captured["flash_ansr_kwargs"]["ranking_weights"] == {"n_nodes": 0.15}
+    assert captured["kwargs"]["draws"] == 4
+    assert captured["flash_ansr_kwargs"]["refine"]["n_restarts"] == 2
+    assert dict(captured["flash_ansr_kwargs"]["ranking"].weights) == {"n_nodes": 0.15}
 
 
 def _inline_eval_cfg(**extra):
     cfg = {"n_restarts": 2, "refiner_method": "curve_fit_lm", "refiner_p0_noise": "normal",
            "refiner_p0_noise_kwargs": {"loc": 0.0, "scale": 1.0}, "device": "cpu",
-           "generation_config": {"method": "softmax_sampling", "kwargs": {"choices": 4, "max_len": 16}}}
+           "generation_config": {"method": "softmax_sampling", "kwargs": {"draws": 4, "max_len": 16}}}
     cfg.update(extra)
     return cfg
 
@@ -340,9 +338,9 @@ def test_flash_ansr_adapter_ranking_block_replaces_the_evaluation_configs(monkey
         "ranking": {"mode": "pareto", "metrics": ["fvu", "mdl"], "tie_break": "n_nodes"},
     })
     kw = captured["flash_ansr_kwargs"]
-    assert kw["ranking_mode"] == "pareto"
-    assert kw["ranking_metrics"] == ("fvu", "mdl") and kw["ranking_tie_break"] == "n_nodes"
-    assert kw["ranking_weights"] is None and kw["mdl_strength"] is None
+    assert kw["ranking"].mode == "pareto"
+    assert kw["ranking"].metrics == ("fvu", "mdl") and kw["ranking"].tie_break == "n_nodes"
+    assert dict(kw["ranking"].weights) == {} and kw["ranking"].mdl_strength is None
 
 
 def test_flash_ansr_ranking_block_is_strict(monkeypatch):
@@ -562,7 +560,7 @@ def test_runs_from_config_expands_named_sweep(monkeypatch):
 
     cfg = {"run": {
         "data_source": {"catalog": "v23-val", "problems_per_expression": Sweep([10, 5], name="L")},
-        "model_adapter": {"type": "flash_ansr", "choices": Sweep([16, 256], name="L")},
+        "model_adapter": {"type": "flash_ansr", "draws": Sweep([16, 256], name="L")},
         "runner": {},
     }}
     benches = Benchmark.runs_from_config(cfg)
@@ -595,13 +593,13 @@ def test_build_flash_ansr_adapter_defaults_follow_the_doctrine(monkeypatch):
     # Owner ruling 2026-09-02: fittable emission + fittable refine scope unless a config says otherwise.
     captured = {}
     _patch_flash_ansr(monkeypatch, captured)
-    adapter = run_config.build_model_adapter(
+    run_config.build_model_adapter(
         {"type": "flash_ansr", "model_path": "/nowhere", "evaluation_config": {
             "n_restarts": 1, "refiner_p0_noise": "normal", "ranking": {"mode": "mdl"},
             "generation_config": {"method": "softmax_sampling", "kwargs": {}}}}
     )
-    assert adapter.emission == "fittable"
+    assert captured["kwargs"]["emission"] == "fittable"
     # and the default ranking resolves to the engineered mdl strength, stated in full
-    assert captured["flash_ansr_kwargs"]["ranking_mode"] == "mdl"
-    assert captured["flash_ansr_kwargs"]["mdl_strength"] == 1e-2
-    assert captured["flash_ansr_kwargs"]["refiner_scope"] == "fittable"
+    assert captured["flash_ansr_kwargs"]["ranking"].mode == "mdl"
+    assert captured["flash_ansr_kwargs"]["ranking"].mdl_strength == 1e-2
+    assert captured["flash_ansr_kwargs"]["refine"]["scope"] == "fittable"

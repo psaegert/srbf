@@ -201,29 +201,47 @@ def test_pysr_config_builds_a_worker_backed_adapter(monkeypatch):
 
 
 class TestEmissionConfig:
-    """The promptable emission format reaches the adapter and fails fast on bad values."""
+    """The promptable emission format is a sampling POLICY (flash-ansr 0.17): the builder puts the
+    adapter config's `emission` into the softmax generation config, 'fittable' by default."""
 
-    def test_emission_default_is_the_application_mode(self) -> None:
+    @staticmethod
+    def _generation_kwargs(monkeypatch, config_extra: dict) -> dict:
+        import srbf.config as cfg_mod
+        captured: dict = {}
+
+        class FakeModel:
+            simplipy_engine = object()
+
+        monkeypatch.setattr(cfg_mod.FlashANSR, "load", staticmethod(lambda **kwargs: FakeModel()))
+
+        def fake_create(method, **kwargs):
+            captured.update(method=method, **kwargs)
+            return object()
+
+        monkeypatch.setattr(cfg_mod, "create_generation_config", fake_create)
+        config = {"model_path": "/nowhere", "evaluation_config": {
+            "n_restarts": 2, "refiner_p0_noise": "normal", "ranking": {"mode": "mdl"},
+            "generation_config": {"method": "softmax_sampling", "kwargs": {"draws": 4}}}}
+        config.update(config_extra)
+        cfg_mod._build_flash_ansr_adapter(config)
+        return captured
+
+    def test_emission_default_is_the_application_mode(self, monkeypatch) -> None:
         # Owner ruling 2026-09-02: the model predicts the typed literals, the refiner fits
         # the placeholders -- <mask_fittable> is the default emission.
-        from srbf.model_adapters import FlashANSRAdapter
-        adapter = FlashANSRAdapter(object())
-        assert adapter.emission == "fittable"
+        assert self._generation_kwargs(monkeypatch, {})["emission"] == "fittable"
 
-    def test_emission_constants_is_still_selectable(self) -> None:
-        from srbf.model_adapters import FlashANSRAdapter
-        assert FlashANSRAdapter(object(), emission="constants").emission == "constants"
+    def test_emission_constants_is_still_selectable(self, monkeypatch) -> None:
+        assert self._generation_kwargs(monkeypatch, {"emission": "constants"})["emission"] == "constants"
 
-    def test_emission_skeleton_is_stored(self) -> None:
-        from srbf.model_adapters import FlashANSRAdapter
-        adapter = FlashANSRAdapter(object(), emission="skeleton")
-        assert adapter.emission == "skeleton"
+    def test_emission_skeleton_is_stored(self, monkeypatch) -> None:
+        assert self._generation_kwargs(monkeypatch, {"emission": "skeleton"})["emission"] == "skeleton"
 
     def test_emission_rejects_unknown_values_before_model_load(self) -> None:
         import pytest
-        from srbf.model_adapters import FlashANSRAdapter
+        from flash_ansr import SoftmaxSamplingConfig
         with pytest.raises(ValueError, match="emission"):
-            FlashANSRAdapter(object(), emission="masked")
+            SoftmaxSamplingConfig(emission="masked")
 
 
 class TestRefineScopeConfig:
@@ -253,14 +271,14 @@ class TestRefineScopeConfig:
         return captured
 
     def test_default_scope_is_fittable(self, monkeypatch) -> None:
-        assert self._build(monkeypatch, {})["refiner_scope"] == "fittable"
+        assert self._build(monkeypatch, {})["refine"]["scope"] == "fittable"
 
     def test_adapter_config_overrides_evaluation_config(self, monkeypatch) -> None:
         captured = self._build(monkeypatch, {"refine_scope": "placeholders"}, {"refine_scope": "all"})
-        assert captured["refiner_scope"] == "placeholders"
+        assert captured["refine"]["scope"] == "placeholders"
 
     def test_evaluation_config_sets_the_scope(self, monkeypatch) -> None:
-        assert self._build(monkeypatch, {}, {"refine_scope": "all"})["refiner_scope"] == "all"
+        assert self._build(monkeypatch, {}, {"refine_scope": "all"})["refine"]["scope"] == "all"
 
 
 class TestAnswerProvenanceColumns:
@@ -271,11 +289,12 @@ class TestAnswerProvenanceColumns:
 
     def test_rank0_provenance_lands_in_the_row(self, monkeypatch) -> None:
         import numpy as np
-        from flash_ansr.inference import Candidate, InferenceResult
+        from flash_ansr.inference import Candidate, FitResult
+        from flash_ansr.scoring import resolve_ranking
         from srbf.core import EvaluationSample
         from srbf.model_adapters import FlashANSRAdapter
 
-        best = Candidate(raw_beam=[7, 8, 9], expression=["pow", "x1", "<constant>"], expression_prefix=["pow", "x1", "2.31"],
+        best = Candidate(raw_beam=[7, 8, 9], expression=["pow", "x1", "<constant>"], slots=[2], expression_prefix=["pow", "x1", "2.31"],
                          expression_infix="pow(x1, 2.31)", skeleton_prefix=["pow", "x1", "<constant>"], constants=[2.31],
                          constants_emitted=[2.0], log_prob=-1.0, score=-15.0, fvu=0.0, n_nodes=3, mu=None, mdl=19443.0,
                          constant_count=1, pruned_variant=False, pareto_rank=-1, rank=0,
@@ -284,10 +303,12 @@ class TestAnswerProvenanceColumns:
         class FakeModel:
             numpy_errors = "ignore"
 
-            def infer(self, X, y, **kwargs):
-                return InferenceResult(candidates=[best], ledger=None, generation_time=0.1, refinement_time=0.2)
+            def fit(self, X, y, **kwargs):
+                return FitResult(candidates=[best], ledger=None, generation_time=0.1, refinement_time=0.2,
+                                 ranking=resolve_ranking("mdl"), n_variables=1)
 
-        adapter = FlashANSRAdapter(FakeModel(), device="cpu", complexity="none", emission="fittable")
+        monkeypatch.setattr(FitResult, "predict", lambda self, X, rank=0: np.zeros((np.asarray(X).shape[0], 1)))
+        adapter = FlashANSRAdapter(FakeModel(), device="cpu", complexity="none")
         monkeypatch.setattr(adapter, "ranking_config", lambda: {"mode": "mdl"})
         x = np.linspace(1.0, 5.0, 16).reshape(-1, 1)
         sample = EvaluationSample(x_support=x, y_support=x[:, 0] ** 2.31, x_validation=np.empty((0, 1)), y_validation=np.empty((0,)),

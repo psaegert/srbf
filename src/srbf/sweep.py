@@ -9,9 +9,9 @@ A ``!sweep`` YAML tag marks a value that varies across runs. Two forms:
   separate cross-product dimensions.
 
 So the default is a grid product; sharing an axis name collapses those sweeps into one zipped
-dimension. The scaling "choices ladder" is one named axis ``ladder`` carried by ``choices``,
+dimension. The scaling "draw ladder" is one named axis ``ladder`` carried by ``draws``,
 ``datasets_per_expression`` (a.k.a. ``problems_per_expression``), and the per-rung ``output`` path --
-all zipped -- giving N runs with matched (choices, draws, output) tuples and no spurious product.
+all zipped -- giving N runs with matched (draws, output) tuples and no spurious product.
 
 ``resolve_sweeps(config)`` expands a config into ``[(resolved_config, axis_labels), ...]``. The draw
 axis (``problems_per_expression``) is orthogonal: a sweep over hyperparameters never multiplies the
@@ -101,7 +101,7 @@ def resolve_sweeps(config: Mapping[str, Any]) -> list[tuple[dict[str, Any], dict
 
     Named axes zip (equal length required); anonymous axes form the cross-product. ``axis_labels``
     maps each axis name to the value that identifies the run on that axis: the value of the first
-    co-named sweep whose values differ from rung to rung (the ``choices`` ladder rather than a
+    co-named sweep whose values differ from rung to rung (the ``draws`` ladder rather than a
     ``problems_per_expression`` column that repeats ``10``), falling back to the first co-named
     sweep when none does. Anonymous axes are omitted from labels, since they have no stable name.
     A config with no sweeps yields a single ``(config, {})``.

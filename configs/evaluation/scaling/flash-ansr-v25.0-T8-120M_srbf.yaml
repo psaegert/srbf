@@ -36,7 +36,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -48,7 +48,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -91,7 +91,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -103,7 +103,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -146,7 +146,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -158,7 +158,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -201,7 +201,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -213,7 +213,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -256,7 +256,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -268,7 +268,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -311,7 +311,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -323,7 +323,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -366,7 +366,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -378,7 +378,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -421,7 +421,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -433,7 +433,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -476,7 +476,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -488,7 +488,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -531,7 +531,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -543,7 +543,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -586,7 +586,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -598,7 +598,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -641,7 +641,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -653,7 +653,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -696,7 +696,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -708,7 +708,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -751,7 +751,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -763,7 +763,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -806,7 +806,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -818,7 +818,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -861,7 +861,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -873,7 +873,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -916,7 +916,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -928,7 +928,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -971,7 +971,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -983,7 +983,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -1026,7 +1026,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -1038,7 +1038,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -1081,7 +1081,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -1093,7 +1093,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -1136,7 +1136,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -1148,7 +1148,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -1191,7 +1191,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -1203,7 +1203,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -1246,7 +1246,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -1258,7 +1258,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -1301,7 +1301,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -1313,7 +1313,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -1356,7 +1356,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -1368,7 +1368,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -1411,7 +1411,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -1423,7 +1423,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -1466,7 +1466,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -1478,7 +1478,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -1521,7 +1521,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -1533,7 +1533,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:
@@ -1576,7 +1576,7 @@ experiments:
         generation_config:
           method: softmax_sampling
           kwargs:
-            choices: 1024
+            draws: 1024
             top_k: 0
             top_p: 1
             max_len: 160
@@ -1588,7 +1588,7 @@ experiments:
         device: cuda
       generation_overrides:
         kwargs:
-          choices: !sweep
+          draws: !sweep
             name: ladder
             values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
     runner:

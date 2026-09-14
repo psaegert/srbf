@@ -165,21 +165,26 @@ def test_ranking_and_validation_columns_round_trip(tmp_path):
 
 
 def test_adapter_capture_computes_validation_metrics_from_every_candidate(tmp_path):
-    """top_k='all' gives every FIT_OK candidate its predictions; the adapter turns them into per-candidate
-    validation FVU and recovery with the shared srbf metrics, aligned through result_index."""
+    """The adapter evaluates every FIT_OK candidate through the result (``result.predict(X, rank)``) and
+    turns the curves into per-candidate validation FVU and recovery with the shared srbf metrics,
+    aligned through result_index."""
     from srbf.metrics.numeric import fvu, is_perfect_fit
     adapter = FlashANSRAdapter(_mock_model(), candidate_store_dir=str(tmp_path))
     y_sup = np.array([1.0, 2.0, 3.0])
     y_val = np.array([4.0, 5.0])
-    exact = types.SimpleNamespace(y_pred=y_sup.copy(), y_pred_val=y_val.copy())
-    off = types.SimpleNamespace(y_pred=y_sup + 0.5, y_pred_val=y_val + 1.0)
+    x_sup = np.arange(3.0).reshape(-1, 1)
+    x_val = np.arange(2.0).reshape(-1, 1) + 10.0
+    curves = {0: (y_sup.copy(), y_val.copy()), 1: (y_sup + 0.5, y_val + 1.0)}
+
+    def predict(X, rank=0):
+        return curves[rank][0] if X is x_sup else curves[rank][1]
     ledger = CandidateLedger(
         token_lists=[[1, 2], [3, 4], [5]], fvu=[0.0, 0.1, float("nan")], log_prob=[-1.0, -2.0, -3.0],
         valid=[1, 1, 0], fit_status=[FIT_OK, FIT_OK, INVALID], constants=[[], [], []],
         n_nodes=[2, 2, -1], n_constants=[0, 0, -1], mdl=[1.0, 2.0, float("nan")], score=[-9.0, -1.0, float("nan")],
         pareto_rank=[-1, -1, -1], rank=[0, 1, -1], result_index=[0, 1, -1])
-    result = types.SimpleNamespace(ledger=ledger, candidates=[exact, off])
-    sample = types.SimpleNamespace(y_support=y_sup, y_validation=y_val)
+    result = types.SimpleNamespace(ledger=ledger, candidates=[object(), object()], predict=predict)
+    sample = types.SimpleNamespace(x_support=x_sup, y_support=y_sup, x_validation=x_val, y_validation=y_val)
     adapter._capture_ledger({"eval_row_index": 9}, result, sample)
     block = next(iter(CandidateStoreReader(tmp_path)))
     np.testing.assert_array_equal(block["recovery_fit"], [1, 0, 0])
