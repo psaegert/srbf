@@ -31,7 +31,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -83,7 +82,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -135,7 +133,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -187,7 +184,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -239,7 +235,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -291,7 +286,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -343,7 +337,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -395,7 +388,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -447,7 +439,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -499,7 +490,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -551,7 +541,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -603,7 +592,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -655,7 +643,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -707,7 +694,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -759,7 +745,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -811,7 +796,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -863,7 +847,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -915,7 +898,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -967,7 +949,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -1019,7 +1000,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -1071,7 +1051,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -1123,7 +1102,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -1175,7 +1153,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -1227,7 +1204,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -1279,7 +1255,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -1331,7 +1306,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -1383,7 +1357,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -1435,7 +1408,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling
@@ -1487,7 +1459,6 @@ experiments:
           scale: 5
         ranking:
           mode: mdl
-          mdl_strength: 1.0e-2
         prune_constant_budget: 0
         generation_config:
           method: prior_sampling

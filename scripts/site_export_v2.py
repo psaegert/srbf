@@ -1,0 +1,376 @@
+"""Export a srbf benchmark release for the results site's explorer (results-site/explorer_v2.js), schema 2.
+
+Reads the per-law judged rows of a campaign root (rows_full_<method>.csv written by the full-metric readout:
+srbf's derive_metrics plus the 2026-07 site's derived columns, one row per law x rung) and writes
+
+  <out.js>                       window.RESULTS_V2: release, catalogs, rungs, methods, the METRIC REGISTRY, and per
+                                 method x catalog x rung cell: n laws, n successful, and for every metric
+                                 [n defined, n finite, sum, sum of squares] (rates: [hits, n]); status; timing.
+  <out dir>/hist/<metric>.js     per-metric histograms of the same cells (pooled medians and the distribution view),
+                                 loaded by the page on demand.
+  <out dir>/paired.js            draw-1 paired contrasts per method pair x catalog x rung: 2x2 tables for the rate
+                                 metrics (exact McNemar on the client), [n, sum d, sum d^2, wins, losses] for the
+                                 continuous ones.
+
+PUBLIC / PRIVATE SPLIT. Only the methods named in --public go into the release files the site ships. Methods
+named in --private are written to --private-dir ONLY (a directory outside the deployed tree; results-site/README.md
+"Local-only methods"): the public payload, page and repository carry no trace of them; the private overlay has the
+same schema and is merged by the page when a LOCAL build loads it.
+
+usage: site_export_v2.py <root> <release id> <out.js> [--title ...] [--notes ...] [--sizes suite_law_mu.json]
+       [--public e2e,nesymres-100M,...] [--private diffsym-v4.0 --private-dir results-site/private/2026-09]"""
+import argparse, csv, datetime as dt, glob, json, math, os, sys
+from collections import defaultdict
+import numpy as np
+
+# ---- registries -------------------------------------------------------------------------------------------------
+METHODS = [  # key, label, param, color, group, provenance, unit-file key
+    ("e2e", "E2E", "candidates per bag", "#2f6fd0", "baseline", "upstream_default", "e2e"),
+    ("nesymres-100M", "NeSymReS 100M", "beam width", "#e8842a", "baseline", "upstream_default", "nesymres"),
+    ("PySR", "PySR", "seconds", "#d62728", "baseline", "harness_tuned", None),
+    ("diffsym-v4.0", "diffsym v4.0", "samples", "#d6338f", "baseline", "author_blessed", "diffsym"),
+    ("T8-3M", "Flash-ANSR T8-3M", "draws", "#8fcf8a", "flash-ansr", "author_blessed", None),
+    ("T8-20M", "Flash-ANSR T8-20M", "draws", "#3e9b4a", "flash-ansr", "author_blessed", None),
+    ("T8-120M", "Flash-ANSR T8-120M", "draws", "#1b5e20", "flash-ansr", "author_blessed", None),
+    ("prior", "training prior", "draws", "#9a9a9a", "reference", "author_blessed", None)]
+RUNGS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
+E2E_DEFAULT_MAX_RUNG = 256   # E2E is reported at its default settings only (owner 2026-09-16)
+CATALOG_GROUPS = {
+    "physics": ["fastsrb", "feynman", "feynman-bonus", "srsd-dummy", "erbench-phybench", "erbench-densities", "physo-astro", "physo-class"],
+    "classical": ["nguyen", "keijzer", "korns", "koza", "livermore", "livermore2", "vladislavleva", "jin", "neat", "pagie", "poly", "nonic", "sine", "meier", "r-rationals", "constant", "grammarvae"],
+    "synthetic": ["erbench-syneq", "soose-fc", "soose-nc", "soose-wc"]}
+NB = 128
+
+# key, label, short, group, kind, higher_is_better (None = 1 is ideal / descriptive), tier, format, histogram (lo, hi, transform), description
+# Rate metrics are defined for EVERY law (a failed prediction is a miss). Continuous metrics cover successful predictions
+# only, except fit_time (every row with a time) and the ground-truth descriptors (every law).
+METRICS = [
+    ("numeric_recovery_val", "Numeric recovery (vNRR)", "vNRR", "Recovery", "rate", True, "main", "pct", None,
+     "Share of laws whose prediction reproduces the validation targets to float32 precision: FVU on the validation split at or below 2^-23. A failed prediction is a miss."),
+    ("symbolic_recovery", "Symbolic recovery (SRR)", "SRR", "Recovery", "rate", True, "main", "pct", None,
+     "Share of laws whose predicted expression has the same certified canonical form (SimpliPy, f64) as the law after both are simplified: structurally the same law, constants matched up to the judge's tolerance."),
+    ("numeric_recovery_fit", "Numeric recovery on support (fNRR)", "fNRR", "Recovery", "rate", True, "more", "pct", None,
+     "The float32-precision indicator on the support points the method was fitted on. fNRR above vNRR means fitting without generalizing."),
+    ("skeleton_match_raw", "Exact skeleton match (raw)", "raw match", "Recovery", "rate", True, "more", "pct", None,
+     "Share of laws whose predicted skeleton equals the law's skeleton token for token, without simplification: the 2026-07 site's symbolic recovery. Sensitive to spelling, kept for comparability."),
+    ("numeric_recovery_relative_val", "Relative numeric recovery (val)", "rel. vNRR", "Recovery", "rate", True, "more", "pct", None,
+     "Validation FVU at or below the catalog's own reference tolerance instead of the fixed float32 bar."),
+    ("numeric_recovery_relative_fit", "Relative numeric recovery (support)", "rel. fNRR", "Recovery", "rate", True, "more", "pct", None,
+     "Support FVU at or below the catalog's own reference tolerance."),
+    ("success", "Prediction success rate", "success", "Recovery", "rate", True, "more", "pct", None,
+     "Share of laws for which the method returned any evaluable expression at all: decoding, parsing, compiling and constant fitting completed."),
+    ("log10_fvu_val", "log10 FVU (validation)", "log10 FVU val", "Fit quality", "cont", False, "main", "num2", (-17.0, 3.0, None),
+     "Fraction of variance unexplained on the validation split, log10. -inf is a perfect fit and counts in the median; the mean is over finite values only."),
+    ("log10_fvu_fit", "log10 FVU (support)", "log10 FVU fit", "Fit quality", "cont", False, "more", "num2", (-17.0, 3.0, None),
+     "Fraction of variance unexplained on the support points, log10."),
+    ("r2_val", "R² (validation)", "R² val", "Fit quality", "cont", True, "more", "num3", (-1.0, 1.0, None),
+     "Coefficient of determination on the validation split. Values below -1 are pooled into the lowest bin of the distribution."),
+    ("r2_fit", "R² (support)", "R² fit", "Fit quality", "cont", True, "more", "num3", (-1.0, 1.0, None),
+     "Coefficient of determination on the support points."),
+    ("mdl_ratio", "MDL ratio (pred / law)", "MDL ratio", "Length and complexity", "cont", None, "main", "ratio", (-4.0, 4.0, "log2"),
+     "Description length of the prediction over the law's, both priced in the certified f64 canon (SimpliPy mu). 1 = as long as the law; the median is taken on the log2 scale."),
+    ("predicted_mdl", "Predicted description length (bits)", "pred. MDL", "Length and complexity", "cont", False, "more", "num1", (0.0, 256.0, None),
+     "Description length of the predicted expression in bits (SimpliPy mu, f64 canon)."),
+    ("expr_length_ratio", "Expression length ratio (pred / law)", "length ratio", "Length and complexity", "cont", None, "main", "ratio", (-4.0, 4.0, "log2"),
+     "Prefix-token length of the predicted skeleton over the simplified law's. 1 = same length; the median is taken on the log2 scale."),
+    ("expr_length_ratio_abserr", "Length ratio |log2| error", "|log2 ratio|", "Length and complexity", "cont", False, "more", "num2", (0.0, 4.0, None),
+     "Absolute log2 of the length ratio: 0 when the lengths match, 1 at twice or half the length."),
+    ("predicted_skeleton_prefix_length", "Predicted skeleton length", "pred. length", "Length and complexity", "cont", False, "more", "num1", (0.0, 64.0, None),
+     "Prefix-token length of the predicted skeleton."),
+    ("predicted_n_constants", "Predicted constant count", "pred. constants", "Length and complexity", "cont", False, "more", "num1", (0.0, 32.0, None),
+     "Number of fitted constants in the predicted skeleton."),
+    ("n_constants_ratio", "Constant-count ratio (pred / law)", "constants ratio", "Length and complexity", "cont", None, "more", "ratio", (-4.0, 4.0, "log2"),
+     "Predicted over true constant count, for laws with at least one constant; the median is taken on the log2 scale."),
+    ("n_constants_delta", "Constant-count delta (pred - law)", "constants delta", "Length and complexity", "cont", False, "more", "num1", (-16.0, 16.0, None),
+     "Predicted minus true constant count."),
+    ("predicted_total_nestedness", "Predicted unary nestedness", "pred. nesting", "Length and complexity", "cont", False, "more", "num1", (0.0, 16.0, None),
+     "Excess depth of directly nested unary operators in the prediction, summed over maximal chains: sin(log(x)) counts 1."),
+    ("total_nestedness_delta", "Unary-nestedness delta (pred - law)", "nesting delta", "Length and complexity", "cont", False, "more", "num1", (-8.0, 8.0, None),
+     "Predicted minus true unary nestedness."),
+    ("f1_score", "Skeleton token F1", "token F1", "Skeleton similarity", "cont", True, "more", "num3", (0.0, 1.0, None),
+     "Token-multiset F1 between the predicted skeleton and the simplified law's skeleton."),
+    ("precision_score", "Skeleton token precision", "token precision", "Skeleton similarity", "cont", True, "more", "num3", (0.0, 1.0, None),
+     "Share of predicted skeleton tokens that occur in the law's skeleton."),
+    ("recall_score", "Skeleton token recall", "token recall", "Skeleton similarity", "cont", True, "more", "num3", (0.0, 1.0, None),
+     "Share of the law's skeleton tokens that occur in the prediction."),
+    ("edit_distance_norm", "Skeleton edit distance (normalized)", "edit dist. norm", "Skeleton similarity", "cont", False, "more", "num3", (0.0, 1.0, None),
+     "Levenshtein distance between the prefix token sequences over the longer length, in [0, 1]."),
+    ("edit_distance", "Skeleton edit distance", "edit dist.", "Skeleton similarity", "cont", False, "more", "num1", (0.0, 64.0, None),
+     "Levenshtein distance between the prefix token sequences."),
+    ("zss_edit_distance", "Tree edit distance (ZSS)", "tree edit dist.", "Skeleton similarity", "cont", False, "more", "num1", (0.0, 128.0, None),
+     "Zhang-Shasha tree edit distance between the expression trees."),
+    ("f1_score_unique_variables", "Variable-set F1", "variables F1", "Skeleton similarity", "cont", True, "more", "num3", (0.0, 1.0, None),
+     "F1 between the sets of input variables the prediction and the law use."),
+    ("precision_unique_variables", "Variable-set precision", "variables prec.", "Skeleton similarity", "cont", True, "more", "num3", (0.0, 1.0, None),
+     "Share of the prediction's variables that the law uses."),
+    ("recall_unique_variables", "Variable-set recall", "variables recall", "Skeleton similarity", "cont", True, "more", "num3", (0.0, 1.0, None),
+     "Share of the law's variables that the prediction uses."),
+    ("predicted_log_prob", "Predicted log-probability", "log-prob", "Model internals", "cont", True, "more", "num1", (-64.0, 0.0, None),
+     "Log-probability of the selected candidate's token sequence under the model's decoder. Sampling methods only."),
+    ("predicted_score", "Selection score", "score", "Model internals", "cont", False, "more", "num1", (-2048.0, 512.0, None),
+     "The ranking score of the selected candidate as the method computed it (Flash-ANSR: the two-part code, lower is better). Only comparable within one method."),
+    ("predicted_pareto_rank", "Pareto rank of the selection", "Pareto rank", "Model internals", "cont", False, "more", "num1", (0.0, 64.0, None),
+     "Rank of the selected candidate on the method's FVU / length front (0 = on the front)."),
+    ("fit_time", "Per-problem fit time (s)", "fit time", "Cost", "cont", False, "more", "sec", (-2.0, 4.0, "log10"),
+     "Wall-clock seconds per problem as measured where the unit ran (mixed GPUs on the cluster). For like-for-like timing use the time axis, which comes from one reference machine."),
+    ("generation_time", "Per-problem generation time (s)", "generation time", "Cost", "cont", False, "more", "sec", (-2.0, 4.0, "log10"),
+     "Wall-clock seconds spent generating candidates, before refinement, where the method reports it."),
+    ("skeleton_length", "Law skeleton length", "law length", "Ground truth", "cont", None, "more", "num1", (0.0, 64.0, None),
+     "Prefix-token length of the simplified law: a property of the catalog, the same for every method."),
+    ("ground_truth_mdl", "Law description length (bits)", "law MDL", "Ground truth", "cont", None, "more", "num1", (0.0, 256.0, None),
+     "Description length of the law in bits (SimpliPy mu, f64 canon)."),
+    ("n_constants", "Law constant count", "law constants", "Ground truth", "cont", None, "more", "num1", (0.0, 32.0, None),
+     "Number of constants in the law's skeleton."),
+    ("total_nestedness", "Law unary nestedness", "law nesting", "Ground truth", "cont", None, "more", "num1", (0.0, 16.0, None),
+     "Excess depth of directly nested unary operators in the law."),
+    ("n_variables", "Law variable count", "law variables", "Ground truth", "cont", None, "more", "num1", (0.0, 16.0, None),
+     "Number of input variables the law uses.")]
+RATE_KEYS = [m[0] for m in METRICS if m[4] == "rate"]
+CONT_KEYS = [m[0] for m in METRICS if m[4] == "cont"]
+HIST_SPECS = {m[0]: m[8] for m in METRICS if m[8]}
+PAIRED_KEYS = ["numeric_recovery_val", "symbolic_recovery", "success", "log10_fvu_val", "r2_val", "mdl_ratio", "expr_length_ratio", "f1_score", "fit_time"]
+
+
+def registry_json():
+    out = []
+    for k, label, short, group, kind, higher, tier, fmt, hist, desc in METRICS:
+        m = {"key": k, "label": label, "short": short, "group": group, "kind": kind, "higher": higher, "tier": tier, "fmt": fmt, "desc": desc}
+        if hist:
+            m["hist"] = {"lo": hist[0], "hi": hist[1], "tf": hist[2]}
+        out.append(m)
+    return out
+
+
+# ---- reading rows -----------------------------------------------------------------------------------------------
+def fnum(s):
+    if s is None or s == "":
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def load_rows(root):
+    """{method: {(catalog, rung): {row: {metric: value}}}}, draw 1 only."""
+    data = defaultdict(lambda: defaultdict(dict))
+    files = sorted(set(glob.glob(os.path.join(root, "rows_full_*.csv")) + glob.glob(os.path.join(root, "*_rows_full.csv"))))
+    for path in files:
+        with open(path) as fh:
+            for r in csv.DictReader(fh):
+                if r.get("draw", "1") != "1":
+                    continue
+                vals = {}
+                for k in RATE_KEYS:
+                    v = fnum(r.get(k)); vals[k] = 0.0 if v is None else v
+                for k in CONT_KEYS:
+                    vals[k] = fnum(r.get(k))
+                data[r["model"]][(r["catalog"], int(r["rung"]))][int(r["row"])] = vals
+    return data
+
+
+def transform(v, tf):
+    if v is None or (isinstance(v, float) and math.isnan(v)):
+        return None
+    if tf == "log2":
+        return math.log2(v) if v > 0 else (-math.inf if v == 0 else None)
+    if tf == "log10":
+        return math.log10(v) if v > 0 else (-math.inf if v == 0 else None)
+    return v
+
+
+def hist_of(values, lo, hi):
+    """values already transformed; +-inf clipped into the edge bins; sparse [bin, count] pairs when few bins are used."""
+    v = np.asarray([x for x in values if x is not None], float)
+    v = v[~np.isnan(v)]
+    if v.size == 0:
+        return None
+    idx = np.clip(np.floor((np.clip(v, lo, hi) - lo) / (hi - lo) * NB).astype(int), 0, NB - 1)
+    h = np.bincount(idx, minlength=NB)
+    nz = np.nonzero(h)[0]
+    if nz.size <= NB // 4:
+        return [[int(i), int(h[i])] for i in nz]
+    return h.tolist()
+
+
+def summarize_cell(rows, expected):
+    vals = list(rows.values())
+    cell = {"state": "complete" if expected is None or len(rows) >= expected else "partial", "n": len(vals),
+            "ok": int(sum(1 for x in vals if x["success"])), "m": {}}
+    for k in RATE_KEYS:
+        cell["m"][k] = [int(sum(1 for x in vals if x[k])), len(vals)]
+    for k in CONT_KEYS:
+        xs = [x[k] for x in vals if x[k] is not None and not math.isnan(x[k])]
+        if not xs:
+            continue
+        fin = np.asarray([x for x in xs if math.isfinite(x)], float)
+        cell["m"][k] = [len(xs), int(fin.size), float(fin.sum()) if fin.size else 0.0, float((fin * fin).sum()) if fin.size else 0.0]
+    return cell
+
+
+def paired_cell(rows_a, rows_b):
+    common = sorted(set(rows_a) & set(rows_b))
+    if not common:
+        return None
+    out = {}
+    for k in PAIRED_KEYS:
+        if k in RATE_KEYS:
+            n11 = n10 = n01 = n00 = 0
+            for i in common:
+                a, b = bool(rows_a[i][k]), bool(rows_b[i][k])
+                if a and b: n11 += 1
+                elif a: n10 += 1
+                elif b: n01 += 1
+                else: n00 += 1
+            out[k] = [n11, n10, n01, n00]
+        else:
+            tf = HIST_SPECS[k][2] if k in HIST_SPECS else None
+            ds = []
+            for i in common:
+                a, b = transform(rows_a[i][k], tf), transform(rows_b[i][k], tf)
+                if a is None or b is None or not (math.isfinite(a) and math.isfinite(b)):
+                    continue
+                ds.append(a - b)
+            d = np.asarray(ds, float)
+            out[k] = [int(d.size), float(d.sum()) if d.size else 0.0, float((d * d).sum()) if d.size else 0.0, int((d > 0).sum()), int((d < 0).sum())]
+    return {"n": len(common), "m": out}
+
+
+# ---- status / catalogs / timing ---------------------------------------------------------------------------------
+def load_units(root, ukey, key):
+    for cand in ([os.path.join(root, f"units_{ukey}_d1.txt")] if ukey else []) + [os.path.join(root, "t8s1_units_draw1.txt")]:
+        if not os.path.exists(cand):
+            continue
+        n = 0
+        for line in open(cand):
+            p = line.split()
+            if not p:
+                continue
+            if ukey or p[0] == key or (len(p) > 1 and p[1] == key):
+                n += 1
+        if n:
+            return n
+    return None
+
+
+def status_of(root, key, ukey, cells_done):
+    total = load_units(root, ukey, key)
+    marks = os.path.join(root, "markers", f"{key}.txt")
+    done = sum(1 for line in open(marks) if line.strip()) if os.path.exists(marks) else cells_done
+    return [done, total if total is not None else (664 if not ukey else None)]
+
+
+def catalog_meta(sizes_path, present):
+    groups = {c: g for g, cs in CATALOG_GROUPS.items() for c in cs}
+    per = json.load(open(sizes_path)).get("per_catalog", {}) if sizes_path and os.path.exists(sizes_path) else {}
+    cats = []
+    for c in sorted(set(per) | set(present), key=lambda c: -(len(per.get(c, [])) or present.get(c, 0))):
+        mu = np.asarray(per.get(c, []), float)
+        cats.append({"key": c, "laws": int(mu.size) if mu.size else int(present.get(c, 0)), "group": groups.get(c, "other"),
+                     "mu": [round(float(np.percentile(mu, q)), 1) for q in (25, 50, 75)] if mu.size else None})
+    return cats
+
+
+def rel_base(out_dir, site_dir):
+    return os.path.relpath(out_dir, site_dir).replace(os.sep, "/") + "/"
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("root"); ap.add_argument("release"); ap.add_argument("out")
+    ap.add_argument("--title", default=None); ap.add_argument("--notes", default="")
+    ap.add_argument("--sizes", default=None)
+    ap.add_argument("--site-dir", default=None, help="results-site directory (default: two levels above out.js); base paths are relative to it")
+    ap.add_argument("--public", default=",".join(m[0] for m in METHODS if m[0] != "diffsym-v4.0"))
+    ap.add_argument("--private", default=""); ap.add_argument("--private-dir", default=None)
+    a = ap.parse_args()
+    public = [k for k in a.public.split(",") if k]
+    private = [k for k in a.private.split(",") if k]
+    known = {m[0] for m in METHODS}
+    for k in public + private:
+        if k not in known:
+            sys.exit(f"unknown method key {k!r}; add it to METHODS")
+    if set(public) & set(private):
+        sys.exit(f"a method cannot be both public and private: {sorted(set(public) & set(private))}")
+    if private and not a.private_dir:
+        sys.exit("--private needs --private-dir")
+    out_dir = os.path.dirname(os.path.abspath(a.out))
+    site_dir = os.path.abspath(a.site_dir) if a.site_dir else os.path.abspath(os.path.join(out_dir, "..", ".."))
+    data = load_rows(a.root)
+    present = defaultdict(int)
+    for mk in data:
+        for (c, r), rows in data[mk].items():
+            present[c] = max(present[c], len(rows))
+    cats = catalog_meta(a.sizes, present)
+    sizes = {c["key"]: c["laws"] for c in cats}
+
+    def usable(key, r):
+        return r in RUNGS and not (key == "e2e" and r > E2E_DEFAULT_MAX_RUNG)
+
+    def contrasts(pairs, paired):
+        for ka, kb in pairs:
+            for (c, r), rows_a in data.get(ka, {}).items():
+                rows_b = data.get(kb, {}).get((c, r))
+                if not rows_b or not usable(ka, r) or not usable(kb, r):
+                    continue
+                pc = paired_cell(rows_a, rows_b)
+                if pc:
+                    paired.setdefault(ka + "|" + kb, {}).setdefault(c, {})[str(r)] = pc
+
+    def build(keys, base):
+        methods = [m for m in METHODS if m[0] in keys]
+        cells, hists, status = {}, {k: {} for k in HIST_SPECS}, {}
+        for key, label, param, color, group, prov, ukey in methods:
+            cells[key] = {}
+            for (c, r), rows in sorted(data.get(key, {}).items()):
+                if not usable(key, r):
+                    continue
+                cells[key].setdefault(c, {})[str(r)] = summarize_cell(rows, sizes.get(c))
+                for hk, (lo, hi, tf) in HIST_SPECS.items():
+                    h = hist_of([transform(x[hk], tf) for x in rows.values()], lo, hi)
+                    if h is not None:
+                        hists[hk].setdefault(key, {}).setdefault(c, {})[str(r)] = h
+            status[key] = status_of(a.root, key, ukey, sum(len(v) for v in cells[key].values()))
+        paired = {}
+        mkeys = [m[0] for m in methods]
+        contrasts([(ka, kb) for i, ka in enumerate(mkeys) for kb in mkeys[i + 1:]], paired)
+        timing, timing_note = {}, ""
+        tpath = os.path.join(a.root, "timing.json")
+        if os.path.exists(tpath):
+            t = json.load(open(tpath)); timing = {k: v for k, v in t.items() if k in keys and isinstance(v, dict)}; timing_note = t.get("note", "")
+        payload = {"schema": 2, "base": base,
+                   "release": {"id": a.release, "title": a.title or a.release, "notes": a.notes, "generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                               "scoring": "candidates ranked by the two-part code (n/2 log2 FVU + description length in bits; flash-ansr 0.18, srbf 0.20)",
+                               "judge": "srbf derive_metrics: canonical-form judge (SimpliPy acj-5-4-llm, f64), float32-eps numeric recovery on 512 validation points"},
+                   "catalogs": cats, "rungs": RUNGS, "nb": NB, "metrics": registry_json(), "paired_keys": PAIRED_KEYS,
+                   "methods": [{"key": k, "label": l, "param": p, "color": col, "group": g, "provenance": prov} for k, l, p, col, g, prov, _ in methods],
+                   "cells": cells, "status": status, "timing": timing, "timing_note": timing_note}
+        return payload, hists, paired
+
+    def write_set(payload, hists, paired, out_js, out_dir, var, note):
+        os.makedirs(os.path.join(out_dir, "hist"), exist_ok=True)
+        with open(out_js, "w") as fh:
+            fh.write(f"window.{var} = " + json.dumps(payload, separators=(",", ":")) + ";\n")
+        rel = json.dumps(payload["release"]["id"])
+        for hk, per in hists.items():
+            lo, hi, _ = HIST_SPECS[hk]
+            with open(os.path.join(out_dir, "hist", hk + ".js"), "w") as fh:
+                fh.write("window.RESULTS_V2_HIST=window.RESULTS_V2_HIST||{};(function(){var R=window.RESULTS_V2_HIST;R[%s]=R[%s]||{};var H=R[%s];H[%s]=H[%s]||{lo:%s,hi:%s,nb:%d,cells:{}};Object.assign(H[%s].cells,%s);})();\n" % (
+                    rel, rel, rel, json.dumps(hk), json.dumps(hk), lo, hi, NB, json.dumps(hk), json.dumps(per, separators=(",", ":"))))
+        with open(os.path.join(out_dir, "paired.js"), "w") as fh:
+            fh.write("window.RESULTS_V2_PAIRED=window.RESULTS_V2_PAIRED||{};(function(){var R=window.RESULTS_V2_PAIRED;R[%s]=R[%s]||{};Object.assign(R[%s],%s);})();\n" % (
+                rel, rel, rel, json.dumps(paired, separators=(",", ":"))))
+        with_data = [k for k in payload["cells"] if payload["cells"][k]]
+        print(f"{note}: {out_js} ({os.path.getsize(out_js) // 1024} kB), hist/ {len(hists)} files, paired {len(paired)} pairs; methods with data: {with_data}; status {payload['status']}")
+
+    payload, hists, paired = build(public, rel_base(out_dir, site_dir))
+    write_set(payload, hists, paired, a.out, out_dir, "RESULTS_V2", f"public release {a.release}")
+    if private:
+        pdir = os.path.abspath(a.private_dir); os.makedirs(pdir, exist_ok=True)
+        ppayload, phists, ppaired = build(private, rel_base(pdir, site_dir))
+        contrasts([(ka, kb) for ka in private for kb in public], ppaired)   # private-vs-public contrasts stay private
+        write_set(ppayload, phists, ppaired, os.path.join(pdir, "results_v2_private.js"), pdir, "RESULTS_V2_PRIVATE", f"private overlay ({len(private)} method(s), never inside the deployed tree)")
+
+
+if __name__ == "__main__":
+    main()

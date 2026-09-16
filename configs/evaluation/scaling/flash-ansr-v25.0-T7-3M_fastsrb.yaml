@@ -30,7 +30,6 @@ run:
         scale: 5
       ranking:
         mode: mdl
-        mdl_strength: 1.0e-2  # decades of FVU per bit of the refined expression's description length
       prune_constant_budget: 0
       generation_config:
         method: softmax_sampling

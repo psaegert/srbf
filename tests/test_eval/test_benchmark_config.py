@@ -599,7 +599,8 @@ def test_build_flash_ansr_adapter_defaults_follow_the_doctrine(monkeypatch):
             "generation_config": {"method": "softmax_sampling", "kwargs": {}}}}
     )
     assert captured["kwargs"]["emission"] == "fittable"
-    # and the default ranking resolves to the engineered mdl strength, stated in full
+    # and the default ranking is flash-ansr's two-part code (0.18: mdl mode without a fixed weight)
     assert captured["flash_ansr_kwargs"]["ranking"].mode == "mdl"
-    assert captured["flash_ansr_kwargs"]["ranking"].mdl_strength == 1e-2
+    assert captured["flash_ansr_kwargs"]["ranking"].mdl_strength is None
+    assert captured["flash_ansr_kwargs"]["ranking"].two_part
     assert captured["flash_ansr_kwargs"]["refine"]["scope"] == "fittable"

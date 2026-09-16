@@ -5,7 +5,14 @@ here (the Helix draw ladders carry it); this is the protocol's time axis on the 
 
     FLASH_ANSR_ROOT=<root> CUDA_VISIBLE_DEVICES=0 python scripts/run_timing_ladder.py \\
         -c configs/evaluation/scaling/flash-ansr-v25.0-T8-20M_srbf.yaml --data-dir <root>/hybrid_data \\
-        --model-name t8-20m [--model-path DIR] [--rungs 1,2,4,...] [--experiments a,b] [--refiner-workers 16] [--dry-run]
+        --model-name t8-20m [--model-path DIR] [--rungs 1,2,4,...] [--experiments a,b] [--refiner-workers 16]
+        [--budget-hours 100] [--dry-run]
+
+Budget (owner 2026-09-16: 100 h per model row, no method gets more): rung-major, the wall time of every finished
+unit is recorded in its marker; before a rung starts, its cost is projected from the previous rung times the
+measured growth of the last two rungs (2x while only one rung is known); a rung whose projection does not fit
+in the remaining budget is skipped together with everything above it (marks/BUDGET_STOP records why). Every kept
+rung is measured on the whole subset.
 
 Writes <root>/timing/<model-name>/<config stem>.timing.yaml -- every experiment's data source pointed at its frozen
 file, model_path overridden when given (an RL checkpoint directory, say), refiner_workers pinned, outputs under
@@ -40,9 +47,52 @@ def _sweep_representer(dumper: Any, data: Any) -> Any:
 yaml.add_representer(Sweep, _sweep_representer)
 
 
+def _find_ladder(node: Any) -> Sweep | None:
+    if isinstance(node, Sweep):
+        return node if getattr(node, "name", None) == "ladder" else None
+    if isinstance(node, dict):
+        for value in node.values():
+            found = _find_ladder(value)
+            if found is not None:
+                return found
+    if isinstance(node, list):
+        for value in node:
+            found = _find_ladder(value)
+            if found is not None:
+                return found
+    return None
+
+
 def ladder_of(cfg: Any, experiment: str) -> list[int]:
-    choices = select_experiment(cfg, experiment)["model_adapter"]["generation_overrides"]["kwargs"]["choices"]
-    return [int(c) for c in getattr(choices, "values", choices)]
+    """The rung values of the experiment's `ladder` sweep, wherever it sits under `model_adapter`: the draw budget
+    of a flash-ansr config (generation_overrides.kwargs.draws) or a baseline's own compute axis
+    (candidates_per_bag / beam_width / n_samples), the first `ladder` sweep in config order."""
+    sweep = _find_ladder(select_experiment(cfg, experiment)["model_adapter"])
+    if sweep is None:
+        raise KeyError(f"experiment {experiment!r}: no sweep named `ladder` under model_adapter")
+    return [int(c) for c in sweep.values]
+
+
+def budget_decision(rung_seconds: dict[int, float], done_rungs: list[int], next_rung: int,
+                    budget_seconds: float | None) -> tuple[bool, str]:
+    """Whether `next_rung` may start under the budget. `rung_seconds` maps a rung to the wall time of its finished
+    units; `done_rungs` are the rungs finished completely so far, in ladder order."""
+    if budget_seconds is None:
+        return True, "no budget"
+    spent = sum(rung_seconds.values())
+    if spent >= budget_seconds:
+        return False, f"spent {spent / 3600:.1f} h >= budget {budget_seconds / 3600:.1f} h"
+    if not done_rungs:
+        return True, f"first rung; spent {spent / 3600:.1f} h"
+    last = rung_seconds.get(done_rungs[-1], 0.0)
+    growth = 2.0
+    if len(done_rungs) >= 2 and rung_seconds.get(done_rungs[-2], 0.0) > 0:
+        growth = max(1.0, last / rung_seconds[done_rungs[-2]])
+    projected = last * growth
+    if spent + projected > budget_seconds:
+        return False, (f"rung {next_rung} projected {projected / 3600:.1f} h (last rung {last / 3600:.1f} h x growth "
+                       f"{growth:.2f}) + spent {spent / 3600:.1f} h > budget {budget_seconds / 3600:.1f} h")
+    return True, f"rung {next_rung} projected {projected / 3600:.1f} h, spent {spent / 3600:.1f} h of {budget_seconds / 3600:.1f} h"
 
 
 def timing_config(cfg: Any, experiments: list[str], data_dir: Path, model_name: str, model_path: str | None,
@@ -83,6 +133,7 @@ def main() -> int:
     ap.add_argument("--refiner-workers", type=int, help="pin refiner_workers in every adapter block")
     ap.add_argument("--root", default=os.environ.get("FLASH_ANSR_ROOT"), help="FLASH_ANSR_ROOT (default: the environment)")
     ap.add_argument("--host", default="solomon", help="the reference machine; measuring elsewhere is refused")
+    ap.add_argument("--budget-hours", type=float, help="wall-time budget of this model row; rungs that do not fit are skipped")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
     if not a.root:
@@ -109,31 +160,60 @@ def main() -> int:
               f"scripts/run_timing_ladder.py; do not edit by hand.\n")
     config_path.write_text(header + yaml.dump(derived, sort_keys=False, width=200))
     plan = [(e, c) for c in ladder for e in experiments]
+    budget_s = a.budget_hours * 3600.0 if a.budget_hours else None
     print(f"{len(plan)} units: {len(experiments)} catalogs x {len(ladder)} rungs {ladder}; root {a.root}; host {host}; "
-          f"config {config_path}", flush=True)
+          f"config {config_path}; budget {a.budget_hours or 'none'} h", flush=True)
     env = dict(os.environ, PYTHONUNBUFFERED="1")
     env.setdefault("OMP_NUM_THREADS", "1")
+    rung_seconds: dict[int, float] = {}          # rung -> wall seconds of its finished units (this run and earlier ones)
+    for m in marks.glob("*.done"):
+        parts = m.read_text().split()
+        try:
+            rung_seconds[int(m.stem.rsplit("_", 1)[1])] = rung_seconds.get(int(m.stem.rsplit("_", 1)[1]), 0.0) + float(parts[1])
+        except (IndexError, ValueError):
+            pass                                  # a marker without seconds (older kit): unknown cost, counted as 0
     done = skipped = failed = 0
-    for e, c in plan:
-        tag = f"{e}_{c:06d}"
-        marker = marks / f"{tag}.done"
-        if marker.exists():
-            skipped += 1
+    done_rungs: list[int] = []
+    stopped = False
+    for c in ladder:
+        units = [(e, cc) for e, cc in plan if cc == c]
+        if all((marks / f"{e}_{c:06d}.done").exists() for e, _ in units):
+            skipped += len(units)
+            done_rungs.append(c)
             continue
-        cmd = ["srbf", "run", "-c", str(config_path), "--experiment", e, "--sweep-filter", f"ladder={c}", "-v"]
-        if a.dry_run:
-            print("  ", " ".join(cmd[1:]))
-            continue
-        t0 = time.time()
-        with open(marks / f"{tag}.log", "a") as log:
-            rc = subprocess.call(cmd, env=env, stdout=log, stderr=subprocess.STDOUT)
-        print(time.strftime("%H:%M:%S"), f"{e} ladder={c} rc={rc} {time.time() - t0:.0f}s", flush=True)
-        if rc == 0:
-            marker.write_text(time.strftime("%Y-%m-%dT%H:%M:%S\n"))
-            done += 1
-        else:
-            (marks / f"{tag}.failed").write_text(f"{rc}\n")
-            failed += 1
+        if not a.dry_run:
+            ok, why = budget_decision(rung_seconds, done_rungs, c, budget_s)
+            print(time.strftime("%H:%M:%S"), f"rung {c}: {why}", flush=True)
+            if not ok:
+                (marks / "BUDGET_STOP").write_text(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} stop before rung {c}: {why}\n")
+                stopped = True
+                break
+        for e, _ in units:
+            tag = f"{e}_{c:06d}"
+            marker = marks / f"{tag}.done"
+            if marker.exists():
+                skipped += 1
+                continue
+            cmd = ["srbf", "run", "-c", str(config_path), "--experiment", e, "--sweep-filter", f"ladder={c}", "-v"]
+            if a.dry_run:
+                print("  ", " ".join(cmd[1:]))
+                continue
+            t0 = time.time()
+            with open(marks / f"{tag}.log", "a") as log:
+                rc = subprocess.call(cmd, env=env, stdout=log, stderr=subprocess.STDOUT)
+            dt = time.time() - t0
+            print(time.strftime("%H:%M:%S"), f"{e} ladder={c} rc={rc} {dt:.0f}s", flush=True)
+            if rc == 0:
+                marker.write_text(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} {dt:.1f}\n")
+                rung_seconds[c] = rung_seconds.get(c, 0.0) + dt
+                done += 1
+            else:
+                (marks / f"{tag}.failed").write_text(f"{rc}\n")
+                failed += 1
+        if all((marks / f"{e}_{c:06d}.done").exists() for e, _ in units):
+            done_rungs.append(c)
+    if stopped:
+        print(f"budget stop: rungs measured {done_rungs}, spent {sum(rung_seconds.values()) / 3600:.1f} h", flush=True)
     print(f"finished: {done} units run, {skipped} already done, {failed} failed", flush=True)
     return 1 if failed else 0
 

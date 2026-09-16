@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-09-16
+
+### Changed
+- **flash-ansr 0.18: the two-part code is the ranking.** Pin `flash-ansr>=0.18,<0.19`. Every shipped
+  scaling config ranks with `ranking: {mode: mdl}` -- flash-ansr's two-part code
+  `(n/2) log2 FVU + bits` (the score study's S1, owner ruling 2026-09-16) -- instead of the fixed
+  `mdl_strength: 1.0e-2` (S0) they carried before; a config that still names `mdl_strength` runs
+  the fixed weight, so the old numbers stay reproducible on request. Result files record the
+  ranking as before (`mdl_strength: null` = the two-part code).
+
 ## [0.19.0] - 2026-09-14
 
 ### Changed

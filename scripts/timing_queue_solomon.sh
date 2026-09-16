@@ -2,14 +2,20 @@
 # The timing campaign on the reference machine (solomon), sequential, one unit at a time, box otherwise idle
 # (owner protocol 2026-09-13, flash-ansr-research/plans/srbf_timing_subset_protocol.md):
 #   1. freeze the 262-problem timing subset, nested in the hybrid r-sweep's frozen subset;
-#   2. timing ladders (every rung 1..65,536 on the subset) for the base models, and the RL rows when their
-#      checkpoints are named;
-#   3. hybrid T-curves at r* for T in {10, 100, 1000} s, every size (and the RL rows when named);
-#   4. PySR alone (the hybrid at ratio 1: all of the budget to PySR, the same clock) at the three budgets;
-#   5. the bootstrap read-out of the ladders.
+#   2. the baselines' timing ladders on the subset, in the owner's order of 2026-09-16: E2E (candidates_per_bag
+#      1..2048), NeSymReS (beam_width 1..512), diffsym (n_samples 1..128) -- E2E and NeSymReS in the legacy venv;
+#   3. PySR alone (the hybrid at ratio 1: all of the budget to PySR, the same clock) at the three budgets;
+#   4. ONLY WITH SCORING SET (the score study's ruling, owner 2026-09-16: "for our T8 series models we need to decide
+#      which scoring we use before we can evaluate them"): the T8 timing ladders (every rung 1..65,536) for the base
+#      models and the RL rows when named, then the hybrid T-curves at r* for T in {10, 100, 1000} s, every size;
+#   5. the bootstrap read-out of whatever ladders exist.
+# Budget (owner 2026-09-16): 100 h of wall time per model row (BUDGET_HOURS); a ladder skips every rung whose projected
+# cost would exceed it, so a slow method measures fewer rungs, never more hours. The hybrid cells are not gated
+# (PySR alone at the three budgets ~82 h, a model's three T-curves ~81 h, both under the cap by construction).
 # Never starts while the r-sweep runs; refuses any host but solomon; needs the GPU free; stops cleanly between
 # units when $R/STOP exists. Resumable: every step and unit leaves a marker. Runs detached:
-#   RSTAR=0.1 nohup bash scripts/timing_queue_solomon.sh > ~/srbf_clock_kit/timing/logs/queue.out 2>&1 &
+#   VENV=~/srbf_clock_kit/venv_timing nohup bash scripts/timing_queue_solomon.sh > ~/srbf_clock_kit/timing/logs/queue.out 2>&1 &
+#   (later, for the T8 rows: SCORING=<ruling> RSTAR=<r*> ... the same command; every finished unit is skipped)
 set -u
 K=${K:-$HOME/srbf_clock_kit}                 # the clock kit: venv, scripts, the r-sweep under $K/hybrid
 S=${S:-$K/scripts}
@@ -30,6 +36,18 @@ M3=${M3:-$K/models/flash-ansr-v25.0-T8-3M}
 M120=${M120:-$K/models/flash-ansr-v25.0-T8-120M}
 RL20=${RL20:-}; RL3=${RL3:-}; RL120=${RL120:-}     # RL checkpoint directories (empty: row skipped)
 PYSR_REPEATS=${PYSR_REPEATS:-1}
+# the baselines (owner's order 2026-09-16: e2e, nesymres, diffsym, pysr -- before any T8 row)
+VENV_LEGACY=${VENV_LEGACY:-$K/venv_legacy}              # srbf[baselines] + patched NeSymReS/E2E clones (build_solomon_baselines.sh)
+E2E_MODEL=${E2E_MODEL:-$HOME/Projects/flash-ansr/models/e2e/model1.pt}
+NESYMRES_DIR=${NESYMRES_DIR:-$HOME/Projects/flash-ansr/models/nesymres}   # eq_setting.json, config.yaml, 100M.ckpt
+DIFFSYM_PY=${DIFFSYM_PY:-$K/diffsym/.venv/bin/python}
+DIFFSYM_MODEL=${DIFFSYM_MODEL:-$K/models/diffsym-v4.0/best.pt}
+DIFFSYM_CFG=${DIFFSYM_CFG:-$K/diffsym/configs/v4.0}
+E2E_LADDER=${E2E_LADDER:-1,2,4,8,16,32,64,128,256}   # default settings only (owner 2026-09-16); extend after the 4090 memory probe
+NESYMRES_LADDER=${NESYMRES_LADDER:-1,2,4,8,16,32,128,512}
+DIFFSYM_LADDER=${DIFFSYM_LADDER:-1,2,4,8,16,32,64,128}
+SCORING=${SCORING:-}                         # the score study's ruling (e.g. S0 or S1); the T8 rows refuse to run without it
+BUDGET_HOURS=${BUDGET_HOURS:-100}            # owner 2026-09-16: 100 h per model row; rungs that do not fit are skipped (run_timing_ladder.py)
 
 export FLASH_ANSR_ROOT=$R PYTHONUNBUFFERED=1 OMP_NUM_THREADS=1 CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
 export PATH=$VENV/bin:$PATH
@@ -56,6 +74,13 @@ for m in M20:$M20 M3:$M3 M120:$M120; do
     [ -d "${m#*:}" ] && say "model ${m%%:*} = ${m#*:}" || say "WARNING: model ${m%%:*} missing at ${m#*:} (its rows are skipped)"
 done
 [ -d $SWEEP_DATA ] || die "no r-sweep frozen data at $SWEEP_DATA"
+if [ -x $VENV_LEGACY/bin/python ] && $VENV_LEGACY/bin/python -c 'import srbf, symbolicregression, nesymres' 2>/dev/null; then
+    say "legacy venv $VENV_LEGACY: $($VENV_LEGACY/bin/python -c 'import srbf, torch; print("srbf", srbf.__version__, "torch", torch.__version__, "cuda", torch.cuda.is_available())')"
+else say "WARNING: no usable legacy venv at $VENV_LEGACY (srbf + symbolicregression + nesymres); the E2E and NeSymReS rows are skipped"; fi
+[ -f "$E2E_MODEL" ] || say "WARNING: no E2E checkpoint at $E2E_MODEL (row skipped)"
+[ -f "$NESYMRES_DIR/100M.ckpt" ] || say "WARNING: no NeSymReS checkpoint under $NESYMRES_DIR (row skipped)"
+[ -x "$DIFFSYM_PY" ] && [ -f "$DIFFSYM_MODEL" ] || say "WARNING: diffsym env/model missing ($DIFFSYM_PY, $DIFFSYM_MODEL): row skipped"
+[ -n "$SCORING" ] && say "SCORING=$SCORING: the T8 rows run after the baselines" || say "SCORING unset: the T8 ladders and the hybrid T-curves wait for the score study's ruling"
 say "root $R rule $RULE rstar '${RSTAR}' budgets '$BUDGETS' k_seeds $K_SEEDS refiner_workers $REFINER_WORKERS pysr_repeats $PYSR_REPEATS"
 
 # ---- 1. the frozen timing subset ----------------------------------------------------------------------------------
@@ -66,26 +91,28 @@ if ! done_ freeze; then
     mark freeze
 fi
 
-# ---- 2. timing ladders ---------------------------------------------------------------------------------------------
-ladder() {   # name path config
-    local name=$1 path=$2 cfg=$3
-    [ -d "$path" ] || { say "skip ladder $name: no model at $path"; return 0; }
+# ---- 2. the baselines' timing ladders (owner's order 2026-09-16) ----------------------------------------------------
+baseline_ladder() {   # name config-generator-args... ; runs in $BL_PY (its venv on PATH), config under $R/configs
+    local name=$1; shift
     done_ ladder_$name && return 0
     stop_requested
-    say "ladder $name ($path) on $cfg"
-    $PY $S/run_timing_ladder.py -c $cfg --data-dir $R/hybrid_data --model-name $name --model-path $path \
-        --refiner-workers $REFINER_WORKERS --root $R 2>&1 | grep -v Warning | tee -a $LOG
+    local cfg=$R/configs/${name}_srbf.yaml
+    "$BL_PY" $S/make_baseline_config.py "$@" $cfg $BL_LADDER > /dev/null || { say "config generation for $name failed"; return 1; }
+    say "baseline ladder $name (ladder $BL_LADDER) on $cfg, python $BL_PY"
+    PATH=$(dirname $BL_PY):$PATH "$BL_PY" $S/run_timing_ladder.py -c $cfg --data-dir $R/hybrid_data --model-name $name \
+        --root $R --budget-hours $BUDGET_HOURS 2>&1 | grep -v Warning | tee -a $LOG
     ls $R/timing/$name/marks/*.failed > /dev/null 2>&1 && { say "ladder $name has failed units; not marked done"; return 1; }
     mark ladder_$name
 }
-ladder t8-20m  "$M20"  $CFG_DIR/flash-ansr-v25.0-T8-20M_srbf.yaml
-ladder t8-3m   "$M3"   $CFG_DIR/flash-ansr-v25.0-T8-3M_srbf.yaml
-ladder t8-120m "$M120" $CFG_DIR/flash-ansr-v25.0-T8-120M_srbf.yaml
-[ -n "$RL20" ]  && ladder rl-20m  "$RL20"  $CFG_DIR/flash-ansr-v25.0-T8-20M_srbf.yaml
-[ -n "$RL3" ]   && ladder rl-3m   "$RL3"   $CFG_DIR/flash-ansr-v25.0-T8-3M_srbf.yaml
-[ -n "$RL120" ] && ladder rl-120m "$RL120" $CFG_DIR/flash-ansr-v25.0-T8-120M_srbf.yaml
+if [ -x $VENV_LEGACY/bin/python ] && $VENV_LEGACY/bin/python -c 'import symbolicregression, nesymres' 2>/dev/null; then
+    [ -f "$E2E_MODEL" ] && BL_PY=$VENV_LEGACY/bin/python BL_LADDER=$E2E_LADDER baseline_ladder e2e e2e "$E2E_MODEL"
+    [ -f "$NESYMRES_DIR/100M.ckpt" ] && BL_PY=$VENV_LEGACY/bin/python BL_LADDER=$NESYMRES_LADDER baseline_ladder nesymres-100M nesymres "$NESYMRES_DIR"
+fi
+if [ -x "$DIFFSYM_PY" ] && [ -f "$DIFFSYM_MODEL" ]; then
+    BL_PY=$PY BL_LADDER=$DIFFSYM_LADDER baseline_ladder diffsym-v4.0 diffsym "$DIFFSYM_PY" "$DIFFSYM_MODEL" "$DIFFSYM_CFG"
+fi
 
-# ---- 3./4. hybrid T-curves at r* and PySR alone ---------------------------------------------------------------------
+# ---- 3. PySR alone (the hybrid at ratio 1; needs no r*) -----------------------------------------------------------
 hybrid_cell() {   # name model_path budget ratios
     local name=$1 path=$2 budget=$3 ratios=$4 HR=$R/hybrid/$1
     [ -d "$path" ] || { say "skip hybrid $name: no model at $path"; return 0; }
@@ -103,7 +130,41 @@ hybrid_cell() {   # name model_path budget ratios
     [ "$n_done" -ge 29 ] || { say "hybrid $name: only $n_done/29 cells done; not marked"; return 1; }
     mark hybrid_$name
 }
-if [ -n "$RSTAR" ]; then
+if $PY -c 'import flash_ansr_hybrid' 2>/dev/null; then
+    for T in $BUDGETS; do
+        for rep in $(seq 1 $PYSR_REPEATS); do
+            hybrid_cell pysr-T$T-r$rep "$M20" $T 1        # ratio 1: PySR gets the whole budget, the model is idle
+        done
+    done
+else say "flash_ansr_hybrid not importable: PySR-alone skipped"; fi
+
+# ---- 4. the T8 rows: only with the scoring ruling ------------------------------------------------------------------
+ladder() {   # name path config
+    local name=$1 path=$2 cfg=$3
+    [ -d "$path" ] || { say "skip ladder $name: no model at $path"; return 0; }
+    done_ ladder_$name && return 0
+    stop_requested
+    say "ladder $name ($path) on $cfg"
+    $PY $S/run_timing_ladder.py -c $cfg --data-dir $R/hybrid_data --model-name $name --model-path $path \
+        --refiner-workers $REFINER_WORKERS --root $R --budget-hours $BUDGET_HOURS 2>&1 | grep -v Warning | tee -a $LOG
+    ls $R/timing/$name/marks/*.failed > /dev/null 2>&1 && { say "ladder $name has failed units; not marked done"; return 1; }
+    mark ladder_$name
+}
+if [ -z "$SCORING" ]; then
+    say "SCORING unset: T8 ladders and hybrid T-curves not run (owner 2026-09-16: decide the scoring first)"
+else
+say "T8 rows under scoring ruling '$SCORING' (the scaling configs in $CFG_DIR must carry that ranking)"
+ladder t8-20m  "$M20"  $CFG_DIR/flash-ansr-v25.0-T8-20M_srbf.yaml
+ladder t8-3m   "$M3"   $CFG_DIR/flash-ansr-v25.0-T8-3M_srbf.yaml
+ladder t8-120m "$M120" $CFG_DIR/flash-ansr-v25.0-T8-120M_srbf.yaml
+[ -n "$RL20" ]  && ladder rl-20m  "$RL20"  $CFG_DIR/flash-ansr-v25.0-T8-20M_srbf.yaml
+[ -n "$RL3" ]   && ladder rl-3m   "$RL3"   $CFG_DIR/flash-ansr-v25.0-T8-3M_srbf.yaml
+[ -n "$RL120" ] && ladder rl-120m "$RL120" $CFG_DIR/flash-ansr-v25.0-T8-120M_srbf.yaml
+
+# ---- 4b. hybrid T-curves at r* --------------------------------------------------------------------------------------
+if [ -z "$RSTAR" ]; then
+    say "RSTAR unset: hybrid T-curves skipped (rerun with RSTAR=<r*> once the r-sweep is read)"
+else
     for T in $BUDGETS; do
         hybrid_cell hyb-20m-T$T  "$M20"  $T $RSTAR
         hybrid_cell hyb-3m-T$T   "$M3"   $T $RSTAR
@@ -112,19 +173,14 @@ if [ -n "$RSTAR" ]; then
         [ -n "$RL3" ]   && hybrid_cell hyb-rl-3m-T$T   "$RL3"   $T $RSTAR
         [ -n "$RL120" ] && hybrid_cell hyb-rl-120m-T$T "$RL120" $T $RSTAR
     done
-    for T in $BUDGETS; do
-        for rep in $(seq 1 $PYSR_REPEATS); do
-            hybrid_cell pysr-T$T-r$rep "$M20" $T 1        # ratio 1: PySR gets the whole budget, the model is idle
-        done
-    done
-else
-    say "RSTAR unset: hybrid T-curves and PySR-alone skipped (rerun with RSTAR=<r*> once the r-sweep is read)"
 fi
+fi   # SCORING
 
 # ---- 5. read-out --------------------------------------------------------------------------------------------------
 models=$(ls -d $R/results/evaluation/timing/*/ 2>/dev/null | xargs -n1 basename | grep -v '^smoke' | paste -sd,)
 if [ -n "$models" ]; then
-    $PY $S/timing_readout.py --root $R --manifest $R/hybrid_data/timing_subset.json --models $models --reference t8-20m \
+    ref=t8-20m; echo ",$models," | grep -q ",t8-20m," || ref=${models%%,*}
+    $PY $S/timing_readout.py --root $R --manifest $R/hybrid_data/timing_subset.json --models $models --reference $ref \
         --out $R/REPORT_ladders.md --json $R/REPORT_ladders.json 2>&1 | tail -2 | tee -a $LOG
 fi
 say "queue finished"

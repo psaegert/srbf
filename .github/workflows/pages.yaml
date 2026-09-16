@@ -28,6 +28,8 @@ jobs:
           node-version: 20
       - name: Copy lint (viewer-facing wording)
         run: python3 results-site/tests/copy_lint.py
+      - name: Public guard (no local-only methods in the deployed tree)
+        run: python3 results-site/tests/public_guard.py
       - name: Install Playwright
         working-directory: results-site/tests
         run: |

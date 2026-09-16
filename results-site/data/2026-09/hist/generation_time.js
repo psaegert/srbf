@@ -1,0 +1,1 @@
+window.RESULTS_V2_HIST=window.RESULTS_V2_HIST||{};(function(){var R=window.RESULTS_V2_HIST;R["2026-09"]=R["2026-09"]||{};var H=R["2026-09"];H["generation_time"]=H["generation_time"]||{lo:-2.0,hi:4.0,nb:128,cells:{}};Object.assign(H["generation_time"].cells,{});})();

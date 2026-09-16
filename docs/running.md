@@ -100,7 +100,7 @@ run:
       refiner_method: curve_fit_lm
       refiner_p0_noise: normal
       refiner_p0_noise_kwargs: {loc: 0.0, scale: 5}
-      ranking: {mode: mdl, mdl_strength: 1.0e-2}   # REQUIRED. mdl | weighted | pareto
+      ranking: {mode: mdl}                         # REQUIRED. mdl (the two-part code) | weighted | pareto
       generation_config:
         method: softmax_sampling
         kwargs: {choices: 1024, max_len: 160, batch_size: 128, temperature: 1, simplify: true}
