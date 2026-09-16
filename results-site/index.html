@@ -173,7 +173,15 @@
     </section>
 
     <section class="panel">
-      <div id="results-explorer" class="explorer">
+      <nav class="release-switch" id="release-switch" aria-label="Benchmark release">
+        <span class="release-label">Benchmark release</span>
+        <a href="?release=2026-09" data-release="2026-09">2026-09 · current</a>
+        <a href="?release=2026-07" data-release="2026-07">2026-07 · paper</a>
+      </nav>
+      <div id="results-explorer-v2" class="explorer-v2" hidden>
+        <div class="loading">Loading the results explorer…</div>
+      </div>
+      <div id="results-explorer" class="explorer" hidden>
         <div class="loading">Loading the results explorer…</div>
       </div>
     </section>
@@ -751,7 +759,31 @@
     </div>
   </footer>
 
+  <script>
+    // Benchmark release routing (client-side, no server): the newest release is the default; a deep link
+    // of the 2026-07 explorer (?view=, ?bench=, ?baseline=, ?metric=, ?budget=) or ?release=2026-07 selects it.
+    (function () {
+      var q = new URLSearchParams(window.location.search);
+      var v1 = ["view", "bench", "baseline", "metric", "budget"].some(function (k) { return q.has(k); });
+      var release = q.get("release") || (v1 ? "2026-07" : "2026-09");
+      if (release !== "2026-07" && release !== "2026-09") { release = "2026-09"; }
+      document.documentElement.setAttribute("data-release", release);
+      window.SRBF_RELEASE = release;
+    })();
+  </script>
+  <script src="data/2026-09/results.js" charset="utf-8"></script>
   <script src="results_data.js" charset="utf-8"></script>
+  <script src="explorer_v2.js" charset="utf-8"></script>
   <script src="explorer.js" charset="utf-8"></script>
+  <script>
+    (function () {
+      var release = window.SRBF_RELEASE || "2026-09";
+      document.getElementById("results-explorer-v2").hidden = release !== "2026-09";
+      document.getElementById("results-explorer").hidden = release !== "2026-07";
+      document.querySelectorAll("#release-switch a").forEach(function (a) {
+        a.setAttribute("aria-current", a.dataset.release === release ? "true" : "false");
+      });
+    })();
+  </script>
 </body>
 </html>
