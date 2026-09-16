@@ -189,6 +189,24 @@
     <section id="about" class="prose">
       <h2>About these numbers</h2>
 
+      <h3>Two benchmark releases</h3>
+      <p>
+        The switch above the explorer selects a release. <strong>2026-09 (current)</strong> is a
+        fresh <code>srbf</code> run: 29 catalogs and 6,660 laws, one problem per law with 512 support
+        and 512 validation points, one draw per problem so far. Candidates are ranked by the two-part
+        code (\(\tfrac{n}{2}\log_2 \operatorname{FVU}\) plus the description length in bits) and
+        judged by <code>srbf</code>'s canonical-form judge. E2E runs at its default settings, NeSymReS
+        with its released model, and PySR, the Flash-ANSR T8 series and the training prior appear as
+        their units finish; a time axis from one reference machine follows the first measurements.
+        Every metric of the 2026-07 release is available there under the same definition, plus
+        symbolic recovery in canonical form, the MDL ratio, R², relative recovery, variable-set
+        precision and recall, the Pareto rank and the generation time. Paired comparisons in 2026-09
+        are draw-1 contrasts on the same laws (exact McNemar for rates, paired t and sign tests
+        otherwise); the repeated-draw noise margins and the Ranks view described below belong to
+        <strong>2026-07 (paper)</strong> and return for 2026-09 once further draws exist. The rest of
+        this section describes the 2026-07 release.
+      </p>
+
       <h3>Provenance</h3>
       <p>
         The series on this page are re-scored through <a href="https://srbf.readthedocs.io/"
@@ -451,6 +469,22 @@
         \(|\tau|\) denotes the length of a skeleton in prefix tokens. Aggregation across problems
         works as described in <a href="#about">About these numbers</a>; the arrows note which
         direction is better.
+      </p>
+      <p>
+        The <strong>2026-09 release</strong> keeps every definition below and adds: <strong>symbolic
+        recovery (SRR)</strong>, the prediction has the same certified canonical form (SimpliPy, f64)
+        as the law after both are simplified, so the raw match below is its <em>exact skeleton match
+        (raw)</em>; the <strong>MDL ratio</strong>, the description length of the prediction over the
+        law's, both priced in that canon (1 = as long as the law); <strong>R²</strong> on the
+        validation and support points; <strong>relative numeric recovery</strong>, validation FVU at
+        or below the catalog's own reference tolerance instead of the fixed float32 bar;
+        <strong>variable-set F1, precision and recall</strong> over the input variables used;
+        the <strong>Pareto rank</strong> of the selected candidate on the method's FVU / length front;
+        the <strong>generation time</strong> before refinement; and the law's own length,
+        description length, constant count, nestedness and variable count as descriptors. Its
+        <em>selection score</em> is the ranking score the method itself computed (the two-part code
+        for Flash-ANSR). In the explorer every metric carries a one-sentence definition behind its
+        <code>?</code>.
       </p>
 
       <h3>Numeric fit</h3>

@@ -1,5 +1,6 @@
 // The 2026-09 release explorer (explorer_v2.js) and the release switch. Same philosophy as site.spec.mjs:
-// content renders, transitions land, no console errors, no horizontal overflow.
+// content renders, transitions land, no console errors, no horizontal overflow. Every view, the metric registry,
+// the lazily loaded histograms and paired contrasts, deep links, popovers, colours.
 import { test, expect } from '@playwright/test';
 
 function collectErrors(page) {
@@ -8,13 +9,20 @@ function collectErrors(page) {
   page.on('console', (msg) => { if (msg.type() === 'error') { errors.push(msg.text()); } });
   return errors;
 }
+const V2 = '#results-explorer-v2';
+const VIEWS = ['curves', 'table', 'matrix', 'dist', 'paired'];
+// the 2026-07 site's 21 metrics under their schema-2 keys: none may be missing from a release
+const LEGACY_METRICS = ['numeric_recovery_val', 'expr_length_ratio', 'log10_fvu_val', 'log10_fvu_fit', 'numeric_recovery_fit', 'success',
+  'skeleton_match_raw', 'f1_score', 'precision_score', 'recall_score', 'edit_distance_norm', 'zss_edit_distance', 'expr_length_ratio_abserr',
+  'predicted_skeleton_prefix_length', 'skeleton_length', 'n_constants_ratio', 'n_constants_delta', 'total_nestedness_delta', 'predicted_log_prob',
+  'predicted_score', 'fit_time'];
 
-test('the newest release is the default and renders its charts', async ({ page }) => {
+test('the newest release is the default and renders its curves', async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto('/');
-  await expect(page.locator('#results-explorer-v2')).toBeVisible();
+  await expect(page.locator(V2)).toBeVisible();
   await expect(page.locator('#results-explorer')).toBeHidden();
-  await expect(page.locator('#results-explorer-v2 svg.v2chart').first()).toBeVisible();
+  await expect(page.locator(V2 + ' svg.v2chart').first()).toBeVisible();
   await expect(page.locator('#release-switch a[aria-current="true"]')).toHaveAttribute('data-release', '2026-09');
   expect(errors).toEqual([]);
 });
@@ -24,43 +32,107 @@ test('the release switch reaches the 2026-07 explorer and back', async ({ page }
   await page.goto('/');
   await page.locator('#release-switch a[data-release="2026-07"]').click();
   await expect(page.locator('#results-explorer')).toBeVisible();
-  await expect(page.locator('#results-explorer-v2')).toBeHidden();
+  await expect(page.locator(V2)).toBeHidden();
   await expect(page.locator('#results-plot .main-svg').first()).toBeVisible();
   await page.locator('#release-switch a[data-release="2026-09"]').click();
-  await expect(page.locator('#results-explorer-v2 svg.v2chart').first()).toBeVisible();
+  await expect(page.locator(V2 + ' svg.v2chart').first()).toBeVisible();
   expect(errors).toEqual([]);
 });
 
 test('a 2026-07 deep link still opens the 2026-07 explorer', async ({ page }) => {
   await page.goto('/?view=curves&bench=FastSRB');
   await expect(page.locator('#results-explorer')).toBeVisible();
-  await expect(page.locator('#results-explorer-v2')).toBeHidden();
+  await expect(page.locator(V2)).toBeHidden();
+});
+
+test('the metric registry carries every 2026-07 metric and the new headline ones', async ({ page }) => {
+  await page.goto('/');
+  const keys = await page.evaluate(() => window.RESULTS_V2.metrics.map((m) => m.key));
+  for (const k of LEGACY_METRICS.concat(['symbolic_recovery', 'mdl_ratio', 'r2_val'])) { expect(keys, k).toContain(k); }
+  expect(keys.length).toBeGreaterThanOrEqual(24);
+  const count = await page.evaluate(() => document.querySelectorAll('#results-explorer-v2 .v2metric').length);
+  expect(count).toBe(keys.length);
+});
+
+for (const view of VIEWS) {
+  test(`the ${view} view renders from a deep link without errors or overflow`, async ({ page }) => {
+    const errors = collectErrors(page);
+    await page.goto(`/?release=2026-09&v=${view}&f=log10_fvu_val&r=32`);
+    await expect(page.locator(V2 + ' .v2tab.active')).toHaveAttribute('data-view', view);
+    const content = page.locator(V2 + ' .v2view svg.v2chart, ' + V2 + ' .v2view table');
+    await expect(content.first()).toBeVisible({ timeout: 15000 });
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+    expect(errors).toEqual([]);
+  });
+}
+
+test('pooled medians load their histograms on demand', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/?release=2026-09&v=table&p=log10_fvu_val,mdl_ratio&s=median');
+  await expect(page.locator(V2 + ' table')).toBeVisible();
+  await expect.poll(async () => page.evaluate(() => Object.keys((window.RESULTS_V2_HIST || {})['2026-09'] || {}).length), { timeout: 15000 }).toBeGreaterThanOrEqual(2);
+  await expect.poll(async () => (await page.locator(V2 + ' table tbody td').allTextContents()).filter((t) => /^-?\d/.test(t.trim())).length, { timeout: 15000 }).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});
+
+test('the paired view loads its contrasts and shows a baseline selector', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/?release=2026-09&v=paired&p=numeric_recovery_val');
+  await expect(page.locator(V2 + ' select.v2base')).toBeVisible({ timeout: 15000 });
+  await expect.poll(async () => page.evaluate(() => Object.keys((window.RESULTS_V2_PAIRED || {})['2026-09'] || {}).length), { timeout: 15000 }).toBeGreaterThanOrEqual(1);
+  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toBeVisible();
+  expect(errors).toEqual([]);
 });
 
 test('catalog and method controls change the pooled charts', async ({ page }) => {
   const errors = collectErrors(page);
-  await page.goto('/');
-  const count = page.locator('#results-explorer-v2 .v2catcount');
+  await page.goto('/?release=2026-09&v=curves');
+  const count = page.locator(V2 + ' .v2catcount');
   const before = await count.textContent();
-  await page.locator('#results-explorer-v2 button[data-act="phys"]').click();
+  await page.locator(V2 + ' button[data-act="phys"]').click();
   await expect(count).not.toHaveText(before);
-  await page.locator('#results-explorer-v2 button[data-act="none"]').click();
-  await expect(page.locator('#results-explorer-v2 svg.v2chart').first()).toContainText('no catalog selected');
-  await page.locator('#results-explorer-v2 button[data-act="reset"]').click();
+  await page.locator(V2 + ' button[data-act="none"]').click();
+  await expect(page.locator(V2 + ' svg.v2chart').first()).toContainText('no catalog selected');
+  await page.locator(V2 + ' button[data-act="all"]').click();
   await expect(count).toHaveText(before);
   expect(errors).toEqual([]);
 });
 
+test('the view state round-trips through the URL', async ({ page }) => {
+  await page.goto('/?release=2026-09&v=matrix&f=mdl_ratio&r=16&c=phys&s=mean&pool=own&ci=0');
+  await expect(page.locator(V2 + ' .v2tab.active')).toHaveAttribute('data-view', 'matrix');
+  await expect(page.locator(V2 + ' select.v2focus')).toHaveValue('mdl_ratio');
+  await expect(page.locator(V2 + ' select.v2rung')).toHaveValue('16');
+  await expect(page.locator(V2 + ' input[name="v2stat"][value="mean"]')).toBeChecked();
+  await expect(page.locator(V2 + ' input[name="v2pool"][value="own"]')).toBeChecked();
+  await expect(page.locator(V2 + ' .v2ci')).not.toBeChecked();
+  await expect(page.locator(V2 + ' .v2catcount')).toContainText('8 of');
+  await page.locator(V2 + ' .v2tab[data-view="table"]').click();
+  expect(page.url()).toContain('v=table');
+});
+
+test('terms and metric help open a floating explanation', async ({ page }) => {
+  await page.goto('/?release=2026-09&v=curves');
+  await page.locator(V2 + ' .v2help').first().click();
+  await expect(page.locator('.v2pop')).toBeVisible();
+  await expect(page.locator('.v2pop')).toContainText('Share of laws');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.v2pop')).toHaveCount(0);
+  await page.locator(V2 + ' .v2panel .v2term[data-term="matched"]').first().click();
+  await expect(page.locator('.v2pop')).toContainText('Matched pooling');
+});
+
 test('the time axis is offered only with reference-machine measurements', async ({ page }) => {
   await page.goto('/');
-  const radio = page.locator('#results-explorer-v2 input.v2xtime');
-  const hasTiming = await page.evaluate(() => Object.keys((window.RESULTS_V2 || {}).timing || {}).length > 0);
+  const radio = page.locator(V2 + ' input.v2xtime');
+  const hasTiming = await page.evaluate(() => Object.keys((window.RESULTS_V2 || {}).timing || {}).some((k) => Object.keys(window.RESULTS_V2.timing[k]).length));
   if (hasTiming) { await expect(radio).toBeEnabled(); } else { await expect(radio).toBeDisabled(); }
 });
 
-test('no horizontal page overflow on the 2026-09 release', async ({ page }) => {
+test('the public page carries no private overlay', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('#results-explorer-v2 svg.v2chart').first()).toBeVisible();
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  expect(overflow).toBeLessThanOrEqual(0);
+  expect(await page.evaluate(() => typeof window.RESULTS_V2_PRIVATE)).toBe('undefined');
+  const html = await page.content();
+  expect(html).not.toContain('private/');
 });

@@ -1,0 +1,1 @@
+window.RESULTS_V2_HIST=window.RESULTS_V2_HIST||{};(function(){var R=window.RESULTS_V2_HIST;R["2026-09"]=R["2026-09"]||{};var H=R["2026-09"];H["predicted_pareto_rank"]=H["predicted_pareto_rank"]||{lo:0.0,hi:64.0,nb:128,cells:{}};Object.assign(H["predicted_pareto_rank"].cells,{});})();
