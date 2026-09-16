@@ -9,6 +9,9 @@
 #      which scoring we use before we can evaluate them"): the T8 timing ladders (every rung 1..65,536) for the base
 #      models and the RL rows when named, then the hybrid T-curves at r* for T in {10, 100, 1000} s, every size;
 #   5. the bootstrap read-out of whatever ladders exist.
+# Budget (owner 2026-09-16): 100 h of wall time per model row (BUDGET_HOURS); a ladder skips every rung whose projected
+# cost would exceed it, so a slow method measures fewer rungs, never more hours. The hybrid cells are not gated
+# (PySR alone at the three budgets ~82 h, a model's three T-curves ~81 h, both under the cap by construction).
 # Never starts while the r-sweep runs; refuses any host but solomon; needs the GPU free; stops cleanly between
 # units when $R/STOP exists. Resumable: every step and unit leaves a marker. Runs detached:
 #   VENV=~/srbf_clock_kit/venv_timing nohup bash scripts/timing_queue_solomon.sh > ~/srbf_clock_kit/timing/logs/queue.out 2>&1 &
@@ -44,6 +47,7 @@ E2E_LADDER=${E2E_LADDER:-1,2,4,8,16,32,64,128,256,512,1024,2048}
 NESYMRES_LADDER=${NESYMRES_LADDER:-1,2,4,8,16,32,128,512}
 DIFFSYM_LADDER=${DIFFSYM_LADDER:-1,2,4,8,16,32,64,128}
 SCORING=${SCORING:-}                         # the score study's ruling (e.g. S0 or S1); the T8 rows refuse to run without it
+BUDGET_HOURS=${BUDGET_HOURS:-100}            # owner 2026-09-16: 100 h per model row; rungs that do not fit are skipped (run_timing_ladder.py)
 
 export FLASH_ANSR_ROOT=$R PYTHONUNBUFFERED=1 OMP_NUM_THREADS=1 CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
 export PATH=$VENV/bin:$PATH
@@ -96,7 +100,7 @@ baseline_ladder() {   # name config-generator-args... ; runs in $BL_PY (its venv
     "$BL_PY" $S/make_baseline_config.py "$@" $cfg $BL_LADDER > /dev/null || { say "config generation for $name failed"; return 1; }
     say "baseline ladder $name (ladder $BL_LADDER) on $cfg, python $BL_PY"
     PATH=$(dirname $BL_PY):$PATH "$BL_PY" $S/run_timing_ladder.py -c $cfg --data-dir $R/hybrid_data --model-name $name \
-        --root $R 2>&1 | grep -v Warning | tee -a $LOG
+        --root $R --budget-hours $BUDGET_HOURS 2>&1 | grep -v Warning | tee -a $LOG
     ls $R/timing/$name/marks/*.failed > /dev/null 2>&1 && { say "ladder $name has failed units; not marked done"; return 1; }
     mark ladder_$name
 }
@@ -142,7 +146,7 @@ ladder() {   # name path config
     stop_requested
     say "ladder $name ($path) on $cfg"
     $PY $S/run_timing_ladder.py -c $cfg --data-dir $R/hybrid_data --model-name $name --model-path $path \
-        --refiner-workers $REFINER_WORKERS --root $R 2>&1 | grep -v Warning | tee -a $LOG
+        --refiner-workers $REFINER_WORKERS --root $R --budget-hours $BUDGET_HOURS 2>&1 | grep -v Warning | tee -a $LOG
     ls $R/timing/$name/marks/*.failed > /dev/null 2>&1 && { say "ladder $name has failed units; not marked done"; return 1; }
     mark ladder_$name
 }
