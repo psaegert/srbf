@@ -14,6 +14,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 SITE = Path(__file__).resolve().parents[1]
 PUBLIC_METHODS = {"e2e", "nesymres-100M", "PySR", "T8-3M", "T8-20M", "T8-120M", "prior"}
@@ -27,12 +28,12 @@ REQUIRED_METRICS = {
     "symbolic_recovery", "mdl_ratio", "r2_val"}
 
 
-def payload_of(text, var):
+def payload_of(text: str, var: str) -> Any:
     m = re.match(r"window\." + var + r" = (.*);\s*$", text, re.S)
     return json.loads(m.group(1)) if m else None
 
 
-def keys_in_wrapped(text, pattern):
+def keys_in_wrapped(text: str, pattern: str) -> set[str] | None:
     m = re.search(pattern, text, re.S)
     return set(json.loads(m.group(1))) if m else None
 
@@ -46,7 +47,8 @@ def main() -> int:
     for js in sorted((SITE / "data").glob("*/results.js")):
         payload = payload_of(js.read_text(encoding="utf-8"), "RESULTS_V2")
         if not payload:
-            failures.append(f"{js}: not a RESULTS_V2 payload"); continue
+            failures.append(f"{js}: not a RESULTS_V2 payload")
+            continue
         keys = {mm["key"] for mm in payload.get("methods", [])} | set(payload.get("cells", payload.get("data", {}))) | set(payload.get("status", {})) | set(payload.get("timing", {}))
         extra = sorted(keys - PUBLIC_METHODS)
         if extra:
@@ -58,7 +60,8 @@ def main() -> int:
         for hj in sorted(js.parent.glob("hist/*.js")):
             ks = keys_in_wrapped(hj.read_text(encoding="utf-8"), r"\.cells,(\{.*\})\);\}\)\(\);\s*$")
             if ks is None:
-                failures.append(f"{hj}: not a histogram file"); continue
+                failures.append(f"{hj}: not a histogram file")
+                continue
             extra = sorted(ks - PUBLIC_METHODS)
             if extra:
                 failures.append(f"{hj}: non-public method keys {extra}")

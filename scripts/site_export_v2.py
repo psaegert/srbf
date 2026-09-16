@@ -19,8 +19,16 @@ same schema and is merged by the page when a LOCAL build loads it.
 
 usage: site_export_v2.py <root> <release id> <out.js> [--title ...] [--notes ...] [--sizes suite_law_mu.json]
        [--public e2e,nesymres-100M,...] [--private diffsym-v4.0 --private-dir results-site/private/2026-09]"""
-import argparse, csv, datetime as dt, glob, json, math, os, sys
+import argparse
+import csv
+import datetime as dt
+import glob
+import json
+import math
+import os
+import sys
 from collections import defaultdict
+from typing import Any
 import numpy as np
 
 # ---- registries -------------------------------------------------------------------------------------------------
@@ -131,10 +139,10 @@ HIST_SPECS = {m[0]: m[8] for m in METRICS if m[8]}
 PAIRED_KEYS = ["numeric_recovery_val", "symbolic_recovery", "success", "log10_fvu_val", "r2_val", "mdl_ratio", "expr_length_ratio", "f1_score", "fit_time"]
 
 
-def registry_json():
+def registry_json() -> list[dict[str, Any]]:
     out = []
     for k, label, short, group, kind, higher, tier, fmt, hist, desc in METRICS:
-        m = {"key": k, "label": label, "short": short, "group": group, "kind": kind, "higher": higher, "tier": tier, "fmt": fmt, "desc": desc}
+        m: dict[str, Any] = {"key": k, "label": label, "short": short, "group": group, "kind": kind, "higher": higher, "tier": tier, "fmt": fmt, "desc": desc}
         if hist:
             m["hist"] = {"lo": hist[0], "hi": hist[1], "tf": hist[2]}
         out.append(m)
@@ -142,7 +150,7 @@ def registry_json():
 
 
 # ---- reading rows -----------------------------------------------------------------------------------------------
-def fnum(s):
+def fnum(s: str | None) -> float | None:
     if s is None or s == "":
         return None
     try:
@@ -151,25 +159,26 @@ def fnum(s):
         return None
 
 
-def load_rows(root):
+def load_rows(root: str) -> dict[str, dict[tuple[str, int], dict[int, dict[str, Any]]]]:
     """{method: {(catalog, rung): {row: {metric: value}}}}, draw 1 only."""
-    data = defaultdict(lambda: defaultdict(dict))
+    data: dict[str, dict[tuple[str, int], dict[int, dict[str, Any]]]] = defaultdict(lambda: defaultdict(dict))
     files = sorted(set(glob.glob(os.path.join(root, "rows_full_*.csv")) + glob.glob(os.path.join(root, "*_rows_full.csv"))))
     for path in files:
         with open(path) as fh:
             for r in csv.DictReader(fh):
                 if r.get("draw", "1") != "1":
                     continue
-                vals = {}
+                vals: dict[str, float | None] = {}
                 for k in RATE_KEYS:
-                    v = fnum(r.get(k)); vals[k] = 0.0 if v is None else v
+                    v = fnum(r.get(k))
+                    vals[k] = 0.0 if v is None else v
                 for k in CONT_KEYS:
                     vals[k] = fnum(r.get(k))
                 data[r["model"]][(r["catalog"], int(r["rung"]))][int(r["row"])] = vals
     return data
 
 
-def transform(v, tf):
+def transform(v: float | None, tf: str | None) -> float | None:
     if v is None or (isinstance(v, float) and math.isnan(v)):
         return None
     if tf == "log2":
@@ -179,7 +188,7 @@ def transform(v, tf):
     return v
 
 
-def hist_of(values, lo, hi):
+def hist_of(values: list[float | None], lo: float, hi: float) -> list[Any] | None:
     """values already transformed; +-inf clipped into the edge bins; sparse [bin, count] pairs when few bins are used."""
     v = np.asarray([x for x in values if x is not None], float)
     v = v[~np.isnan(v)]
@@ -193,10 +202,11 @@ def hist_of(values, lo, hi):
     return h.tolist()
 
 
-def summarize_cell(rows, expected):
+def summarize_cell(rows: dict[int, dict[str, Any]], expected: int | None) -> dict[str, Any]:
     vals = list(rows.values())
-    cell = {"state": "complete" if expected is None or len(rows) >= expected else "partial", "n": len(vals),
-            "ok": int(sum(1 for x in vals if x["success"])), "m": {}}
+    cell: dict[str, Any] = {
+        "state": "complete" if expected is None or len(rows) >= expected else "partial",
+        "n": len(vals), "ok": int(sum(1 for x in vals if x["success"])), "m": {}}
     for k in RATE_KEYS:
         cell["m"][k] = [int(sum(1 for x in vals if x[k])), len(vals)]
     for k in CONT_KEYS:
@@ -208,36 +218,40 @@ def summarize_cell(rows, expected):
     return cell
 
 
-def paired_cell(rows_a, rows_b):
+def paired_cell(rows_a: dict[int, dict[str, Any]], rows_b: dict[int, dict[str, Any]]) -> dict[str, Any] | None:
     common = sorted(set(rows_a) & set(rows_b))
     if not common:
         return None
-    out = {}
+    out: dict[str, Any] = {}
     for k in PAIRED_KEYS:
         if k in RATE_KEYS:
             n11 = n10 = n01 = n00 = 0
             for i in common:
                 a, b = bool(rows_a[i][k]), bool(rows_b[i][k])
-                if a and b: n11 += 1
-                elif a: n10 += 1
-                elif b: n01 += 1
-                else: n00 += 1
+                if a and b:
+                    n11 += 1
+                elif a:
+                    n10 += 1
+                elif b:
+                    n01 += 1
+                else:
+                    n00 += 1
             out[k] = [n11, n10, n01, n00]
         else:
             tf = HIST_SPECS[k][2] if k in HIST_SPECS else None
             ds = []
             for i in common:
-                a, b = transform(rows_a[i][k], tf), transform(rows_b[i][k], tf)
-                if a is None or b is None or not (math.isfinite(a) and math.isfinite(b)):
+                va, vb = transform(rows_a[i][k], tf), transform(rows_b[i][k], tf)
+                if va is None or vb is None or not (math.isfinite(va) and math.isfinite(vb)):
                     continue
-                ds.append(a - b)
+                ds.append(va - vb)
             d = np.asarray(ds, float)
             out[k] = [int(d.size), float(d.sum()) if d.size else 0.0, float((d * d).sum()) if d.size else 0.0, int((d > 0).sum()), int((d < 0).sum())]
     return {"n": len(common), "m": out}
 
 
 # ---- status / catalogs / timing ---------------------------------------------------------------------------------
-def load_units(root, ukey, key):
+def load_units(root: str, ukey: str | None, key: str) -> int | None:
     for cand in ([os.path.join(root, f"units_{ukey}_d1.txt")] if ukey else []) + [os.path.join(root, "t8s1_units_draw1.txt")]:
         if not os.path.exists(cand):
             continue
@@ -253,36 +267,40 @@ def load_units(root, ukey, key):
     return None
 
 
-def status_of(root, key, ukey, cells_done):
+def status_of(root: str, key: str, ukey: str | None, cells_done: int) -> list[int | None]:
     total = load_units(root, ukey, key)
     marks = os.path.join(root, "markers", f"{key}.txt")
     done = sum(1 for line in open(marks) if line.strip()) if os.path.exists(marks) else cells_done
     return [done, total if total is not None else (664 if not ukey else None)]
 
 
-def catalog_meta(sizes_path, present):
+def catalog_meta(sizes_path: str | None, present: dict[str, int]) -> list[dict[str, Any]]:
     groups = {c: g for g, cs in CATALOG_GROUPS.items() for c in cs}
     per = json.load(open(sizes_path)).get("per_catalog", {}) if sizes_path and os.path.exists(sizes_path) else {}
-    cats = []
-    for c in sorted(set(per) | set(present), key=lambda c: -(len(per.get(c, [])) or present.get(c, 0))):
+    cats: list[dict[str, Any]] = []
+    for c in sorted(set(per) | set(present), key=lambda c: (-(len(per.get(c, [])) or present.get(c, 0)), c)):   # size, then name: deterministic
         mu = np.asarray(per.get(c, []), float)
         cats.append({"key": c, "laws": int(mu.size) if mu.size else int(present.get(c, 0)), "group": groups.get(c, "other"),
                      "mu": [round(float(np.percentile(mu, q)), 1) for q in (25, 50, 75)] if mu.size else None})
     return cats
 
 
-def rel_base(out_dir, site_dir):
+def rel_base(out_dir: str, site_dir: str) -> str:
     return os.path.relpath(out_dir, site_dir).replace(os.sep, "/") + "/"
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("root"); ap.add_argument("release"); ap.add_argument("out")
-    ap.add_argument("--title", default=None); ap.add_argument("--notes", default="")
+    ap.add_argument("root")
+    ap.add_argument("release")
+    ap.add_argument("out")
+    ap.add_argument("--title", default=None)
+    ap.add_argument("--notes", default="")
     ap.add_argument("--sizes", default=None)
     ap.add_argument("--site-dir", default=None, help="results-site directory (default: two levels above out.js); base paths are relative to it")
     ap.add_argument("--public", default=",".join(m[0] for m in METHODS if m[0] != "diffsym-v4.0"))
-    ap.add_argument("--private", default=""); ap.add_argument("--private-dir", default=None)
+    ap.add_argument("--private", default="")
+    ap.add_argument("--private-dir", default=None)
     a = ap.parse_args()
     public = [k for k in a.public.split(",") if k]
     private = [k for k in a.private.split(",") if k]
@@ -297,17 +315,17 @@ def main():
     out_dir = os.path.dirname(os.path.abspath(a.out))
     site_dir = os.path.abspath(a.site_dir) if a.site_dir else os.path.abspath(os.path.join(out_dir, "..", ".."))
     data = load_rows(a.root)
-    present = defaultdict(int)
+    present: dict[str, int] = defaultdict(int)
     for mk in data:
         for (c, r), rows in data[mk].items():
             present[c] = max(present[c], len(rows))
     cats = catalog_meta(a.sizes, present)
     sizes = {c["key"]: c["laws"] for c in cats}
 
-    def usable(key, r):
+    def usable(key: str, r: int) -> bool:
         return r in RUNGS and not (key == "e2e" and r > E2E_DEFAULT_MAX_RUNG)
 
-    def contrasts(pairs, paired):
+    def contrasts(pairs: list[tuple[str, str]], paired: dict[str, Any]) -> None:
         for ka, kb in pairs:
             for (c, r), rows_a in data.get(ka, {}).items():
                 rows_b = data.get(kb, {}).get((c, r))
@@ -317,9 +335,11 @@ def main():
                 if pc:
                     paired.setdefault(ka + "|" + kb, {}).setdefault(c, {})[str(r)] = pc
 
-    def build(keys, base):
+    def build(keys: list[str], base: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
         methods = [m for m in METHODS if m[0] in keys]
-        cells, hists, status = {}, {k: {} for k in HIST_SPECS}, {}
+        cells: dict[str, Any] = {}
+        hists: dict[str, Any] = {k: {} for k in HIST_SPECS}
+        status: dict[str, Any] = {}
         for key, label, param, color, group, prov, ukey in methods:
             cells[key] = {}
             for (c, r), rows in sorted(data.get(key, {}).items()):
@@ -331,13 +351,16 @@ def main():
                     if h is not None:
                         hists[hk].setdefault(key, {}).setdefault(c, {})[str(r)] = h
             status[key] = status_of(a.root, key, ukey, sum(len(v) for v in cells[key].values()))
-        paired = {}
+        paired: dict[str, Any] = {}
         mkeys = [m[0] for m in methods]
         contrasts([(ka, kb) for i, ka in enumerate(mkeys) for kb in mkeys[i + 1:]], paired)
-        timing, timing_note = {}, ""
+        timing: dict[str, Any] = {}
+        timing_note = ""
         tpath = os.path.join(a.root, "timing.json")
         if os.path.exists(tpath):
-            t = json.load(open(tpath)); timing = {k: v for k, v in t.items() if k in keys and isinstance(v, dict)}; timing_note = t.get("note", "")
+            t = json.load(open(tpath))
+            timing = {k: v for k, v in t.items() if k in keys and isinstance(v, dict)}
+            timing_note = t.get("note", "")
         payload = {"schema": 2, "base": base,
                    "release": {"id": a.release, "title": a.title or a.release, "notes": a.notes, "generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
                                "scoring": "candidates ranked by the two-part code (n/2 log2 FVU + description length in bits; flash-ansr 0.18, srbf 0.20)",
@@ -347,7 +370,7 @@ def main():
                    "cells": cells, "status": status, "timing": timing, "timing_note": timing_note}
         return payload, hists, paired
 
-    def write_set(payload, hists, paired, out_js, out_dir, var, note):
+    def write_set(payload: dict[str, Any], hists: dict[str, Any], paired: dict[str, Any], out_js: str, out_dir: str, var: str, note: str) -> None:
         os.makedirs(os.path.join(out_dir, "hist"), exist_ok=True)
         with open(out_js, "w") as fh:
             fh.write(f"window.{var} = " + json.dumps(payload, separators=(",", ":")) + ";\n")
@@ -366,7 +389,8 @@ def main():
     payload, hists, paired = build(public, rel_base(out_dir, site_dir))
     write_set(payload, hists, paired, a.out, out_dir, "RESULTS_V2", f"public release {a.release}")
     if private:
-        pdir = os.path.abspath(a.private_dir); os.makedirs(pdir, exist_ok=True)
+        pdir = os.path.abspath(a.private_dir)
+        os.makedirs(pdir, exist_ok=True)
         ppayload, phists, ppaired = build(private, rel_base(pdir, site_dir))
         contrasts([(ka, kb) for ka in private for kb in public], ppaired)   # private-vs-public contrasts stay private
         write_set(ppayload, phists, ppaired, os.path.join(pdir, "results_v2_private.js"), pdir, "RESULTS_V2_PRIVATE", f"private overlay ({len(private)} method(s), never inside the deployed tree)")
