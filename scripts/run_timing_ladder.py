@@ -40,9 +40,30 @@ def _sweep_representer(dumper: Any, data: Any) -> Any:
 yaml.add_representer(Sweep, _sweep_representer)
 
 
+def _find_ladder(node: Any) -> Sweep | None:
+    if isinstance(node, Sweep):
+        return node if getattr(node, "name", None) == "ladder" else None
+    if isinstance(node, dict):
+        for value in node.values():
+            found = _find_ladder(value)
+            if found is not None:
+                return found
+    if isinstance(node, list):
+        for value in node:
+            found = _find_ladder(value)
+            if found is not None:
+                return found
+    return None
+
+
 def ladder_of(cfg: Any, experiment: str) -> list[int]:
-    choices = select_experiment(cfg, experiment)["model_adapter"]["generation_overrides"]["kwargs"]["choices"]
-    return [int(c) for c in getattr(choices, "values", choices)]
+    """The rung values of the experiment's `ladder` sweep, wherever it sits under `model_adapter`: the draw budget
+    of a flash-ansr config (generation_overrides.kwargs.draws) or a baseline's own compute axis
+    (candidates_per_bag / beam_width / n_samples), the first `ladder` sweep in config order."""
+    sweep = _find_ladder(select_experiment(cfg, experiment)["model_adapter"])
+    if sweep is None:
+        raise KeyError(f"experiment {experiment!r}: no sweep named `ladder` under model_adapter")
+    return [int(c) for c in sweep.values]
 
 
 def timing_config(cfg: Any, experiments: list[str], data_dir: Path, model_name: str, model_path: str | None,
