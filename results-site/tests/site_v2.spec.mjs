@@ -217,3 +217,30 @@ test('the mean is the default statistic, and the median stays one click away', a
   expect(await xLabel(chart)).toBe(before);
   expect(await headline.textContent()).toBe(headBefore);
 });
+
+test('each display carries only the controls it can use', async ({ page }) => {
+  const shown = () => page.evaluate(() => [...document.querySelectorAll('#results-explorer-v2 [data-uses]')]
+    .filter((e) => !e.hidden).flatMap((e) => e.dataset.uses.split(' ')));
+  await page.goto('/?release=2026-09&v=curves');
+  const curves = await shown();
+  for (const k of ['plots', 'stat', 'xaxis']) { expect(curves, k).toContain(k); }
+  for (const k of ['focus', 'rung', 'base', 'rows']) { expect(curves, k).not.toContain(k); }
+  await page.locator(V2 + ' .v2tab[data-view="matrix"]').click();
+  await expect.poll(shown).toContain('focus');
+  const matrix = await shown();
+  for (const k of ['rung', 'stat']) { expect(matrix, k).toContain(k); }
+  for (const k of ['plots', 'xaxis', 'thin']) { expect(matrix, k).not.toContain(k); }   // one budget, one metric
+  await page.locator(V2 + ' .v2tab[data-view="paired"]').click();
+  await expect.poll(shown).toContain('base');
+});
+
+test('a chart is drawn at the width it is given', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/?release=2026-09&v=curves');
+  const chart = page.locator('#results-headline-v2 svg.v2chart').first();
+  await expect(chart).toBeVisible();
+  const box = await chart.boundingBox();
+  const viewBox = await chart.getAttribute('viewBox');
+  expect(box.width).toBeGreaterThan(500);                                  // a chart, not a thumbnail
+  expect(Math.abs(Number(viewBox.split(' ')[2]) - box.width)).toBeLessThan(2);   // 1 unit = 1 px: 12 px of label is 12 px
+});
