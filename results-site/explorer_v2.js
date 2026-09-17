@@ -226,6 +226,62 @@
   function measuredTime(m, r, cs) { var n = 0, s = 0; cs.forEach(function (c) { var x = cell(m, c, r), t = x && x.m.fit_time; if (t) { n += t[1]; s += t[2]; } }); return n ? s / n : null; }
   function timeSource(keys) { return keys.length && keys.every(function (k) { return D.timing[k] && Object.keys(D.timing[k]).length; }) ? "ref" : "run"; }
   function timeOf(m, r, cs, src) { return src === "ref" ? refTime(m, r) : measuredTime(m, r, cs); }
+
+  // A chart whose x is a metric, not a budget: each method's ladder walks a path through the plane
+  // (here: how long its answer is against how well it fits), so the points keep their rung order.
+  function frontSVG(opts) {
+    var nr = narrow(), W = nr ? Math.max(320, root.clientWidth) : 560, L = 60, T = 30, R = nr ? 16 : 170;
+    var B = nr ? 52 + 18 * Math.max(1, opts.series.length) : 48, H = 272 + B;
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="v2chart" role="img" aria-label="' + esc(opts.title) + '"><text x="' + L + '" y="18" class="ct">' + esc(opts.title) + "</text>";
+    if (opts.empty) { return s + '<text x="' + W / 2 + '" y="' + H / 2 + '" class="tick" text-anchor="middle">' + esc(opts.empty) + "</text></svg>"; }
+    var xmin = opts.xmin, xmax = opts.xmax, ymin = opts.ymin, ymax = opts.ymax;
+    if (!(xmax > xmin)) { xmax = xmin + 1; } if (!(ymax > ymin)) { ymax = ymin + 1; }
+    var xs = function (x) { return L + (x - xmin) / (xmax - xmin) * (W - L - R); };
+    var y = function (v) { return T + (1 - (v - ymin) / (ymax - ymin)) * (H - T - B); };
+    var clx = function (v) { return Math.min(xmax, Math.max(xmin, v)); }, cly = function (v) { return Math.min(ymax, Math.max(ymin, v)); };
+    opts.yticks.forEach(function (g) { s += '<line x1="' + L + '" y1="' + y(g).toFixed(1) + '" x2="' + (W - R) + '" y2="' + y(g).toFixed(1) + '" class="grid"/><text x="' + (L - 6) + '" y="' + (y(g) + 4).toFixed(1) + '" class="tick" text-anchor="end">' + esc(opts.ytick(g)) + "</text>"; });
+    opts.xticks.forEach(function (g) { s += '<line x1="' + xs(g).toFixed(1) + '" y1="' + T + '" x2="' + xs(g).toFixed(1) + '" y2="' + (H - B) + '" class="grid"/><text x="' + xs(g).toFixed(1) + '" y="' + (H - B + 16) + '" class="tick" text-anchor="middle">' + esc(opts.xtick(g)) + "</text>"; });
+    if (opts.xzero !== undefined && opts.xzero > xmin && opts.xzero < xmax) { s += '<line x1="' + xs(opts.xzero).toFixed(1) + '" y1="' + T + '" x2="' + xs(opts.xzero).toFixed(1) + '" y2="' + (H - B) + '" class="grid zero" stroke-dasharray="4 4"/>'; }
+    s += '<text x="' + ((L + W - R) / 2).toFixed(0) + '" y="' + (H - B + 32) + '" class="tick" text-anchor="middle">' + esc(opts.xlabel) + "</text>";
+    s += '<text transform="translate(14,' + ((T + H - B) / 2).toFixed(0) + ') rotate(-90)" class="tick" text-anchor="middle">' + esc(opts.ylabel) + "</text>";
+    var ly = nr ? H - B + 46 : T + 6, lx = nr ? L : W - R + 10;
+    opts.series.forEach(function (sr) {
+      var col = sr.color;
+      if (state.ci) { sr.pts.forEach(function (p) { if (isFinite(p.lo) && isFinite(p.hi)) { s += '<line x1="' + xs(clx(p.x)).toFixed(1) + '" y1="' + y(cly(p.hi)).toFixed(1) + '" x2="' + xs(clx(p.x)).toFixed(1) + '" y2="' + y(cly(p.lo)).toFixed(1) + '" stroke="' + col + '" stroke-width="1.5" stroke-opacity="0.4"/>'; } }); }
+      s += '<polyline fill="none" stroke="' + col + '" stroke-width="1.6" stroke-opacity="0.65" points="' + sr.pts.map(function (p) { return xs(clx(p.x)).toFixed(1) + "," + y(cly(p.v)).toFixed(1); }).join(" ") + '"/>';
+      sr.pts.forEach(function (p) { s += '<circle cx="' + xs(clx(p.x)).toFixed(1) + '" cy="' + y(cly(p.v)).toFixed(1) + '" r="3.2" fill="' + (p.thin ? "var(--surface)" : col) + '" stroke="' + col + '" stroke-width="1.5"><title>' + esc(p.title) + "</title></circle>"; });
+      s += '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 20) + '" y2="' + ly + '" stroke="' + col + '" stroke-width="3"/><text x="' + (lx + 26) + '" y="' + (ly + 4) + '" class="leg">' + esc(sr.label) + "</text>"; ly += 18;
+    });
+    return s + "</svg>";
+  }
+  function frontChart(xm, ym, shown) {
+    var keys = shown.map(function (m) { return m.key; }), series = [], pending = false;
+    var xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity;
+    shown.forEach(function (m) {
+      var tm = thinMap(m.key, keys), pts = [];
+      D.rungs.forEach(function (r) {
+        var use = poolCats(m.key, r, keys); if (!use.length || (tm.thin[r] && !state.thin)) { return; }
+        var sx = stat(xm, m.key, r, use), sy = stat(ym, m.key, r, use); if (!sx || !sy) { return; }
+        if (sx.pending || sy.pending) { pending = true; return; }
+        if (!isFinite(sx.v) || !isFinite(sy.v)) { return; }
+        pts.push({ x: sx.v, v: sy.v, lo: sy.lo, hi: sy.hi, thin: tm.thin[r],
+          title: m.label + " @ " + r + ": " + fmt(xm, sx.v, sx.edge) + " " + xm.short + ", " + fmt(ym, sy.v, sy.edge) + " " + ym.short + ", n = " + sy.n });
+        xmin = Math.min(xmin, sx.v); xmax = Math.max(xmax, sx.v);
+        [sy.v, state.ci ? sy.lo : sy.v, state.ci ? sy.hi : sy.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
+      });
+      if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: pts }); }
+    });
+    var title = "Fit error against length";
+    if (pending && !series.length) { return frontSVG({ title: title, series: [], empty: "loading the distributions\u2026" }); }
+    if (!series.length) { return frontSVG({ title: title, series: [], empty: "no finished units for this selection yet" }); }
+    var xpad = (xmax - xmin) * 0.08 || 0.3, ypad = (ymax - ymin) * 0.08 || 0.3;
+    xmin = Math.min(xmin - xpad, -0.15); xmax += xpad; ymin -= ypad; ymax += ypad;   // keep the law's own length in view
+    return frontSVG({ title: title, series: series, xmin: xmin, xmax: xmax, ymin: ymin, ymax: ymax,
+      xticks: ticksFor(xm, xmin, xmax), xtick: function (g) { return tickLabel(xm, g); },
+      yticks: ticksFor(ym, ymin, ymax), ytick: function (g) { return tickLabel(ym, g); },
+      xlabel: narrow() ? "answer length / law (log)" : "description length of the answer, over the law's own (log scale)",
+      ylabel: narrow() ? ym.short : ym.label, xzero: 0 });
+  }
   function xOf(m, r, cs, src) { return state.xaxis === "time" ? timeOf(m, r, cs, src) : r; }
   function hasCandidateBudget(m) { return (m.budget || "candidates") !== "seconds"; }   // PySR's budget is seconds
   function axisMethods(shown) { return state.xaxis === "time" ? shown : shown.filter(hasCandidateBudget); }
@@ -269,8 +325,8 @@
   // Two charts that are the same for every visitor: what a method recovers, and how long its answer is, against
   // what it costs. They are deliberately not wired to the controls below -- everything adjustable is the explorer.
   var HEADLINE = [
-    { key: "numeric_recovery_val", caption: "Laws reproduced to float32 precision on held-out points. Higher is better." },
-    { key: "mdl_ratio", caption: "Description length of the answer over the law's own, in the certified canon. 1 is the law itself; lower is a shorter answer." }];
+    { key: "numeric_recovery_val", caption: "Laws reproduced to float32 precision on held-out points, against what they cost. Higher is better." },
+    { x: "mdl_ratio", y: "log10_fvu_val", caption: "How well an answer fits against how long it is: the dashed line is the law's own length. Down and left is better." }];
   function withState(over, fn) { var prev = state; state = Object.assign({}, prev, over); try { return fn(); } finally { state = prev; } }
   function renderHeadline() {
     if (!headRoot) { return; }
@@ -282,18 +338,19 @@
         if (!shown.length) { return '<p class="v2hint">No method has finished units in this release yet.</p>'; }
         var keys = shown.map(function (m) { return m.key; }), src = timeSource(keys);
         var charts = HEADLINE.map(function (h) {
-          var m = METRIC[h.key];
-          if (!m) { return ""; }
-          if (m.kind === "cont") { ensure("hist/" + m.key + ".js", scheduleRender); }
-          return '<figure class="v2hlfig">' + curveChart(m, shown) + '<figcaption>' + esc(h.caption) + "</figcaption></figure>";
+          var ms = (h.key ? [h.key] : [h.x, h.y]).map(function (k) { return METRIC[k]; });
+          if (ms.some(function (m) { return !m; })) { return ""; }
+          ms.forEach(function (m) { if (m.kind === "cont") { ensure("hist/" + m.key + ".js", scheduleRender); } });
+          var svg = h.key ? curveChart(ms[0], shown) : frontChart(ms[0], ms[1], shown);
+          return '<figure class="v2hlfig">' + svg + "<figcaption>" + esc(h.caption) + "</figcaption></figure>";
         }).join("");
-        return '<h2 class="v2hltitle">What it recovers, and what it costs</h2>' +
+        return '<h2 class="v2hltitle">What a method recovers, and what it answers with</h2>' +
           '<p class="v2hlsub">Every method with finished units, all ' + CATS.length + ' catalogs, ' + term("matched", "matched") +
           ' at each budget so the methods are read on the same laws. Bands are ' + term("wilson", "95 % intervals") + '.</p>' +
           '<div class="v2hlcharts">' + charts + "</div>" +
-          '<p class="v2hint">x: ' + (src === "ref" ? term("time", "mean fit time per problem on the reference machine")
+          '<p class="v2hint">Left, x: ' + (src === "ref" ? term("time", "mean fit time per problem on the reference machine")
             : term("time", "mean fit time per problem, measured where each unit ran") + " (the cluster\u2019s mixed GPUs; the reference-machine timing replaces it as it is measured)") +
-          ". Everything below is yours to change.</p>";
+          ". Right: one point per budget, medians over the same laws. Everything below is yours to change.</p>";
       });
   }
 
@@ -428,16 +485,16 @@
   }
 
   // ---- shell -----------------------------------------------------------------------------------------------------
-  var VIEWS = [["curves", "Curves"], ["table", "Table"], ["matrix", "Catalogs"], ["dist", "Distribution"], ["paired", "Paired Δ"]];
+  var VIEWS = [["curves", "Curves"], ["table", "Tables"], ["matrix", "Catalogs"], ["dist", "Distribution"], ["paired", "Paired Δ"]];
   function shell() {
     var rel = D.release;
     var strip = D.methods.filter(function (m) { return D.status[m.key]; }).map(function (m) { var d = D.status[m.key][0], t = D.status[m.key][1]; return '<div class="v2tile" title="' + esc(m.label) + '"><b><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + (m.local ? " (local)" : "") + '</b><span>' + d + '<small> / ' + (t == null ? "?" : t) + ' units</small></span><div class="v2bar"><i style="width:' + (t ? 100 * d / t : 0) + '%"></i></div></div>'; }).join("");
     var catList = CATS.map(function (c) { var m = CAT[c]; return '<label title="' + esc(GROUPS[m.group] + (m.mu ? " · median law complexity " + m.mu[1] + " bits (IQR " + m.mu[0] + " to " + m.mu[2] + ")" : "")) + '"><input type="checkbox" data-c="' + c + '"> ' + esc(c) + ' <span class="v2hint">' + m.laws + '</span></label>'; }).join("");
-    var methList = D.methods.filter(withData).map(function (m) { return '<div class="v2meth"><label><input type="checkbox" data-m="' + m.key + '"><input type="color" class="v2swatch" data-m="' + m.key + '" value="' + colorOf(m) + '" title="Colour for ' + esc(m.label) + '"><span class="v2mname">' + esc(m.label) + '</span></label>' + (m.local ? ' <span class="v2tag v2tag-local">local only</span>' : "") + ' <span class="v2hint">' + esc(m.param) + '</span> <span class="v2tag" title="' + esc(PROV_NOTE[m.provenance] || "") + '">' + esc(PROV[m.provenance] || m.provenance || "") + '</span><button type="button" class="v2reset" data-m="' + m.key + '" title="Reset colour to default" hidden>↺</button></div>'; }).join("") || '<span class="v2hint">no method has finished units yet</span>';
+    var methList = D.methods.filter(withData).map(function (m) { return '<div class="v2meth"><label><input type="checkbox" data-m="' + m.key + '"><input type="color" class="v2swatch" data-m="' + m.key + '" value="' + colorOf(m) + '" title="Colour for ' + esc(m.label) + '"><span class="v2mname">' + esc(m.label) + '</span></label>' + (m.local ? ' <span class="v2tag v2tag-local">local only</span>' : "") + ' <span class="v2hint">' + esc(m.param) + '</span>' + (m.selection ? " " + help(m.selection, "How does " + m.label + " choose its answer?") : "") + ' <span class="v2tag" title="' + esc(PROV_NOTE[m.provenance] || "") + '">' + esc(PROV[m.provenance] || m.provenance || "") + '</span><button type="button" class="v2reset" data-m="' + m.key + '" title="Reset colour to default" hidden>↺</button></div>'; }).join("") || '<span class="v2hint">no method has finished units yet</span>';
     var metricList = MGROUPS.map(function (g) { var ms = D.metrics.filter(function (m) { return m.group === g; }); return '<div class="v2mgroup" data-group="' + esc(g) + '"><h4>' + esc(g) + '</h4>' + ms.map(function (m) { return '<div class="v2metric" data-tier="' + m.tier + '" data-key="' + m.key + '"><label><input type="checkbox" data-p="' + m.key + '"> ' + esc(m.label) + '</label> ' + help(m.desc + (m.kind === "rate" ? " Defined for every law." : " Successful predictions only.") + (m.higher === true ? " Higher is better." : m.higher === false ? " Lower is better." : ""), "What is " + m.label + "?") + '</div>'; }).join("") + "</div>"; }).join("");
     root.innerHTML =
       '<div class="v2head"><div><div class="v2kicker">benchmark release ' + esc(rel.id) + '</div><p class="v2sub">' + esc(rel.title !== rel.id ? rel.title + " · " : "") + 'generated ' + esc(rel.generated) + '. ' + esc(rel.notes || "") + '</p></div><div class="v2row"><button type="button" class="v2btn" data-act="link">copy link to this view</button><span class="v2linkok v2hint" hidden>link copied</span></div></div>' +
-      '<details class="v2release"><summary>Protocol of this release</summary><ul><li><b>Scoring.</b> ' + esc(rel.scoring || "") + '</li><li><b>Judge.</b> ' + esc(rel.judge || "") + '</li><li><b>Data.</b> One problem per law: 512 support points and 512 validation points from the catalog\'s own ranges, no noise; ' + CATS.length + ' catalogs, ' + laws(CATS) + ' laws.</li><li><b>Configurations.</b> ' + term("provenance", "Who chose each method\'s configuration") + ' is shown next to every method.</li><li><b>Time axis.</b> ' + term("time", "Reference-machine timing") + (D.timing_note ? " · " + esc(D.timing_note) : "") + '</li><li><b>Statistics.</b> ' + term("regime", "Two regimes") + ', ' + term("matched", "matched pooling") + ', ' + term("wilson", "95 % intervals") + '.</li></ul></details>' +
+      '<details class="v2release"><summary>Protocol of this release</summary><ul><li><b>Choosing an answer.</b> ' + esc(rel.scoring || "") + '</li><li><b>Judging it.</b> ' + esc(rel.judge || "") + '</li><li><b>Data.</b> One problem per law: 512 support points and 512 validation points from the catalog\'s own ranges, no noise; ' + CATS.length + ' catalogs, ' + laws(CATS) + ' laws.</li><li><b>Configurations.</b> ' + term("provenance", "Who chose each method\'s configuration") + ' is shown next to every method.</li><li><b>Time axis.</b> ' + term("time", "Reference-machine timing") + (D.timing_note ? " · " + esc(D.timing_note) : "") + '</li><li><b>Statistics.</b> ' + term("regime", "Two regimes") + ', ' + term("matched", "matched pooling") + ', ' + term("wilson", "95 % intervals") + '.</li></ul></details>' +
       '<div class="v2strip">' + strip + '</div>' +
       '<div class="v2tabs" role="tablist">' + VIEWS.map(function (v) { return '<button type="button" class="v2tab" role="tab" data-view="' + v[0] + '">' + v[1] + '</button>'; }).join("") + '</div>' +
       '<div class="v2layout"><aside class="v2side">' +

@@ -13,12 +13,12 @@
     })();
   </script>
   <title>srbf: Symbolic Regression Benchmark Framework · Results</title>
-  <meta name="description" content="Interactive results explorer of srbf, the Symbolic Regression Benchmark Framework: Flash-ANSR across model scales versus PySR, NeSymReS, and E2E, over inference compute, noise, and support-size sweeps." />
+  <meta name="description" content="Interactive results explorer of srbf, the Symbolic Regression Benchmark Framework: symbolic regression methods on the same laws, the same data and one judge, over compute, noise, and support-size sweeps." />
   <link rel="icon" type="image/svg+xml" href="srbf-icon.svg" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="srbf: Symbolic Regression Benchmark Framework" />
-  <meta property="og:description" content="Interactive results explorer: Flash-ANSR across model scales versus PySR, NeSymReS, and E2E, over inference compute, noise, and sample-count sweeps." />
+  <meta property="og:description" content="Interactive results explorer: symbolic regression methods on the same laws, the same data and one judge, over compute, noise, and sample-count sweeps." />
   <meta property="og:url" content="https://psaegert.github.io/srbf/" />
   <meta property="og:image" content="https://psaegert.github.io/srbf/srbf-social.png" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -58,15 +58,17 @@
       <p class="kicker">Results explorer</p>
       <h1>Symbolic Regression Benchmark Framework</h1>
       <p class="lede">
-        The live results of <strong>srbf</strong>: recovery and fit quality across
-        <strong>Flash-ANSR</strong> model scales and the <strong>PySR</strong>,
-        <strong>NeSymReS</strong>, and <strong>E2E</strong> baselines (plus <strong>Prior</strong>,
-        a reference that samples candidate skeletons from the training prior without any model).
+        <strong>srbf</strong> puts symbolic regression methods on the same problems, with the same
+        data, and reads every answer with one judge. This page is its live results. The methods
+        entered so far are <strong>E2E</strong>, <strong>NeSymReS</strong>, <strong>PySR</strong>
+        and the <strong>Flash-ANSR</strong> series, plus <strong>Prior</strong>, a reference that
+        samples candidates from a training prior with no model at all. Any method can be entered:
+        it needs an adapter, a configuration, and a name for whoever chose it.
         Views are organized on two axes:
       </p>
       <ul class="lede-axes">
         <li><strong>Display:</strong> Curves over a whole sweep (compute, support size, or
-          noise level), a Table at one chosen compute budget, or <a href="#ranks">Ranks</a>,
+          noise level), Tables at one chosen compute budget, or <a href="#ranks">Ranks</a>,
           a ranking of all methods at once.</li>
         <li><strong>Values:</strong> Absolute numbers per series, shown with 95% bootstrap
           confidence bands, or Paired head-to-head differences (is A better than B, beyond
@@ -86,7 +88,7 @@
              never could (media queries inside an image only see the OS scheme). -->
         <svg id="va" class="visual-abstract" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320"
              font-family="Inter, system-ui, -apple-system, sans-serif" role="img"
-             aria-label="srbf visual abstract: any datasets crossed with any methods go through one framework (unified dataset formalism, decontamination built in, paired pre-declared statistics) into the explorer's Curves, Table, and Ranks views.">
+             aria-label="srbf visual abstract: any datasets crossed with any methods go through one framework (unified dataset formalism, decontamination built in, paired pre-declared statistics) into the explorer's Curves, Tables, and Ranks views.">
           <rect class="bg" x="1" y="1" width="1198" height="318" rx="18" stroke-width="2"/>
 
         <!-- phase captions -->
@@ -105,7 +107,7 @@
         <rect class="panel" x="48" y="198" width="290" height="78" rx="12"/>
         <text class="accent" x="70" y="224" font-size="11.5" font-weight="700" letter-spacing="1.4">METHODS</text>
         <text class="ink" x="70" y="245" font-size="13">One adapter interface:</text>
-        <text class="soft" x="70" y="263" font-size="13">Flash-ANSR &#183; PySR &#183; NeSymReS &#183; E2E</text>
+        <text class="soft" x="70" y="263" font-size="13">E2E &#183; Flash-ANSR &#183; NeSymReS &#183; PySR</text>
 
         <!-- arrow -->
         <path class="accent-stroke" d="M356 178 h33" stroke-width="2.5" fill="none"/>
@@ -154,7 +156,7 @@
         <rect class="grey" x="962" y="141" width="12" height="7" rx="2" opacity="0.75"/>
         <rect class="grey" x="962" y="167" width="12" height="7" rx="2" opacity="0.55"/>
         <rect class="grey" x="962" y="193" width="12" height="7" rx="2" opacity="0.4"/>
-        <text class="soft" x="932" y="272" text-anchor="middle" font-size="13.5" font-weight="600">Table</text>
+        <text class="soft" x="932" y="272" text-anchor="middle" font-size="13.5" font-weight="600">Tables</text>
 
         <!-- ranks -->
         <rect class="panel" x="1016" y="80" width="136" height="168" rx="12"/>
@@ -194,15 +196,18 @@
       <p>
         The switch above the explorer selects a release. <strong>2026-09 (current)</strong> is a
         fresh <code>srbf</code> run: 29 catalogs and 6,660 laws, one problem per law with 512 support
-        and 512 validation points, one draw per problem so far. Candidates are ranked by the two-part
-        code (\(\tfrac{n}{2}\log_2 \operatorname{FVU}\) plus the description length in bits) and
-        judged by <code>srbf</code>'s canonical-form judge. E2E runs at its default settings, NeSymReS
-        with its released model, and PySR, the Flash-ANSR T8 series and the training prior appear as
-        their units finish. Two fixed charts above the explorer carry the release's headline: what a
-        method recovers and how long its answer is, against what it costs. Cost is seconds per
-        problem, measured where each unit ran until the reference machine has timed every method
-        shown; the explorer's x axis switches between that and the candidate budget, which only the
-        methods that draw candidates have (PySR spends a time limit instead).
+        and 512 validation points, one draw per problem so far. Every method sees the same problems
+        and every answer is read the same way: the predicted expression and the law are compared in
+        one certified canonical form, and the prediction is scored on held-out points it never saw.
+        How a method arrives at the answer it submits is its own affair, and the explorer names that
+        rule next to it, together with who chose its configuration. E2E runs at its default settings
+        and NeSymReS with its released model; PySR, the Flash-ANSR series and the training-prior
+        reference appear as their units finish. Two fixed charts above the explorer carry the
+        release's headline: what a method recovers against what it costs, and how well an answer fits
+        against how long it is. Cost is seconds per problem, measured where each unit ran until the
+        reference machine has timed every method shown; the explorer's x axis switches between that
+        and the candidate budget, which only the methods that draw candidates have (PySR spends a
+        time limit instead).
         Every metric of the 2026-07 release is available there under the same definition, plus
         symbolic recovery in canonical form, the MDL ratio, R², relative recovery, variable-set
         precision and recall, the Pareto rank and the generation time. Paired comparisons in 2026-09
@@ -319,10 +324,12 @@
       </p>
       <p>
         <strong>Token-level and exact-match metrics compare raw prefix skeletons.</strong> The
-        archived predictions are not re-normalized to a common simplified form, and the baselines
-        tokenize variables differently, so cross-series comparisons of the symbolic-similarity
-        metrics (exact match, F1, edit distances) carry a systematic offset between method
-        families. Within a series, and across x for one series, they are consistent.
+        archived predictions are not re-normalized to a common simplified form, and the methods name
+        variables differently, so cross-series comparisons of the symbolic-similarity metrics (exact
+        match, F1, edit distances) carry a systematic offset between method families. Within a
+        series, and across x for one series, they are consistent. In the 2026-09 release this does
+        not apply: every prediction is mapped into the ground truth's variable names and judged in
+        one canonical form, so those metrics are comparable across methods.
       </p>
       <p>
         <strong>Some metrics exist only for Flash-ANSR series.</strong> The log-probability and

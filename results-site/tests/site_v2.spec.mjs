@@ -159,8 +159,11 @@ test('the headline stands above the explorer with its two fixed charts', async (
   await expect(head.locator('.v2hltitle')).toBeVisible();
   await expect(head.locator('svg.v2chart')).toHaveCount(2);
   await expect(head.locator('svg.v2chart').first()).toContainText('recovery');
-  await expect(head.locator('svg.v2chart').nth(1)).toContainText('MDL ratio');
   await expect(head.locator('svg.v2chart').first()).toContainText('fit time');
+  // the second headline chart is the trade-off: description length on x, fit error on y
+  await expect(head.locator('svg.v2chart').nth(1)).toContainText('Fit error against length');
+  await expect(head.locator('svg.v2chart').nth(1)).toContainText('description length');
+  await expect(head.locator('svg.v2chart').nth(1)).toContainText('FVU');
   // fixed: the explorer's own controls do not move it
   await page.locator(V2 + ' button[data-act="none"]').click();
   await expect(head.locator('svg.v2chart').first()).not.toContainText('no catalog selected');
@@ -177,4 +180,22 @@ test('the public page carries no private overlay', async ({ page }) => {
   expect(await page.evaluate(() => typeof window.RESULTS_V2_PRIVATE)).toBe('undefined');
   const html = await page.content();
   expect(html).not.toContain('private/');
+});
+
+test('every method says how it picks the answer it submits', async ({ page }) => {
+  await page.goto('/?release=2026-09&v=curves');
+  const withData = await page.evaluate(() => (window.RESULTS_V2.methods || []).filter((m) => window.RESULTS_V2.cells[m.key] && Object.keys(window.RESULTS_V2.cells[m.key]).length));
+  expect(withData.length).toBeGreaterThan(0);
+  for (const m of withData) { expect(m.selection, m.key).toBeTruthy(); }
+  // the release protocol no longer states one method's ranking rule as if it were the benchmark's
+  const scoring = await page.evaluate(() => window.RESULTS_V2.release.scoring);
+  expect(scoring).not.toMatch(/two-part code/i);
+  await page.locator(V2 + ' .v2methods .v2help').first().click();
+  await expect(page.locator('.v2pop')).toBeVisible();
+});
+
+test('the view that shows tables is called Tables', async ({ page }) => {
+  await page.goto('/?release=2026-09&v=curves');
+  await expect(page.locator(V2 + ' .v2tab[data-view="table"]')).toHaveText('Tables');
+  await expect(page.locator('#va')).toContainText('Tables');
 });

@@ -32,15 +32,24 @@ from typing import Any
 import numpy as np
 
 # ---- registries -------------------------------------------------------------------------------------------------
-METHODS = [  # key, label, param, color, group, provenance, unit-file key
-    ("e2e", "E2E", "candidates per bag", "#2f6fd0", "baseline", "upstream_default", "e2e"),
-    ("nesymres-100M", "NeSymReS 100M", "beam width", "#e8842a", "baseline", "upstream_default", "nesymres"),
-    ("PySR", "PySR", "seconds", "#d62728", "baseline", "harness_tuned", None),
-    ("diffsym-v4.0", "diffsym v4.0", "samples", "#d6338f", "baseline", "author_blessed", "diffsym"),
-    ("T8-3M", "Flash-ANSR T8-3M", "draws", "#8fcf8a", "flash-ansr", "author_blessed", None),
-    ("T8-20M", "Flash-ANSR T8-20M", "draws", "#3e9b4a", "flash-ansr", "author_blessed", None),
-    ("T8-120M", "Flash-ANSR T8-120M", "draws", "#1b5e20", "flash-ansr", "author_blessed", None),
-    ("prior", "training prior", "draws", "#9a9a9a", "reference", "author_blessed", None)]
+# key, label, param, color, group, provenance, unit-file key, selection rule (how the method picks the
+# one answer it submits; that is the method's own business, and the page says whose rule it is)
+METHODS = [
+    ("e2e", "E2E", "candidates per bag", "#2f6fd0", "baseline", "upstream_default", "e2e",
+     "Refines its decoded trees with BFGS and submits the one with the lowest error on the data it was given."),
+    ("nesymres-100M", "NeSymReS", "beam width", "#e8842a", "baseline", "upstream_default", "nesymres",
+     "Beam search, then BFGS on the constants; submits the beam candidate that fits the data best."),
+    ("PySR", "PySR", "seconds", "#d62728", "baseline", "harness_tuned", None,
+     "Evolutionary search; submits the pick of its own hall of fame, its own accuracy-versus-complexity rule."),
+    ("diffsym-v4.0", "diffsym v4.0", "samples", "#d6338f", "baseline", "author_blessed", "diffsym",
+     "Diffusion sampling; submits its own best-scoring sample after refinement."),
+    ("T8-3M", "Flash-ANSR T8-3M", "draws", "#8fcf8a", "flash-ansr", "author_blessed", None, None),
+    ("T8-20M", "Flash-ANSR T8-20M", "draws", "#3e9b4a", "flash-ansr", "author_blessed", None, None),
+    ("T8-120M", "Flash-ANSR T8-120M", "draws", "#1b5e20", "flash-ansr", "author_blessed", None, None),
+    ("prior", "training prior", "draws", "#9a9a9a", "reference", "author_blessed", None,
+     "Draws skeletons from Flash-ANSR's training prior with no model and no data, then refines and picks them the way Flash-ANSR does: what the prior alone is worth.")]
+FLASH_ANSR_SELECTION = ("Fits the constants of every candidate it draws and submits the one with the best two-part code: "
+                        "(n/2) log2 FVU plus the description length of the expression in bits.")
 RUNGS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
 E2E_DEFAULT_MAX_RUNG = 256   # E2E is reported at its default settings only (owner 2026-09-16)
 CATALOG_GROUPS = {
@@ -340,7 +349,7 @@ def main() -> None:
         cells: dict[str, Any] = {}
         hists: dict[str, Any] = {k: {} for k in HIST_SPECS}
         status: dict[str, Any] = {}
-        for key, label, param, color, group, prov, ukey in methods:
+        for key, label, param, color, group, prov, ukey, _sel in methods:
             cells[key] = {}
             for (c, r), rows in sorted(data.get(key, {}).items()):
                 if not usable(key, r):
@@ -363,13 +372,15 @@ def main() -> None:
             timing_note = t.get("note", "")
         payload = {"schema": 2, "base": base,
                    "release": {"id": a.release, "title": a.title or a.release, "notes": a.notes, "generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
-                               "scoring": "candidates ranked by the two-part code (n/2 log2 FVU + description length in bits; flash-ansr 0.18, srbf 0.20)",
-                               "judge": "srbf derive_metrics: canonical-form judge (SimpliPy acj-5-4-llm, f64), float32-eps numeric recovery on 512 validation points"},
+                               "scoring": "Every method submits one answer per problem and chooses it by its own rule; the rule is named next to the method, along with who chose its configuration.",
+                               "judge": "One judge for every answer: the predicted expression and the law are compared in one certified canonical form (SimpliPy acj-5-4-llm, f64), and numeric recovery is float32 precision on 512 held-out points."},
                    "catalogs": cats, "rungs": RUNGS, "nb": NB, "metrics": registry_json(), "paired_keys": PAIRED_KEYS,
                    # budget: what one rung of the ladder buys. "candidates" is a count a generative method draws;
                    # "seconds" is a time limit (PySR), which has no place on the candidate axis of the site.
                    "methods": [{"key": k, "label": l, "param": p, "budget": "seconds" if p == "seconds" else "candidates",
-                                "color": col, "group": g, "provenance": prov} for k, l, p, col, g, prov, _ in methods],
+                                "color": col, "group": g, "provenance": prov,
+                                "selection": sel or (FLASH_ANSR_SELECTION if g == "flash-ansr" else "")}
+                               for k, l, p, col, g, prov, _, sel in methods],
                    "cells": cells, "status": status, "timing": timing, "timing_note": timing_note}
         return payload, hists, paired
 
