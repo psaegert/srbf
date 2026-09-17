@@ -10,6 +10,13 @@ function collectErrors(page) {
   return errors;
 }
 const V2 = '#results-explorer-v2';
+// every metric is chosen through the same picker: open the control, click the entry
+async function pick(page, trigger, key) {
+  await trigger.click();
+  await expect(page.locator('.v2picker')).toBeVisible();
+  await page.locator(`.v2picker .v2pickitem[data-k="${key}"]`).click();
+  await expect(page.locator('.v2picker')).toHaveCount(0);
+}
 const VIEWS = ['curves', 'table', 'matrix', 'dist', 'paired'];
 // the 2026-07 site's 21 metrics under their schema-2 keys: none may be missing from a release
 const LEGACY_METRICS = ['numeric_recovery_val', 'expr_length_ratio', 'log10_fvu_val', 'log10_fvu_fit', 'numeric_recovery_fit', 'success',
@@ -102,7 +109,7 @@ test('catalog and method controls change the pooled charts', async ({ page }) =>
 test('the view state round-trips through the URL', async ({ page }) => {
   await page.goto('/?release=2026-09&v=matrix&f=mdl_ratio&r=16&c=phys&s=mean&pool=own&ci=0');
   await expect(page.locator(V2 + ' .v2tab.active')).toHaveAttribute('data-view', 'matrix');
-  await expect(page.locator(V2 + ' select.v2focus')).toHaveValue('mdl_ratio');
+  await expect(page.locator(V2 + ' .v2focus')).toHaveAttribute('data-k', 'mdl_ratio');
   await expect(page.locator(V2 + ' select.v2rung')).toHaveValue('16');
   await expect(page.locator(V2 + ' input[name="v2stat"][value="mean"]')).toBeChecked();
   await expect(page.locator(V2 + ' input[name="v2pool"][value="own"]')).toBeChecked();
@@ -125,27 +132,27 @@ test('terms and metric help open a floating explanation', async ({ page }) => {
 
 test('time is the default x axis wherever a time was measured', async ({ page }) => {
   await page.goto('/');
-  const axis = page.locator(V2 + ' .v2plot .v2xsel').first();
+  const axis = page.locator(V2 + ' .v2plot .v2xsel').first();   // the x control of the first plot
   // a time exists when the reference machine has measured a method, or when the runs themselves carry fit_time
   const hasTime = await page.evaluate(() => {
     const D = window.RESULTS_V2 || {};
     if (Object.keys(D.timing || {}).some((k) => Object.keys(D.timing[k]).length)) { return true; }
     return Object.keys(D.cells || {}).some((m) => Object.keys(D.cells[m]).some((c) => Object.keys(D.cells[m][c]).some((r) => D.cells[m][c][r].m && D.cells[m][c][r].m.fit_time)));
   });
-  if (!hasTime) { await expect(axis.locator('option[value="time"]')).toBeDisabled(); return; }
-  await expect(axis).toHaveValue('time');
+  if (!hasTime) { await axis.click(); await expect(page.locator('.v2pickitem[data-k="time"]')).toBeDisabled(); return; }
+  await expect(axis).toHaveAttribute('data-k', 'time');
   await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('fit time');
 });
 
 test('the candidate axis names itself and is offered beside time', async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto('/?release=2026-09&v=curves');
-  await page.locator(V2 + ' .v2plot .v2xsel').first().selectOption('rung');
+  await pick(page, page.locator(V2 + ' .v2plot .v2xsel').first(), 'rung');
   await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('candidates');
   // a method whose budget is a time limit has no position on this axis and is named instead of dropped silently
   const seconds = await page.evaluate(() => (window.RESULTS_V2.methods || []).filter((m) => m.budget === 'seconds' && window.RESULTS_V2.cells[m.key] && Object.keys(window.RESULTS_V2.cells[m.key]).length).map((m) => m.label));
   for (const label of seconds) { await expect(page.locator(V2 + ' .v2view')).toContainText(label); }
-  await page.locator(V2 + ' .v2plot .v2xsel').first().selectOption('time');
+  await pick(page, page.locator(V2 + ' .v2plot .v2xsel').first(), 'time');
   await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('fit time');
   expect(errors).toEqual([]);
 });
@@ -161,7 +168,7 @@ test('the headline stands above the explorer with its two fixed charts', async (
   await expect(head.locator('svg.v2chart').first()).toContainText('fit time');
   // the second headline chart is the trade-off: description length on x, fit error on y
   await expect(head.locator('svg.v2chart').nth(1)).toContainText('Fit vs length');
-  await expect(head.locator('svg.v2chart').nth(1)).toContainText(/length \/ law/);
+  await expect(head.locator('svg.v2chart').nth(1)).toContainText('MDL ratio');   // the metric's own name, as everywhere else
   await expect(head.locator('svg.v2chart').nth(1)).toContainText('FVU');
   // fixed: the explorer's own controls do not move it
   await page.locator(V2 + ' button[data-act="none"]').click();
@@ -241,9 +248,9 @@ test('every plot carries its own two axes, and plots are added and removed', asy
   await page.goto('/?release=2026-09&v=curves&p=time~numeric_recovery_val');
   const cards = page.locator(V2 + ' .v2plot');
   await expect(cards).toHaveCount(1);
-  await expect(cards.first().locator('.v2ysel')).toHaveValue('numeric_recovery_val');
+  await expect(cards.first().locator('.v2ysel')).toHaveAttribute('data-k', 'numeric_recovery_val');
   // a metric on x makes the plot a trade-off: the budget is gone from both axes
-  await cards.first().locator('.v2xsel').selectOption('mdl_ratio');
+  await pick(page, cards.first().locator('.v2xsel'), 'mdl_ratio');
   await expect(cards.first().locator('svg.v2chart')).toContainText('MDL ratio');
   expect(decodeURIComponent(page.url())).toContain('mdl_ratio~numeric_recovery_val');
   // the dashed tile adds a plot, the x removes one
@@ -256,6 +263,56 @@ test('every plot carries its own two axes, and plots are added and removed', asy
   await expect(page.locator(V2 + ' .v2addplot')).toBeVisible();   // never a dead end
   await page.locator(V2 + ' .v2addplot').click();
   await expect(cards).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
+
+test('a metric carries one name and one definition wherever it appears', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1100 });
+  await page.goto('/?release=2026-09&v=curves&p=time~numeric_recovery_val');
+  const M = await page.evaluate(() => (window.RESULTS_V2.metrics || []).find((m) => m.key === 'numeric_recovery_val'));
+  // the plot header, the picker entry and the table column all use the registry label
+  await expect(page.locator(V2 + ' .v2plot .v2ysel .v2picklab')).toHaveText(M.label);
+  await page.locator(V2 + ' .v2plot .v2ysel').click();
+  await expect(page.locator(`.v2picker .v2pickitem[data-k="${M.key}"]`)).toContainText(M.label);
+  const def = await page.locator(`.v2picker .v2pickitem[data-k="${M.key}"]`).getAttribute('title');
+  expect(def).toContain(M.desc);
+  await page.keyboard.press('Escape');
+  await page.locator(V2 + ' .v2tab[data-view="table"]').click();
+  const th = page.locator(V2 + ' table thead th', { hasText: M.label }).first();
+  await expect(th).toBeVisible();
+  expect(await th.locator('.v2help').getAttribute('data-help')).toBe(def);   // the same sentence, not a paraphrase
+});
+
+test('every chart names both of its axes', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1100 });
+  await page.goto('/?release=2026-09&v=curves&p=time~numeric_recovery_val,mdl_ratio~log10_fvu_val');
+  const labels = async (svg) => (await svg.locator('text').allTextContents()).join(' | ');
+  const charts = page.locator('svg.v2chart');
+  await expect(charts.first()).toBeVisible();
+  const n = await charts.count();
+  expect(n).toBeGreaterThanOrEqual(4);   // two headline panels and two plots
+  for (let i = 0; i < n; i++) {
+    const t = await labels(charts.nth(i));
+    expect(t, `chart ${i} x label`).toMatch(/fit time per problem|MDL ratio|candidates per problem/);
+    expect(t, `chart ${i} y label`).toMatch(/Numeric recovery|log10 FVU/);
+  }
+});
+
+test('the picker lists every metric in columns and filters', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.setViewportSize({ width: 1600, height: 1100 });
+  await page.goto('/?release=2026-09&v=curves&p=time~numeric_recovery_val');
+  const all = await page.evaluate(() => (window.RESULTS_V2.metrics || []).length);
+  await page.locator(V2 + ' .v2plot .v2xsel').click();
+  const picker = page.locator('.v2picker');
+  await expect(picker).toBeVisible();
+  await expect(picker.locator('.v2pickitem')).toHaveCount(all + 2);        // every metric, plus the two budgets
+  expect(await picker.locator('.v2pickgroup').count()).toBeGreaterThan(3);  // grouped, not one long column
+  expect(await picker.evaluate((el) => getComputedStyle(el.querySelector('.v2pickcols')).columnCount)).not.toBe('1');
+  await picker.locator('.v2pickq').fill('recovery');
+  await expect(picker.locator('.v2pickitem:visible')).toHaveCount(await page.evaluate(() => (window.RESULTS_V2.metrics || []).filter((m) => (m.label + m.key).toLowerCase().includes('recovery')).length));
+  await page.keyboard.press('Escape');
+  await expect(picker).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 

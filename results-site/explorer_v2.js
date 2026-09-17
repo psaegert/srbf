@@ -48,6 +48,26 @@
   function plotAxes() { var seen = {}, out = []; state.plots.forEach(function (p) { [p.x, p.y].forEach(function (k) { if (METRIC[k] && !seen[k]) { seen[k] = 1; out.push(k); } }); }); return out; }
   function plotMetrics() { var seen = {}, out = []; state.plots.forEach(function (p) { if (!seen[p.y]) { seen[p.y] = 1; out.push(p.y); } }); return out; }
   function isBudgetAxis(x) { return x === "time" || x === "rung"; }
+
+  // ---- One name, one definition, everywhere ----------------------------------------------------------------------
+  // A metric carries its label wherever there is room (plot header, axis, table column, view title) and its short
+  // form only where space is not negotiable (a point tooltip, a narrow screen). Its definition is ONE string, shown
+  // by every surface that names it. The two budget axes are described here in the same shape, so the pickers and the
+  // axis labels read them the same way.
+  var AXIS = {
+    time: { key: "time", label: "fit time", short: "time", get desc() { return TERMS.time; } },
+    rung: { key: "rung", label: "candidates", short: "candidates", get desc() { return TERMS.candidates; } }
+  };
+  function axisOf(k) { return AXIS[k] || METRIC[k]; }
+  function mname(m) { return m ? m.label : ""; }
+  function mdef(m) {
+    if (!m) { return ""; }
+    if (AXIS[m.key]) { return m.desc; }
+    return m.desc + (m.kind === "rate" ? " Defined for every law." : " Successful predictions only.") +
+      (m.higher === true ? " Higher is better." : m.higher === false ? " Lower is better." : "");
+  }
+  function mhelp(m) { return help(mdef(m), "What is " + mname(m) + "?"); }
+  function axisName(m) { return narrow() ? m.short : mname(m) + (tfOf(m) ? " (log scale)" : ""); }
   function lastAxis() { return state.plots.length ? state.plots[state.plots.length - 1].x : "time"; }   // a new plot joins the last one
   var PROV = { upstream_default: "upstream defaults", author_blessed: "author-blessed", harness_tuned: "maintainer-chosen" };
   var PROV_NOTE = {
@@ -58,7 +78,7 @@
   var TERMS = {
     matched: "Matched pooling: at every rung only the catalogs that EVERY shown method has finished are pooled, so the methods are compared on the same laws. Own pooling: each method over whatever it has finished.",
     thin: "A rung is thin when its pool holds fewer than half the laws of the method's largest pool (units still running). Thin rungs are hidden unless you show them; they draw with hollow markers.",
-    wilson: "95 % Wilson score interval for a rate; t-interval for a mean; order-statistic interval for a median (from the pooled histogram).",
+    wilson: "95 % Wilson score interval for a rate; t-interval for a mean; order-statistic interval for a median (from the pooled histogram). Against a budget the interval is drawn as a band, because the x position is the budget and carries no error; against another metric it is a cross, because both coordinates are estimates.",
     median: "The median is read from a 128-bin histogram per cell, so it is exact to a bin. Ratios and times are binned on a log scale.",
     mean: "The default. A mean is taken over the finite values of the pooled laws, so an exactly recovered law (log10 FVU = -inf) is counted by the recovery rates and by the median, but not by the mean; every point reports how many finite values it averaged and how many it had. Switch to the median where that matters.",
     regime: "Rate metrics are defined for every law: a failed prediction is a miss. Continuous metrics describe successful predictions only.",
@@ -283,7 +303,9 @@
     var ly = nr ? H - B + 46 : T + 6, lx = nr ? L : W - R + 10;
     opts.series.forEach(function (sr) {
       var col = sr.color;
-      if (state.ci) { sr.pts.forEach(function (p) { if (isFinite(p.lo) && isFinite(p.hi)) { s += '<line x1="' + xs(clx(p.x)).toFixed(1) + '" y1="' + y(cly(p.hi)).toFixed(1) + '" x2="' + xs(clx(p.x)).toFixed(1) + '" y2="' + y(cly(p.lo)).toFixed(1) + '" stroke="' + col + '" stroke-width="1.5" stroke-opacity="0.4"/>'; } }); }
+      if (state.ci) { sr.pts.forEach(function (p) {   // both coordinates are estimates here, so the interval is a cross
+        if (isFinite(p.lo) && isFinite(p.hi)) { s += '<line x1="' + xs(clx(p.x)).toFixed(1) + '" y1="' + y(cly(p.hi)).toFixed(1) + '" x2="' + xs(clx(p.x)).toFixed(1) + '" y2="' + y(cly(p.lo)).toFixed(1) + '" stroke="' + col + '" stroke-width="1.5" stroke-opacity="0.4"/>'; }
+        if (isFinite(p.xlo) && isFinite(p.xhi)) { s += '<line x1="' + xs(clx(p.xlo)).toFixed(1) + '" y1="' + y(cly(p.v)).toFixed(1) + '" x2="' + xs(clx(p.xhi)).toFixed(1) + '" y2="' + y(cly(p.v)).toFixed(1) + '" stroke="' + col + '" stroke-width="1.5" stroke-opacity="0.4"/>'; } }); }
       s += '<polyline fill="none" stroke="' + col + '" stroke-width="1.6" stroke-opacity="0.65" points="' + sr.pts.map(function (p) { return xs(clx(p.x)).toFixed(1) + "," + y(cly(p.v)).toFixed(1); }).join(" ") + '"/>';
       sr.pts.forEach(function (p) { s += '<circle cx="' + xs(clx(p.x)).toFixed(1) + '" cy="' + y(cly(p.v)).toFixed(1) + '" r="3.2" fill="' + (p.thin ? "var(--surface)" : col) + '" stroke="' + col + '" stroke-width="1.5"><title>' + esc(p.title) + "</title></circle>"; });
       s += '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 20) + '" y2="' + ly + '" stroke="' + col + '" stroke-width="3"/><text x="' + (lx + 26) + '" y="' + (ly + 4) + '" class="leg">' + esc(sr.label) + "</text>"; ly += 20;
@@ -300,9 +322,9 @@
         var sx = stat(xm, m.key, r, use), sy = stat(ym, m.key, r, use); if (!sx || !sy) { return; }
         if (sx.pending || sy.pending) { pending = true; return; }
         if (!isFinite(sx.v) || !isFinite(sy.v)) { return; }
-        pts.push({ x: sx.v, v: sy.v, lo: sy.lo, hi: sy.hi, thin: tm.thin[r],
+        pts.push({ x: sx.v, xlo: sx.lo, xhi: sx.hi, v: sy.v, lo: sy.lo, hi: sy.hi, thin: tm.thin[r],
           title: m.label + " @ " + r + ": " + fmt(xm, sx.v, sx.edge) + " " + xm.short + ", " + fmt(ym, sy.v, sy.edge) + " " + ym.short + ", n = " + sy.n });
-        xmin = Math.min(xmin, sx.v); xmax = Math.max(xmax, sx.v);
+        [sx.v, state.ci ? sx.lo : sx.v, state.ci ? sx.hi : sx.v].forEach(function (v) { if (isFinite(v)) { xmin = Math.min(xmin, v); xmax = Math.max(xmax, v); } });
         [sy.v, state.ci ? sy.lo : sy.v, state.ci ? sy.hi : sy.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
       });
       if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: pts }); }
@@ -315,8 +337,7 @@
     return frontSVG({ title: title, aria: aria, series: series, xmin: xmin, xmax: xmax, ymin: ymin, ymax: ymax,
       xticks: ticksFor(xm, xmin, xmax), xtick: function (g) { return tickLabel(xm, g); },
       yticks: ticksFor(ym, ymin, ymax), ytick: function (g) { return tickLabel(ym, g); },
-      xlabel: xlabel || (narrow() ? xm.short : xm.label + (tfOf(xm) ? " (log scale)" : "")),
-      ylabel: ylabel == null ? (narrow() ? ym.short : ym.label) : ylabel, xzero: 0 });
+      xlabel: xlabel || axisName(xm), ylabel: ylabel == null ? axisName(ym) : ylabel, xzero: 0 });
   }
   function xOf(m, r, cs, src) { return state.xaxis === "time" ? timeOf(m, r, cs, src) : r; }
   function hasCandidateBudget(m) { return (m.budget || "candidates") !== "seconds"; }   // PySR's budget is seconds
@@ -347,28 +368,46 @@
     else if (tfOf(metric) === "log2") { ymin = Math.min(ymin, -0.3); ymax = Math.max(ymax, 0.3); }
     else { var pad = (ymax - ymin) * 0.08 || 0.1; ymin -= pad; ymax += pad; }
     var tr = state.xaxis === "time" ? timeRange(tmin, tmax) : [0, 0];
-    return chartSVG({ title: title, aria: aria, series: series, ymin: ymin, ymax: ymax, ticks: ticksFor(metric, ymin, ymax), tick: function (g) { return tickLabel(metric, g); }, ylabel: "", timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: tfOf(metric) === "log2" ? 0 : undefined });
+    return chartSVG({ title: title, aria: aria, series: series, ymin: ymin, ymax: ymax, ticks: ticksFor(metric, ymin, ymax), tick: function (g) { return tickLabel(metric, g); }, ylabel: axisName(metric), timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: tfOf(metric) === "log2" ? 0 : undefined });
   }
   // ---- Curves: one card per plot, each carrying its own two axes -------------------------------------------------
-  function opt(value, label, sel) { return '<option value="' + value + '"' + (sel === value ? " selected" : "") + ">" + esc(label) + "</option>"; }
-  function metricOptions(sel, short) {   // grouped, because a flat list of every metric is unreadable
-    return MGROUPS.map(function (g) {
+  // A picker, not a select: forty metrics in one column is a scroll, in grouped columns it is a menu. One control
+  // serves every place a metric is chosen, and every entry carries the same name and the same definition.
+  function pickButton(cls, attrs, k) {
+    var m = axisOf(k);
+    return '<button type="button" class="v2pick ' + cls + '" ' + attrs + ' data-k="' + esc(k) + '" aria-haspopup="dialog" aria-expanded="false" title="' + esc(mdef(m)) + '">' +
+      '<span class="v2picklab">' + esc(mname(m)) + '</span><span class="v2caret" aria-hidden="true">\u25be</span></button>';
+  }
+  function pickerGroups(axis) {
+    var gs = axis === "x" ? [{ title: "budget spent", items: [AXIS.time, AXIS.rung] }] : [];
+    MGROUPS.forEach(function (g) {
       var ms = D.metrics.filter(function (m) { return m.group === g; });
-      return ms.length ? '<optgroup label="' + esc(g) + '">' + ms.map(function (m) { return opt(m.key, short ? m.short : m.label, sel); }).join("") + "</optgroup>" : "";
+      if (ms.length) { gs.push({ title: g, items: ms }); }
+    });
+    return gs;
+  }
+  function pickerHTML(axis, cur) {
+    var cols = pickerGroups(axis).map(function (g) {
+      return '<div class="v2pickgroup"><h5>' + esc(g.title) + "</h5>" + g.items.map(function (m) {
+        var off = m.key === "time" && !anyTime();
+        return '<button type="button" class="v2pickitem' + (m.key === cur ? " on" : "") + '" data-k="' + esc(m.key) + '"' + (off ? " disabled" : "") +
+          ' title="' + esc(mdef(m)) + '"><span>' + esc(mname(m)) + "</span>" + (off ? ' <span class="v2hint">not measured yet</span>' : "") + "</button>";
+      }).join("") + "</div>";
     }).join("");
+    return '<input type="search" class="v2pickq" placeholder="filter" aria-label="filter the list"><div class="v2pickcols">' + cols + "</div>";
   }
-  function xOptions(sel) {
-    var time = anyTime() ? opt("time", "fit time", sel) : opt("time", "fit time (not measured yet)", sel).replace("<option", "<option disabled");
-    return '<optgroup label="budget spent">' + time + opt("rung", "candidates", sel) + "</optgroup>" + metricOptions(sel, true);
+  function setPick(el, k) {
+    if (!el) { return; }
+    var m = axisOf(k);
+    el.dataset.k = k; el.title = mdef(m); el.querySelector(".v2picklab").textContent = mname(m);
   }
-  function yOptions(sel) { return metricOptions(sel, false); }
   function plotCard(p, i, shown) {
     var ym = METRIC[p.y], svg;
-    if (isBudgetAxis(p.x)) { svg = withState({ xaxis: p.x }, function () { return curveChart(ym, axisMethods(shown), "", ym.label + " against " + (p.x === "time" ? "fit time" : "candidates")); }); }
-    else { svg = frontChart(METRIC[p.x], ym, shown, "", ym.label + " against " + METRIC[p.x].label, null, ""); }
+    if (isBudgetAxis(p.x)) { svg = withState({ xaxis: p.x }, function () { return curveChart(ym, axisMethods(shown), "", mname(ym) + " against " + mname(AXIS[p.x])); }); }
+    else { svg = frontChart(METRIC[p.x], ym, shown, "", mname(ym) + " against " + mname(METRIC[p.x])); }
     return '<figure class="v2plot">' +
-      '<div class="v2plothead"><select class="v2ysel" data-i="' + i + '" aria-label="metric on the y axis">' + yOptions(p.y) + "</select>" +
-      '<span class="v2vs">vs</span><select class="v2xsel" data-i="' + i + '" aria-label="axis on the x axis">' + xOptions(p.x) + "</select>" +
+      '<div class="v2plothead">' + pickButton("v2ysel", 'data-i="' + i + '" data-axis="y" aria-label="metric on the y axis"', p.y) +
+      '<span class="v2vs">vs</span>' + pickButton("v2xsel", 'data-i="' + i + '" data-axis="x" aria-label="axis on the x axis"', p.x) +
       '<button type="button" class="v2rmplot" data-i="' + i + '" aria-label="Remove this plot" title="Remove this plot">\u00d7</button></div>' +
       svg + "</figure>";
   }
@@ -392,7 +431,7 @@
   var HEADLINE = [
     { key: "numeric_recovery_val", title: "Recovery vs time",
       caption: "Laws reproduced to float32 precision on held-out points. Up and left is better." },
-    { x: "mdl_ratio", y: "log10_fvu_val", title: "Fit vs length", xlabel: "answer length / law length (log scale)",
+    { x: "mdl_ratio", y: "log10_fvu_val", title: "Fit vs length",
       caption: "Description length in the certified canon; dashed line: the law itself. Down and left is better." }];
   function withState(over, fn) { var prev = state; state = Object.assign({}, prev, over); try { return fn(); } finally { state = prev; } }
   function renderHeadline() {
@@ -408,7 +447,7 @@
           var ms = (h.key ? [h.key] : [h.x, h.y]).map(function (k) { return METRIC[k]; });
           if (ms.some(function (m) { return !m; })) { return ""; }
           if (state.stat === "median") { ms.forEach(function (m) { if (m.kind === "cont") { ensure("hist/" + m.key + ".js", scheduleRender); } }); }
-          var svg = h.key ? curveChart(ms[0], shown, h.title) : frontChart(ms[0], ms[1], shown, h.title, null, narrow() ? "length / law (log)" : h.xlabel);
+          var svg = h.key ? curveChart(ms[0], shown, h.title) : frontChart(ms[0], ms[1], shown, h.title);
           return '<figure class="v2hlfig">' + svg + "<figcaption>" + esc(h.caption) + "</figcaption></figure>";
         }).join("");
         return '<h2 class="v2hltitle">Recovery, cost and length</h2>' +
@@ -427,7 +466,7 @@
     var plots = plotMetrics().map(function (k) { return METRIC[k]; }); var keys = shown.map(function (m) { return m.key; });
     if (!plots.length || !shown.length) { return '<p class="v2hint">Select at least one method and one metric.</p>'; }
     var head = '<tr><th>' + (state.rows === "cats" ? "catalog" : "rung") + '</th><th>laws</th>' + shown.map(function (m) { return '<th colspan="' + plots.length + '"><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + '</th>'; }).join("") + '</tr>' +
-      '<tr><th></th><th></th>' + shown.map(function () { return plots.map(function (p) { return '<th>' + esc(p.short) + '</th>'; }).join(""); }).join("") + '</tr>';
+      '<tr><th></th><th></th>' + shown.map(function () { return plots.map(function (p) { return '<th>' + esc(mname(p)) + " " + mhelp(p) + '</th>'; }).join(""); }).join("") + '</tr>';
     var body = "", rowsOut = [];
     var emit = function (label, nl, tds) { body += '<tr><td>' + esc(label) + '</td><td>' + esc(nl) + '</td>' + tds.map(function (x) { return '<td>' + x.t + '</td>'; }).join("") + '</tr>'; rowsOut.push([label, nl].concat(tds.map(function (x) { return x.raw; }))); };
     if (state.rows === "rungs") {
@@ -445,7 +484,7 @@
       body += '<tr class="v2total"><td>all selected</td><td>' + laws(state.cats) + '</td>' + tds2.map(function (x) { return '<td>' + x.t + '</td>'; }).join("") + '</tr>';
       rowsOut.push(["all selected", String(laws(state.cats))].concat(tds2.map(function (x) { return x.raw; })));
     }
-    lastTable = { header: [state.rows === "cats" ? "catalog" : "rung", "laws"].concat(shown.reduce(function (a, m) { return a.concat(plots.map(function (p) { return m.label + " · " + p.short; })); }, [])), rows: rowsOut };
+    lastTable = { header: [state.rows === "cats" ? "catalog" : "rung", "laws"].concat(shown.reduce(function (a, m) { return a.concat(plots.map(function (p) { return m.label + " · " + mname(p); })); }, [])), rows: rowsOut };
     var ctl = '<div class="v2row v2tablectl"><span class="v2lab">rows</span><label><input type="radio" name="v2rows" value="rungs"' + (state.rows === "rungs" ? " checked" : "") + '> every rung</label><label><input type="radio" name="v2rows" value="cats"' + (state.rows === "cats" ? " checked" : "") + '> catalogs at rung ' + state.rung + '</label>' +
       '<span class="v2spacer"></span><button type="button" class="v2btn" data-act="copy-tsv">copy as TSV</button><button type="button" class="v2btn" data-act="csv">download CSV</button></div>';
     return ctl + '<div class="v2table-wrap"><table class="v2table"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div><p class="v2hint">' + (state.ci ? "Brackets: 95 % interval (" + term("wilson", "Wilson / t / order statistic") + "). " : "") + term("regime", "Rates count every law; continuous metrics describe successful predictions") + ".</p>";
@@ -497,7 +536,7 @@
     var B = 44 + 18 * series.length, H = 300 + B, lo = H0.lo, hi = H0.hi, xs2 = function (x) { return L + (x - lo) / (hi - lo) * (W - L - R); }, y2 = function (v) { return T + (1 - v / (ymax * 1.05)) * (H - T - B); };
     var s2 = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="v2chart v2dist" role="img" aria-label="' + esc(p.label) + ' distribution"><text x="' + L + '" y="18" class="ct">' + esc(p.label) + " at rung " + r + '</text>';
     ticksFor(p, lo, hi).forEach(function (g) { s2 += '<line x1="' + xs2(g).toFixed(1) + '" y1="' + T + '" x2="' + xs2(g).toFixed(1) + '" y2="' + (H - B) + '" class="grid"/><text x="' + xs2(g).toFixed(1) + '" y="' + (H - B + 16) + '" class="tick" text-anchor="middle">' + esc(tickLabel(p, g)) + '</text>'; });
-    s2 += '<text x="' + ((L + W - R) / 2) + '" y="' + (H - B + 32) + '" class="tick" text-anchor="middle">' + esc(p.short) + (tfOf(p) ? " (log scale)" : "") + '</text><text transform="translate(14,' + ((T + H - B) / 2) + ') rotate(-90)" class="tick" text-anchor="middle">density</text>';
+    s2 += '<text x="' + ((L + W - R) / 2) + '" y="' + (H - B + 32) + '" class="tick" text-anchor="middle">' + esc(axisName(p)) + '</text><text transform="translate(14,' + ((T + H - B) / 2) + ') rotate(-90)" class="tick" text-anchor="middle">density</text>';
     var ly2 = H - B + 46;
     series.forEach(function (sr) { var col = colorOf(sr.m), pts = []; for (var i = 0; i < sr.ph.nb; i++) { var x0 = lo + i * (hi - lo) / sr.ph.nb, x1 = x0 + (hi - lo) / sr.ph.nb; pts.push(xs2(x0).toFixed(1) + "," + y2(sr.dens[i]).toFixed(1)); pts.push(xs2(x1).toFixed(1) + "," + y2(sr.dens[i]).toFixed(1)); }
       s2 += '<polygon points="' + xs2(lo).toFixed(1) + "," + y2(0).toFixed(1) + " " + pts.join(" ") + " " + xs2(hi).toFixed(1) + "," + y2(0).toFixed(1) + '" fill="' + col + '" fill-opacity="0.12" stroke="none"/><polyline fill="none" stroke="' + col + '" stroke-width="1.8" points="' + pts.join(" ") + '"/>';
@@ -529,14 +568,14 @@
     var base = D.methods.filter(function (m) { return m.key === state.base; })[0], others = shown.filter(function (m) { return m.key !== state.base; }), keys = shown.map(function (m) { return m.key; });
     var plots = plotMetrics().filter(function (k) { return PAIRED_KEYS.indexOf(k) >= 0; }).map(function (k) { return METRIC[k]; });
     var ctl = '<p class="v2hint">Every method is read as method \u2212 ' + esc(base.label) + ' on the same laws \u00b7 ' + term("draw1", "draw 1") + '</p>';
-    if (!plots.length) { return ctl + '<p class="v2hint">None of the plotted metrics has paired contrasts. Paired contrasts exist for: ' + PAIRED_KEYS.map(function (k) { return METRIC[k] ? METRIC[k].short : k; }).join(", ") + '.</p>'; }
+    if (!plots.length) { return ctl + '<p class="v2hint">None of the plotted metrics has paired contrasts. Paired contrasts exist for: ' + esc(PAIRED_KEYS.map(function (k) { return METRIC[k] ? mname(METRIC[k]) : k; }).join(", ")) + '.</p>'; }
     var src = timeSource(keys);
     var charts = inBlock(root.querySelector(".v2main"), plots.length, function () { return plots.map(function (p) { var series = [], ymin = Infinity, ymax = -Infinity, tmin = Infinity, tmax = -Infinity;
       axisMethods(others).forEach(function (m) { var pts = []; D.rungs.forEach(function (r) { var use = poolCats(m.key, r, keys).filter(function (c) { return cell(base.key, c, r); }); if (!use.length) { return; } var x = xOf(m.key, r, use, src); if (x === null) { return; } var st = pairedStat(p, m.key, base.key, r, use); if (!st || !isFinite(st.v)) { return; }
           pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, thin: false, title: m.label + " − " + base.label + " @ " + r + ": " + fmtDelta(p, st.v) + " [" + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + "], n = " + st.n + " laws, p = " + fmtP(st.p) });
           [st.v, state.ci ? st.lo : st.v, state.ci ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } }); if (state.xaxis === "time") { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); } });
         if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: pts }); } });
-      var title = "Δ " + p.short + " vs " + base.label;
+      var title = "Δ " + mname(p) + " vs " + base.label;
       if (!series.length) { return chartSVG({ title: title, aria: title, series: [], empty: "no matched cells with the baseline yet" }); }
       ymin = Math.min(ymin, 0); ymax = Math.max(ymax, 0); var pad = (ymax - ymin) * 0.1 || 0.05; ymin -= pad; ymax += pad;
       var tr = state.xaxis === "time" ? timeRange(tmin, tmax) : [0, 0];
@@ -545,7 +584,7 @@
     var r = state.rung, rows = "";
     others.forEach(function (m) { rows += '<tr><td><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + '</td>' + plots.map(function (p) { var use = poolCats(m.key, r, keys).filter(function (c) { return cell(base.key, c, r); }); var st = use.length ? pairedStat(p, m.key, base.key, r, use) : null; if (!st) { return '<td class="v2na">–</td><td class="v2na">–</td><td class="v2na">–</td>'; } var sig = st.p !== null && st.p < 0.05; return '<td' + (sig ? ' class="v2sig"' : "") + '>' + fmtDelta(p, st.v) + ' <span class="v2ci-txt">[' + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + ']</span></td><td>' + fmtP(st.p) + '</td><td class="v2hint">' + st.wins + " / " + st.losses + " of " + st.n + '</td>'; }).join("") + '</tr>'; });
     var anyRow = others.some(function (m) { return plots.some(function (p) { var use = poolCats(m.key, r, keys).filter(function (c) { return cell(base.key, c, r); }); return use.length && pairedStat(p, m.key, base.key, r, use); }); });
-    var table = '<h3 class="v2h">At rung ' + r + '</h3>' + (anyRow ? "" : '<p class="v2hint">No matched cells with the baseline at rung ' + r + ' yet: pick another rung under Options.</p>') + '<div class="v2table-wrap"><table class="v2table"><thead><tr><th>method − ' + esc(base.label) + '</th>' + plots.map(function (p) { return '<th colspan="3">' + esc(p.short) + '</th>'; }).join("") + '</tr><tr><th></th>' + plots.map(function () { return '<th>Δ [95 %]</th><th>p</th><th>wins / losses</th>'; }).join("") + '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    var table = '<h3 class="v2h">At rung ' + r + '</h3>' + (anyRow ? "" : '<p class="v2hint">No matched cells with the baseline at rung ' + r + ' yet: pick another rung under Options.</p>') + '<div class="v2table-wrap"><table class="v2table"><thead><tr><th>method − ' + esc(base.label) + '</th>' + plots.map(function (p) { return '<th colspan="3">' + esc(mname(p)) + " " + mhelp(p) + '</th>'; }).join("") + '</tr><tr><th></th>' + plots.map(function () { return '<th>Δ [95 %]</th><th>p</th><th>wins / losses</th>'; }).join("") + '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
       '<p class="v2hint">Rates: ' + term("mcnemar", "exact McNemar") + ' on the laws the pair disagrees on; wins / losses count those laws. Continuous metrics: ' + term("signtest", "paired mean difference and exact sign test") + ' over laws where both have a finite value; ratios and times are read as multiplicative factors. Bold: p below 0.05, uncorrected.</p>';
     return ctl + '<div class="v2charts">' + charts.join("") + "</div>" + table;
   }
@@ -571,7 +610,7 @@
     var strip = D.methods.filter(function (m) { return D.status[m.key]; }).map(function (m) { var d = D.status[m.key][0], t = D.status[m.key][1]; return '<div class="v2tile" title="' + esc(m.label) + '"><b><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + (m.local ? " (local)" : "") + '</b><span>' + d + '<small> / ' + (t == null ? "?" : t) + ' units</small></span><div class="v2bar"><i style="width:' + (t ? 100 * d / t : 0) + '%"></i></div></div>'; }).join("");
     var catList = CATS.map(function (c) { var m = CAT[c]; return '<label title="' + esc(GROUPS[m.group] + (m.mu ? " · median law complexity " + m.mu[1] + " bits (IQR " + m.mu[0] + " to " + m.mu[2] + ")" : "")) + '"><input type="checkbox" data-c="' + c + '"> ' + esc(c) + ' <span class="v2hint">' + m.laws + '</span></label>'; }).join("");
     var methList = D.methods.filter(withData).map(function (m) { return '<div class="v2meth"><label><input type="checkbox" data-m="' + m.key + '"><input type="color" class="v2swatch" data-m="' + m.key + '" value="' + colorOf(m) + '" title="Colour for ' + esc(m.label) + '"><span class="v2mname">' + esc(m.label) + '</span></label>' + (m.local ? ' <span class="v2tag v2tag-local">local only</span>' : "") + ' <span class="v2hint">' + esc(m.param) + '</span>' + (m.selection ? " " + help(m.selection, "How does " + m.label + " choose its answer?") : "") + ' <span class="v2tag" title="' + esc(PROV_NOTE[m.provenance] || "") + '">' + esc(PROV[m.provenance] || m.provenance || "") + '</span><button type="button" class="v2reset" data-m="' + m.key + '" title="Reset colour to default" hidden>↺</button></div>'; }).join("") || '<span class="v2hint">no method has finished units yet</span>';
-    var metricList = MGROUPS.map(function (g) { var ms = D.metrics.filter(function (m) { return m.group === g; }); return '<div class="v2mgroup" data-group="' + esc(g) + '"><h4>' + esc(g) + '</h4>' + ms.map(function (m) { return '<div class="v2metric" data-tier="' + m.tier + '" data-key="' + m.key + '"><label><input type="checkbox" data-p="' + m.key + '"> ' + esc(m.label) + '</label> ' + help(m.desc + (m.kind === "rate" ? " Defined for every law." : " Successful predictions only.") + (m.higher === true ? " Higher is better." : m.higher === false ? " Lower is better." : ""), "What is " + m.label + "?") + '</div>'; }).join("") + "</div>"; }).join("");
+    var metricList = MGROUPS.map(function (g) { var ms = D.metrics.filter(function (m) { return m.group === g; }); return '<div class="v2mgroup" data-group="' + esc(g) + '"><h4>' + esc(g) + '</h4>' + ms.map(function (m) { return '<div class="v2metric" data-tier="' + m.tier + '" data-key="' + m.key + '"><label><input type="checkbox" data-p="' + m.key + '"> ' + esc(m.label) + '</label> ' + mhelp(m) + '</div>'; }).join("") + "</div>"; }).join("");
     root.innerHTML =
       '<div class="v2head"><div><div class="v2kicker">benchmark release ' + esc(rel.id) + '</div><p class="v2sub">' + esc(rel.title !== rel.id ? rel.title + " · " : "") + 'generated ' + esc(rel.generated) + '. ' + esc(rel.notes || "") + '</p></div><div class="v2row"><button type="button" class="v2btn" data-act="link">copy link to this view</button><span class="v2linkok v2hint" hidden>link copied</span></div></div>' +
       '<details class="v2release"><summary>Protocol of this release</summary><ul><li><b>Choosing an answer.</b> ' + esc(rel.scoring || "") + '</li><li><b>Judging it.</b> ' + esc(rel.judge || "") + '</li><li><b>Data.</b> One problem per law: 512 support points and 512 validation points from the catalog\'s own ranges, no noise; ' + CATS.length + ' catalogs, ' + laws(CATS) + ' laws.</li><li><b>Configurations.</b> ' + term("provenance", "Who chose each method\'s configuration") + ' is shown next to every method.</li><li><b>Time axis.</b> ' + term("time", "Reference-machine timing") + (D.timing_note ? " · " + esc(D.timing_note) : "") + '</li><li><b>Statistics.</b> ' + term("regime", "Two regimes") + ', ' + term("matched", "matched pooling") + ', ' + term("wilson", "95 % intervals") + '.</li></ul></details>' +
@@ -582,7 +621,7 @@
       '<div class="v2panel v2panel-show"><h3><span class="v2showtitle">Plots</span> <span class="v2hint v2metcount"></span></h3>' +
       '<div class="v2row" data-uses="plots"><input type="search" class="v2q" placeholder="filter metrics" aria-label="filter metrics"><label><input type="checkbox" class="v2tier"> show all ' + D.metrics.length + '</label></div>' +
       '<div class="v2metrics" data-uses="plots">' + metricList + '</div>' +
-      '<div class="v2row" data-uses="focus"><span class="v2lab">metric</span><select class="v2focus" aria-label="metric shown in this view">' + D.metrics.map(function (m) { return '<option value="' + m.key + '">' + esc(m.label) + '</option>'; }).join("") + '</select></div>' +
+      '<div class="v2row" data-uses="focus"><span class="v2lab">metric</span>' + pickButton("v2focus", 'data-axis="focus" aria-label="metric shown in this view"', state.focus) + '</div>' +
       '<div class="v2row" data-uses="rows"><span class="v2lab">rows</span><label><input type="radio" name="v2rows" value="rungs"> one per budget</label><label><input type="radio" name="v2rows" value="cats"> one per catalog</label></div>' +
       '<div class="v2row" data-uses="base"><span class="v2lab">baseline</span><select class="v2base" aria-label="baseline method">' + D.methods.filter(withData).map(function (m) { return '<option value="' + m.key + '">' + esc(m.label) + '</option>'; }).join("") + '</select></div>' +
       '<div class="v2row" data-uses="rung"><span class="v2lab">budget</span><select class="v2rung" aria-label="budget per problem">' + D.rungs.map(function (r) { return '<option value="' + r + '">' + r + '</option>'; }).join("") + '</select><span class="v2hint">candidates or seconds, per method</span></div></div>' +
@@ -612,7 +651,7 @@
     root.querySelectorAll("input[name=v2pool]").forEach(function (i) { i.checked = i.value === state.pool; });
     root.querySelectorAll("input[name=v2xaxis]").forEach(function (i) { i.checked = i.value === state.xaxis; });
     root.querySelector(".v2ci").checked = state.ci; root.querySelector(".v2thin").checked = state.thin;
-    root.querySelector(".v2focus").value = state.focus; root.querySelector(".v2rung").value = String(state.rung);
+    setPick(root.querySelector(".v2focus"), state.focus); root.querySelector(".v2rung").value = String(state.rung);
     root.querySelectorAll("input[name=v2rows]").forEach(function (i) { i.checked = i.value === state.rows; });
     if (state.base) { root.querySelector(".v2base").value = state.base; }
     root.querySelectorAll(".v2tab").forEach(function (b) { b.classList.toggle("active", b.dataset.view === state.view); b.setAttribute("aria-selected", b.dataset.view === state.view ? "true" : "false"); });
@@ -639,6 +678,7 @@
       }
       renderHeadline();
       view.innerHTML = state.view === "table" ? renderTable(shown) : state.view === "matrix" ? renderMatrix(shown) : state.view === "dist" ? renderDist(shown) : state.view === "paired" ? renderPaired(shown) : renderCurves(shown);
+      if (pickerFor && !document.body.contains(pickerFor)) { closePicker(); }
       root.querySelector(".v2err").textContent = ""; save();
     } catch (e) { root.querySelector(".v2err").textContent = "The explorer hit an error while drawing: " + (e && e.message ? e.message : e) + ". Reload the page, or press “all” under Catalogs to reset the selection."; if (window.console) { console.error(e); } }
   }
@@ -652,9 +692,7 @@
     else if (t.dataset.p) { if (t.checked) { state.plots.push({ x: lastAxis(), y: t.dataset.p }); } else { state.plots = state.plots.filter(function (c) { return c.y !== t.dataset.p; }); } }
     else if (t.name === "v2stat") { state.stat = t.value; } else if (t.name === "v2pool") { state.pool = t.value; } else if (t.name === "v2xaxis") { state.xaxis = t.value; } else if (t.name === "v2rows") { state.rows = t.value; }
     else if (t.classList.contains("v2ci")) { state.ci = t.checked; } else if (t.classList.contains("v2thin")) { state.thin = t.checked; } else if (t.classList.contains("v2tier")) { state.tier = t.checked ? "all" : "main"; }
-    else if (t.classList.contains("v2focus")) { state.focus = t.value; } else if (t.classList.contains("v2rung")) { state.rung = parseInt(t.value, 10); } else if (t.classList.contains("v2base")) { state.base = t.value; }
-    else if (t.classList.contains("v2ysel")) { state.plots[+t.dataset.i].y = t.value; }
-    else if (t.classList.contains("v2xsel")) { state.plots[+t.dataset.i].x = t.value; }
+    else if (t.classList.contains("v2rung")) { state.rung = parseInt(t.value, 10); } else if (t.classList.contains("v2base")) { state.base = t.value; }
     else if (t.classList.contains("v2swatch")) { userColors[t.dataset.m] = t.value; writeCookie(userColors); root.querySelector(".v2cookie").hidden = false; }
     else { return; }
     render();
@@ -695,8 +733,52 @@
     pop.style.left = left + "px"; pop.style.top = top + "px";
     popArmed = false; window.requestAnimationFrame(function () { window.requestAnimationFrame(function () { popArmed = true; }); });
   });
-  document.addEventListener("keydown", function (e) { if (e.key === "Escape") { closePop(); } });
-  window.addEventListener("resize", function () { closeArmed(); scheduleRender(); });
+  // ---- the metric picker: a menu in columns, at body level like the explanations ---------------------------------
+  var pickerEl = null, pickerFor = null;
+  function closePicker() {
+    if (pickerEl) { pickerEl.remove(); pickerEl = null; }
+    if (pickerFor) { pickerFor.setAttribute("aria-expanded", "false"); pickerFor = null; }
+  }
+  function placePicker(btn) {
+    var margin = 8, r = btn.getBoundingClientRect(), h = pickerEl.offsetHeight, w = pickerEl.offsetWidth;
+    var left = Math.min(Math.max(r.left, margin), Math.max(margin, window.innerWidth - w - margin));
+    var top = r.bottom + 6;
+    if (top + h > window.innerHeight - margin) { top = Math.max(margin, window.innerHeight - h - margin); }
+    pickerEl.style.left = left + "px"; pickerEl.style.top = top + "px";
+  }
+  function openPicker(btn) {
+    var axis = btn.dataset.axis;
+    closePicker(); closePop();
+    pickerEl = document.createElement("div");
+    pickerEl.className = "v2picker"; pickerEl.setAttribute("role", "dialog");
+    pickerEl.setAttribute("aria-label", axis === "x" ? "What the x axis shows" : "Which metric to show");
+    pickerEl.innerHTML = pickerHTML(axis, btn.dataset.k);
+    document.body.appendChild(pickerEl);
+    pickerFor = btn; btn.setAttribute("aria-expanded", "true"); placePicker(btn);
+    var q = pickerEl.querySelector(".v2pickq");
+    q.addEventListener("input", function () {
+      var v = q.value.trim().toLowerCase();
+      pickerEl.querySelectorAll(".v2pickitem").forEach(function (it) { it.hidden = !!v && it.textContent.toLowerCase().indexOf(v) < 0 && it.dataset.k.indexOf(v) < 0; });
+      pickerEl.querySelectorAll(".v2pickgroup").forEach(function (g) { g.hidden = !Array.prototype.some.call(g.querySelectorAll(".v2pickitem"), function (it) { return !it.hidden; }); });
+    });
+    pickerEl.addEventListener("click", function (e) {
+      var it = e.target.closest ? e.target.closest(".v2pickitem") : null;
+      if (!it || it.disabled) { return; }
+      if (axis === "focus") { state.focus = it.dataset.k; }
+      else if (btn.dataset.i !== undefined) { state.plots[+btn.dataset.i][axis] = it.dataset.k; }
+      closePicker(); render();
+    });
+    if (!narrow()) { q.focus(); }
+  }
+  document.addEventListener("click", function (e) {
+    if (!e.target.closest) { return; }
+    if (e.target.closest(".v2picker")) { return; }
+    var trigger = e.target.closest(".v2pick");
+    if (!trigger || trigger === pickerFor) { closePicker(); return; }
+    if (root.contains(trigger)) { openPicker(trigger); }
+  });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") { closePop(); closePicker(); } });
+  window.addEventListener("resize", function () { closeArmed(); closePicker(); scheduleRender(); });
   // The first paint can measure a container that has not settled (fonts, the sidebar, a scrollbar), and a
   // chart built for the wrong width is a chart whose labels are the wrong size. Watch and redraw.
   if (window.ResizeObserver) {
