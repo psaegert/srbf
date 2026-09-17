@@ -113,7 +113,7 @@ test('the view state round-trips through the URL', async ({ page }) => {
 });
 
 test('terms and metric help open a floating explanation', async ({ page }) => {
-  await page.goto('/?release=2026-09&v=curves');
+  await page.goto('/?release=2026-09&v=table');
   await page.locator(V2 + ' .v2metrics .v2help').first().click();
   await expect(page.locator('.v2pop')).toBeVisible();
   await expect(page.locator('.v2pop')).toContainText('Share of laws');
@@ -125,28 +125,27 @@ test('terms and metric help open a floating explanation', async ({ page }) => {
 
 test('time is the default x axis wherever a time was measured', async ({ page }) => {
   await page.goto('/');
-  const radio = page.locator(V2 + ' input.v2xtime');
+  const axis = page.locator(V2 + ' .v2plot .v2xsel').first();
   // a time exists when the reference machine has measured a method, or when the runs themselves carry fit_time
   const hasTime = await page.evaluate(() => {
     const D = window.RESULTS_V2 || {};
     if (Object.keys(D.timing || {}).some((k) => Object.keys(D.timing[k]).length)) { return true; }
     return Object.keys(D.cells || {}).some((m) => Object.keys(D.cells[m]).some((c) => Object.keys(D.cells[m][c]).some((r) => D.cells[m][c][r].m && D.cells[m][c][r].m.fit_time)));
   });
-  if (!hasTime) { await expect(radio).toBeDisabled(); return; }
-  await expect(radio).toBeEnabled();
-  await expect(radio).toBeChecked();
+  if (!hasTime) { await expect(axis.locator('option[value="time"]')).toBeDisabled(); return; }
+  await expect(axis).toHaveValue('time');
   await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('fit time');
 });
 
 test('the candidate axis names itself and is offered beside time', async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto('/?release=2026-09&v=curves');
-  await page.locator(V2 + ' input[name="v2xaxis"][value="rung"]').check();
+  await page.locator(V2 + ' .v2plot .v2xsel').first().selectOption('rung');
   await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('candidates');
   // a method whose budget is a time limit has no position on this axis and is named instead of dropped silently
   const seconds = await page.evaluate(() => (window.RESULTS_V2.methods || []).filter((m) => m.budget === 'seconds' && window.RESULTS_V2.cells[m.key] && Object.keys(window.RESULTS_V2.cells[m.key]).length).map((m) => m.label));
   for (const label of seconds) { await expect(page.locator(V2 + ' .v2view')).toContainText(label); }
-  await page.locator(V2 + ' input.v2xtime').check();
+  await page.locator(V2 + ' .v2plot .v2xsel').first().selectOption('time');
   await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('fit time');
   expect(errors).toEqual([]);
 });
@@ -223,8 +222,10 @@ test('each display carries only the controls it can use', async ({ page }) => {
     .filter((e) => !e.hidden).flatMap((e) => e.dataset.uses.split(' ')));
   await page.goto('/?release=2026-09&v=curves');
   const curves = await shown();
-  for (const k of ['plots', 'stat', 'xaxis']) { expect(curves, k).toContain(k); }
-  for (const k of ['focus', 'rung', 'base', 'rows']) { expect(curves, k).not.toContain(k); }
+  for (const k of ['stat', 'pool', 'thin']) { expect(curves, k).toContain(k); }
+  for (const k of ['plots', 'xaxis', 'focus', 'rung', 'base', 'rows']) { expect(curves, k).not.toContain(k); }
+  await page.locator(V2 + ' .v2tab[data-view="table"]').click();
+  await expect.poll(shown).toContain('plots');
   await page.locator(V2 + ' .v2tab[data-view="matrix"]').click();
   await expect.poll(shown).toContain('focus');
   const matrix = await shown();
@@ -232,6 +233,30 @@ test('each display carries only the controls it can use', async ({ page }) => {
   for (const k of ['plots', 'xaxis', 'thin']) { expect(matrix, k).not.toContain(k); }   // one budget, one metric
   await page.locator(V2 + ' .v2tab[data-view="paired"]').click();
   await expect.poll(shown).toContain('base');
+});
+
+test('every plot carries its own two axes, and plots are added and removed', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.setViewportSize({ width: 1600, height: 1100 });
+  await page.goto('/?release=2026-09&v=curves&p=time~numeric_recovery_val');
+  const cards = page.locator(V2 + ' .v2plot');
+  await expect(cards).toHaveCount(1);
+  await expect(cards.first().locator('.v2ysel')).toHaveValue('numeric_recovery_val');
+  // a metric on x makes the plot a trade-off: the budget is gone from both axes
+  await cards.first().locator('.v2xsel').selectOption('mdl_ratio');
+  await expect(cards.first().locator('svg.v2chart')).toContainText('MDL ratio');
+  expect(decodeURIComponent(page.url())).toContain('mdl_ratio~numeric_recovery_val');
+  // the dashed tile adds a plot, the x removes one
+  await page.locator(V2 + ' .v2addplot').click();
+  await expect(cards).toHaveCount(2);
+  await page.locator(V2 + ' .v2rmplot').first().click();
+  await expect(cards).toHaveCount(1);
+  await page.locator(V2 + ' .v2rmplot').first().click();
+  await expect(cards).toHaveCount(0);
+  await expect(page.locator(V2 + ' .v2addplot')).toBeVisible();   // never a dead end
+  await page.locator(V2 + ' .v2addplot').click();
+  await expect(cards).toHaveCount(1);
+  expect(errors).toEqual([]);
 });
 
 test('a chart is drawn at the width it is given', async ({ page }) => {
