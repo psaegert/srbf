@@ -458,11 +458,14 @@ class SubprocessAdapter(EvaluationModelAdapter):
         # that calls its columns that); the ground truth spells the same columns x1, x2, ... , so
         # both the stored expression and its prefix are mapped back before anything is judged.
         names = skeleton_variable_names(variables)
-        record["predicted_expression"] = rename_named_variables_in_infix(str(expression), variables)
+        expression = rename_named_variables_in_infix(str(expression), variables)
+        record["predicted_expression"] = expression
         try:
             # read_infix, not the raw infix_to_prefix: the reader's own tokens ('**', 'neg' on a
-            # literal) are not the engine grammar, and simplify/complexity refuse them.
-            prefix = rename_named_variables(list(self.simplipy_engine.read_infix(str(expression))), variables) or []
+            # literal) are not the engine grammar, and simplify/complexity refuse them. The reader
+            # takes any identifier as a variable, so the map runs FIRST: everything downstream --
+            # the canonical form, the price, the judge -- then sees one spelling.
+            prefix = rename_named_variables(list(self.simplipy_engine.read_infix(expression)), variables) or []
             record["predicted_expression_prefix"] = normalize_expression(prefix)
             record["predicted_skeleton_prefix"] = normalize_skeleton(prefix)
         except Exception as exc:  # noqa: BLE001 - parse errors vary by engine
