@@ -15,6 +15,7 @@
   "use strict";
   var root = document.getElementById("results-explorer-v2");
   if (!root || typeof window.RESULTS_V2 === "undefined") { return; }
+  var headRoot = document.getElementById("results-headline-v2");   // the two fixed charts above the explorer
   var D = JSON.parse(JSON.stringify(window.RESULTS_V2));
   var REL = D.release.id;
   // another release is on screen (the routing script decided before this file ran): leave the page and its URL alone
@@ -49,7 +50,8 @@
     mcnemar: "Exact McNemar test on the laws the two methods disagree on (one recovered, the other did not): two-sided binomial p-value, no asymptotics. The difference of paired rates carries a 95 % Wald interval.",
     signtest: "Paired mean difference with a t-interval over laws where both methods have a finite value, plus a two-sided exact sign test on the wins and losses.",
     draw1: "One draw per problem so far. These are paired contrasts on the same laws, not the repeated-draw noise margins of the 2026-07 release; those follow when draws 2 and up exist.",
-    time: "Mean fit time per problem on one reference machine (solomon: RTX 4090, 16 refiner workers), measured on a frozen 262-problem stratified subset. The quality numbers come from the cluster; only the x position moves.",
+    time: "Seconds per problem, averaged over the pooled laws. Where the reference machine (solomon: RTX 4090, 16 refiner workers, a frozen 262-problem subset) has measured every shown method, that is the x position; until then it is the time measured where each unit ran, on the cluster's mixed GPUs. One chart never mixes the two, and its x label says which it is.",
+    candidates: "Samples, beam width, candidates or draws per problem: the budget a generative method spends. PySR's budget is a time limit rather than a count, so it has no position on this axis and appears on the time axis only.",
     provenance: "Who chose each method's configuration. Upstream defaults: nothing tuned. Author-blessed: the method's authors chose it (Flash-ANSR shares authors with the benchmark). Maintainer-chosen: the benchmark maintainers set it."
   };
   var COOKIE = "srbf_colors";
@@ -66,10 +68,10 @@
   var DEFAULTS = function () {
     return { view: "curves", cats: CATS.slice(), methods: D.methods.filter(withData).map(function (m) { return m.key; }),
       plots: D.metrics.filter(function (m) { return m.tier === "main"; }).map(function (m) { return m.key; }),
-      focus: "numeric_recovery_val", stat: "median", pool: "matched", ci: true, thin: false, xaxis: "rung", rung: 64, base: null, tier: "main", q: "", rows: "rungs" };
+      focus: "numeric_recovery_val", stat: "median", pool: "matched", ci: true, thin: false, xaxis: "time", rung: 64, base: null, tier: "main", q: "", rows: "rungs" };
   };
   var state = DEFAULTS();
-  var LS = "srbf-v2-" + REL;
+  var LS = "srbf-v2-" + REL + ".2";   // .2: time became the default x axis, and a state saved before that must not pin the old one
   function loadState() {
     try { var s = JSON.parse(localStorage.getItem(LS) || "null"); if (s) { Object.keys(state).forEach(function (k) { if (s[k] !== undefined) { state[k] = s[k]; } }); } } catch (e) { /* no storage */ }
     var q = new URLSearchParams(window.location.search); var any = false;
@@ -202,7 +204,12 @@
     if (opts.zero !== undefined && opts.zero >= ymin && opts.zero <= ymax) { s += '<line x1="' + L + '" y1="' + y(opts.zero).toFixed(1) + '" x2="' + (W - R) + '" y2="' + y(opts.zero).toFixed(1) + '" class="grid zero" stroke-dasharray="4 4"/>'; }
     if (timeAxis) { for (var t = tmin; t <= tmax * 1.0001; t *= 10) { s += '<line x1="' + xs(t).toFixed(1) + '" y1="' + T + '" x2="' + xs(t).toFixed(1) + '" y2="' + (H - B) + '" class="grid"/><text x="' + xs(t).toFixed(1) + '" y="' + (H - B + 16) + '" class="tick" text-anchor="middle">' + (t >= 1 ? t : t.toPrecision(1)) + ' s</text>'; } }
     else { D.rungs.forEach(function (r) { var e = Math.round(Math.log2(r)); s += '<line x1="' + xs(r).toFixed(1) + '" y1="' + (H - B) + '" x2="' + xs(r).toFixed(1) + '" y2="' + (H - B + (e % 2 ? 3 : 5)) + '" class="grid"/>'; if (e % 2) { return; } s += '<text x="' + xs(r).toFixed(1) + '" y="' + (H - B + 16) + '" class="tick" text-anchor="middle">' + (r >= 1024 ? (r / 1024) + "k" : r) + '</text>'; }); }
-    s += '<text x="' + ((L + W - R) / 2).toFixed(0) + '" y="' + (H - B + 32) + '" class="tick" text-anchor="middle">' + esc(timeAxis ? (nr ? "fit time on the reference machine (s, log)" : "mean fit time per problem on the reference machine (s, log scale)") : (nr ? "budget per problem (log scale)" : "samples / beam / candidates / draws per problem (log scale)")) + '</text>';
+    var xlab = timeAxis
+      ? (opts.timeSource === "ref"
+        ? (nr ? "fit time, reference machine (s, log)" : "mean fit time per problem on the reference machine (s, log scale)")
+        : (nr ? "fit time where the unit ran (s, log)" : "mean fit time per problem, measured where each unit ran (s, log scale)"))
+      : (nr ? "candidates per problem (log scale)" : "samples / beam / candidates / draws per problem (log scale)");
+    s += '<text x="' + ((L + W - R) / 2).toFixed(0) + '" y="' + (H - B + 32) + '" class="tick" text-anchor="middle">' + esc(xlab) + '</text>';
     s += '<text transform="translate(14,' + ((T + H - B) / 2).toFixed(0) + ') rotate(-90)" class="tick" text-anchor="middle">' + esc(opts.ylabel) + '</text>';
     var ly = nr ? H - B + 46 : T + 6, lx = nr ? L : W - R + 10;
     series.forEach(function (sr) { var col = sr.color, pts = sr.pts.slice().sort(function (a, b) { return a.x - b.x; }); var cl = function (v) { return Math.min(ymax, Math.max(ymin, v)); };
@@ -212,15 +219,29 @@
       s += '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 20) + '" y2="' + ly + '" stroke="' + col + '" stroke-width="3"/><text x="' + (lx + 26) + '" y="' + (ly + 4) + '" class="leg">' + esc(sr.label) + '</text>'; ly += 18; });
     return s + "</svg>";
   }
-  function timeOf(m, r) { var t = (D.timing[m] || {})[String(r)]; return t > 0 ? t : null; }
-  function xOf(m, r) { return state.xaxis === "time" ? timeOf(m, r) : r; }
+  // x positions. The budget axis is the method's own ladder. The time axis is seconds per problem: the
+  // reference machine where it has measured every shown method, the runs themselves otherwise -- one
+  // chart uses one source for all of its methods, never a mixture.
+  function refTime(m, r) { var t = (D.timing[m] || {})[String(r)]; return t > 0 ? t : null; }
+  function measuredTime(m, r, cs) { var n = 0, s = 0; cs.forEach(function (c) { var x = cell(m, c, r), t = x && x.m.fit_time; if (t) { n += t[1]; s += t[2]; } }); return n ? s / n : null; }
+  function timeSource(keys) { return keys.length && keys.every(function (k) { return D.timing[k] && Object.keys(D.timing[k]).length; }) ? "ref" : "run"; }
+  function timeOf(m, r, cs, src) { return src === "ref" ? refTime(m, r) : measuredTime(m, r, cs); }
+  function xOf(m, r, cs, src) { return state.xaxis === "time" ? timeOf(m, r, cs, src) : r; }
+  function hasCandidateBudget(m) { return (m.budget || "candidates") !== "seconds"; }   // PySR's budget is seconds
+  function axisMethods(shown) { return state.xaxis === "time" ? shown : shown.filter(hasCandidateBudget); }
+  function anyTime() {
+    if (Object.keys(D.timing).some(function (k) { return Object.keys(D.timing[k]).length; })) { return true; }
+    return D.methods.some(function (m) { var cs = D.cells[m.key] || {};
+      return Object.keys(cs).some(function (c) { return Object.keys(cs[c]).some(function (r) { return cs[c][r].m && cs[c][r].m.fit_time; }); }); });
+  }
   function timeRange(tmin, tmax) { tmin = Math.pow(10, Math.floor(Math.log10(tmin))); tmax = Math.pow(10, Math.ceil(Math.log10(tmax))); if (tmax <= tmin) { tmax = tmin * 10; } return [tmin, tmax]; }
 
   // ---- Curves ----------------------------------------------------------------------------------------------------
   function curveChart(metric, shown) {
     var keys = shown.map(function (x) { return x.key; }), series = [], ymin = Infinity, ymax = -Infinity, pending = false, tmin = Infinity, tmax = -Infinity;
+    var src = timeSource(keys);
     shown.forEach(function (m) { var tm = thinMap(m.key, keys), pts = [];
-      D.rungs.forEach(function (r) { var use = poolCats(m.key, r, keys); if (!use.length || (tm.thin[r] && !state.thin)) { return; } var x = xOf(m.key, r); if (x === null) { return; }
+      D.rungs.forEach(function (r) { var use = poolCats(m.key, r, keys); if (!use.length || (tm.thin[r] && !state.thin)) { return; } var x = xOf(m.key, r, use, src); if (x === null) { return; }
         var st = stat(metric, m.key, r, use); if (!st) { return; } if (st.pending) { pending = true; return; } if (!isFinite(st.v)) { return; }
         var title = m.label + " @ " + r + (state.xaxis === "time" ? " (" + x.toFixed(2) + " s)" : "") + ": " + fmt(metric, st.v, st.edge) + " [" + fmt(metric, st.lo) + ", " + fmt(metric, st.hi) + "], n = " + st.n + (st.ndef ? " finite of " + st.ndef : "") + ", pool " + tm.pools[r] + " laws" + (tm.thin[r] ? " (thin)" : "");
         pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, thin: tm.thin[r], title: title });
@@ -234,12 +255,46 @@
     else if (tfOf(metric) === "log2") { ymin = Math.min(ymin, -0.3); ymax = Math.max(ymax, 0.3); }
     else { var pad = (ymax - ymin) * 0.08 || 0.1; ymin -= pad; ymax += pad; }
     var tr = state.xaxis === "time" ? timeRange(tmin, tmax) : [0, 0];
-    return chartSVG({ title: title, series: series, ymin: ymin, ymax: ymax, ticks: ticksFor(metric, ymin, ymax), tick: function (g) { return tickLabel(metric, g); }, ylabel: metric.short, timeAxis: state.xaxis === "time", tmin: tr[0], tmax: tr[1], zero: tfOf(metric) === "log2" ? 0 : undefined });
+    return chartSVG({ title: title, series: series, ymin: ymin, ymax: ymax, ticks: ticksFor(metric, ymin, ymax), tick: function (g) { return tickLabel(metric, g); }, ylabel: metric.short, timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: tfOf(metric) === "log2" ? 0 : undefined });
   }
   function renderCurves(shown) {
     var plots = D.metrics.filter(function (m) { return state.plots.indexOf(m.key) >= 0; });
     if (!plots.length) { return '<p class="v2hint">No metric selected: tick one in the Metrics panel.</p>'; }
-    return '<div class="v2charts">' + plots.map(function (m) { return curveChart(m, shown); }).join("") + "</div>";
+    var drawn = axisMethods(shown), dropped = shown.filter(function (m) { return drawn.indexOf(m) < 0; });
+    var note = dropped.length ? '<p class="v2hint">' + esc(dropped.map(function (m) { return m.label; }).join(", ")) + ' spends a time budget, not ' + term("candidates", "a candidate count") + ': switch the x axis to time to see ' + (dropped.length > 1 ? "them" : "it") + '.</p>' : "";
+    return note + '<div class="v2charts">' + plots.map(function (m) { return curveChart(m, drawn); }).join("") + "</div>";
+  }
+
+  // ---- Headline ---------------------------------------------------------------------------------------------------
+  // Two charts that are the same for every visitor: what a method recovers, and how long its answer is, against
+  // what it costs. They are deliberately not wired to the controls below -- everything adjustable is the explorer.
+  var HEADLINE = [
+    { key: "numeric_recovery_val", caption: "Laws reproduced to float32 precision on held-out points. Higher is better." },
+    { key: "mdl_ratio", caption: "Description length of the answer over the law's own, in the certified canon. 1 is the law itself; lower is a shorter answer." }];
+  function withState(over, fn) { var prev = state; state = Object.assign({}, prev, over); try { return fn(); } finally { state = prev; } }
+  function renderHeadline() {
+    if (!headRoot) { return; }
+    headRoot.innerHTML = withState(
+      { cats: CATS.slice(), methods: D.methods.filter(withData).map(function (m) { return m.key; }),
+        pool: "matched", stat: "median", ci: true, thin: false, xaxis: "time" },
+      function () {
+        var shown = shownMethods();
+        if (!shown.length) { return '<p class="v2hint">No method has finished units in this release yet.</p>'; }
+        var keys = shown.map(function (m) { return m.key; }), src = timeSource(keys);
+        var charts = HEADLINE.map(function (h) {
+          var m = METRIC[h.key];
+          if (!m) { return ""; }
+          if (m.kind === "cont") { ensure("hist/" + m.key + ".js", scheduleRender); }
+          return '<figure class="v2hlfig">' + curveChart(m, shown) + '<figcaption>' + esc(h.caption) + "</figcaption></figure>";
+        }).join("");
+        return '<h2 class="v2hltitle">What it recovers, and what it costs</h2>' +
+          '<p class="v2hlsub">Every method with finished units, all ' + CATS.length + ' catalogs, ' + term("matched", "matched") +
+          ' at each budget so the methods are read on the same laws. Bands are ' + term("wilson", "95 % intervals") + '.</p>' +
+          '<div class="v2hlcharts">' + charts + "</div>" +
+          '<p class="v2hint">x: ' + (src === "ref" ? term("time", "mean fit time per problem on the reference machine")
+            : term("time", "mean fit time per problem, measured where each unit ran") + " (the cluster\u2019s mixed GPUs; the reference-machine timing replaces it as it is measured)") +
+          ". Everything below is yours to change.</p>";
+      });
   }
 
   // ---- Table -----------------------------------------------------------------------------------------------------
@@ -352,8 +407,9 @@
     var plots = D.metrics.filter(function (m) { return state.plots.indexOf(m.key) >= 0 && PAIRED_KEYS.indexOf(m.key) >= 0; });
     var ctl = '<div class="v2row"><span class="v2lab">baseline</span><select class="v2base" aria-label="baseline method">' + shown.map(function (m) { return '<option value="' + m.key + '"' + (m.key === state.base ? " selected" : "") + '>' + esc(m.label) + '</option>'; }).join("") + '</select><span class="v2hint">every other method is read as method − baseline on the same laws · ' + term("draw1", "draw 1") + '</span></div>';
     if (!plots.length) { return ctl + '<p class="v2hint">None of the plotted metrics has paired contrasts. Paired contrasts exist for: ' + PAIRED_KEYS.map(function (k) { return METRIC[k] ? METRIC[k].short : k; }).join(", ") + '.</p>'; }
+    var src = timeSource(keys);
     var charts = plots.map(function (p) { var series = [], ymin = Infinity, ymax = -Infinity, tmin = Infinity, tmax = -Infinity;
-      others.forEach(function (m) { var pts = []; D.rungs.forEach(function (r) { var use = poolCats(m.key, r, keys).filter(function (c) { return cell(base.key, c, r); }); if (!use.length) { return; } var x = xOf(m.key, r); if (x === null) { return; } var st = pairedStat(p, m.key, base.key, r, use); if (!st || !isFinite(st.v)) { return; }
+      axisMethods(others).forEach(function (m) { var pts = []; D.rungs.forEach(function (r) { var use = poolCats(m.key, r, keys).filter(function (c) { return cell(base.key, c, r); }); if (!use.length) { return; } var x = xOf(m.key, r, use, src); if (x === null) { return; } var st = pairedStat(p, m.key, base.key, r, use); if (!st || !isFinite(st.v)) { return; }
           pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, thin: false, title: m.label + " − " + base.label + " @ " + r + ": " + fmtDelta(p, st.v) + " [" + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + "], n = " + st.n + " laws, p = " + fmtP(st.p) });
           [st.v, state.ci ? st.lo : st.v, state.ci ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } }); if (state.xaxis === "time") { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); } });
         if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: pts }); } });
@@ -362,7 +418,7 @@
       ymin = Math.min(ymin, 0); ymax = Math.max(ymax, 0); var pad = (ymax - ymin) * 0.1 || 0.05; ymin -= pad; ymax += pad;
       var tr = state.xaxis === "time" ? timeRange(tmin, tmax) : [0, 0];
       var lin = { kind: "cont", fmt: "num2", hist: null };
-      return chartSVG({ title: title, series: series, ymin: ymin, ymax: ymax, ticks: ticksFor(lin, ymin, ymax), tick: function (g) { return fmtDelta(p, g); }, ylabel: "Δ " + p.short, timeAxis: state.xaxis === "time", tmin: tr[0], tmax: tr[1], zero: 0 }); });
+      return chartSVG({ title: title, series: series, ymin: ymin, ymax: ymax, ticks: ticksFor(lin, ymin, ymax), tick: function (g) { return fmtDelta(p, g); }, ylabel: "Δ " + p.short, timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: 0 }); });
     var r = state.rung, rows = "";
     others.forEach(function (m) { rows += '<tr><td><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + '</td>' + plots.map(function (p) { var use = poolCats(m.key, r, keys).filter(function (c) { return cell(base.key, c, r); }); var st = use.length ? pairedStat(p, m.key, base.key, r, use) : null; if (!st) { return '<td class="v2na">–</td><td class="v2na">–</td><td class="v2na">–</td>'; } var sig = st.p !== null && st.p < 0.05; return '<td' + (sig ? ' class="v2sig"' : "") + '>' + fmtDelta(p, st.v) + ' <span class="v2ci-txt">[' + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + ']</span></td><td>' + fmtP(st.p) + '</td><td class="v2hint">' + st.wins + " / " + st.losses + " of " + st.n + '</td>'; }).join("") + '</tr>'; });
     var anyRow = others.some(function (m) { return plots.some(function (p) { var use = poolCats(m.key, r, keys).filter(function (c) { return cell(base.key, c, r); }); return use.length && pairedStat(p, m.key, base.key, r, use); }); });
@@ -392,10 +448,10 @@
       '<div class="v2row"><span class="v2lab">focus</span><select class="v2focus" aria-label="metric for the Catalogs and Distribution views">' + D.metrics.map(function (m) { return '<option value="' + m.key + '">' + esc(m.label) + '</option>'; }).join("") + '</select></div></div>' +
       '<div class="v2panel"><h3>Options</h3><div class="v2row"><span class="v2lab">' + term("matched", "pooling") + '</span><label><input type="radio" name="v2pool" value="matched"> matched</label><label><input type="radio" name="v2pool" value="own"> own</label></div>' +
       '<label><input type="checkbox" class="v2ci"> 95 % intervals ' + help(TERMS.wilson) + '</label><label><input type="checkbox" class="v2thin"> show ' + term("thin", "thin rungs") + '</label>' +
-      '<div class="v2row"><span class="v2lab">x axis</span><label><input type="radio" name="v2xaxis" value="rung"> budget</label><label><input type="radio" name="v2xaxis" value="time" class="v2xtime"> ' + term("time", "time") + '</label><span class="v2hint v2xtimehint"></span></div>' +
+      '<div class="v2row"><span class="v2lab">x axis</span><label><input type="radio" name="v2xaxis" value="time" class="v2xtime"> ' + term("time", "time") + '</label><label><input type="radio" name="v2xaxis" value="rung"> ' + term("candidates", "candidates") + '</label><span class="v2hint v2xtimehint"></span></div>' +
       '<div class="v2row"><span class="v2lab">rung</span><select class="v2rung" aria-label="rung for the Table by catalog, Catalogs, Distribution and Paired views">' + D.rungs.map(function (r) { return '<option value="' + r + '">' + r + '</option>'; }).join("") + '</select><span class="v2hint">for Table by catalog, Catalogs, Distribution, Paired</span></div></div>' +
       '</aside><section class="v2main"><p class="v2err" role="alert"></p><div class="v2view"></div></section></div>';
-    var hasTiming = Object.keys(D.timing).some(function (k) { return Object.keys(D.timing[k]).length; });
+    var hasTiming = anyTime();
     root.querySelector(".v2xtime").disabled = !hasTiming; root.querySelector(".v2xtimehint").textContent = hasTiming ? "" : "(no measurements yet)";
     if (!hasTiming && state.xaxis === "time") { state.xaxis = "rung"; }
   }
@@ -427,6 +483,7 @@
       if (state.stat === "median" && state.view !== "dist" && state.view !== "paired") {   // histograms the current view needs
         (state.view === "matrix" ? [METRIC[state.focus]] : D.metrics.filter(function (m) { return state.plots.indexOf(m.key) >= 0; })).forEach(function (m) { if (m.kind === "cont") { ensure("hist/" + m.key + ".js", scheduleRender); } });
       }
+      renderHeadline();
       view.innerHTML = state.view === "table" ? renderTable(shown) : state.view === "matrix" ? renderMatrix(shown) : state.view === "dist" ? renderDist(shown) : state.view === "paired" ? renderPaired(shown) : renderCurves(shown);
       root.querySelector(".v2err").textContent = ""; save();
     } catch (e) { root.querySelector(".v2err").textContent = "The explorer hit an error while drawing: " + (e && e.message ? e.message : e) + ". Reload the page, or press “all” under Catalogs to reset the selection."; if (window.console) { console.error(e); } }
@@ -466,7 +523,7 @@
   function closeArmed() { if (popArmed) { closePop(); } }
   document.addEventListener("click", function (e) {
     var el = e.target.closest ? e.target.closest(".v2term, .v2help") : null; var open = document.querySelector(".v2pop"); var prev = open && open._anchor; closePop();
-    if (!el || prev === el || !root.contains(el)) { return; }
+    if (!el || prev === el || !(root.contains(el) || (headRoot && headRoot.contains(el)))) { return; }
     e.preventDefault();
     var pop = document.createElement("div"); pop.className = "v2pop"; pop.textContent = el.classList.contains("v2help") ? el.dataset.help : (TERMS[el.dataset.term] || ""); pop._anchor = el; document.body.appendChild(pop);
     var margin = 8; pop.style.maxWidth = Math.min(520, window.innerWidth - 2 * margin) + "px"; var r = el.getBoundingClientRect();

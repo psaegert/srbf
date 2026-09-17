@@ -103,7 +103,7 @@ npm install && npx playwright install chromium
 python3 copy_lint.py && python3 public_guard.py && npx playwright test --config playwright.config.mjs
 ```
 
-`site_v2.spec.mjs` covers the current release: default routing, the release switch both ways, 2026-07 deep links, the metric registry floor, every view from a deep link (no errors, no overflow at 390 px), on-demand histograms and paired contrasts, catalog and method controls, URL round trips, popovers, the time axis gate, and the absence of any private overlay. `site.spec.mjs` covers the 2026-07 explorer: every view from deep links, the full view-transition matrix, slider
+`site_v2.spec.mjs` covers the current release: default routing, the release switch both ways, 2026-07 deep links, the metric registry floor, every view from a deep link (no errors, no overflow at 390 px), on-demand histograms and paired contrasts, catalog and method controls, URL round trips, popovers, the two fixed headline charts (present and unmoved by the explorer's controls, absent from 2026-07), the time and candidate axes, and the absence of any private overlay. `site.spec.mjs` covers the 2026-07 explorer: every view from deep links, the full view-transition matrix, slider
 snap/descriptive semantics, tap-to-pin, metric-eligibility guards (no ghost plots), benchmark
 switches, zero console errors in every state, and no horizontal page overflow at 390 px. When a
 wording bug is fixed, add its pattern to `tests/copy_lint.py` so it cannot return.

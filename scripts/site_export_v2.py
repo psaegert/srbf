@@ -366,7 +366,10 @@ def main() -> None:
                                "scoring": "candidates ranked by the two-part code (n/2 log2 FVU + description length in bits; flash-ansr 0.18, srbf 0.20)",
                                "judge": "srbf derive_metrics: canonical-form judge (SimpliPy acj-5-4-llm, f64), float32-eps numeric recovery on 512 validation points"},
                    "catalogs": cats, "rungs": RUNGS, "nb": NB, "metrics": registry_json(), "paired_keys": PAIRED_KEYS,
-                   "methods": [{"key": k, "label": l, "param": p, "color": col, "group": g, "provenance": prov} for k, l, p, col, g, prov, _ in methods],
+                   # budget: what one rung of the ladder buys. "candidates" is a count a generative method draws;
+                   # "seconds" is a time limit (PySR), which has no place on the candidate axis of the site.
+                   "methods": [{"key": k, "label": l, "param": p, "budget": "seconds" if p == "seconds" else "candidates",
+                                "color": col, "group": g, "provenance": prov} for k, l, p, col, g, prov, _ in methods],
                    "cells": cells, "status": status, "timing": timing, "timing_note": timing_note}
         return payload, hists, paired
 

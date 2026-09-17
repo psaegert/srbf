@@ -123,11 +123,53 @@ test('terms and metric help open a floating explanation', async ({ page }) => {
   await expect(page.locator('.v2pop')).toContainText('Matched pooling');
 });
 
-test('the time axis is offered only with reference-machine measurements', async ({ page }) => {
+test('time is the default x axis wherever a time was measured', async ({ page }) => {
   await page.goto('/');
   const radio = page.locator(V2 + ' input.v2xtime');
-  const hasTiming = await page.evaluate(() => Object.keys((window.RESULTS_V2 || {}).timing || {}).some((k) => Object.keys(window.RESULTS_V2.timing[k]).length));
-  if (hasTiming) { await expect(radio).toBeEnabled(); } else { await expect(radio).toBeDisabled(); }
+  // a time exists when the reference machine has measured a method, or when the runs themselves carry fit_time
+  const hasTime = await page.evaluate(() => {
+    const D = window.RESULTS_V2 || {};
+    if (Object.keys(D.timing || {}).some((k) => Object.keys(D.timing[k]).length)) { return true; }
+    return Object.keys(D.cells || {}).some((m) => Object.keys(D.cells[m]).some((c) => Object.keys(D.cells[m][c]).some((r) => D.cells[m][c][r].m && D.cells[m][c][r].m.fit_time)));
+  });
+  if (!hasTime) { await expect(radio).toBeDisabled(); return; }
+  await expect(radio).toBeEnabled();
+  await expect(radio).toBeChecked();
+  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('fit time');
+});
+
+test('the candidate axis names itself and is offered beside time', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/?release=2026-09&v=curves');
+  await page.locator(V2 + ' input[name="v2xaxis"][value="rung"]').check();
+  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('candidates');
+  // a method whose budget is a time limit has no position on this axis and is named instead of dropped silently
+  const seconds = await page.evaluate(() => (window.RESULTS_V2.methods || []).filter((m) => m.budget === 'seconds' && window.RESULTS_V2.cells[m.key] && Object.keys(window.RESULTS_V2.cells[m.key]).length).map((m) => m.label));
+  for (const label of seconds) { await expect(page.locator(V2 + ' .v2view')).toContainText(label); }
+  await page.locator(V2 + ' input.v2xtime').check();
+  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('fit time');
+  expect(errors).toEqual([]);
+});
+
+test('the headline stands above the explorer with its two fixed charts', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/');
+  const head = page.locator('#results-headline-v2');
+  await expect(head).toBeVisible();
+  await expect(head.locator('.v2hltitle')).toBeVisible();
+  await expect(head.locator('svg.v2chart')).toHaveCount(2);
+  await expect(head.locator('svg.v2chart').first()).toContainText('recovery');
+  await expect(head.locator('svg.v2chart').nth(1)).toContainText('MDL ratio');
+  await expect(head.locator('svg.v2chart').first()).toContainText('fit time');
+  // fixed: the explorer's own controls do not move it
+  await page.locator(V2 + ' button[data-act="none"]').click();
+  await expect(head.locator('svg.v2chart').first()).not.toContainText('no catalog selected');
+  expect(errors).toEqual([]);
+});
+
+test('the headline belongs to the 2026-09 release only', async ({ page }) => {
+  await page.goto('/?release=2026-07');
+  await expect(page.locator('#results-headline-v2')).toBeHidden();
 });
 
 test('the public page carries no private overlay', async ({ page }) => {
