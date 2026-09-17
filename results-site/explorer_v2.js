@@ -21,12 +21,21 @@
   // another release is on screen (the routing script decided before this file ran): leave the page and its URL alone
   if (window.SRBF_RELEASE && window.SRBF_RELEASE !== REL) { return; }
   var SOURCES = [{ base: D.base, local: false }];
-  if (typeof window.RESULTS_V2_PRIVATE !== "undefined") {   // local overlay: additional methods, same schema
-    var P = window.RESULTS_V2_PRIVATE;
-    (P.methods || []).forEach(function (m) { if (!D.methods.some(function (x) { return x.key === m.key; })) { D.methods.push(Object.assign({}, m, { local: true })); } });
+  // An overlay adds methods to the release: the same schema, merged into the tables every view reads. A local build
+  // supplies one as a plain script and serves its lazy files from a base of its own (results-site/README.md,
+  // "Local-only methods"); an overlay that arrives with a key carries those files inside it, so it has no base and
+  // its methods are shown like any other.
+  function mergeOverlay(P, withBase) {
+    if (!P) { return []; }
+    var added = [];
+    (P.methods || []).forEach(function (m) {
+      if (!D.methods.some(function (x) { return x.key === m.key; })) { D.methods.push(Object.assign({}, m, { local: !!withBase })); added.push(m.key); }
+    });
     Object.assign(D.cells, P.cells || {}); Object.assign(D.status, P.status || {}); Object.assign(D.timing, P.timing || {});
-    SOURCES.push({ base: P.base, local: true });
+    if (withBase && P.base) { SOURCES.push({ base: P.base, local: true }); }
+    return added;
   }
+  mergeOverlay(window.RESULTS_V2_PRIVATE, true);
   var Z = 1.959964, LN2 = Math.log(2);
   var CATS = D.catalogs.map(function (c) { return c.key; });
   var CAT = {}; D.catalogs.forEach(function (c) { CAT[c.key] = c; });
@@ -145,11 +154,15 @@
     if (is("physics")) { return "phys"; } if (is("classical")) { return "classic"; } if (is("synthetic")) { return "synth"; }
     return state.cats.join(",");
   }
+  // A link is meant to be passed around, so it names only methods the release publishes; a method that arrived
+  // with a key is remembered for this browser (localStorage, this device only) and re-added by the key, not by a URL.
+  var byKey = {};
+  function sharedMethods() { return state.methods.filter(function (k) { return !byKey[k]; }); }
   function save() {
     try { localStorage.setItem(LS, JSON.stringify(state)); } catch (e) { /* no storage */ }
     var q = new URLSearchParams(window.location.search);
     ["view", "bench", "baseline", "metric", "budget"].forEach(function (k) { q.delete(k); });   // never carry 2026-07 keys
-    q.set("release", REL); q.set("v", state.view); q.set("c", catsParam()); q.set("m", state.methods.join(",")); q.set("p", state.plots.map(plotKey).join(","));
+    q.set("release", REL); q.set("v", state.view); q.set("c", catsParam()); q.set("m", sharedMethods().join(",")); q.set("p", state.plots.map(plotKey).join(","));
     q.set("f", state.focus); q.set("s", state.stat); q.set("pool", state.pool); q.set("ci", state.ci ? "1" : "0"); q.set("thin", state.thin ? "1" : "0");
     q.set("x", state.xaxis); q.set("r", String(state.rung)); if (state.base) { q.set("b", state.base); } q.set("rows", state.rows);
     try { window.history.replaceState(null, "", "?" + q.toString() + window.location.hash); } catch (e) { /* file:// */ }
@@ -170,6 +183,59 @@
   function ready(file) { return SOURCES.every(function (s) { return loading[s.base + file] === "done" || failed[s.base + file]; }); }
   function histOf(k) { var H = window.RESULTS_V2_HIST && window.RESULTS_V2_HIST[REL]; return H && H[k]; }
   function pairedOf() { var Pd = window.RESULTS_V2_PAIRED && window.RESULTS_V2_PAIRED[REL]; return Pd || null; }
+
+  // ---- adding a method from a key ---------------------------------------------------------------------------------
+  // A release may ship one sealed payload next to the public ones. It holds the same kind of payload scripts as the
+  // rest of the release -- an overlay, its histograms and its paired contrasts -- gzipped and encrypted with
+  // AES-256-GCM under a key derived by PBKDF2-HMAC-SHA256. The key is not in this repository and nothing here
+  // derives it; the payload is fetched only when someone asks for it, and a key that does not open it leaves the
+  // page exactly as it was. What the page shows without it is complete on its own terms.
+  var sealedAsked = false;
+  function bytesOf(b64) { var s = atob(b64), u = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) { u[i] = s.charCodeAt(i); } return u; }
+  function withSealed(cb) {
+    if (sealedAsked || window.RESULTS_V2_SEALED) { cb(); return; }
+    sealedAsked = true;
+    var sc = document.createElement("script"); sc.src = D.base + "sealed.js"; sc.async = true;
+    sc.onload = cb; sc.onerror = cb; document.head.appendChild(sc);
+  }
+  function openWithKey(key) {   // -> the keys of the methods it added, or [] when nothing opened
+    return new Promise(function (res) { withSealed(res); }).then(function () {
+      var S = window.RESULTS_V2_SEALED, env = S && S[REL];
+      var subtle = window.crypto && window.crypto.subtle;
+      if (!env || !subtle || typeof DecompressionStream === "undefined") { return []; }
+      return subtle.importKey("raw", new TextEncoder().encode(key), "PBKDF2", false, ["deriveKey"])
+        .then(function (base) {
+          return subtle.deriveKey({ name: "PBKDF2", salt: bytesOf(env.salt), iterations: env.iter, hash: "SHA-256" },
+            base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+        })
+        .then(function (k) { return subtle.decrypt({ name: "AES-GCM", iv: bytesOf(env.iv) }, k, bytesOf(env.ct)); })
+        .then(function (gz) { return new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream("gzip"))).text(); })
+        .then(function (src) {
+          (new Function(src))();   // the payload scripts, run exactly as a <script> tag would run them
+          var added = mergeOverlay(window.RESULTS_V2_PRIVATE, false);
+          added.forEach(function (k2) { byKey[k2] = true; if (state.methods.indexOf(k2) < 0) { state.methods.push(k2); } });
+          return added;
+        })
+        .catch(function () { return []; });   // a key that does not fit is not told apart from a release without one
+    });
+  }
+  function labelsOf(keys) {
+    return keys.map(function (k) { var m = D.methods.filter(function (x) { return x.key === k; })[0]; return m ? m.label : k; }).join(", ");
+  }
+  function tryKey(key, quiet) {
+    var msg = root.querySelector(".v2addmmsg");
+    if (msg && !quiet) { msg.textContent = "checking…"; }
+    openWithKey(key).then(function (added) {
+      if (added.length) {
+        try { window.sessionStorage.setItem("srbf.k", key); } catch (e) { /* storage off */ }
+        shell(); render();
+        var after = root.querySelector(".v2addmmsg");
+        if (after && !quiet) { after.textContent = "Added " + labelsOf(added) + "."; }
+        return;
+      }
+      if (!quiet && msg) { msg.textContent = "No method found for that key."; }
+    });
+  }
 
   // ---- pooling ---------------------------------------------------------------------------------------------------
   function cell(m, c, r) { var x = D.cells[m] && D.cells[m][c] && D.cells[m][c][String(r)]; return x && x.state === "complete" ? x : null; }
@@ -626,7 +692,12 @@
       '<div class="v2row" data-uses="base"><span class="v2lab">baseline</span><select class="v2base" aria-label="baseline method">' + D.methods.filter(withData).map(function (m) { return '<option value="' + m.key + '">' + esc(m.label) + '</option>'; }).join("") + '</select></div>' +
       '<div class="v2row" data-uses="rung"><span class="v2lab">budget</span><select class="v2rung" aria-label="budget per problem">' + D.rungs.map(function (r) { return '<option value="' + r + '">' + r + '</option>'; }).join("") + '</select><span class="v2hint">candidates or seconds, per method</span></div></div>' +
       // 2. what it is shown for
-      '<div class="v2panel"><h3>Methods</h3><div class="v2methods">' + methList + '</div><div class="v2row v2colour"><button type="button" class="v2btn" data-act="reset-colours">reset all colours</button><span class="v2hint v2cookie" hidden>A single functional cookie remembers your colour choices on this device: no tracking, no third parties. It is written only when you change a colour; \u201creset all colours\u201d deletes it.</span></div></div>' +
+      '<div class="v2panel"><h3>Methods</h3><div class="v2methods">' + methList + '</div>' +
+      '<div class="v2row v2addm"><button type="button" class="v2btn v2addmopen" data-act="add-method">add method</button>' +
+      '<span class="v2addmbox" hidden><input type="text" class="v2addmkey" placeholder="method key" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="method key">' +
+      '<button type="button" class="v2btn" data-act="add-method-go">add</button></span>' +
+      '<span class="v2hint v2addmmsg" role="status"></span></div>' +
+      '<div class="v2row v2colour"><button type="button" class="v2btn" data-act="reset-colours">reset all colours</button><span class="v2hint v2cookie" hidden>A single functional cookie remembers your colour choices on this device: no tracking, no third parties. It is written only when you change a colour; \u201creset all colours\u201d deletes it.</span></div></div>' +
       '<div class="v2panel"><h3>Catalogs <span class="v2hint v2catcount"></span></h3><div class="v2row"><button type="button" data-act="all">all</button><button type="button" data-act="none">none</button><button type="button" data-act="phys">physics</button><button type="button" data-act="classic">classical</button><button type="button" data-act="synth">synthetic</button></div><div class="v2cats">' + catList + '</div></div>' +
       // 3. how the numbers are read
       '<div class="v2panel"><h3>Reading</h3>' +
@@ -710,6 +781,13 @@
         || D.metrics.filter(function (m) { return taken.indexOf(m.key) < 0; })[0] || D.metrics[0];
       state.plots.push({ x: lastAxis(), y: next.key }); render(); return;
     }
+    if (act === "add-method") {
+      var box = root.querySelector(".v2addmbox"), open = root.querySelector(".v2addmopen");
+      if (box) { box.hidden = false; } if (open) { open.hidden = true; }
+      var f = root.querySelector(".v2addmkey"); if (f) { f.focus(); }
+      return;
+    }
+    if (act === "add-method-go") { var fk = root.querySelector(".v2addmkey"); if (fk && fk.value.trim()) { tryKey(fk.value.trim(), false); } return; }
     if (act === "all") { state.cats = CATS.slice(); } else if (act === "none") { state.cats = []; }
     else if (act === "phys" || act === "classic" || act === "synth") { var g = { phys: "physics", classic: "classical", synth: "synthetic" }[act]; state.cats = CATS.filter(function (c) { return CAT[c].group === g; }); }
     else if (act === "reset-colours") { userColors = {}; writeCookie(userColors); root.querySelector(".v2cookie").hidden = true; }
@@ -787,6 +865,12 @@
     [root.querySelector(".v2main"), headRoot].forEach(function (el) { if (el) { ro.observe(el); } });
   }
   document.addEventListener("scroll", closeArmed, true);
+  root.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter" || !e.target.classList || !e.target.classList.contains("v2addmkey")) { return; }
+    e.preventDefault(); var v = e.target.value.trim(); if (v) { tryKey(v, false); }
+  });
   render();
+  // a key given earlier in this tab opens the same payload again without asking for it
+  try { var saved = window.sessionStorage.getItem("srbf.k"); if (saved) { tryKey(saved, true); } } catch (e) { /* storage off */ }
   if (fromUrl) { try { root.scrollIntoView({ block: "start" }); } catch (e) { /* ignore */ } }
 })();

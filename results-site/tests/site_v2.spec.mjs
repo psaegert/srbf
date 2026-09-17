@@ -2,6 +2,7 @@
 // content renders, transitions land, no console errors, no horizontal overflow. Every view, the metric registry,
 // the lazily loaded histograms and paired contrasts, deep links, popovers, colours.
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 
 function collectErrors(page) {
   const errors = [];
@@ -314,6 +315,39 @@ test('the picker lists every metric in columns and filters', async ({ page }) =>
   await page.keyboard.press('Escape');
   await expect(picker).toHaveCount(0);
   expect(errors).toEqual([]);
+});
+
+// the fixture overlay and the key it was sealed with (results-site/tools/seal.mjs, tests/fixtures/overlay)
+const FIXTURE_KEY = 'fixture-key-for-the-tests';
+const FIXTURE = readFileSync(new URL('./fixtures/sealed_fixture.js', import.meta.url), 'utf8');
+
+test('a method is added with its key, and a key that does not fit adds nothing', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.addInitScript({ content: FIXTURE });
+  await page.goto('/?release=2026-09&v=curves');
+  const methods = page.locator(V2 + ' .v2methods .v2meth');
+  await expect(methods.first()).toBeVisible();
+  const before = await methods.count();
+  await page.locator(V2 + ' .v2addmopen').click();
+  await page.locator(V2 + ' .v2addmkey').fill('not-the-key-at-all');
+  await page.locator(V2 + ' [data-act="add-method-go"]').click();
+  await expect(page.locator(V2 + ' .v2addmmsg')).toHaveText(/No method found/, { timeout: 20000 });
+  expect(await methods.count(), 'a key that does not fit changes nothing').toBe(before);
+  await page.locator(V2 + ' .v2addmkey').fill(FIXTURE_KEY);
+  await page.locator(V2 + ' [data-act="add-method-go"]').click();
+  await expect(page.locator(V2 + ' .v2methods')).toContainText('Fixture Method', { timeout: 20000 });
+  expect(await methods.count()).toBe(before + 1);
+  // and it is an ordinary method from there on: selectable, and carried by the URL like the rest
+  await expect(page.locator(V2 + ' .v2methods input[type=checkbox][data-m="fixture-method"]')).toBeChecked();
+  expect(errors).toEqual([]);
+});
+
+test('the page says nothing about what it does not show', async ({ page }) => {
+  await page.goto('/?release=2026-09&v=curves');
+  // the control is plain, and neither it nor the payload names anything the release does not publish
+  await expect(page.locator(V2 + ' .v2addmopen')).toHaveText('add method');
+  const html = await page.content();
+  expect(html).not.toMatch(/private|sealed|decrypt|password/i);
 });
 
 test('a chart is drawn at the width it is given', async ({ page }) => {
