@@ -1,128 +1,57 @@
-"""Variable renaming helpers for baseline model outputs.
+"""Map a baseline's own variable spelling onto the one the ground truth uses.
 
-Baseline models (PySR, NeSymReS, E2E) use different variable naming
-conventions than the ground truth.  These helpers normalise predicted
-skeleton tokens back to the ``x1, x2, ...`` convention used in the
-ground-truth expressions.
+E2E names the columns it is handed ``x_0, x_1, ...`` and NeSymReS names them ``x_1, x_2, ...``; the
+ground-truth skeleton names the same columns ``x1, x2, ...`` in column order (a problem's
+``variables`` are often catalog names such as ``v1``, so they cannot be matched by name). Without
+this map a prediction that IS the law shares no variable with it, and every symbolic comparison is
+structurally impossible: symbolic recovery, the raw skeleton match, the token F1 and the
+variable-set precision / recall / F1 all read zero. Both adapters hand the model a known block of
+columns in a known order, so the map is positional and exact.
+
+An index the model made up (a padding column, say) has no column to map onto and is left as it is:
+a prediction that reaches for a variable it was never given is a miss, not a renaming problem.
 """
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
-from typing import Any, Callable
+
+X_NAME = re.compile(r"x\d+")
+MODEL_TOKEN = re.compile(r"x_(\d+)")
+# The first column's index in each baseline's own spelling.
+E2E_FIRST_INDEX = 0
+NESYMRES_FIRST_INDEX = 1
 
 
-def rename_variables_nesymres(
-    skeleton: list[str] | None,
-    original_variable_names: list[str] | None,
-) -> list[str] | None:
-    """Rename NeSymReS variables (``x_1, x_2, ...``) back to original names.
+def skeleton_variable_names(columns: Sequence[str] | None) -> list[str]:
+    """The ground truth's name for every column handed to the model, in column order.
 
-    NeSymReS strips padding and re-indexes variables starting at ``x_1``.
-    This restores the original variable names from the ground-truth skeleton.
+    A column that already carries an ``x<n>`` name keeps it (that is the skeleton's own spelling,
+    e.g. after the unused columns were dropped); anything else is named by its position, because
+    the skeleton spells the i-th variable of a problem ``x<i+1>`` whatever the catalog calls it.
     """
-    if skeleton is None or original_variable_names is None:
+    return [str(c) if X_NAME.fullmatch(str(c)) else f"x{i + 1}" for i, c in enumerate(columns or [])]
+
+
+def rename_variable_tokens(tokens: Sequence[str] | None, names: Sequence[str], *, first_index: int) -> list[str] | None:
+    """Rename the ``x_<i>`` tokens of a prefix expression to the ground truth's names."""
+    if tokens is None:
         return None
-    renamed: list[str] = []
-    for token in skeleton:
-        if token.startswith('x_'):
-            index = int(token[2:]) - 1  # 'x_1' -> 0
-            if index < len(original_variable_names):
-                renamed.append(original_variable_names[index])
-            else:
-                renamed.append(token)
-        else:
-            renamed.append(token)
-    return renamed
+    out: list[str] = []
+    for token in tokens:
+        m = MODEL_TOKEN.fullmatch(str(token))
+        column = int(m.group(1)) - first_index if m else -1
+        out.append(names[column] if 0 <= column < len(names) else str(token))
+    return out
 
 
-def rename_variables_pysr(
-    skeleton: list[str] | None,
-    *args: Any,
-    **kwargs: Any,
-) -> list[str] | None:
-    """Rename PySR variables from 0-indexed (``x0, x1, ...``) to 1-indexed (``x1, x2, ...``)."""
-    if skeleton is None:
-        return None
-    renamed: list[str] = []
-    for token in skeleton:
-        if token.startswith('x'):
-            index = int(token[1:]) + 1  # 'x0' -> 'x1'
-            renamed.append(f'x{index}')
-        else:
-            renamed.append(token)
-    return renamed
+def rename_variables_in_infix(expression: str, names: Sequence[str], *, first_index: int) -> str:
+    """The same map on an infix string, so the stored expression and its prefix agree.
 
-
-def rename_variables_e2e(
-    skeleton: list[str] | None,
-    *args: Any,
-    **kwargs: Any,
-) -> list[str] | None:
-    """Rename E2E variables from ``x_0, x_1, ...`` to ``x1, x2, ...``."""
-    if skeleton is None:
-        return None
-    renamed: list[str] = []
-    for token in skeleton:
-        if token.startswith('x_'):
-            index = int(token[2:]) + 1  # 'x_0' -> 'x1'
-            renamed.append(f'x{index}')
-        else:
-            renamed.append(token)
-    return renamed
-
-
-# Map from model name to its renaming function.
-RENAME_FUNCTIONS: dict[str, Callable[..., list[str] | None]] = {
-    'nesymres': rename_variables_nesymres,
-    'pysr': rename_variables_pysr,
-    'e2e': rename_variables_e2e,
-}
-
-
-def apply_variable_renaming(
-    results: dict[str, Any],
-    model_rename_map: dict[str, Callable[..., list[str] | None]] | None = None,
-    test_sets: Sequence[str] | None = None,
-) -> None:
-    """Apply variable renaming in-place for baseline model results.
-
-    Parameters
-    ----------
-    results : dict
-        Nested results dict: ``results[model]['results'][test_set][scaling_value]``.
-    model_rename_map : dict, optional
-        Map from model name to renaming function.  Defaults to
-        :data:`RENAME_FUNCTIONS`.
-    test_sets : Sequence[str], optional
-        Test sets to process.  If ``None``, processes all available test sets.
+    The word boundary keeps an identifier that merely ends in one of these names (``mulx_0``) intact.
     """
-    if model_rename_map is None:
-        model_rename_map = RENAME_FUNCTIONS
+    def sub(m: re.Match[str]) -> str:
+        column = int(m.group(1)) - first_index
+        return names[column] if 0 <= column < len(names) else m.group(0)
 
-    for model_name, rename_fn in model_rename_map.items():
-        if model_name not in results:
-            continue
-        model_test_sets = test_sets or list(results[model_name].get('results', {}).keys())
-        for test_set in model_test_sets:
-            if test_set not in results[model_name].get('results', {}):
-                continue
-            for scaling_value in results[model_name]['results'][test_set]:
-                r = results[model_name]['results'][test_set][scaling_value]
-
-                unique_variables_in_ground_truth = [
-                    sorted(
-                        list(set(token for token in skeleton if token.startswith('x'))),
-                        key=lambda x: int(x[1:]),
-                    )
-                    if skeleton is not None else None
-                    for skeleton in r['skeleton']
-                ]
-
-                r['predicted_skeleton_prefix_raw'] = r['predicted_skeleton_prefix'].copy()
-                r['predicted_skeleton_prefix'] = [
-                    rename_fn(pred, var_names)
-                    for pred, var_names in zip(
-                        r['predicted_skeleton_prefix_raw'],
-                        unique_variables_in_ground_truth,
-                    )
-                ]
+    return re.sub(r"\bx_(\d+)\b", sub, expression)
