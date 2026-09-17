@@ -7,9 +7,14 @@ Fatal checks, run before the Playwright suite in CI and locally:
   3. every release payload carries the complete metric registry (at least the 2026-07 site's metrics, under their
      schema-2 keys) so a regenerated release cannot silently lose metrics;
   4. in CI, results-site/private/ and index.local.html do not exist in the checkout (they are git-ignored; a forced
-     add would surface here before anything deploys).
+     add would surface here before anything deploys);
+  5. a sealed payload, if one is present, is sealed: the envelope carries only its own fields, the KDF is strong
+     enough to be worth having, and the ciphertext reads as ciphertext (high entropy, no plaintext left in it).
+     The checker is run against a deliberately bad envelope on every invocation, so it cannot pass vacuously.
 """
+import base64
 import json
+import math
 import os
 import re
 import sys
@@ -38,8 +43,62 @@ def keys_in_wrapped(text: str, pattern: str) -> set[str] | None:
     return set(json.loads(m.group(1))) if m else None
 
 
+SEALED_FIELDS = {"v", "kdf", "iter", "salt", "iv", "ct"}
+MIN_ITERATIONS = 200_000
+# A sealed blob must not carry recognisable plaintext. These are the tells of an unsealed payload.
+PLAINTEXT_TELLS = (b"window.", b'{"', b"RESULTS_V2", b"function")
+
+
+def entropy(data: bytes) -> float:
+    """Shannon entropy in bits per byte. Ciphertext sits at ~8.0; anything structured sits well below."""
+    if not data:
+        return 0.0
+    counts = [0] * 256
+    for b in data:
+        counts[b] += 1
+    n = len(data)
+    return -sum((c / n) * math.log2(c / n) for c in counts if c)
+
+
+def check_sealed(text: str, name: str) -> list[str]:
+    """Everything that must hold for a sealed payload, whatever it holds."""
+    bad = []
+    m = re.search(r"window\.RESULTS_V2_SEALED\[[^\]]*\]=(\{.*\});\s*$", text, re.S)
+    if not m:
+        return [f"{name}: not a sealed envelope"]
+    try:
+        env = json.loads(m.group(1))
+    except ValueError:
+        return [f"{name}: envelope is not JSON"]
+    if set(env) != SEALED_FIELDS:
+        bad.append(f"{name}: envelope fields {sorted(set(env) ^ SEALED_FIELDS)} (only {sorted(SEALED_FIELDS)} belong here)")
+    if env.get("kdf") != "PBKDF2-SHA256" or int(env.get("iter", 0)) < MIN_ITERATIONS:
+        bad.append(f"{name}: kdf {env.get('kdf')!r} at {env.get('iter')} iterations is below the bar")
+    try:
+        ct = base64.b64decode(env.get("ct", ""), validate=True)
+    except Exception:
+        return bad + [f"{name}: ciphertext is not base64"]
+    if len(ct) < 1024:
+        bad.append(f"{name}: ciphertext is {len(ct)} bytes")
+    if entropy(ct) < 7.5:
+        bad.append(f"{name}: ciphertext entropy {entropy(ct):.2f} bits/byte reads as plaintext")
+    for tell in PLAINTEXT_TELLS:
+        if tell in ct:
+            bad.append(f"{name}: ciphertext contains {tell!r}")
+    return bad
+
+
+def selftest() -> list[str]:
+    """The guard checks itself: a blob that is plainly not sealed must be rejected by check_sealed."""
+    plain = json.dumps({"methods": [{"key": "x", "label": "X"}], "cells": {}}).encode() * 64
+    envelope = {"v": 1, "kdf": "PBKDF2-SHA256", "iter": 600000, "salt": "AA==", "iv": "AA==",
+                "ct": base64.b64encode(plain).decode()}
+    text = "window.RESULTS_V2_SEALED[\"t\"]=" + json.dumps(envelope) + ";\n"
+    return [] if check_sealed(text, "selftest") else ["selftest: check_sealed accepted a plaintext payload"]
+
+
 def main() -> int:
-    failures = []
+    failures = selftest()
     index = (SITE / "index.html").read_text(encoding="utf-8")
     for needle in ("private/", "index.local"):
         if needle in index:
@@ -74,6 +133,8 @@ def main() -> int:
                 extra = sorted({k for pair in ks for k in pair.split("|")} - PUBLIC_METHODS)
                 if extra:
                     failures.append(f"{pj}: non-public method keys {extra}")
+    for sj in sorted((SITE / "data").glob("*/sealed.js")):
+        failures.extend(check_sealed(sj.read_text(encoding="utf-8"), str(sj)))
     if os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"):
         for p in ("private", "index.local.html"):
             if (SITE / p).exists():

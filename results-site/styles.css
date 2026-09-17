@@ -598,6 +598,13 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 .explorer-v2 .v2plus { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px;
   border: 2px solid currentColor; border-radius: 50%; font-size: 26px; line-height: 1; padding-bottom: 3px; }
 
+/* Adding a method by key: one small row under the method list, quiet until it is used. */
+.explorer-v2 .v2addm { flex-wrap: wrap; gap: 6px; align-items: center; }
+.explorer-v2 .v2addmbox { display: inline-flex; gap: 6px; align-items: center; min-width: 0; }
+.explorer-v2 .v2addmkey { font: inherit; font-size: 12.5px; padding: 3px 7px; width: 13em; max-width: 100%;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
+.explorer-v2 .v2addmmsg { flex-basis: 100%; }
+
 /* The metric picker: one control for every place a metric is chosen, at body level so it never reflows a card. */
 .explorer-v2 .v2pick { display: inline-flex; align-items: center; gap: 6px; flex: 0 1 auto; min-width: 0; max-width: 46%;
   font: inherit; font-size: 13px; color: var(--ink); background: none; border: 1px solid transparent;

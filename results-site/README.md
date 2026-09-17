@@ -92,6 +92,32 @@ them out of every public channel by construction, not by convention:
   directory or the local page exists in the CI checkout. It runs before the Playwright suite.
 - Screenshots, artifacts, PR descriptions and issues are made from the public page only.
 
+## Sharing an overlay with the people it belongs to
+
+An overlay can also travel with the site instead of staying on one machine, for the collaborators whose
+results they are. `tools/seal.mjs` concatenates the overlay's payload scripts, gzips them and encrypts the
+result with AES-256-GCM under a key derived by PBKDF2-HMAC-SHA256 (600k iterations, fresh salt and IV per
+run); the page fetches `data/<release>/sealed.js` only when someone enters a key under the method list, runs
+the payload exactly as a `<script>` would, and from then on treats its methods like any other. A key that
+does not fit is indistinguishable from a release that ships no such file.
+
+    SRBF_SEAL_KEY="$(cat ~/.config/srbf/seal-<release>.key)" node tools/seal.mjs <release>
+
+Three things this rests on, none of them optional:
+
+- **The key is generated, never chosen.** The sealed file is public, so guessing is offline and unlimited;
+  the KDF is the only brake. Keep the key outside the repository, out of commit messages and issues, and
+  hand it over through a channel that is not this site.
+- **Publishing a sealed file cannot be undone.** It enters git history, forks and archives. If the key
+  leaks later, everything inside it is exposed retroactively. Seal only what may live in public in that
+  form, and only with the agreement of whoever owns the results.
+- **The guard checks it is sealed** (`tests/public_guard.py`): envelope shape, KDF strength, ciphertext
+  entropy and no plaintext left inside. The checker is run against a deliberately unsealed blob on every
+  invocation, so it cannot pass vacuously.
+
+`tests/fixtures/` holds a stand-in overlay and its sealed form, so the Playwright suite exercises the whole
+path — wrong key, right key, method merged — without any real payload.
+
 ## Testing
 
 `tests/` holds the functionality suite (Playwright, desktop + mobile projects) and a copy lint
