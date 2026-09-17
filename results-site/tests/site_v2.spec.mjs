@@ -199,3 +199,12 @@ test('the view that shows tables is called Tables', async ({ page }) => {
   await expect(page.locator(V2 + ' .v2tab[data-view="table"]')).toHaveText('Tables');
   await expect(page.locator('#va')).toContainText('Tables');
 });
+
+test('the mean is the default statistic, and the median stays one click away', async ({ page }) => {
+  await page.goto('/?release=2026-09&v=curves&p=log10_fvu_val');
+  await expect(page.locator(V2 + ' input[name="v2stat"][value="mean"]')).toBeChecked();
+  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('mean');
+  await expect(page.locator('#results-headline-v2 svg.v2chart').nth(1)).toBeVisible();   // no histogram needed to draw it
+  await page.locator(V2 + ' input[name="v2stat"][value="median"]').check();
+  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('median', { timeout: 15000 });
+});

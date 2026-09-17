@@ -45,7 +45,7 @@
     thin: "A rung is thin when its pool holds fewer than half the laws of the method's largest pool (units still running). Thin rungs are hidden unless you show them; they draw with hollow markers.",
     wilson: "95 % Wilson score interval for a rate; t-interval for a mean; order-statistic interval for a median (from the pooled histogram).",
     median: "The median is read from a 128-bin histogram per cell, so it is exact to a bin. Ratios and times are binned on a log scale.",
-    mean: "The mean is over finite values only; a perfect fit (log10 FVU = -inf) is counted by the median and by the recovery rates, not by the mean.",
+    mean: "The default. A mean is taken over the finite values of the pooled laws, so an exactly recovered law (log10 FVU = -inf) is counted by the recovery rates and by the median, but not by the mean; every point reports how many finite values it averaged and how many it had. Switch to the median where that matters.",
     regime: "Rate metrics are defined for every law: a failed prediction is a miss. Continuous metrics describe successful predictions only.",
     mcnemar: "Exact McNemar test on the laws the two methods disagree on (one recovered, the other did not): two-sided binomial p-value, no asymptotics. The difference of paired rates carries a 95 % Wald interval.",
     signtest: "Paired mean difference with a t-interval over laws where both methods have a finite value, plus a two-sided exact sign test on the wins and losses.",
@@ -68,10 +68,10 @@
   var DEFAULTS = function () {
     return { view: "curves", cats: CATS.slice(), methods: D.methods.filter(withData).map(function (m) { return m.key; }),
       plots: D.metrics.filter(function (m) { return m.tier === "main"; }).map(function (m) { return m.key; }),
-      focus: "numeric_recovery_val", stat: "median", pool: "matched", ci: true, thin: false, xaxis: "time", rung: 64, base: null, tier: "main", q: "", rows: "rungs" };
+      focus: "numeric_recovery_val", stat: "mean", pool: "matched", ci: true, thin: false, xaxis: "time", rung: 64, base: null, tier: "main", q: "", rows: "rungs" };
   };
   var state = DEFAULTS();
-  var LS = "srbf-v2-" + REL + ".2";   // .2: time became the default x axis, and a state saved before that must not pin the old one
+  var LS = "srbf-v2-" + REL + ".3";   // bumped whenever a default changes (.2 time axis, .3 mean), so a saved state cannot pin the old one
   function loadState() {
     try { var s = JSON.parse(localStorage.getItem(LS) || "null"); if (s) { Object.keys(state).forEach(function (k) { if (s[k] !== undefined) { state[k] = s[k]; } }); } } catch (e) { /* no storage */ }
     var q = new URLSearchParams(window.location.search); var any = false;
@@ -81,7 +81,7 @@
     if (q.has("m")) { state.methods = q.get("m").split(",").filter(function (x) { return D.methods.some(function (mm) { return mm.key === x; }); }); any = true; }
     if (q.has("p")) { state.plots = q.get("p").split(",").filter(function (x) { return METRIC[x]; }); any = true; }
     if (q.has("f") && METRIC[q.get("f")]) { state.focus = q.get("f"); any = true; }
-    if (q.has("s")) { state.stat = q.get("s") === "mean" ? "mean" : "median"; any = true; }
+    if (q.has("s")) { state.stat = q.get("s") === "median" ? "median" : "mean"; any = true; }
     if (q.has("pool")) { state.pool = q.get("pool") === "own" ? "own" : "matched"; any = true; }
     if (q.has("ci")) { state.ci = q.get("ci") !== "0"; any = true; }
     if (q.has("thin")) { state.thin = q.get("thin") === "1"; any = true; }
@@ -332,7 +332,7 @@
     if (!headRoot) { return; }
     headRoot.innerHTML = withState(
       { cats: CATS.slice(), methods: D.methods.filter(withData).map(function (m) { return m.key; }),
-        pool: "matched", stat: "median", ci: true, thin: false, xaxis: "time" },
+        pool: "matched", stat: "mean", ci: true, thin: false, xaxis: "time" },
       function () {
         var shown = shownMethods();
         if (!shown.length) { return '<p class="v2hint">No method has finished units in this release yet.</p>'; }
@@ -340,7 +340,7 @@
         var charts = HEADLINE.map(function (h) {
           var ms = (h.key ? [h.key] : [h.x, h.y]).map(function (k) { return METRIC[k]; });
           if (ms.some(function (m) { return !m; })) { return ""; }
-          ms.forEach(function (m) { if (m.kind === "cont") { ensure("hist/" + m.key + ".js", scheduleRender); } });
+          if (state.stat === "median") { ms.forEach(function (m) { if (m.kind === "cont") { ensure("hist/" + m.key + ".js", scheduleRender); } }); }
           var svg = h.key ? curveChart(ms[0], shown) : frontChart(ms[0], ms[1], shown);
           return '<figure class="v2hlfig">' + svg + "<figcaption>" + esc(h.caption) + "</figcaption></figure>";
         }).join("");
@@ -350,7 +350,7 @@
           '<div class="v2hlcharts">' + charts + "</div>" +
           '<p class="v2hint">Left, x: ' + (src === "ref" ? term("time", "mean fit time per problem on the reference machine")
             : term("time", "mean fit time per problem, measured where each unit ran") + " (the cluster\u2019s mixed GPUs; the reference-machine timing replaces it as it is measured)") +
-          ". Right: one point per budget, medians over the same laws. Everything below is yours to change.</p>";
+          ". Right: one point per budget, means over the same laws. Everything below is yours to change.</p>";
       });
   }
 
@@ -501,7 +501,7 @@
       '<div class="v2panel"><h3>Catalogs <span class="v2hint v2catcount"></span></h3><div class="v2row"><button type="button" data-act="all">all</button><button type="button" data-act="none">none</button><button type="button" data-act="phys">physics</button><button type="button" data-act="classic">classical</button><button type="button" data-act="synth">synthetic</button></div><div class="v2cats">' + catList + '</div></div>' +
       '<div class="v2panel"><h3>Methods</h3><div class="v2methods">' + methList + '</div><div class="v2row v2colour"><button type="button" class="v2btn" data-act="reset-colours">reset all colours</button><span class="v2hint v2cookie" hidden>A single functional cookie remembers your colour choices on this device: no tracking, no third parties. It is written only when you change a colour; “reset all colours” deletes it.</span></div></div>' +
       '<div class="v2panel"><h3>Metrics <span class="v2hint v2metcount"></span></h3><div class="v2row"><input type="search" class="v2q" placeholder="filter metrics" aria-label="filter metrics"><label><input type="checkbox" class="v2tier"> show all ' + D.metrics.length + '</label></div><div class="v2metrics">' + metricList + '</div>' +
-      '<div class="v2row"><span class="v2lab">statistic</span><label><input type="radio" name="v2stat" value="median"> ' + term("median", "median") + '</label><label><input type="radio" name="v2stat" value="mean"> ' + term("mean", "mean") + '</label></div>' +
+      '<div class="v2row"><span class="v2lab">statistic</span><label><input type="radio" name="v2stat" value="mean"> ' + term("mean", "mean") + '</label><label><input type="radio" name="v2stat" value="median"> ' + term("median", "median") + '</label></div>' +
       '<div class="v2row"><span class="v2lab">focus</span><select class="v2focus" aria-label="metric for the Catalogs and Distribution views">' + D.metrics.map(function (m) { return '<option value="' + m.key + '">' + esc(m.label) + '</option>'; }).join("") + '</select></div></div>' +
       '<div class="v2panel"><h3>Options</h3><div class="v2row"><span class="v2lab">' + term("matched", "pooling") + '</span><label><input type="radio" name="v2pool" value="matched"> matched</label><label><input type="radio" name="v2pool" value="own"> own</label></div>' +
       '<label><input type="checkbox" class="v2ci"> 95 % intervals ' + help(TERMS.wilson) + '</label><label><input type="checkbox" class="v2thin"> show ' + term("thin", "thin rungs") + '</label>' +
