@@ -114,7 +114,7 @@ test('the view state round-trips through the URL', async ({ page }) => {
   await expect(page.locator(V2 + ' select.v2rung')).toHaveValue('16');
   await expect(page.locator(V2 + ' input[name="v2stat"][value="mean"]')).toBeChecked();
   await expect(page.locator(V2 + ' input[name="v2pool"][value="own"]')).toBeChecked();
-  await expect(page.locator(V2 + ' .v2ci')).not.toBeChecked();
+  await expect(page.locator(V2 + ' .v2band')).not.toBeChecked();   // the legacy ci=0 link still means "no interval"
   await expect(page.locator(V2 + ' .v2catcount')).toContainText('8 of');
   await page.locator(V2 + ' .v2tab[data-view="table"]').click();
   expect(page.url()).toContain('v=table');
@@ -348,6 +348,31 @@ test('the page says nothing about what it does not show', async ({ page }) => {
   await expect(page.locator(V2 + ' .v2addmopen')).toHaveText('add method');
   const html = await page.content();
   expect(html).not.toMatch(/private|sealed|decrypt|password/i);
+});
+
+test('the interval is a band by default, and crosses are a separate switch', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.setViewportSize({ width: 1600, height: 1100 });
+  await page.goto('/?release=2026-09&v=curves&p=time~numeric_recovery_val,mdl_ratio~log10_fvu_val');
+  // one shape for both kinds of x axis: the band is drawn from the interval boxes, so a trade-off plot gets a
+  // two-dimensional region rather than a bar through each point
+  const shapes = () => page.evaluate(() => [...document.querySelectorAll('#results-explorer-v2 .v2plot svg.v2chart')].map((s) => ({
+    polys: s.querySelectorAll('polygon').length,
+    bars: [...s.querySelectorAll('line')].filter((l) => l.getAttribute('stroke-opacity') === '0.45').length,
+  })));
+  await expect(page.locator(V2 + ' .v2band')).toBeChecked();
+  await expect(page.locator(V2 + ' .v2cross')).not.toBeChecked();
+  for (const c of await shapes()) { expect(c.polys).toBeGreaterThan(0); expect(c.bars).toBe(0); }
+  await page.locator(V2 + ' .v2cross').check();
+  await expect.poll(async () => (await shapes())[0].bars).toBeGreaterThan(0);
+  for (const c of await shapes()) { expect(c.polys, 'both shapes at once').toBeGreaterThan(0); }
+  await page.locator(V2 + ' .v2band').uncheck();
+  await expect.poll(async () => (await shapes())[0].polys).toBe(0);
+  for (const c of await shapes()) { expect(c.bars).toBeGreaterThan(0); }
+  await page.locator(V2 + ' .v2cross').uncheck();
+  for (const c of await shapes()) { expect(c.polys + c.bars, 'neither shape').toBe(0); }
+  expect(page.url()).toContain('band=0');
+  expect(errors).toEqual([]);
 });
 
 test('a chart is drawn at the width it is given', async ({ page }) => {

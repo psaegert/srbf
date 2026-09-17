@@ -87,7 +87,7 @@
   var TERMS = {
     matched: "Matched pooling: at every rung only the catalogs that EVERY shown method has finished are pooled, so the methods are compared on the same laws. Own pooling: each method over whatever it has finished.",
     thin: "A rung is thin when its pool holds fewer than half the laws of the method's largest pool (units still running). Thin rungs are hidden unless you show them; they draw with hollow markers.",
-    wilson: "95 % Wilson score interval for a rate; t-interval for a mean; order-statistic interval for a median (from the pooled histogram). Against a budget the interval is drawn as a band, because the x position is the budget and carries no error; against another metric it is a cross, because both coordinates are estimates.",
+    wilson: "95 % Wilson score interval for a rate; t-interval for a mean; order-statistic interval for a median (from the pooled histogram). A band is the region the ladder could occupy: the interval box of every point and the hull between consecutive ones, in both axes where both are measured. Crosses draw the same intervals as bars through each point. Either, both or neither.",
     median: "The median is read from a 128-bin histogram per cell, so it is exact to a bin. Ratios and times are binned on a log scale.",
     mean: "The default. A mean is taken over the finite values of the pooled laws, so an exactly recovered law (log10 FVU = -inf) is counted by the recovery rates and by the median, but not by the mean; every point reports how many finite values it averaged and how many it had. Switch to the median where that matters.",
     regime: "Rate metrics are defined for every law: a failed prediction is a miss. Continuous metrics describe successful predictions only.",
@@ -112,10 +112,10 @@
   var DEFAULTS = function () {
     return { view: "curves", cats: CATS.slice(), methods: D.methods.filter(withData).map(function (m) { return m.key; }),
       plots: D.metrics.filter(function (m) { return m.tier === "main"; }).map(function (m) { return { x: "time", y: m.key }; }),
-      focus: "numeric_recovery_val", stat: "mean", pool: "matched", ci: true, thin: false, xaxis: "time", rung: 64, base: null, tier: "main", q: "", rows: "rungs" };
+      focus: "numeric_recovery_val", stat: "mean", pool: "matched", band: true, cross: false, thin: false, xaxis: "time", rung: 64, base: null, tier: "main", q: "", rows: "rungs" };
   };
   var state = DEFAULTS();
-  var LS = "srbf-v2-" + REL + ".3";   // bumped whenever a default changes (.2 time axis, .3 mean), so a saved state cannot pin the old one
+  var LS = "srbf-v2-" + REL + ".4";   // bumped whenever a default changes (.2 time axis, .3 mean, .4 bands), so a saved state cannot pin the old one
   function loadState() {
     try { var s = JSON.parse(localStorage.getItem(LS) || "null"); if (s) { Object.keys(state).forEach(function (k) { if (s[k] !== undefined) { state[k] = s[k]; } }); } } catch (e) { /* no storage */ }
     var q = new URLSearchParams(window.location.search); var any = false;
@@ -127,7 +127,9 @@
     if (q.has("f") && METRIC[q.get("f")]) { state.focus = q.get("f"); any = true; }
     if (q.has("s")) { state.stat = q.get("s") === "median" ? "median" : "mean"; any = true; }
     if (q.has("pool")) { state.pool = q.get("pool") === "own" ? "own" : "matched"; any = true; }
-    if (q.has("ci")) { state.ci = q.get("ci") !== "0"; any = true; }
+    if (q.has("ci")) { state.band = q.get("ci") !== "0"; state.cross = false; any = true; }   // the old single flag
+    if (q.has("band")) { state.band = q.get("band") !== "0"; any = true; }
+    if (q.has("cross")) { state.cross = q.get("cross") !== "0"; any = true; }
     if (q.has("thin")) { state.thin = q.get("thin") === "1"; any = true; }
     if (q.has("x")) { state.xaxis = q.get("x") === "time" ? "time" : "rung"; any = true; }
     if (q.has("r")) { var r = parseInt(q.get("r"), 10); if (D.rungs.indexOf(r) >= 0) { state.rung = r; } any = true; }
@@ -163,7 +165,7 @@
     var q = new URLSearchParams(window.location.search);
     ["view", "bench", "baseline", "metric", "budget"].forEach(function (k) { q.delete(k); });   // never carry 2026-07 keys
     q.set("release", REL); q.set("v", state.view); q.set("c", catsParam()); q.set("m", sharedMethods().join(",")); q.set("p", state.plots.map(plotKey).join(","));
-    q.set("f", state.focus); q.set("s", state.stat); q.set("pool", state.pool); q.set("ci", state.ci ? "1" : "0"); q.set("thin", state.thin ? "1" : "0");
+    q.set("f", state.focus); q.set("s", state.stat); q.set("pool", state.pool); q.set("band", state.band ? "1" : "0"); q.set("cross", state.cross ? "1" : "0"); q.set("thin", state.thin ? "1" : "0");
     q.set("x", state.xaxis); q.set("r", String(state.rung)); if (state.base) { q.set("b", state.base); } q.set("rows", state.rows);
     try { window.history.replaceState(null, "", "?" + q.toString() + window.location.hash); } catch (e) { /* file:// */ }
   }
@@ -309,6 +311,46 @@
   var chartHost = null, chartCount = 0;   // set while a block renders: its charts are built for THAT container
   function hostWidth() { return chartWidth(chartHost || root.querySelector(".v2main") || root, chartCount); }
   function inBlock(host, count, fn) { chartHost = host; chartCount = count; try { return fn(); } finally { chartHost = null; chartCount = 0; } }
+  // ---- the 95 % interval, drawn -----------------------------------------------------------------------------------
+  // Every point carries an uncertainty BOX: [xlo, xhi] x [lo, hi] in data units, whatever the axes are. The band is
+  // the region a ladder could occupy -- the boxes, plus the convex hull of each consecutive pair, so the shape
+  // follows the path instead of assuming it runs left to right. The pieces are drawn in one group at a single
+  // opacity, so overlaps do not darken. Where the x is a budget the boxes are vertical segments and the union is
+  // exactly the familiar envelope; where both axes are measured the band is genuinely two-dimensional.
+  function anyCI() { return state.band || state.cross; }
+  function hullOf(ps) {   // monotone chain, on the few corners of one or two boxes
+    var q = ps.slice().sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; }), i, lo = [], up = [];
+    var turn = function (o, a, b) { return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]); };
+    for (i = 0; i < q.length; i++) { while (lo.length > 1 && turn(lo[lo.length - 2], lo[lo.length - 1], q[i]) <= 0) { lo.pop(); } lo.push(q[i]); }
+    for (i = q.length - 1; i >= 0; i--) { while (up.length > 1 && turn(up[up.length - 2], up[up.length - 1], q[i]) <= 0) { up.pop(); } up.push(q[i]); }
+    return lo.slice(0, -1).concat(up.slice(0, -1));
+  }
+  function boxOf(p, xs, y, clx, cly) {
+    var a = xs(clx(isFinite(p.xlo) ? p.xlo : p.x)), b = xs(clx(isFinite(p.xhi) ? p.xhi : p.x));
+    var c = y(cly(isFinite(p.hi) ? p.hi : p.v)), d = y(cly(isFinite(p.lo) ? p.lo : p.v));
+    return [[a, c], [b, c], [b, d], [a, d]];
+  }
+  function ciSVG(pts, col, xs, y, clx, cly) {
+    if (!pts.length || !anyCI()) { return ""; }
+    var out = "";
+    if (state.band) {
+      var polys = pts.map(function (p, i) {
+        var corners = boxOf(p, xs, y, clx, cly);
+        if (i + 1 < pts.length) { corners = corners.concat(boxOf(pts[i + 1], xs, y, clx, cly)); }
+        return '<polygon points="' + hullOf(corners).map(function (q) { return q[0].toFixed(1) + "," + q[1].toFixed(1); }).join(" ") + '"/>';
+      });
+      out += '<g fill="' + col + '" opacity="0.13" stroke="none">' + polys.join("") + "</g>";
+    }
+    if (state.cross) {
+      out += pts.map(function (p) {
+        var px = xs(clx(p.x)).toFixed(1), py = y(cly(p.v)).toFixed(1), bar = "";
+        if (isFinite(p.lo) && isFinite(p.hi)) { bar += '<line x1="' + px + '" y1="' + y(cly(p.hi)).toFixed(1) + '" x2="' + px + '" y2="' + y(cly(p.lo)).toFixed(1) + '" stroke="' + col + '" stroke-width="1.5" stroke-opacity="0.45"/>'; }
+        if (isFinite(p.xlo) && isFinite(p.xhi)) { bar += '<line x1="' + xs(clx(p.xlo)).toFixed(1) + '" y1="' + py + '" x2="' + xs(clx(p.xhi)).toFixed(1) + '" y2="' + py + '" stroke="' + col + '" stroke-width="1.5" stroke-opacity="0.45"/>'; }
+        return bar;
+      }).join("");
+    }
+    return out;
+  }
   function chartSVG(opts) {
     var nr = narrow(), W = opts.width || hostWidth(), L = 62, T = opts.title ? 34 : 16, R = nr ? 16 : 180, series = opts.series;
     var B = nr ? 56 + 20 * Math.max(1, series.length) : 52, H = plotHeight(W) + B;
@@ -335,7 +377,7 @@
     if (opts.ylabel) { s += '<text transform="translate(14,' + ((T + H - B) / 2).toFixed(0) + ') rotate(-90)" class="tick" text-anchor="middle">' + esc(opts.ylabel) + "</text>"; }
     var ly = nr ? H - B + 46 : T + 6, lx = nr ? L : W - R + 10;
     series.forEach(function (sr) { var col = sr.color, pts = sr.pts.slice().sort(function (a, b) { return a.x - b.x; }); var cl = function (v) { return Math.min(ymax, Math.max(ymin, v)); };
-      if (state.ci && pts.some(function (p) { return isFinite(p.lo) && isFinite(p.hi); })) { var up = pts.map(function (p) { return xs(p.x).toFixed(1) + "," + y(cl(isFinite(p.hi) ? p.hi : p.v)).toFixed(1); }); var dn = pts.slice().reverse().map(function (p) { return xs(p.x).toFixed(1) + "," + y(cl(isFinite(p.lo) ? p.lo : p.v)).toFixed(1); }); s += '<polygon points="' + up.concat(dn).join(" ") + '" fill="' + col + '" fill-opacity="0.13" stroke="none"/>'; }
+      s += ciSVG(pts, col, xs, y, function (v) { return v; }, cl);
       s += '<polyline fill="none" stroke="' + col + '" stroke-width="2" points="' + pts.map(function (p) { return xs(p.x).toFixed(1) + "," + y(cl(p.v)).toFixed(1); }).join(" ") + '"/>';
       pts.forEach(function (p) { s += '<circle cx="' + xs(p.x).toFixed(1) + '" cy="' + y(cl(p.v)).toFixed(1) + '" r="3.2" fill="' + (p.thin ? "var(--surface)" : col) + '" stroke="' + col + '" stroke-width="1.5"><title>' + esc(p.title) + '</title></circle>'; });
       s += '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 20) + '" y2="' + ly + '" stroke="' + col + '" stroke-width="3"/><text x="' + (lx + 26) + '" y="' + (ly + 4) + '" class="leg">' + esc(sr.label) + '</text>'; ly += 20; });
@@ -369,9 +411,7 @@
     var ly = nr ? H - B + 46 : T + 6, lx = nr ? L : W - R + 10;
     opts.series.forEach(function (sr) {
       var col = sr.color;
-      if (state.ci) { sr.pts.forEach(function (p) {   // both coordinates are estimates here, so the interval is a cross
-        if (isFinite(p.lo) && isFinite(p.hi)) { s += '<line x1="' + xs(clx(p.x)).toFixed(1) + '" y1="' + y(cly(p.hi)).toFixed(1) + '" x2="' + xs(clx(p.x)).toFixed(1) + '" y2="' + y(cly(p.lo)).toFixed(1) + '" stroke="' + col + '" stroke-width="1.5" stroke-opacity="0.4"/>'; }
-        if (isFinite(p.xlo) && isFinite(p.xhi)) { s += '<line x1="' + xs(clx(p.xlo)).toFixed(1) + '" y1="' + y(cly(p.v)).toFixed(1) + '" x2="' + xs(clx(p.xhi)).toFixed(1) + '" y2="' + y(cly(p.v)).toFixed(1) + '" stroke="' + col + '" stroke-width="1.5" stroke-opacity="0.4"/>'; } }); }
+      s += ciSVG(sr.pts, col, xs, y, clx, cly);
       s += '<polyline fill="none" stroke="' + col + '" stroke-width="1.6" stroke-opacity="0.65" points="' + sr.pts.map(function (p) { return xs(clx(p.x)).toFixed(1) + "," + y(cly(p.v)).toFixed(1); }).join(" ") + '"/>';
       sr.pts.forEach(function (p) { s += '<circle cx="' + xs(clx(p.x)).toFixed(1) + '" cy="' + y(cly(p.v)).toFixed(1) + '" r="3.2" fill="' + (p.thin ? "var(--surface)" : col) + '" stroke="' + col + '" stroke-width="1.5"><title>' + esc(p.title) + "</title></circle>"; });
       s += '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 20) + '" y2="' + ly + '" stroke="' + col + '" stroke-width="3"/><text x="' + (lx + 26) + '" y="' + (ly + 4) + '" class="leg">' + esc(sr.label) + "</text>"; ly += 20;
@@ -390,8 +430,8 @@
         if (!isFinite(sx.v) || !isFinite(sy.v)) { return; }
         pts.push({ x: sx.v, xlo: sx.lo, xhi: sx.hi, v: sy.v, lo: sy.lo, hi: sy.hi, thin: tm.thin[r],
           title: m.label + " @ " + r + ": " + fmt(xm, sx.v, sx.edge) + " " + xm.short + ", " + fmt(ym, sy.v, sy.edge) + " " + ym.short + ", n = " + sy.n });
-        [sx.v, state.ci ? sx.lo : sx.v, state.ci ? sx.hi : sx.v].forEach(function (v) { if (isFinite(v)) { xmin = Math.min(xmin, v); xmax = Math.max(xmax, v); } });
-        [sy.v, state.ci ? sy.lo : sy.v, state.ci ? sy.hi : sy.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
+        [sx.v, anyCI() ? sx.lo : sx.v, anyCI() ? sx.hi : sx.v].forEach(function (v) { if (isFinite(v)) { xmin = Math.min(xmin, v); xmax = Math.max(xmax, v); } });
+        [sy.v, anyCI() ? sy.lo : sy.v, anyCI() ? sy.hi : sy.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
       });
       if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: pts }); }
     });
@@ -423,8 +463,8 @@
       D.rungs.forEach(function (r) { var use = poolCats(m.key, r, keys); if (!use.length || (tm.thin[r] && !state.thin)) { return; } var x = xOf(m.key, r, use, src); if (x === null) { return; }
         var st = stat(metric, m.key, r, use); if (!st) { return; } if (st.pending) { pending = true; return; } if (!isFinite(st.v)) { return; }
         var title = m.label + " @ " + r + (state.xaxis === "time" ? " (" + x.toFixed(2) + " s)" : "") + ": " + fmt(metric, st.v, st.edge) + " [" + fmt(metric, st.lo) + ", " + fmt(metric, st.hi) + "], n = " + st.n + (st.ndef ? " finite of " + st.ndef : "") + ", pool " + tm.pools[r] + " laws" + (tm.thin[r] ? " (thin)" : "");
-        pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, thin: tm.thin[r], title: title });
-        [st.v, state.ci ? st.lo : st.v, state.ci ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
+        pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, thin: tm.thin[r], title: title });   // a budget has no interval: the candidate count is exact, and the measured time is within a pixel of its mean (0.4-1.1 px, measured)
+        [st.v, anyCI() ? st.lo : st.v, anyCI() ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
         if (state.xaxis === "time") { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); } });
       if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: pts }); } });
     if (title == null) { title = metric.label; }   // the statistic is named once per block, not on every chart
@@ -504,7 +544,7 @@
     if (!headRoot) { return; }
     headRoot.innerHTML = inBlock(headRoot, HEADLINE.length, function () { return withState(
       { cats: CATS.slice(), methods: D.methods.filter(withData).map(function (m) { return m.key; }),
-        pool: "matched", stat: "mean", ci: true, thin: false, xaxis: "time" },
+        pool: "matched", stat: "mean", band: true, cross: false, thin: false, xaxis: "time" },
       function () {
         var shown = shownMethods();
         if (!shown.length) { return '<p class="v2hint">No method has finished units in this release yet.</p>'; }
@@ -527,7 +567,7 @@
 
   // ---- Table -----------------------------------------------------------------------------------------------------
   var lastTable = null;
-  function cellText(st, p) { if (!st) { return ""; } if (st.pending) { return "…"; } return fmt(p, st.v, st.edge) + (state.ci ? ' <span class="v2ci-txt">[' + fmt(p, st.lo) + ", " + fmt(p, st.hi) + "]</span>" : ""); }
+  function cellText(st, p) { if (!st) { return ""; } if (st.pending) { return "…"; } return fmt(p, st.v, st.edge) + (anyCI() ? ' <span class="v2ci-txt">[' + fmt(p, st.lo) + ", " + fmt(p, st.hi) + "]</span>" : ""); }
   function renderTable(shown) {
     var plots = plotMetrics().map(function (k) { return METRIC[k]; }); var keys = shown.map(function (m) { return m.key; });
     if (!plots.length || !shown.length) { return '<p class="v2hint">Select at least one method and one metric.</p>'; }
@@ -553,7 +593,7 @@
     lastTable = { header: [state.rows === "cats" ? "catalog" : "rung", "laws"].concat(shown.reduce(function (a, m) { return a.concat(plots.map(function (p) { return m.label + " · " + mname(p); })); }, [])), rows: rowsOut };
     var ctl = '<div class="v2row v2tablectl"><span class="v2lab">rows</span><label><input type="radio" name="v2rows" value="rungs"' + (state.rows === "rungs" ? " checked" : "") + '> every rung</label><label><input type="radio" name="v2rows" value="cats"' + (state.rows === "cats" ? " checked" : "") + '> catalogs at rung ' + state.rung + '</label>' +
       '<span class="v2spacer"></span><button type="button" class="v2btn" data-act="copy-tsv">copy as TSV</button><button type="button" class="v2btn" data-act="csv">download CSV</button></div>';
-    return ctl + '<div class="v2table-wrap"><table class="v2table"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div><p class="v2hint">' + (state.ci ? "Brackets: 95 % interval (" + term("wilson", "Wilson / t / order statistic") + "). " : "") + term("regime", "Rates count every law; continuous metrics describe successful predictions") + ".</p>";
+    return ctl + '<div class="v2table-wrap"><table class="v2table"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div><p class="v2hint">' + (anyCI() ? "Brackets: 95 % interval (" + term("wilson", "Wilson / t / order statistic") + "). " : "") + term("regime", "Rates count every law; continuous metrics describe successful predictions") + ".</p>";
   }
 
   // ---- Catalog matrix --------------------------------------------------------------------------------------------
@@ -589,7 +629,7 @@
       [0, 0.25, 0.5, 0.75, 1].forEach(function (g) { s += '<line x1="' + xs(g) + '" y1="' + T + '" x2="' + xs(g) + '" y2="' + (Hh - B1) + '" class="grid"/><text x="' + xs(g) + '" y="' + (Hh - B1 + 16) + '" class="tick" text-anchor="middle">' + (100 * g) + '%</text>'; });
       cats.forEach(function (c, i) { var yy = T + (i + 0.5) * rowH; s += '<text x="' + (Lw - 8) + '" y="' + (yy + 4) + '" class="tick" text-anchor="end">' + esc(c) + ' · ' + CAT[c].laws + '</text>';
         shown.forEach(function (m, j) { var st = cell(m.key, c, r) ? stat(p, m.key, r, [c]) : null; if (!st) { return; } var yj = yy + (j - (shown.length - 1) / 2) * Math.min(6, rowH / (shown.length + 1)); var col = colorOf(m);
-          if (state.ci) { s += '<line x1="' + xs(st.lo).toFixed(1) + '" y1="' + yj.toFixed(1) + '" x2="' + xs(st.hi).toFixed(1) + '" y2="' + yj.toFixed(1) + '" stroke="' + col + '" stroke-width="2" stroke-opacity="0.45"/>'; }
+          if (anyCI()) { s += '<line x1="' + xs(st.lo).toFixed(1) + '" y1="' + yj.toFixed(1) + '" x2="' + xs(st.hi).toFixed(1) + '" y2="' + yj.toFixed(1) + '" stroke="' + col + '" stroke-width="2" stroke-opacity="0.45"/>'; }
           s += '<circle cx="' + xs(st.v).toFixed(1) + '" cy="' + yj.toFixed(1) + '" r="3.5" fill="' + col + '"><title>' + esc(m.label + " on " + c + ": " + fmt(p, st.v) + " [" + fmt(p, st.lo) + ", " + fmt(p, st.hi) + "], n = " + st.n) + '</title></circle>'; }); });
       var ly = Hh - B1 + 34; shown.forEach(function (m) { s += '<circle cx="' + (Lw + 6) + '" cy="' + ly + '" r="4" fill="' + colorOf(m) + '"/><text x="' + (Lw + 16) + '" y="' + (ly + 4) + '" class="leg">' + esc(m.label + (m.local ? " (local)" : "")) + '</text>'; ly += 20; });
       return s + "</svg>" + '<p class="v2hint">Each dot is one catalog; bars are ' + term("wilson", "95 % Wilson intervals") + '. Catalogs sorted by size. Pick a continuous metric under Focus for a histogram.</p>';
@@ -639,7 +679,7 @@
     var charts = inBlock(root.querySelector(".v2main"), plots.length, function () { return plots.map(function (p) { var series = [], ymin = Infinity, ymax = -Infinity, tmin = Infinity, tmax = -Infinity;
       axisMethods(others).forEach(function (m) { var pts = []; D.rungs.forEach(function (r) { var use = poolCats(m.key, r, keys).filter(function (c) { return cell(base.key, c, r); }); if (!use.length) { return; } var x = xOf(m.key, r, use, src); if (x === null) { return; } var st = pairedStat(p, m.key, base.key, r, use); if (!st || !isFinite(st.v)) { return; }
           pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, thin: false, title: m.label + " − " + base.label + " @ " + r + ": " + fmtDelta(p, st.v) + " [" + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + "], n = " + st.n + " laws, p = " + fmtP(st.p) });
-          [st.v, state.ci ? st.lo : st.v, state.ci ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } }); if (state.xaxis === "time") { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); } });
+          [st.v, anyCI() ? st.lo : st.v, anyCI() ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } }); if (state.xaxis === "time") { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); } });
         if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: pts }); } });
       var title = "Δ " + mname(p) + " vs " + base.label;
       if (!series.length) { return chartSVG({ title: title, aria: title, series: [], empty: "no matched cells with the baseline yet" }); }
@@ -704,7 +744,8 @@
       '<div class="v2row" data-uses="stat"><span class="v2lab">statistic</span><label><input type="radio" name="v2stat" value="mean"> ' + term("mean", "mean") + '</label><label><input type="radio" name="v2stat" value="median"> ' + term("median", "median") + '</label></div>' +
       '<div class="v2row" data-uses="pool"><span class="v2lab">' + term("matched", "pooling") + '</span><label><input type="radio" name="v2pool" value="matched"> matched</label><label><input type="radio" name="v2pool" value="own"> own</label></div>' +
       '<div class="v2row" data-uses="xaxis"><span class="v2lab">x axis</span><label><input type="radio" name="v2xaxis" value="time" class="v2xtime"> ' + term("time", "time") + '</label><label><input type="radio" name="v2xaxis" value="rung"> ' + term("candidates", "candidates") + '</label><span class="v2hint v2xtimehint"></span></div>' +
-      '<div class="v2row v2checks" data-uses="ci thin"><label data-uses="ci"><input type="checkbox" class="v2ci"> 95 % intervals ' + help(TERMS.wilson) + '</label><label data-uses="thin"><input type="checkbox" class="v2thin"> show ' + term("thin", "thin rungs") + '</label></div></div>' +
+      '<div class="v2row v2checks" data-uses="ci thin"><span class="v2lab" data-uses="ci">95 % intervals ' + help(TERMS.wilson) + '</span>' +
+      '<label data-uses="ci"><input type="checkbox" class="v2band"> bands</label><label data-uses="ci"><input type="checkbox" class="v2cross"> crosses</label><label data-uses="thin"><input type="checkbox" class="v2thin"> show ' + term("thin", "thin rungs") + '</label></div></div>' +
       '</aside><section class="v2main"><p class="v2err" role="alert"></p><div class="v2view"></div></section></div>';
     var hasTiming = anyTime();
     root.querySelector(".v2xtime").disabled = !hasTiming; root.querySelector(".v2xtimehint").textContent = hasTiming ? "" : "(no measurements yet)";
@@ -721,7 +762,7 @@
     root.querySelectorAll("input[name=v2stat]").forEach(function (i) { i.checked = i.value === state.stat; });
     root.querySelectorAll("input[name=v2pool]").forEach(function (i) { i.checked = i.value === state.pool; });
     root.querySelectorAll("input[name=v2xaxis]").forEach(function (i) { i.checked = i.value === state.xaxis; });
-    root.querySelector(".v2ci").checked = state.ci; root.querySelector(".v2thin").checked = state.thin;
+    root.querySelector(".v2band").checked = state.band; root.querySelector(".v2cross").checked = state.cross; root.querySelector(".v2thin").checked = state.thin;
     setPick(root.querySelector(".v2focus"), state.focus); root.querySelector(".v2rung").value = String(state.rung);
     root.querySelectorAll("input[name=v2rows]").forEach(function (i) { i.checked = i.value === state.rows; });
     if (state.base) { root.querySelector(".v2base").value = state.base; }
@@ -762,7 +803,7 @@
     else if (t.dataset.m && t.type === "checkbox") { if (t.checked) { state.methods.push(t.dataset.m); } else { state.methods = state.methods.filter(function (c) { return c !== t.dataset.m; }); } }
     else if (t.dataset.p) { if (t.checked) { state.plots.push({ x: lastAxis(), y: t.dataset.p }); } else { state.plots = state.plots.filter(function (c) { return c.y !== t.dataset.p; }); } }
     else if (t.name === "v2stat") { state.stat = t.value; } else if (t.name === "v2pool") { state.pool = t.value; } else if (t.name === "v2xaxis") { state.xaxis = t.value; } else if (t.name === "v2rows") { state.rows = t.value; }
-    else if (t.classList.contains("v2ci")) { state.ci = t.checked; } else if (t.classList.contains("v2thin")) { state.thin = t.checked; } else if (t.classList.contains("v2tier")) { state.tier = t.checked ? "all" : "main"; }
+    else if (t.classList.contains("v2band")) { state.band = t.checked; } else if (t.classList.contains("v2cross")) { state.cross = t.checked; } else if (t.classList.contains("v2thin")) { state.thin = t.checked; } else if (t.classList.contains("v2tier")) { state.tier = t.checked ? "all" : "main"; }
     else if (t.classList.contains("v2rung")) { state.rung = parseInt(t.value, 10); } else if (t.classList.contains("v2base")) { state.base = t.value; }
     else if (t.classList.contains("v2swatch")) { userColors[t.dataset.m] = t.value; writeCookie(userColors); root.querySelector(".v2cookie").hidden = false; }
     else { return; }
