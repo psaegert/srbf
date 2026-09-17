@@ -190,9 +190,10 @@
   }
 
   // ---- SVG chart: series of points {x, v, lo, hi, thin, title} on a rung/time x axis -----------------------------
-  function narrow() { return root.clientWidth > 0 && root.clientWidth < 560; }
+  function narrow() { return window.innerWidth < 700; }   // the viewport, like the CSS breakpoints: a container reflows, this does not
+  function chartWidth(nr) { return nr ? Math.max(320, root.clientWidth || window.innerWidth) : 560; }
   function chartSVG(opts) {
-    var nr = narrow(), W = nr ? Math.max(320, root.clientWidth) : 560, L = 60, T = 30, R = nr ? 16 : 170, series = opts.series;
+    var nr = narrow(), W = chartWidth(nr), L = 60, T = 30, R = nr ? 16 : 170, series = opts.series;
     var B = nr ? 52 + 18 * Math.max(1, series.length) : 48, H = 272 + B;
     var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="v2chart" role="img" aria-label="' + esc(opts.title) + '"><text x="' + L + '" y="18" class="ct">' + esc(opts.title) + '</text>';
     if (opts.empty) { return s + '<text x="' + W / 2 + '" y="' + H / 2 + '" class="tick" text-anchor="middle">' + esc(opts.empty) + '</text></svg>'; }
@@ -230,7 +231,7 @@
   // A chart whose x is a metric, not a budget: each method's ladder walks a path through the plane
   // (here: how long its answer is against how well it fits), so the points keep their rung order.
   function frontSVG(opts) {
-    var nr = narrow(), W = nr ? Math.max(320, root.clientWidth) : 560, L = 60, T = 30, R = nr ? 16 : 170;
+    var nr = narrow(), W = chartWidth(nr), L = 60, T = 30, R = nr ? 16 : 170;
     var B = nr ? 52 + 18 * Math.max(1, opts.series.length) : 48, H = 272 + B;
     var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="v2chart" role="img" aria-label="' + esc(opts.title) + '"><text x="' + L + '" y="18" class="ct">' + esc(opts.title) + "</text>";
     if (opts.empty) { return s + '<text x="' + W / 2 + '" y="' + H / 2 + '" class="tick" text-anchor="middle">' + esc(opts.empty) + "</text></svg>"; }
@@ -409,7 +410,7 @@
   function renderDist(shown) {
     var p = METRIC[state.focus], r = state.rung, keys = shown.map(function (m) { return m.key; });
     if (!shown.length) { return '<p class="v2hint">Select at least one method.</p>'; }
-    var nr = narrow(), W = nr ? Math.max(320, root.clientWidth) : 720, L = 60, T = 30, R = 16;
+    var nr = narrow(), W = nr ? Math.max(320, root.clientWidth || window.innerWidth) : 720, L = 60, T = 30, R = 16;
     if (p.kind === "rate") {   // per-catalog rates: a dot plot with Wilson intervals
       var cats = state.cats.slice().sort(function (a, b) { return CAT[b].laws - CAT[a].laws; }).filter(function (c) { return shown.some(function (m) { return cell(m.key, c, r); }); });
       if (!cats.length) { return '<p class="v2hint">No finished units at rung ' + r + '.</p>'; }
