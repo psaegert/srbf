@@ -158,11 +158,11 @@ test('the headline stands above the explorer with its two fixed charts', async (
   await expect(head).toBeVisible();
   await expect(head.locator('.v2hltitle')).toBeVisible();
   await expect(head.locator('svg.v2chart')).toHaveCount(2);
-  await expect(head.locator('svg.v2chart').first()).toContainText('recovery');
+  await expect(head.locator('svg.v2chart').first()).toContainText('Recovery vs time');
   await expect(head.locator('svg.v2chart').first()).toContainText('fit time');
   // the second headline chart is the trade-off: description length on x, fit error on y
-  await expect(head.locator('svg.v2chart').nth(1)).toContainText('Fit error against length');
-  await expect(head.locator('svg.v2chart').nth(1)).toContainText(/length/);   // the x label is shortened on mobile
+  await expect(head.locator('svg.v2chart').nth(1)).toContainText('Fit vs length');
+  await expect(head.locator('svg.v2chart').nth(1)).toContainText(/length \/ law/);
   await expect(head.locator('svg.v2chart').nth(1)).toContainText('FVU');
   // fixed: the explorer's own controls do not move it
   await page.locator(V2 + ' button[data-act="none"]').click();
@@ -203,8 +203,13 @@ test('the view that shows tables is called Tables', async ({ page }) => {
 test('the mean is the default statistic, and the median stays one click away', async ({ page }) => {
   await page.goto('/?release=2026-09&v=curves&p=log10_fvu_val');
   await expect(page.locator(V2 + ' input[name="v2stat"][value="mean"]')).toBeChecked();
-  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('mean');
+  await expect(page.locator('#results-headline-v2 .v2hlsub')).toContainText('mean');
   await expect(page.locator('#results-headline-v2 svg.v2chart').nth(1)).toBeVisible();   // no histogram needed to draw it
+  // switching the statistic must not rewrite the labels, in the explorer or in the headline
+  const before = await page.locator(V2 + ' .v2view svg.v2chart').first().textContent();
+  const head = await page.locator('#results-headline-v2 svg.v2chart').first().textContent();
   await page.locator(V2 + ' input[name="v2stat"][value="median"]').check();
-  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('median', { timeout: 15000 });
+  await expect.poll(async () => page.locator('#results-headline-v2 svg.v2chart').first().textContent()).toBe(head);
+  const after = await page.locator(V2 + ' .v2view svg.v2chart').first().textContent();
+  for (const label of ['log10 FVU (validation)', 'fit time per problem']) { expect(before, label).toContain(label); expect(after, label).toContain(label); }
 });

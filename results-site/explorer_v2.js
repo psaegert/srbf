@@ -206,11 +206,11 @@
     else { D.rungs.forEach(function (r) { var e = Math.round(Math.log2(r)); s += '<line x1="' + xs(r).toFixed(1) + '" y1="' + (H - B) + '" x2="' + xs(r).toFixed(1) + '" y2="' + (H - B + (e % 2 ? 3 : 5)) + '" class="grid"/>'; if (e % 2) { return; } s += '<text x="' + xs(r).toFixed(1) + '" y="' + (H - B + 16) + '" class="tick" text-anchor="middle">' + (r >= 1024 ? (r / 1024) + "k" : r) + '</text>'; }); }
     var xlab = timeAxis
       ? (opts.timeSource === "ref"
-        ? (nr ? "fit time, reference machine (s, log)" : "mean fit time per problem on the reference machine (s, log scale)")
-        : (nr ? "fit time where the unit ran (s, log)" : "mean fit time per problem, measured where each unit ran (s, log scale)"))
-      : (nr ? "candidates per problem (log scale)" : "samples / beam / candidates / draws per problem (log scale)");
+        ? (nr ? "fit time (s, ref)" : "fit time per problem (s, log, reference machine)")
+        : (nr ? "fit time (s, as run)" : "fit time per problem (s, log, as run)"))
+      : (nr ? "candidates / problem" : "candidates per problem (log scale)");
     s += '<text x="' + ((L + W - R) / 2).toFixed(0) + '" y="' + (H - B + 32) + '" class="tick" text-anchor="middle">' + esc(xlab) + '</text>';
-    s += '<text transform="translate(14,' + ((T + H - B) / 2).toFixed(0) + ') rotate(-90)" class="tick" text-anchor="middle">' + esc(opts.ylabel) + '</text>';
+    if (opts.ylabel) { s += '<text transform="translate(14,' + ((T + H - B) / 2).toFixed(0) + ') rotate(-90)" class="tick" text-anchor="middle">' + esc(opts.ylabel) + "</text>"; }
     var ly = nr ? H - B + 46 : T + 6, lx = nr ? L : W - R + 10;
     series.forEach(function (sr) { var col = sr.color, pts = sr.pts.slice().sort(function (a, b) { return a.x - b.x; }); var cl = function (v) { return Math.min(ymax, Math.max(ymin, v)); };
       if (state.ci && pts.some(function (p) { return isFinite(p.lo) && isFinite(p.hi); })) { var up = pts.map(function (p) { return xs(p.x).toFixed(1) + "," + y(cl(isFinite(p.hi) ? p.hi : p.v)).toFixed(1); }); var dn = pts.slice().reverse().map(function (p) { return xs(p.x).toFixed(1) + "," + y(cl(isFinite(p.lo) ? p.lo : p.v)).toFixed(1); }); s += '<polygon points="' + up.concat(dn).join(" ") + '" fill="' + col + '" fill-opacity="0.13" stroke="none"/>'; }
@@ -254,7 +254,7 @@
     });
     return s + "</svg>";
   }
-  function frontChart(xm, ym, shown) {
+  function frontChart(xm, ym, shown, title) {
     var keys = shown.map(function (m) { return m.key; }), series = [], pending = false;
     var xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity;
     shown.forEach(function (m) {
@@ -271,7 +271,7 @@
       });
       if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: pts }); }
     });
-    var title = "Fit error against length";
+    title = title || (xm.short + " vs " + ym.short);
     if (pending && !series.length) { return frontSVG({ title: title, series: [], empty: "loading the distributions\u2026" }); }
     if (!series.length) { return frontSVG({ title: title, series: [], empty: "no finished units for this selection yet" }); }
     var xpad = (xmax - xmin) * 0.08 || 0.3, ypad = (ymax - ymin) * 0.08 || 0.3;
@@ -279,7 +279,7 @@
     return frontSVG({ title: title, series: series, xmin: xmin, xmax: xmax, ymin: ymin, ymax: ymax,
       xticks: ticksFor(xm, xmin, xmax), xtick: function (g) { return tickLabel(xm, g); },
       yticks: ticksFor(ym, ymin, ymax), ytick: function (g) { return tickLabel(ym, g); },
-      xlabel: narrow() ? "answer length / law (log)" : "description length of the answer, over the law's own (log scale)",
+      xlabel: narrow() ? "length / law (log)" : "answer length / law length (log scale)",
       ylabel: narrow() ? ym.short : ym.label, xzero: 0 });
   }
   function xOf(m, r, cs, src) { return state.xaxis === "time" ? timeOf(m, r, cs, src) : r; }
@@ -293,7 +293,7 @@
   function timeRange(tmin, tmax) { tmin = Math.pow(10, Math.floor(Math.log10(tmin))); tmax = Math.pow(10, Math.ceil(Math.log10(tmax))); if (tmax <= tmin) { tmax = tmin * 10; } return [tmin, tmax]; }
 
   // ---- Curves ----------------------------------------------------------------------------------------------------
-  function curveChart(metric, shown) {
+  function curveChart(metric, shown, title) {
     var keys = shown.map(function (x) { return x.key; }), series = [], ymin = Infinity, ymax = -Infinity, pending = false, tmin = Infinity, tmax = -Infinity;
     var src = timeSource(keys);
     shown.forEach(function (m) { var tm = thinMap(m.key, keys), pts = [];
@@ -304,14 +304,14 @@
         [st.v, state.ci ? st.lo : st.v, state.ci ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
         if (state.xaxis === "time") { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); } });
       if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: pts }); } });
-    var title = metric.label + (metric.kind === "cont" ? (state.stat === "mean" ? " · mean" : " · median") : "");
+    title = title || metric.label;   // the statistic is named once per block, not on every chart
     if (pending && !series.length) { return chartSVG({ title: title, series: [], empty: "loading the distribution…" }); }
     if (!series.length) { return chartSVG({ title: title, series: [], empty: state.cats.length ? (shown.length ? (state.xaxis === "time" ? "no time measurement on the reference machine yet for the shown methods" : "no finished units for this selection yet") : "no method selected") : "no catalog selected" }); }
     if (metric.kind === "rate") { ymin = 0; ymax = Math.min(1, Math.max(0.05, ymax * 1.05)); }
     else if (tfOf(metric) === "log2") { ymin = Math.min(ymin, -0.3); ymax = Math.max(ymax, 0.3); }
     else { var pad = (ymax - ymin) * 0.08 || 0.1; ymin -= pad; ymax += pad; }
     var tr = state.xaxis === "time" ? timeRange(tmin, tmax) : [0, 0];
-    return chartSVG({ title: title, series: series, ymin: ymin, ymax: ymax, ticks: ticksFor(metric, ymin, ymax), tick: function (g) { return tickLabel(metric, g); }, ylabel: metric.short, timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: tfOf(metric) === "log2" ? 0 : undefined });
+    return chartSVG({ title: title, series: series, ymin: ymin, ymax: ymax, ticks: ticksFor(metric, ymin, ymax), tick: function (g) { return tickLabel(metric, g); }, ylabel: "", timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: tfOf(metric) === "log2" ? 0 : undefined });
   }
   function renderCurves(shown) {
     var plots = D.metrics.filter(function (m) { return state.plots.indexOf(m.key) >= 0; });
@@ -325,8 +325,10 @@
   // Two charts that are the same for every visitor: what a method recovers, and how long its answer is, against
   // what it costs. They are deliberately not wired to the controls below -- everything adjustable is the explorer.
   var HEADLINE = [
-    { key: "numeric_recovery_val", caption: "Laws reproduced to float32 precision on held-out points, against what they cost. Higher is better." },
-    { x: "mdl_ratio", y: "log10_fvu_val", caption: "How well an answer fits against how long it is: the dashed line is the law's own length. Down and left is better." }];
+    { key: "numeric_recovery_val", title: "Recovery vs time",
+      caption: "Laws reproduced to float32 precision on held-out points. Up and left is better." },
+    { x: "mdl_ratio", y: "log10_fvu_val", title: "Fit vs length",
+      caption: "Description length in the certified canon; dashed line: the law itself. Down and left is better." }];
   function withState(over, fn) { var prev = state; state = Object.assign({}, prev, over); try { return fn(); } finally { state = prev; } }
   function renderHeadline() {
     if (!headRoot) { return; }
@@ -341,16 +343,15 @@
           var ms = (h.key ? [h.key] : [h.x, h.y]).map(function (k) { return METRIC[k]; });
           if (ms.some(function (m) { return !m; })) { return ""; }
           if (state.stat === "median") { ms.forEach(function (m) { if (m.kind === "cont") { ensure("hist/" + m.key + ".js", scheduleRender); } }); }
-          var svg = h.key ? curveChart(ms[0], shown) : frontChart(ms[0], ms[1], shown);
+          var svg = h.key ? curveChart(ms[0], shown, h.title) : frontChart(ms[0], ms[1], shown, h.title);
           return '<figure class="v2hlfig">' + svg + "<figcaption>" + esc(h.caption) + "</figcaption></figure>";
         }).join("");
-        return '<h2 class="v2hltitle">What a method recovers, and what it answers with</h2>' +
-          '<p class="v2hlsub">Every method with finished units, all ' + CATS.length + ' catalogs, ' + term("matched", "matched") +
-          ' at each budget so the methods are read on the same laws. Bands are ' + term("wilson", "95 % intervals") + '.</p>' +
+        return '<h2 class="v2hltitle">Recovery, cost and length</h2>' +
+          '<p class="v2hlsub">One point per budget, ' + (state.stat === "mean" ? "mean" : "median") + ' over all ' + CATS.length + ' catalogs (' +
+          term("matched", "matched") + '), with ' + term("wilson", "95 % intervals") + '.</p>' +
           '<div class="v2hlcharts">' + charts + "</div>" +
-          '<p class="v2hint">Left, x: ' + (src === "ref" ? term("time", "mean fit time per problem on the reference machine")
-            : term("time", "mean fit time per problem, measured where each unit ran") + " (the cluster\u2019s mixed GPUs; the reference-machine timing replaces it as it is measured)") +
-          ". Right: one point per budget, means over the same laws. Everything below is yours to change.</p>";
+          '<p class="v2hint">' + (src === "ref" ? term("time", "Fit time on the reference machine")
+            : term("time", "Fit time as each unit ran") + ", on mixed cluster GPUs until the reference machine has timed every method shown") + ".</p>";
       });
   }
 
@@ -475,7 +476,7 @@
       ymin = Math.min(ymin, 0); ymax = Math.max(ymax, 0); var pad = (ymax - ymin) * 0.1 || 0.05; ymin -= pad; ymax += pad;
       var tr = state.xaxis === "time" ? timeRange(tmin, tmax) : [0, 0];
       var lin = { kind: "cont", fmt: "num2", hist: null };
-      return chartSVG({ title: title, series: series, ymin: ymin, ymax: ymax, ticks: ticksFor(lin, ymin, ymax), tick: function (g) { return fmtDelta(p, g); }, ylabel: "Δ " + p.short, timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: 0 }); });
+      return chartSVG({ title: title, series: series, ymin: ymin, ymax: ymax, ticks: ticksFor(lin, ymin, ymax), tick: function (g) { return fmtDelta(p, g); }, ylabel: "", timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: 0 }); });
     var r = state.rung, rows = "";
     others.forEach(function (m) { rows += '<tr><td><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + '</td>' + plots.map(function (p) { var use = poolCats(m.key, r, keys).filter(function (c) { return cell(base.key, c, r); }); var st = use.length ? pairedStat(p, m.key, base.key, r, use) : null; if (!st) { return '<td class="v2na">–</td><td class="v2na">–</td><td class="v2na">–</td>'; } var sig = st.p !== null && st.p < 0.05; return '<td' + (sig ? ' class="v2sig"' : "") + '>' + fmtDelta(p, st.v) + ' <span class="v2ci-txt">[' + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + ']</span></td><td>' + fmtP(st.p) + '</td><td class="v2hint">' + st.wins + " / " + st.losses + " of " + st.n + '</td>'; }).join("") + '</tr>'; });
     var anyRow = others.some(function (m) { return plots.some(function (p) { var use = poolCats(m.key, r, keys).filter(function (c) { return cell(base.key, c, r); }); return use.length && pairedStat(p, m.key, base.key, r, use); }); });
