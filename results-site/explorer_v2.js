@@ -34,6 +34,21 @@
   var METRIC = {}; D.metrics.forEach(function (m) { METRIC[m.key] = m; });
   var MGROUPS = []; D.metrics.forEach(function (m) { if (MGROUPS.indexOf(m.group) < 0) { MGROUPS.push(m.group); } });
   var PAIRED_KEYS = D.paired_keys || [];
+  // A plot is {x, y}: y is always a metric, x is a budget axis ("time", "rung") or a metric of its own (the
+  // trade-off plot). The old shape was a bare metric key and still parses, from a link or from a saved state.
+  function asPlot(v) {
+    if (v && typeof v === "object") { return METRIC[v.y] ? { x: v.x || "time", y: v.y } : null; }
+    var s = String(v), i = s.indexOf("~");
+    var x = i < 0 ? null : s.slice(0, i), y = i < 0 ? s : s.slice(i + 1);
+    if (!METRIC[y]) { return null; }
+    if (x && x !== "time" && x !== "rung" && !METRIC[x]) { x = null; }
+    return { x: x || "time", y: y };
+  }
+  function plotKey(p) { return p.x + "~" + p.y; }
+  function plotAxes() { var seen = {}, out = []; state.plots.forEach(function (p) { [p.x, p.y].forEach(function (k) { if (METRIC[k] && !seen[k]) { seen[k] = 1; out.push(k); } }); }); return out; }
+  function plotMetrics() { var seen = {}, out = []; state.plots.forEach(function (p) { if (!seen[p.y]) { seen[p.y] = 1; out.push(p.y); } }); return out; }
+  function isBudgetAxis(x) { return x === "time" || x === "rung"; }
+  function lastAxis() { return state.plots.length ? state.plots[state.plots.length - 1].x : "time"; }   // a new plot joins the last one
   var PROV = { upstream_default: "upstream defaults", author_blessed: "author-blessed", harness_tuned: "maintainer-chosen" };
   var PROV_NOTE = {
     upstream_default: "Configuration: the method's own upstream defaults; nothing was tuned in either direction.",
@@ -67,7 +82,7 @@
   var withData = function (m) { return D.cells[m.key] && Object.keys(D.cells[m.key]).length; };
   var DEFAULTS = function () {
     return { view: "curves", cats: CATS.slice(), methods: D.methods.filter(withData).map(function (m) { return m.key; }),
-      plots: D.metrics.filter(function (m) { return m.tier === "main"; }).map(function (m) { return m.key; }),
+      plots: D.metrics.filter(function (m) { return m.tier === "main"; }).map(function (m) { return { x: "time", y: m.key }; }),
       focus: "numeric_recovery_val", stat: "mean", pool: "matched", ci: true, thin: false, xaxis: "time", rung: 64, base: null, tier: "main", q: "", rows: "rungs" };
   };
   var state = DEFAULTS();
@@ -79,7 +94,7 @@
     if (q.has("v")) { state.view = q.get("v"); any = true; }
     if (q.has("c")) { var c = q.get("c"); state.cats = preset[c] ? preset[c].slice() : c.split(",").filter(function (x) { return CAT[x]; }); any = true; }
     if (q.has("m")) { state.methods = q.get("m").split(",").filter(function (x) { return D.methods.some(function (mm) { return mm.key === x; }); }); any = true; }
-    if (q.has("p")) { state.plots = q.get("p").split(",").filter(function (x) { return METRIC[x]; }); any = true; }
+    if (q.has("p")) { state.plots = q.get("p").split(",").map(asPlot).filter(Boolean); any = true; }
     if (q.has("f") && METRIC[q.get("f")]) { state.focus = q.get("f"); any = true; }
     if (q.has("s")) { state.stat = q.get("s") === "median" ? "median" : "mean"; any = true; }
     if (q.has("pool")) { state.pool = q.get("pool") === "own" ? "own" : "matched"; any = true; }
@@ -94,7 +109,8 @@
     if (!Array.isArray(state.cats)) { state.cats = CATS.slice(); }
     if (!Array.isArray(state.methods)) { state.methods = DEFAULTS().methods; }
     if (!Array.isArray(state.plots)) { state.plots = DEFAULTS().plots; }
-    state.cats = state.cats.filter(function (x) { return CAT[x]; }); state.plots = state.plots.filter(function (x) { return METRIC[x]; });
+    state.cats = state.cats.filter(function (x) { return CAT[x]; });
+    state.plots = state.plots.map(asPlot).filter(Boolean);   // from a link, from storage, or from an older shape
     state.methods = state.methods.filter(function (x) { return D.methods.some(function (mm) { return mm.key === x; }); });
     if (!METRIC[state.focus]) { state.focus = "numeric_recovery_val"; }
     if (!state.base || state.methods.indexOf(state.base) < 0) { state.base = state.methods[0] || null; }
@@ -113,7 +129,7 @@
     try { localStorage.setItem(LS, JSON.stringify(state)); } catch (e) { /* no storage */ }
     var q = new URLSearchParams(window.location.search);
     ["view", "bench", "baseline", "metric", "budget"].forEach(function (k) { q.delete(k); });   // never carry 2026-07 keys
-    q.set("release", REL); q.set("v", state.view); q.set("c", catsParam()); q.set("m", state.methods.join(",")); q.set("p", state.plots.join(","));
+    q.set("release", REL); q.set("v", state.view); q.set("c", catsParam()); q.set("m", state.methods.join(",")); q.set("p", state.plots.map(plotKey).join(","));
     q.set("f", state.focus); q.set("s", state.stat); q.set("pool", state.pool); q.set("ci", state.ci ? "1" : "0"); q.set("thin", state.thin ? "1" : "0");
     q.set("x", state.xaxis); q.set("r", String(state.rung)); if (state.base) { q.set("b", state.base); } q.set("rows", state.rows);
     try { window.history.replaceState(null, "", "?" + q.toString() + window.location.hash); } catch (e) { /* file:// */ }
@@ -208,9 +224,9 @@
   function hostWidth() { return chartWidth(chartHost || root.querySelector(".v2main") || root, chartCount); }
   function inBlock(host, count, fn) { chartHost = host; chartCount = count; try { return fn(); } finally { chartHost = null; chartCount = 0; } }
   function chartSVG(opts) {
-    var nr = narrow(), W = opts.width || hostWidth(), L = 62, T = 34, R = nr ? 16 : 180, series = opts.series;
+    var nr = narrow(), W = opts.width || hostWidth(), L = 62, T = opts.title ? 34 : 16, R = nr ? 16 : 180, series = opts.series;
     var B = nr ? 56 + 20 * Math.max(1, series.length) : 52, H = plotHeight(W) + B;
-    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="v2chart" role="img" aria-label="' + esc(opts.title) + '"><text x="' + L + '" y="18" class="ct">' + esc(opts.title) + '</text>';
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="v2chart" role="img" aria-label="' + esc(opts.aria || opts.title) + '">' + (opts.title ? '<text x="' + L + '" y="18" class="ct">' + esc(opts.title) + "</text>" : "");
     if (opts.empty) { return s + '<text x="' + W / 2 + '" y="' + H / 2 + '" class="tick" text-anchor="middle">' + esc(opts.empty) + '</text></svg>'; }
     var ymin = opts.ymin, ymax = opts.ymax; if (!(ymax > ymin)) { ymax = ymin + 1; }
     var timeAxis = opts.timeAxis, tmin = opts.tmin, tmax = opts.tmax;
@@ -218,8 +234,12 @@
     var y = function (v) { return T + (1 - (v - ymin) / (ymax - ymin)) * (H - T - B); };
     opts.ticks.forEach(function (g) { s += '<line x1="' + L + '" y1="' + y(g).toFixed(1) + '" x2="' + (W - R) + '" y2="' + y(g).toFixed(1) + '" class="grid"/><text x="' + (L - 6) + '" y="' + (y(g) + 4).toFixed(1) + '" class="tick" text-anchor="end">' + esc(opts.tick(g)) + '</text>'; });
     if (opts.zero !== undefined && opts.zero >= ymin && opts.zero <= ymax) { s += '<line x1="' + L + '" y1="' + y(opts.zero).toFixed(1) + '" x2="' + (W - R) + '" y2="' + y(opts.zero).toFixed(1) + '" class="grid zero" stroke-dasharray="4 4"/>'; }
-    if (timeAxis) { for (var t = tmin; t <= tmax * 1.0001; t *= 10) { s += '<line x1="' + xs(t).toFixed(1) + '" y1="' + T + '" x2="' + xs(t).toFixed(1) + '" y2="' + (H - B) + '" class="grid"/><text x="' + xs(t).toFixed(1) + '" y="' + (H - B + 16) + '" class="tick" text-anchor="middle">' + (t >= 1 ? t : t.toPrecision(1)) + ' s</text>'; } }
-    else { D.rungs.forEach(function (r) { var e = Math.round(Math.log2(r)); s += '<line x1="' + xs(r).toFixed(1) + '" y1="' + (H - B) + '" x2="' + xs(r).toFixed(1) + '" y2="' + (H - B + (e % 2 ? 3 : 5)) + '" class="grid"/>'; if (e % 2) { return; } s += '<text x="' + xs(r).toFixed(1) + '" y="' + (H - B + 16) + '" class="tick" text-anchor="middle">' + (r >= 1024 ? (r / 1024) + "k" : r) + '</text>'; }); }
+    var xtext = function (a, label) {   // the outermost tick label leans inwards instead of over the edge
+      var anchor = a > W - 30 ? "end" : (a < L + 14 ? "start" : "middle"), x = anchor === "end" ? Math.min(a, W - 2) : (anchor === "start" ? Math.max(a, 2) : a);
+      return '<text x="' + x.toFixed(1) + '" y="' + (H - B + 16) + '" class="tick" text-anchor="' + anchor + '">' + label + "</text>";
+    };
+    if (timeAxis) { for (var t = tmin; t <= tmax * 1.0001; t *= 10) { s += '<line x1="' + xs(t).toFixed(1) + '" y1="' + T + '" x2="' + xs(t).toFixed(1) + '" y2="' + (H - B) + '" class="grid"/>' + xtext(xs(t), (t >= 1 ? t : t.toPrecision(1)) + " s"); } }
+    else { D.rungs.forEach(function (r) { var e = Math.round(Math.log2(r)); s += '<line x1="' + xs(r).toFixed(1) + '" y1="' + (H - B) + '" x2="' + xs(r).toFixed(1) + '" y2="' + (H - B + (e % 2 ? 3 : 5)) + '" class="grid"/>'; if (e % 2) { return; } s += xtext(xs(r), String(r >= 1024 ? (r / 1024) + "k" : r)); }); }
     var xlab = timeAxis
       ? (opts.timeSource === "ref"
         ? (nr ? "fit time (s, ref)" : "fit time per problem (s, log, reference machine)")
@@ -246,9 +266,9 @@
   // A chart whose x is a metric, not a budget: each method's ladder walks a path through the plane
   // (here: how long its answer is against how well it fits), so the points keep their rung order.
   function frontSVG(opts) {
-    var nr = narrow(), W = opts.width || hostWidth(), L = 62, T = 34, R = nr ? 16 : 180;
+    var nr = narrow(), W = opts.width || hostWidth(), L = 62, T = opts.title ? 34 : 16, R = nr ? 16 : 180;
     var B = nr ? 56 + 20 * Math.max(1, opts.series.length) : 52, H = plotHeight(W) + B;
-    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="v2chart" role="img" aria-label="' + esc(opts.title) + '"><text x="' + L + '" y="18" class="ct">' + esc(opts.title) + "</text>";
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="v2chart" role="img" aria-label="' + esc(opts.aria || opts.title) + '">' + (opts.title ? '<text x="' + L + '" y="18" class="ct">' + esc(opts.title) + "</text>" : "");
     if (opts.empty) { return s + '<text x="' + W / 2 + '" y="' + H / 2 + '" class="tick" text-anchor="middle">' + esc(opts.empty) + "</text></svg>"; }
     var xmin = opts.xmin, xmax = opts.xmax, ymin = opts.ymin, ymax = opts.ymax;
     if (!(xmax > xmin)) { xmax = xmin + 1; } if (!(ymax > ymin)) { ymax = ymin + 1; }
@@ -270,7 +290,7 @@
     });
     return s + "</svg>";
   }
-  function frontChart(xm, ym, shown, title) {
+  function frontChart(xm, ym, shown, title, aria, xlabel, ylabel) {
     var keys = shown.map(function (m) { return m.key; }), series = [], pending = false;
     var xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity;
     shown.forEach(function (m) {
@@ -287,16 +307,16 @@
       });
       if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: pts }); }
     });
-    title = title || (xm.short + " vs " + ym.short);
-    if (pending && !series.length) { return frontSVG({ title: title, series: [], empty: "loading the distributions\u2026" }); }
-    if (!series.length) { return frontSVG({ title: title, series: [], empty: "no finished units for this selection yet" }); }
+    if (title == null) { title = xm.short + " vs " + ym.short; }
+    if (pending && !series.length) { return frontSVG({ title: title, aria: aria, series: [], empty: "loading the distributions\u2026" }); }
+    if (!series.length) { return frontSVG({ title: title, aria: aria, series: [], empty: "no finished units for this selection yet" }); }
     var xpad = (xmax - xmin) * 0.08 || 0.3, ypad = (ymax - ymin) * 0.08 || 0.3;
     xmin = Math.min(xmin - xpad, -0.15); xmax += xpad; ymin -= ypad; ymax += ypad;   // keep the law's own length in view
-    return frontSVG({ title: title, series: series, xmin: xmin, xmax: xmax, ymin: ymin, ymax: ymax,
+    return frontSVG({ title: title, aria: aria, series: series, xmin: xmin, xmax: xmax, ymin: ymin, ymax: ymax,
       xticks: ticksFor(xm, xmin, xmax), xtick: function (g) { return tickLabel(xm, g); },
       yticks: ticksFor(ym, ymin, ymax), ytick: function (g) { return tickLabel(ym, g); },
-      xlabel: narrow() ? "length / law (log)" : "answer length / law length (log scale)",
-      ylabel: narrow() ? ym.short : ym.label, xzero: 0 });
+      xlabel: xlabel || (narrow() ? xm.short : xm.label + (tfOf(xm) ? " (log scale)" : "")),
+      ylabel: ylabel == null ? (narrow() ? ym.short : ym.label) : ylabel, xzero: 0 });
   }
   function xOf(m, r, cs, src) { return state.xaxis === "time" ? timeOf(m, r, cs, src) : r; }
   function hasCandidateBudget(m) { return (m.budget || "candidates") !== "seconds"; }   // PySR's budget is seconds
@@ -309,7 +329,7 @@
   function timeRange(tmin, tmax) { tmin = Math.pow(10, Math.floor(Math.log10(tmin))); tmax = Math.pow(10, Math.ceil(Math.log10(tmax))); if (tmax <= tmin) { tmax = tmin * 10; } return [tmin, tmax]; }
 
   // ---- Curves ----------------------------------------------------------------------------------------------------
-  function curveChart(metric, shown, title) {
+  function curveChart(metric, shown, title, aria) {
     var keys = shown.map(function (x) { return x.key; }), series = [], ymin = Infinity, ymax = -Infinity, pending = false, tmin = Infinity, tmax = -Infinity;
     var src = timeSource(keys);
     shown.forEach(function (m) { var tm = thinMap(m.key, keys), pts = [];
@@ -320,22 +340,50 @@
         [st.v, state.ci ? st.lo : st.v, state.ci ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
         if (state.xaxis === "time") { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); } });
       if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: pts }); } });
-    title = title || metric.label;   // the statistic is named once per block, not on every chart
-    if (pending && !series.length) { return chartSVG({ title: title, series: [], empty: "loading the distribution…" }); }
-    if (!series.length) { return chartSVG({ title: title, series: [], empty: state.cats.length ? (shown.length ? (state.xaxis === "time" ? "no time measurement on the reference machine yet for the shown methods" : "no finished units for this selection yet") : "no method selected") : "no catalog selected" }); }
+    if (title == null) { title = metric.label; }   // the statistic is named once per block, not on every chart
+    if (pending && !series.length) { return chartSVG({ title: title, aria: aria, series: [], empty: "loading the distribution…" }); }
+    if (!series.length) { return chartSVG({ title: title, aria: aria, series: [], empty: state.cats.length ? (shown.length ? (state.xaxis === "time" ? "no time measurement on the reference machine yet for the shown methods" : "no finished units for this selection yet") : "no method selected") : "no catalog selected" }); }
     if (metric.kind === "rate") { ymin = 0; ymax = Math.min(1, Math.max(0.05, ymax * 1.05)); }
     else if (tfOf(metric) === "log2") { ymin = Math.min(ymin, -0.3); ymax = Math.max(ymax, 0.3); }
     else { var pad = (ymax - ymin) * 0.08 || 0.1; ymin -= pad; ymax += pad; }
     var tr = state.xaxis === "time" ? timeRange(tmin, tmax) : [0, 0];
-    return chartSVG({ title: title, series: series, ymin: ymin, ymax: ymax, ticks: ticksFor(metric, ymin, ymax), tick: function (g) { return tickLabel(metric, g); }, ylabel: "", timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: tfOf(metric) === "log2" ? 0 : undefined });
+    return chartSVG({ title: title, aria: aria, series: series, ymin: ymin, ymax: ymax, ticks: ticksFor(metric, ymin, ymax), tick: function (g) { return tickLabel(metric, g); }, ylabel: "", timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: tfOf(metric) === "log2" ? 0 : undefined });
+  }
+  // ---- Curves: one card per plot, each carrying its own two axes -------------------------------------------------
+  function opt(value, label, sel) { return '<option value="' + value + '"' + (sel === value ? " selected" : "") + ">" + esc(label) + "</option>"; }
+  function metricOptions(sel, short) {   // grouped, because a flat list of every metric is unreadable
+    return MGROUPS.map(function (g) {
+      var ms = D.metrics.filter(function (m) { return m.group === g; });
+      return ms.length ? '<optgroup label="' + esc(g) + '">' + ms.map(function (m) { return opt(m.key, short ? m.short : m.label, sel); }).join("") + "</optgroup>" : "";
+    }).join("");
+  }
+  function xOptions(sel) {
+    var time = anyTime() ? opt("time", "fit time", sel) : opt("time", "fit time (not measured yet)", sel).replace("<option", "<option disabled");
+    return '<optgroup label="budget spent">' + time + opt("rung", "candidates", sel) + "</optgroup>" + metricOptions(sel, true);
+  }
+  function yOptions(sel) { return metricOptions(sel, false); }
+  function plotCard(p, i, shown) {
+    var ym = METRIC[p.y], svg;
+    if (isBudgetAxis(p.x)) { svg = withState({ xaxis: p.x }, function () { return curveChart(ym, axisMethods(shown), "", ym.label + " against " + (p.x === "time" ? "fit time" : "candidates")); }); }
+    else { svg = frontChart(METRIC[p.x], ym, shown, "", ym.label + " against " + METRIC[p.x].label, null, ""); }
+    return '<figure class="v2plot">' +
+      '<div class="v2plothead"><select class="v2ysel" data-i="' + i + '" aria-label="metric on the y axis">' + yOptions(p.y) + "</select>" +
+      '<span class="v2vs">vs</span><select class="v2xsel" data-i="' + i + '" aria-label="axis on the x axis">' + xOptions(p.x) + "</select>" +
+      '<button type="button" class="v2rmplot" data-i="' + i + '" aria-label="Remove this plot" title="Remove this plot">\u00d7</button></div>' +
+      svg + "</figure>";
   }
   function renderCurves(shown) {
-    var plots = D.metrics.filter(function (m) { return state.plots.indexOf(m.key) >= 0; });
-    if (!plots.length) { return '<p class="v2hint">No metric selected: tick one in the Metrics panel.</p>'; }
-    var drawn = axisMethods(shown), dropped = shown.filter(function (m) { return drawn.indexOf(m) < 0; });
     var main = root.querySelector(".v2main");
-    var note = dropped.length ? '<p class="v2hint">' + esc(dropped.map(function (m) { return m.label; }).join(", ")) + ' spends a time budget, not ' + term("candidates", "a candidate count") + ': switch the x axis to time to see ' + (dropped.length > 1 ? "them" : "it") + '.</p>' : "";
-    return note + '<div class="v2charts">' + inBlock(main, plots.length, function () { return plots.map(function (m) { return curveChart(m, drawn); }).join(""); }) + "</div>";
+    var add = '<button type="button" class="v2addplot" data-act="add-plot" aria-label="Add a plot"><span class="v2plus" aria-hidden="true">+</span><span>add plot</span></button>';
+    if (!state.plots.length) { return '<div class="v2charts">' + add + '</div><p class="v2hint">No plot yet: add one, then choose what goes on each axis.</p>'; }
+    // a candidate count is a budget only a generative method spends; on that axis the others have no position
+    var dropped = state.plots.some(function (p) { return p.x === "rung"; })
+      ? shown.filter(function (m) { return !hasCandidateBudget(m); }) : [];
+    var note = dropped.length ? '<p class="v2hint">' + esc(dropped.map(function (m) { return m.label; }).join(", ")) + " spends a time budget, not " + term("candidates", "a candidate count") + ": on that axis " + (dropped.length > 1 ? "they are" : "it is") + " not drawn.</p>" : "";
+    var cards = inBlock(main, state.plots.length + 1, function () {
+      return state.plots.map(function (p, i) { return plotCard(p, i, shown); }).join("");
+    });
+    return note + '<div class="v2charts">' + cards + add + "</div>";
   }
 
   // ---- Headline ---------------------------------------------------------------------------------------------------
@@ -344,7 +392,7 @@
   var HEADLINE = [
     { key: "numeric_recovery_val", title: "Recovery vs time",
       caption: "Laws reproduced to float32 precision on held-out points. Up and left is better." },
-    { x: "mdl_ratio", y: "log10_fvu_val", title: "Fit vs length",
+    { x: "mdl_ratio", y: "log10_fvu_val", title: "Fit vs length", xlabel: "answer length / law length (log scale)",
       caption: "Description length in the certified canon; dashed line: the law itself. Down and left is better." }];
   function withState(over, fn) { var prev = state; state = Object.assign({}, prev, over); try { return fn(); } finally { state = prev; } }
   function renderHeadline() {
@@ -360,7 +408,7 @@
           var ms = (h.key ? [h.key] : [h.x, h.y]).map(function (k) { return METRIC[k]; });
           if (ms.some(function (m) { return !m; })) { return ""; }
           if (state.stat === "median") { ms.forEach(function (m) { if (m.kind === "cont") { ensure("hist/" + m.key + ".js", scheduleRender); } }); }
-          var svg = h.key ? curveChart(ms[0], shown, h.title) : frontChart(ms[0], ms[1], shown, h.title);
+          var svg = h.key ? curveChart(ms[0], shown, h.title) : frontChart(ms[0], ms[1], shown, h.title, null, narrow() ? "length / law (log)" : h.xlabel);
           return '<figure class="v2hlfig">' + svg + "<figcaption>" + esc(h.caption) + "</figcaption></figure>";
         }).join("");
         return '<h2 class="v2hltitle">Recovery, cost and length</h2>' +
@@ -376,7 +424,7 @@
   var lastTable = null;
   function cellText(st, p) { if (!st) { return ""; } if (st.pending) { return "…"; } return fmt(p, st.v, st.edge) + (state.ci ? ' <span class="v2ci-txt">[' + fmt(p, st.lo) + ", " + fmt(p, st.hi) + "]</span>" : ""); }
   function renderTable(shown) {
-    var plots = D.metrics.filter(function (m) { return state.plots.indexOf(m.key) >= 0; }); var keys = shown.map(function (m) { return m.key; });
+    var plots = plotMetrics().map(function (k) { return METRIC[k]; }); var keys = shown.map(function (m) { return m.key; });
     if (!plots.length || !shown.length) { return '<p class="v2hint">Select at least one method and one metric.</p>'; }
     var head = '<tr><th>' + (state.rows === "cats" ? "catalog" : "rung") + '</th><th>laws</th>' + shown.map(function (m) { return '<th colspan="' + plots.length + '"><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + '</th>'; }).join("") + '</tr>' +
       '<tr><th></th><th></th>' + shown.map(function () { return plots.map(function (p) { return '<th>' + esc(p.short) + '</th>'; }).join(""); }).join("") + '</tr>';
@@ -479,7 +527,7 @@
     if (shown.length < 2) { return '<p class="v2hint">Select at least two methods; one of them is the baseline.</p>'; }
     if (!state.base || !shown.some(function (m) { return m.key === state.base; })) { state.base = shown[0].key; }
     var base = D.methods.filter(function (m) { return m.key === state.base; })[0], others = shown.filter(function (m) { return m.key !== state.base; }), keys = shown.map(function (m) { return m.key; });
-    var plots = D.metrics.filter(function (m) { return state.plots.indexOf(m.key) >= 0 && PAIRED_KEYS.indexOf(m.key) >= 0; });
+    var plots = plotMetrics().filter(function (k) { return PAIRED_KEYS.indexOf(k) >= 0; }).map(function (k) { return METRIC[k]; });
     var ctl = '<p class="v2hint">Every method is read as method \u2212 ' + esc(base.label) + ' on the same laws \u00b7 ' + term("draw1", "draw 1") + '</p>';
     if (!plots.length) { return ctl + '<p class="v2hint">None of the plotted metrics has paired contrasts. Paired contrasts exist for: ' + PAIRED_KEYS.map(function (k) { return METRIC[k] ? METRIC[k].short : k; }).join(", ") + '.</p>'; }
     var src = timeSource(keys);
@@ -489,11 +537,11 @@
           [st.v, state.ci ? st.lo : st.v, state.ci ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } }); if (state.xaxis === "time") { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); } });
         if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: pts }); } });
       var title = "Δ " + p.short + " vs " + base.label;
-      if (!series.length) { return chartSVG({ title: title, series: [], empty: "no matched cells with the baseline yet" }); }
+      if (!series.length) { return chartSVG({ title: title, aria: title, series: [], empty: "no matched cells with the baseline yet" }); }
       ymin = Math.min(ymin, 0); ymax = Math.max(ymax, 0); var pad = (ymax - ymin) * 0.1 || 0.05; ymin -= pad; ymax += pad;
       var tr = state.xaxis === "time" ? timeRange(tmin, tmax) : [0, 0];
       var lin = { kind: "cont", fmt: "num2", hist: null };
-      return chartSVG({ title: title, series: series, ymin: ymin, ymax: ymax, ticks: ticksFor(lin, ymin, ymax), tick: function (g) { return fmtDelta(p, g); }, ylabel: "", timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: 0 }); }); });
+      return chartSVG({ title: title, aria: title, series: series, ymin: ymin, ymax: ymax, ticks: ticksFor(lin, ymin, ymax), tick: function (g) { return fmtDelta(p, g); }, ylabel: "", timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: 0 }); }); });
     var r = state.rung, rows = "";
     others.forEach(function (m) { rows += '<tr><td><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + '</td>' + plots.map(function (p) { var use = poolCats(m.key, r, keys).filter(function (c) { return cell(base.key, c, r); }); var st = use.length ? pairedStat(p, m.key, base.key, r, use) : null; if (!st) { return '<td class="v2na">–</td><td class="v2na">–</td><td class="v2na">–</td>'; } var sig = st.p !== null && st.p < 0.05; return '<td' + (sig ? ' class="v2sig"' : "") + '>' + fmtDelta(p, st.v) + ' <span class="v2ci-txt">[' + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + ']</span></td><td>' + fmtP(st.p) + '</td><td class="v2hint">' + st.wins + " / " + st.losses + " of " + st.n + '</td>'; }).join("") + '</tr>'; });
     var anyRow = others.some(function (m) { return plots.some(function (p) { var use = poolCats(m.key, r, keys).filter(function (c) { return cell(base.key, c, r); }); return use.length && pairedStat(p, m.key, base.key, r, use); }); });
@@ -506,7 +554,7 @@
   var VIEWS = [["curves", "Curves"], ["table", "Tables"], ["matrix", "Catalogs"], ["dist", "Distribution"], ["paired", "Paired Δ"]];
   // Each display carries its own controls. A control that cannot change what is on screen is not shown.
   var USES = {
-    curves: { plots: 1, stat: 1, pool: 1, ci: 1, thin: 1, xaxis: 1 },
+    curves: { stat: 1, pool: 1, ci: 1, thin: 1 },
     table: { plots: 1, rows: 1, stat: 1, pool: 1, ci: 1, rung: 1 },
     matrix: { focus: 1, stat: 1, rung: 1 },
     dist: { focus: 1, stat: 1, rung: 1 },
@@ -555,9 +603,9 @@
   function syncControls() {
     root.querySelectorAll(".v2cats input").forEach(function (i) { i.checked = state.cats.indexOf(i.dataset.c) >= 0; });
     root.querySelectorAll(".v2methods input[type=checkbox]").forEach(function (i) { i.checked = state.methods.indexOf(i.dataset.m) >= 0; });
-    root.querySelectorAll(".v2metrics input[type=checkbox]").forEach(function (i) { i.checked = state.plots.indexOf(i.dataset.p) >= 0; });
+    root.querySelectorAll(".v2metrics input[type=checkbox]").forEach(function (i) { i.checked = plotMetrics().indexOf(i.dataset.p) >= 0; });
     var q = state.q.toLowerCase();
-    root.querySelectorAll(".v2metric").forEach(function (l) { var mm = METRIC[l.dataset.key]; var show = state.tier === "all" || l.dataset.tier === "main" || state.plots.indexOf(l.dataset.key) >= 0; if (q) { show = mm.label.toLowerCase().indexOf(q) >= 0 || l.dataset.key.indexOf(q) >= 0 || mm.group.toLowerCase().indexOf(q) >= 0; } l.hidden = !show; });
+    root.querySelectorAll(".v2metric").forEach(function (l) { var mm = METRIC[l.dataset.key]; var show = state.tier === "all" || l.dataset.tier === "main" || plotMetrics().indexOf(l.dataset.key) >= 0; if (q) { show = mm.label.toLowerCase().indexOf(q) >= 0 || l.dataset.key.indexOf(q) >= 0 || mm.group.toLowerCase().indexOf(q) >= 0; } l.hidden = !show; });
     root.querySelectorAll(".v2mgroup").forEach(function (g) { g.hidden = !Array.prototype.some.call(g.querySelectorAll(".v2metric"), function (l) { return !l.hidden; }); });
     root.querySelector(".v2tier").checked = state.tier === "all"; if (root.querySelector(".v2q").value !== state.q) { root.querySelector(".v2q").value = state.q; }
     root.querySelectorAll("input[name=v2stat]").forEach(function (i) { i.checked = i.value === state.stat; });
@@ -570,7 +618,7 @@
     root.querySelectorAll(".v2tab").forEach(function (b) { b.classList.toggle("active", b.dataset.view === state.view); b.setAttribute("aria-selected", b.dataset.view === state.view ? "true" : "false"); });
     root.querySelectorAll(".v2swatch").forEach(function (i) { var m = D.methods.filter(function (x) { return x.key === i.dataset.m; })[0]; if (m && document.activeElement !== i) { i.value = colorOf(m); } });
     root.querySelectorAll(".v2reset").forEach(function (b) { b.hidden = !userColors[b.dataset.m]; });
-    root.querySelector(".v2metcount").textContent = state.view === "matrix" || state.view === "dist" ? "" : state.plots.length + " plotted";
+    root.querySelector(".v2metcount").textContent = state.view === "matrix" || state.view === "dist" ? "" : plotMetrics().length + " plotted";
     root.querySelector(".v2showtitle").textContent = state.view === "matrix" || state.view === "dist" ? "Metric" : state.view === "paired" ? "Contrast" : "Plots";
     var uses = usesFor(state.view);   // hide every control this display cannot use, then the panels left empty
     root.querySelectorAll("[data-uses]").forEach(function (el) { el.hidden = !el.dataset.uses.split(" ").some(function (k) { return uses[k]; }); });
@@ -587,7 +635,7 @@
       syncControls();
       var shown = shownMethods(), view = root.querySelector(".v2view");
       if (state.stat === "median" && state.view !== "dist" && state.view !== "paired") {   // histograms the current view needs
-        (state.view === "matrix" ? [METRIC[state.focus]] : D.metrics.filter(function (m) { return state.plots.indexOf(m.key) >= 0; })).forEach(function (m) { if (m.kind === "cont") { ensure("hist/" + m.key + ".js", scheduleRender); } });
+        (state.view === "matrix" ? [METRIC[state.focus]] : D.metrics.filter(function (m) { return plotAxes().indexOf(m.key) >= 0; })).forEach(function (m) { if (m.kind === "cont") { ensure("hist/" + m.key + ".js", scheduleRender); } });
       }
       renderHeadline();
       view.innerHTML = state.view === "table" ? renderTable(shown) : state.view === "matrix" ? renderMatrix(shown) : state.view === "dist" ? renderDist(shown) : state.view === "paired" ? renderPaired(shown) : renderCurves(shown);
@@ -601,10 +649,12 @@
     var t = e.target;
     if (t.dataset.c) { if (t.checked) { state.cats.push(t.dataset.c); } else { state.cats = state.cats.filter(function (c) { return c !== t.dataset.c; }); } }
     else if (t.dataset.m && t.type === "checkbox") { if (t.checked) { state.methods.push(t.dataset.m); } else { state.methods = state.methods.filter(function (c) { return c !== t.dataset.m; }); } }
-    else if (t.dataset.p) { if (t.checked) { state.plots.push(t.dataset.p); } else { state.plots = state.plots.filter(function (c) { return c !== t.dataset.p; }); } }
+    else if (t.dataset.p) { if (t.checked) { state.plots.push({ x: lastAxis(), y: t.dataset.p }); } else { state.plots = state.plots.filter(function (c) { return c.y !== t.dataset.p; }); } }
     else if (t.name === "v2stat") { state.stat = t.value; } else if (t.name === "v2pool") { state.pool = t.value; } else if (t.name === "v2xaxis") { state.xaxis = t.value; } else if (t.name === "v2rows") { state.rows = t.value; }
     else if (t.classList.contains("v2ci")) { state.ci = t.checked; } else if (t.classList.contains("v2thin")) { state.thin = t.checked; } else if (t.classList.contains("v2tier")) { state.tier = t.checked ? "all" : "main"; }
     else if (t.classList.contains("v2focus")) { state.focus = t.value; } else if (t.classList.contains("v2rung")) { state.rung = parseInt(t.value, 10); } else if (t.classList.contains("v2base")) { state.base = t.value; }
+    else if (t.classList.contains("v2ysel")) { state.plots[+t.dataset.i].y = t.value; }
+    else if (t.classList.contains("v2xsel")) { state.plots[+t.dataset.i].x = t.value; }
     else if (t.classList.contains("v2swatch")) { userColors[t.dataset.m] = t.value; writeCookie(userColors); root.querySelector(".v2cookie").hidden = false; }
     else { return; }
     render();
@@ -614,7 +664,14 @@
     var b = e.target.closest ? e.target.closest("button") : null; if (!b || !root.contains(b) || b.classList.contains("v2help")) { return; }
     if (b.dataset.view) { state.view = b.dataset.view; render(); return; }
     if (b.classList.contains("v2reset")) { delete userColors[b.dataset.m]; writeCookie(userColors); render(); return; }
+    if (b.classList.contains("v2rmplot")) { state.plots.splice(+b.dataset.i, 1); render(); return; }
     var act = b.dataset.act; if (!act) { return; }
+    if (act === "add-plot") {   // a plot the reader does not have yet, on the axis the last one uses
+      var taken = plotMetrics();
+      var next = D.metrics.filter(function (m) { return m.tier === "main" && taken.indexOf(m.key) < 0; })[0]
+        || D.metrics.filter(function (m) { return taken.indexOf(m.key) < 0; })[0] || D.metrics[0];
+      state.plots.push({ x: lastAxis(), y: next.key }); render(); return;
+    }
     if (act === "all") { state.cats = CATS.slice(); } else if (act === "none") { state.cats = []; }
     else if (act === "phys" || act === "classic" || act === "synth") { var g = { phys: "physics", classic: "classical", synth: "synthetic" }[act]; state.cats = CATS.filter(function (c) { return CAT[c].group === g; }); }
     else if (act === "reset-colours") { userColors = {}; writeCookie(userColors); root.querySelector(".v2cookie").hidden = true; }
