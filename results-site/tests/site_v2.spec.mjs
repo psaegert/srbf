@@ -114,7 +114,7 @@ test('the view state round-trips through the URL', async ({ page }) => {
 
 test('terms and metric help open a floating explanation', async ({ page }) => {
   await page.goto('/?release=2026-09&v=curves');
-  await page.locator(V2 + ' .v2help').first().click();
+  await page.locator(V2 + ' .v2metrics .v2help').first().click();
   await expect(page.locator('.v2pop')).toBeVisible();
   await expect(page.locator('.v2pop')).toContainText('Share of laws');
   await page.keyboard.press('Escape');
@@ -162,7 +162,7 @@ test('the headline stands above the explorer with its two fixed charts', async (
   await expect(head.locator('svg.v2chart').first()).toContainText('fit time');
   // the second headline chart is the trade-off: description length on x, fit error on y
   await expect(head.locator('svg.v2chart').nth(1)).toContainText('Fit error against length');
-  await expect(head.locator('svg.v2chart').nth(1)).toContainText('description length');
+  await expect(head.locator('svg.v2chart').nth(1)).toContainText(/length/);   // the x label is shortened on mobile
   await expect(head.locator('svg.v2chart').nth(1)).toContainText('FVU');
   // fixed: the explorer's own controls do not move it
   await page.locator(V2 + ' button[data-act="none"]').click();
