@@ -585,11 +585,11 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 /* A plot is a card: its two axes are chosen on it, and it can be removed from it. The last cell of the
    grid is the place a new plot would appear, drawn as an outline with a round plus. */
 .explorer-v2 .v2plot { margin: 0; min-width: 0; display: flex; flex-direction: column; }
-.explorer-v2 .v2plothead { display: flex; align-items: center; gap: 6px; padding: 0 2px 5px; min-width: 0; }
-.explorer-v2 .v2plothead select { font-size: 12.5px; padding: 2px 4px; border-color: transparent; background: none; font-weight: 600; color: var(--ink); flex: 0 1 auto; min-width: 0; max-width: 46%; }
-.explorer-v2 .v2plothead select:hover, .explorer-v2 .v2plothead select:focus { border-color: var(--line); background: var(--surface); }
-.explorer-v2 .v2vs { font-size: 11.5px; color: var(--ink-faint); }
-.explorer-v2 .v2rmplot { margin-left: auto; border: none; background: none; color: var(--ink-faint); font-size: 17px; line-height: 1; padding: 0 4px; cursor: pointer; border-radius: 4px; }
+.explorer-v2 .v2plothead { display: flex; align-items: center; gap: 7px; padding: 0 2px 7px; min-width: 0; }
+.explorer-v2 .v2vs { font-size: 12.5px; color: var(--ink-faint); }
+/* the plot's title IS its two axes: name them at title size */
+.explorer-v2 .v2plothead .v2pick { font-size: 16.5px; font-weight: 650; letter-spacing: -.01em; padding: 3px 7px; }
+.explorer-v2 .v2rmplot { margin-left: auto; border: none; background: none; color: var(--ink-faint); font-size: 23px; line-height: 1; width: 32px; height: 32px; padding: 0; cursor: pointer; border-radius: 6px; }
 .explorer-v2 .v2rmplot:hover, .explorer-v2 .v2rmplot:focus-visible { color: #c0392b; background: var(--accent-soft); outline: none; }
 .explorer-v2 .v2addplot { align-self: stretch; justify-self: stretch; min-height: 200px; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 10px; border: 2px dashed var(--line); border-radius: 8px;
@@ -597,6 +597,30 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 .explorer-v2 .v2addplot:hover, .explorer-v2 .v2addplot:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
 .explorer-v2 .v2plus { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px;
   border: 2px solid currentColor; border-radius: 50%; font-size: 26px; line-height: 1; padding-bottom: 3px; }
+
+/* The metric picker: one control for every place a metric is chosen, at body level so it never reflows a card. */
+.explorer-v2 .v2pick { display: inline-flex; align-items: center; gap: 6px; flex: 0 1 auto; min-width: 0; max-width: 46%;
+  font: inherit; font-size: 13px; color: var(--ink); background: none; border: 1px solid transparent;
+  border-radius: 7px; padding: 2px 6px; cursor: pointer; text-align: left; }
+.explorer-v2 .v2pick:hover, .explorer-v2 .v2pick:focus-visible { border-color: var(--line); background: var(--surface); outline: none; }
+.explorer-v2 .v2pick[aria-expanded="true"] { border-color: var(--accent); background: var(--surface); }
+.explorer-v2 .v2picklab { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.explorer-v2 .v2caret { color: var(--ink-faint); font-size: 11px; flex: none; }
+.explorer-v2 .v2row .v2pick { max-width: 100%; border-color: var(--line); background: var(--surface); }
+.v2picker { position: fixed; z-index: 70; background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: var(--shadow); padding: 10px 12px 12px; width: min(880px, calc(100vw - 16px));
+  max-height: min(70vh, 560px); overflow: auto; }
+.v2picker .v2pickq { width: 100%; margin: 0 0 9px; padding: 5px 8px; font: inherit; font-size: 13px;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
+.v2pickcols { columns: 4 200px; column-gap: 18px; }
+.v2pickgroup { break-inside: avoid; margin: 0 0 11px; }
+.v2pickgroup h5 { margin: 0 0 3px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint); }
+.v2pickitem { display: block; width: 100%; text-align: left; font: inherit; font-size: 13px; color: var(--ink);
+  background: none; border: 0; border-radius: 6px; padding: 3px 6px; cursor: pointer; }
+.v2pickitem:hover, .v2pickitem:focus-visible { background: var(--accent-soft); outline: none; }
+.v2pickitem.on { font-weight: 650; color: var(--accent); }
+.v2pickitem[disabled] { color: var(--ink-faint); cursor: default; }
+.v2pickitem[disabled]:hover { background: none; }
 
 /* Headline: the two fixed charts above the explorer. Same numbers for every visitor, no controls. */
 .headline-v2 { background: var(--accent-soft); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px 12px; margin: 0 0 16px; }
@@ -621,5 +645,7 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
   .explorer-v2 .v2plothead { flex-wrap: wrap; }
   .explorer-v2 .v2plothead .v2ysel { flex: 1 1 100%; max-width: 100%; }
   .explorer-v2 .v2plothead .v2xsel { max-width: 70%; }
+  .v2picker { width: calc(100vw - 16px); }
+  .v2pickcols { columns: 1; }
 }
 @media (prefers-reduced-motion: reduce) { .explorer-v2 .v2matrix td { transition: none; } }
