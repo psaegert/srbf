@@ -71,7 +71,7 @@
       focus: "numeric_recovery_val", stat: "median", pool: "matched", ci: true, thin: false, xaxis: "time", rung: 64, base: null, tier: "main", q: "", rows: "rungs" };
   };
   var state = DEFAULTS();
-  var LS = "srbf-v2-" + REL;
+  var LS = "srbf-v2-" + REL + ".2";   // .2: time became the default x axis, and a state saved before that must not pin the old one
   function loadState() {
     try { var s = JSON.parse(localStorage.getItem(LS) || "null"); if (s) { Object.keys(state).forEach(function (k) { if (s[k] !== undefined) { state[k] = s[k]; } }); } } catch (e) { /* no storage */ }
     var q = new URLSearchParams(window.location.search); var any = false;
