@@ -23,7 +23,7 @@ const VIEWS = ['curves', 'table', 'matrix', 'dist', 'paired'];
 const LEGACY_METRICS = ['numeric_recovery_val', 'expr_length_ratio', 'log10_fvu_val', 'log10_fvu_fit', 'numeric_recovery_fit', 'success',
   'skeleton_match_raw', 'f1_score', 'precision_score', 'recall_score', 'edit_distance_norm', 'zss_edit_distance', 'expr_length_ratio_abserr',
   'predicted_skeleton_prefix_length', 'skeleton_length', 'n_constants_ratio', 'n_constants_delta', 'total_nestedness_delta', 'predicted_log_prob',
-  'predicted_score', 'fit_time'];
+  'predicted_score'];   // fit_time is NOT here: the 2026-07 site published an as-run wall clock, this release publishes none
 
 test('the newest release is the default and renders its curves', async ({ page }) => {
   const errors = collectErrors(page);
@@ -131,18 +131,48 @@ test('terms and metric help open a floating explanation', async ({ page }) => {
   await expect(page.locator('.v2pop')).toContainText('Matched pooling');
 });
 
-test('time is the default x axis wherever a time was measured', async ({ page }) => {
+// A published time is a CALIBRATED time. Seconds measured wherever a unit happened to run are not comparable
+// between methods, so the release must not carry them and no chart may draw them.
+const hasRefTiming = (page) => page.evaluate(() => Object.keys(window.RESULTS_V2.timing || {})
+  .some((k) => Object.keys(window.RESULTS_V2.timing[k]).length));
+
+test('a time axis exists only where the reference machine has measured every method shown', async ({ page }) => {
   await page.goto('/');
-  const axis = page.locator(V2 + ' .v2plot .v2xsel').first();   // the x control of the first plot
-  // a time exists when the reference machine has measured a method, or when the runs themselves carry fit_time
-  const hasTime = await page.evaluate(() => {
-    const D = window.RESULTS_V2 || {};
-    if (Object.keys(D.timing || {}).some((k) => Object.keys(D.timing[k]).length)) { return true; }
-    return Object.keys(D.cells || {}).some((m) => Object.keys(D.cells[m]).some((c) => Object.keys(D.cells[m][c]).some((r) => D.cells[m][c][r].m && D.cells[m][c][r].m.fit_time)));
+  const axis = page.locator(V2 + ' .v2plot .v2xsel').first();
+  if (!await hasRefTiming(page)) {
+    await expect(axis).toHaveAttribute('data-k', 'rung');                 // the budget, never an uncalibrated time
+    await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).not.toContainText('fit time');
+    await expect(page.locator('#results-headline-v2')).not.toContainText('fit time');
+    await axis.click();
+    await expect(page.locator('.v2pickitem[data-k="time"]')).toBeDisabled();
+    await page.keyboard.press('Escape');
+  } else {
+    await expect(axis).toHaveAttribute('data-k', 'time');
+    await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('reference machine');
+  }
+  // whatever the state, nothing anywhere may say a time was measured "as run"
+  expect(await page.content()).not.toContain('as run');
+});
+
+test('the release publishes no as-run wall clock', async ({ page }) => {
+  await page.goto('/');
+  const banned = await page.evaluate(() => {
+    const D = window.RESULTS_V2, ban = ['fit_time', 'generation_time'], hits = [];
+    for (const k of ban) {
+      if ((D.metrics || []).some((m) => m.key === k)) { hits.push('registry:' + k); }
+      if ((D.paired_keys || []).includes(k)) { hits.push('paired_keys:' + k); }
+      for (const m of Object.keys(D.cells || {})) {
+        for (const c of Object.keys(D.cells[m])) {
+          for (const r of Object.keys(D.cells[m][c])) {
+            const cell = D.cells[m][c][r];
+            if ((cell.m && k in cell.m) || (cell.r && k in cell.r)) { hits.push('cell:' + k); }
+          }
+        }
+      }
+    }
+    return [...new Set(hits)];
   });
-  if (!hasTime) { await axis.click(); await expect(page.locator('.v2pickitem[data-k="time"]')).toBeDisabled(); return; }
-  await expect(axis).toHaveAttribute('data-k', 'time');
-  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('fit time');
+  expect(banned, 'the payload carries an as-run wall-clock metric').toEqual([]);
 });
 
 test('the candidate axis names itself and is offered beside time', async ({ page }) => {
@@ -153,8 +183,10 @@ test('the candidate axis names itself and is offered beside time', async ({ page
   // a method whose budget is a time limit has no position on this axis and is named instead of dropped silently
   const seconds = await page.evaluate(() => (window.RESULTS_V2.methods || []).filter((m) => m.budget === 'seconds' && window.RESULTS_V2.cells[m.key] && Object.keys(window.RESULTS_V2.cells[m.key]).length).map((m) => m.label));
   for (const label of seconds) { await expect(page.locator(V2 + ' .v2view')).toContainText(label); }
-  await pick(page, page.locator(V2 + ' .v2plot .v2xsel').first(), 'time');
-  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('fit time');
+  if (await hasRefTiming(page)) {
+    await pick(page, page.locator(V2 + ' .v2plot .v2xsel').first(), 'time');
+    await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('reference machine');
+  }
   expect(errors).toEqual([]);
 });
 
@@ -165,8 +197,8 @@ test('the headline stands above the explorer with its two fixed charts', async (
   await expect(head).toBeVisible();
   await expect(head.locator('.v2hltitle')).toBeVisible();
   await expect(head.locator('svg.v2chart')).toHaveCount(2);
-  await expect(head.locator('svg.v2chart').first()).toContainText('Recovery vs time');
-  await expect(head.locator('svg.v2chart').first()).toContainText('fit time');
+  await expect(head.locator('svg.v2chart').first()).toContainText(await hasRefTiming(page) ? 'Recovery vs time' : 'Recovery vs budget');
+  await expect(head.locator('svg.v2chart').first()).toContainText(await hasRefTiming(page) ? 'reference machine' : 'candidates');   // narrow screens shorten the label
   // the second headline chart is the trade-off: description length on x, fit error on y
   await expect(head.locator('svg.v2chart').nth(1)).toContainText('Fit vs length');
   await expect(head.locator('svg.v2chart').nth(1)).toContainText('MDL ratio');   // the metric's own name, as everywhere else
@@ -286,7 +318,7 @@ test('a metric carries one name and one definition wherever it appears', async (
 
 test('every chart names both of its axes', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 1100 });
-  await page.goto('/?release=2026-09&v=curves&p=time~numeric_recovery_val,mdl_ratio~log10_fvu_val');
+  await page.goto('/?release=2026-09&v=curves&p=rung~numeric_recovery_val,mdl_ratio~log10_fvu_val');
   const labels = async (svg) => (await svg.locator('text').allTextContents()).join(' | ');
   const charts = page.locator('svg.v2chart');
   await expect(charts.first()).toBeVisible();
@@ -294,7 +326,7 @@ test('every chart names both of its axes', async ({ page }) => {
   expect(n).toBeGreaterThanOrEqual(4);   // two headline panels and two plots
   for (let i = 0; i < n; i++) {
     const t = await labels(charts.nth(i));
-    expect(t, `chart ${i} x label`).toMatch(/fit time per problem|MDL ratio|candidates per problem/);
+    expect(t, `chart ${i} x label`).toMatch(/fit time per problem|MDL ratio|candidates per problem/);   // a budget or a metric, never an uncalibrated time
     expect(t, `chart ${i} y label`).toMatch(/Numeric recovery|log10 FVU/);
   }
 });
@@ -353,7 +385,7 @@ test('the page says nothing about what it does not show', async ({ page }) => {
 test('the interval is a band by default, and crosses are a separate switch', async ({ page }) => {
   const errors = collectErrors(page);
   await page.setViewportSize({ width: 1600, height: 1100 });
-  await page.goto('/?release=2026-09&v=curves&p=time~numeric_recovery_val,mdl_ratio~log10_fvu_val');
+  await page.goto('/?release=2026-09&v=curves&p=rung~numeric_recovery_val,mdl_ratio~log10_fvu_val');
   // one shape for both kinds of x axis: the band is drawn from the interval boxes, so a trade-off plot gets a
   // two-dimensional region rather than a bar through each point
   const shapes = () => page.evaluate(() => [...document.querySelectorAll('#results-explorer-v2 .v2plot svg.v2chart')].map((s) => ({

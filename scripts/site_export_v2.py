@@ -60,7 +60,11 @@ NB = 128
 
 # key, label, short, group, kind, higher_is_better (None = 1 is ideal / descriptive), tier, format, histogram (lo, hi, transform), description
 # Rate metrics are defined for EVERY law (a failed prediction is a miss). Continuous metrics cover successful predictions
-# only, except fit_time (every row with a time) and the ground-truth descriptors (every law).
+# only, except the ground-truth descriptors (every law).
+# NO WALL-CLOCK METRIC IS PUBLISHED. Seconds measured where a unit happened to run depend on the node, its GPU
+# and whatever shared it, so they are not comparable between methods. The only time this benchmark publishes is
+# the reference-machine ladder in timing.json, which the site uses for the time AXIS and nothing else
+# (owner 2026-09-17: "We will only publish times that are calibrated. Full stop.").
 METRICS = [
     ("numeric_recovery_val", "Numeric recovery (vNRR)", "vNRR", "Recovery", "rate", True, "main", "pct", None,
      "Share of laws whose prediction reproduces the validation targets to float32 precision: FVU on the validation split at or below 2^-23. A failed prediction is a miss."),
@@ -128,10 +132,6 @@ METRICS = [
      "The ranking score of the selected candidate as the method computed it (Flash-ANSR: the two-part code, lower is better). Only comparable within one method."),
     ("predicted_pareto_rank", "Pareto rank of the selection", "Pareto rank", "Model internals", "cont", False, "more", "num1", (0.0, 64.0, None),
      "Rank of the selected candidate on the method's FVU / length front (0 = on the front)."),
-    ("fit_time", "Per-problem fit time (s)", "fit time", "Cost", "cont", False, "more", "sec", (-2.0, 4.0, "log10"),
-     "Wall-clock seconds per problem as measured where the unit ran (mixed GPUs on the cluster). For like-for-like timing use the time axis, which comes from one reference machine."),
-    ("generation_time", "Per-problem generation time (s)", "generation time", "Cost", "cont", False, "more", "sec", (-2.0, 4.0, "log10"),
-     "Wall-clock seconds spent generating candidates, before refinement, where the method reports it."),
     ("skeleton_length", "Law skeleton length", "law length", "Ground truth", "cont", None, "more", "num1", (0.0, 64.0, None),
      "Prefix-token length of the simplified law: a property of the catalog, the same for every method."),
     ("ground_truth_mdl", "Law description length (bits)", "law MDL", "Ground truth", "cont", None, "more", "num1", (0.0, 256.0, None),
@@ -145,7 +145,7 @@ METRICS = [
 RATE_KEYS = [m[0] for m in METRICS if m[4] == "rate"]
 CONT_KEYS = [m[0] for m in METRICS if m[4] == "cont"]
 HIST_SPECS = {m[0]: m[8] for m in METRICS if m[8]}
-PAIRED_KEYS = ["numeric_recovery_val", "symbolic_recovery", "success", "log10_fvu_val", "r2_val", "mdl_ratio", "expr_length_ratio", "f1_score", "fit_time"]
+PAIRED_KEYS = ["numeric_recovery_val", "symbolic_recovery", "success", "log10_fvu_val", "r2_val", "mdl_ratio", "expr_length_ratio", "f1_score"]
 
 
 def registry_json() -> list[dict[str, Any]]:

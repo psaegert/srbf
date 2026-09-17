@@ -8,7 +8,10 @@ Fatal checks, run before the Playwright suite in CI and locally:
      schema-2 keys) so a regenerated release cannot silently lose metrics;
   4. in CI, results-site/private/ and index.local.html do not exist in the checkout (they are git-ignored; a forced
      add would surface here before anything deploys);
-  5. a sealed payload, if one is present, is sealed: the envelope carries only its own fields, the KDF is strong
+  5. no published payload carries an as-run wall-clock metric. Seconds measured where a unit happened to run are
+     not comparable between methods; the only timing this benchmark publishes is the reference-machine ladder in
+     timing.json (owner 2026-09-17: "We will only publish times that are calibrated. Full stop.");
+  6. a sealed payload, if one is present, is sealed: the envelope carries only its own fields, the KDF is strong
      enough to be worth having, and the ciphertext reads as ciphertext (high entropy, no plaintext left in it).
      The checker is run against a deliberately bad envelope on every invocation, so it cannot pass vacuously.
 """
@@ -29,8 +32,11 @@ REQUIRED_METRICS = {
     "numeric_recovery_val", "expr_length_ratio", "log10_fvu_val", "log10_fvu_fit", "numeric_recovery_fit", "success",
     "skeleton_match_raw", "f1_score", "precision_score", "recall_score", "edit_distance_norm", "zss_edit_distance",
     "expr_length_ratio_abserr", "predicted_skeleton_prefix_length", "skeleton_length", "n_constants_ratio",
-    "n_constants_delta", "total_nestedness_delta", "predicted_log_prob", "predicted_score", "fit_time",
+    "n_constants_delta", "total_nestedness_delta", "predicted_log_prob", "predicted_score",
     "symbolic_recovery", "mdl_ratio", "r2_val"}
+# Wall-clock measured wherever a unit ran. Never published: not in the registry, not in a cell, not in a
+# histogram, not in a paired contrast. The reference-machine ladder (timing.json) is the only timing that ships.
+UNCALIBRATED_TIME_KEYS = ("fit_time", "generation_time")
 
 
 def payload_of(text: str, var: str) -> Any:
@@ -90,13 +96,27 @@ def check_sealed(text: str, name: str) -> list[str]:
     return bad
 
 
+def check_no_as_run_time(path: Path) -> list[str]:
+    """No published file may mention an as-run wall-clock metric, wherever it is nested."""
+    text = path.read_text(encoding="utf-8")
+    return [f"{path}: publishes {k!r}" for k in UNCALIBRATED_TIME_KEYS if k in text]
+
+
 def selftest() -> list[str]:
     """The guard checks itself: a blob that is plainly not sealed must be rejected by check_sealed."""
     plain = json.dumps({"methods": [{"key": "x", "label": "X"}], "cells": {}}).encode() * 64
     envelope = {"v": 1, "kdf": "PBKDF2-SHA256", "iter": 600000, "salt": "AA==", "iv": "AA==",
                 "ct": base64.b64encode(plain).decode()}
     text = "window.RESULTS_V2_SEALED[\"t\"]=" + json.dumps(envelope) + ";\n"
-    return [] if check_sealed(text, "selftest") else ["selftest: check_sealed accepted a plaintext payload"]
+    bad = [] if check_sealed(text, "selftest") else ["selftest: check_sealed accepted a plaintext payload"]
+    probe = SITE / "data" / ".guard_selftest.js"
+    try:
+        probe.write_text('window.X={"fit_time":[1,2]};\n', encoding="utf-8")
+        if not check_no_as_run_time(probe):
+            bad.append("selftest: check_no_as_run_time accepted an as-run time metric")
+    finally:
+        probe.unlink(missing_ok=True)
+    return bad
 
 
 def main() -> int:
@@ -135,6 +155,9 @@ def main() -> int:
                 extra = sorted({k for pair in ks for k in pair.split("|")} - PUBLIC_METHODS)
                 if extra:
                     failures.append(f"{pj}: non-public method keys {extra}")
+    for pub in sorted((SITE / "data").rglob("*.js")):
+        if pub.name != "sealed.js":     # the sealed payload is encrypted and is not a published number
+            failures.extend(check_no_as_run_time(pub))
     for sj in sorted((SITE / "data").glob("*/sealed.js")):
         failures.extend(check_sealed(sj.read_text(encoding="utf-8"), str(sj)))
     if os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"):
