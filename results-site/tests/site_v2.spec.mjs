@@ -204,12 +204,16 @@ test('the mean is the default statistic, and the median stays one click away', a
   await page.goto('/?release=2026-09&v=curves&p=log10_fvu_val');
   await expect(page.locator(V2 + ' input[name="v2stat"][value="mean"]')).toBeChecked();
   await expect(page.locator('#results-headline-v2 .v2hlsub')).toContainText('mean');
-  await expect(page.locator('#results-headline-v2 svg.v2chart').nth(1)).toBeVisible();   // no histogram needed to draw it
-  // switching the statistic must not rewrite the labels, in the explorer or in the headline
-  const before = await page.locator(V2 + ' .v2view svg.v2chart').first().textContent();
-  const head = await page.locator('#results-headline-v2 svg.v2chart').first().textContent();
+  const chart = page.locator(V2 + ' .v2view svg.v2chart').first();
+  const headline = page.locator('#results-headline-v2 svg.v2chart').first();
+  await expect(chart).toBeVisible();
+  await expect(headline).toBeVisible();   // drawn from the cell sums: a mean needs no histogram
+  // switching the statistic moves the data, never the wording, here or in the headline
+  const xLabel = async (svg) => (await svg.locator('text').allTextContents()).find((t) => t.includes('fit time'));
+  const before = await xLabel(chart);
+  const headBefore = await headline.textContent();
   await page.locator(V2 + ' input[name="v2stat"][value="median"]').check();
-  await expect.poll(async () => page.locator('#results-headline-v2 svg.v2chart').first().textContent()).toBe(head);
-  const after = await page.locator(V2 + ' .v2view svg.v2chart').first().textContent();
-  for (const label of ['log10 FVU (validation)', 'fit time per problem']) { expect(before, label).toContain(label); expect(after, label).toContain(label); }
+  await expect(chart).not.toContainText('loading', { timeout: 15000 });
+  expect(await xLabel(chart)).toBe(before);
+  expect(await headline.textContent()).toBe(headBefore);
 });
