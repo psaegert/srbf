@@ -154,11 +154,15 @@
     if (is("physics")) { return "phys"; } if (is("classical")) { return "classic"; } if (is("synthetic")) { return "synth"; }
     return state.cats.join(",");
   }
+  // A link is meant to be passed around, so it names only methods the release publishes; a method that arrived
+  // with a key is remembered for this browser (localStorage, this device only) and re-added by the key, not by a URL.
+  var byKey = {};
+  function sharedMethods() { return state.methods.filter(function (k) { return !byKey[k]; }); }
   function save() {
     try { localStorage.setItem(LS, JSON.stringify(state)); } catch (e) { /* no storage */ }
     var q = new URLSearchParams(window.location.search);
     ["view", "bench", "baseline", "metric", "budget"].forEach(function (k) { q.delete(k); });   // never carry 2026-07 keys
-    q.set("release", REL); q.set("v", state.view); q.set("c", catsParam()); q.set("m", state.methods.join(",")); q.set("p", state.plots.map(plotKey).join(","));
+    q.set("release", REL); q.set("v", state.view); q.set("c", catsParam()); q.set("m", sharedMethods().join(",")); q.set("p", state.plots.map(plotKey).join(","));
     q.set("f", state.focus); q.set("s", state.stat); q.set("pool", state.pool); q.set("ci", state.ci ? "1" : "0"); q.set("thin", state.thin ? "1" : "0");
     q.set("x", state.xaxis); q.set("r", String(state.rung)); if (state.base) { q.set("b", state.base); } q.set("rows", state.rows);
     try { window.history.replaceState(null, "", "?" + q.toString() + window.location.hash); } catch (e) { /* file:// */ }
@@ -209,7 +213,7 @@
         .then(function (src) {
           (new Function(src))();   // the payload scripts, run exactly as a <script> tag would run them
           var added = mergeOverlay(window.RESULTS_V2_PRIVATE, false);
-          added.forEach(function (k2) { if (state.methods.indexOf(k2) < 0) { state.methods.push(k2); } });
+          added.forEach(function (k2) { byKey[k2] = true; if (state.methods.indexOf(k2) < 0) { state.methods.push(k2); } });
           return added;
         })
         .catch(function () { return []; });   // a key that does not fit is not told apart from a release without one

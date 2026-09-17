@@ -45,8 +45,10 @@ def keys_in_wrapped(text: str, pattern: str) -> set[str] | None:
 
 SEALED_FIELDS = {"v", "kdf", "iter", "salt", "iv", "ct"}
 MIN_ITERATIONS = 200_000
-# A sealed blob must not carry recognisable plaintext. These are the tells of an unsealed payload.
-PLAINTEXT_TELLS = (b"window.", b'{"', b"RESULTS_V2", b"function")
+# A sealed blob must not carry recognisable plaintext. Every tell is long enough that random bytes do not
+# produce it: a 2-byte needle turns up ~7 times by chance in 400 kB, a 7-byte one once in 10^12 payloads.
+PLAINTEXT_TELLS = (b"window.", b"RESULTS_V2", b"function", b'"methods"', b'"cells"', b'"catalogs"')
+assert all(len(t) >= 7 for t in PLAINTEXT_TELLS), "a short tell fires on ciphertext by chance"
 
 
 def entropy(data: bytes) -> float:
