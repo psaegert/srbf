@@ -3,6 +3,7 @@ import pytest
 
 from srbf.core import EvaluationResult, EvaluationSample
 from srbf import model_adapters
+from srbf import variable_renaming
 
 
 class _DummyModel:
@@ -318,3 +319,94 @@ class TestAnswerProvenanceColumns:
         assert record["predicted_typed_frozen"] == 0
         assert record["predicted_typed_thaw"] == "2"
         assert record["predicted_spelling"] == "c0=/ 231 100"
+
+
+class _SplitEngine:
+    """An engine stub whose reader is just whitespace tokenisation (prefix in, prefix out)."""
+
+    def infix_to_prefix(self, expression):  # noqa: D401 - simple stub
+        return str(expression).split()
+
+    def read_infix(self, expression, convert_expression=True):  # noqa: D401 - simple stub
+        return str(expression).split()
+
+
+class TestBaselineVariableDialect:
+    """E2E and NeSymReS name the columns they are handed in their own dialect; the ground-truth
+    skeleton names the same columns x1, x2, ... positionally. Unmapped, a prediction that IS the law
+    shares no variable with it and every symbolic comparison reads zero."""
+
+    def test_columns_are_named_by_position_unless_already_x_names(self) -> None:
+        assert variable_renaming.skeleton_variable_names(["v1", "v2", "v3"]) == ["x1", "x2", "x3"]
+        assert variable_renaming.skeleton_variable_names(["x3", "x4"]) == ["x3", "x4"]   # unused columns already dropped
+        assert variable_renaming.skeleton_variable_names([]) == []
+        assert variable_renaming.skeleton_variable_names(None) == []
+
+    def test_e2e_tokens_are_zero_indexed_nesymres_tokens_are_one_indexed(self) -> None:
+        names = ["x1", "x2"]
+        assert variable_renaming.rename_variable_tokens(
+            ["+", "x_0", "*", "<constant>", "x_1"], names, first_index=variable_renaming.E2E_FIRST_INDEX
+        ) == ["+", "x1", "*", "<constant>", "x2"]
+        assert variable_renaming.rename_variable_tokens(
+            ["+", "x_1", "*", "<constant>", "x_2"], names, first_index=variable_renaming.NESYMRES_FIRST_INDEX
+        ) == ["+", "x1", "*", "<constant>", "x2"]
+
+    def test_a_column_the_model_was_never_given_keeps_its_own_name(self) -> None:
+        # NeSymReS pads the column block with zeros; a prediction that reads a padding column is a
+        # miss, and inventing a variable name for it would hide that.
+        assert variable_renaming.rename_variable_tokens(["x_9"], ["x1"], first_index=1) == ["x_9"]
+        assert variable_renaming.rename_variable_tokens(None, ["x1"], first_index=1) is None
+
+    def test_the_infix_map_leaves_identifiers_that_merely_end_in_a_variable_alone(self) -> None:
+        assert variable_renaming.rename_variables_in_infix("mulx_0 + x_0", ["x1"], first_index=0) == "mulx_0 + x1"
+
+    def test_nesymres_adapter_maps_its_prediction_onto_the_ground_truth_names(self, monkeypatch) -> None:
+        monkeypatch.setattr(model_adapters, "_HAVE_NESYMRES", True)
+
+        def fitfunc(X_support, y_fit):  # noqa: D401 - simple stub
+            return {"best_bfgs_preds": ["+ x_1 x_2"], "best_bfgs_consts": [[]]}
+
+        adapter = model_adapters.NeSymReSAdapter(
+            model=_DummyModel(), fitfunc=fitfunc, simplipy_engine=_SplitEngine(), remove_padding=False)
+        sample = EvaluationSample(
+            x_support=np.ones((2, 2), dtype=float),
+            y_support=np.zeros((2, 1), dtype=float),
+            x_validation=np.zeros((0, 2), dtype=float),
+            y_validation=np.zeros((0, 1), dtype=float),
+            metadata={"variables": ["v1", "v2"], "skeleton": ["+", "x1", "x2"]},
+        )
+
+        mapping = adapter.evaluate_sample(sample).to_mapping()
+
+        assert mapping["predicted_skeleton_prefix"] == ["+", "x1", "x2"]
+        assert mapping["predicted_expression"] == "+ x1 x2"
+
+    def test_e2e_adapter_maps_its_prediction_onto_the_ground_truth_names(self) -> None:
+        class _Tree:
+            def infix(self):  # noqa: D401 - simple stub
+                return "x_0 + x_1"
+
+        class _Estimator:
+            def fit(self, X, y, verbose=False):  # noqa: D401 - simple stub
+                return None
+
+            def predict(self, X):  # noqa: D401 - simple stub
+                return np.zeros(X.shape[0])
+
+            def retrieve_tree(self, with_infos=True):  # noqa: D401 - simple stub
+                return {"predicted_tree": _Tree()}
+
+        adapter = model_adapters.E2EAdapter(model_path="unused", simplipy_engine=_SplitEngine())
+        adapter._estimator = _Estimator()
+        sample = EvaluationSample(
+            x_support=np.ones((2, 2), dtype=float),
+            y_support=np.zeros((2, 1), dtype=float),
+            x_validation=np.zeros((0, 2), dtype=float),
+            y_validation=np.zeros((0, 1), dtype=float),
+            metadata={"variables": ["v1", "v2"], "skeleton": ["+", "x1", "x2"]},
+        )
+
+        mapping = adapter.evaluate_sample(sample).to_mapping()
+
+        # the engine stub tokenises without reordering, so this is E2E's own infix, mapped
+        assert mapping["predicted_skeleton_prefix"] == ["x1", "+", "x2"]

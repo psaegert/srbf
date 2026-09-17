@@ -17,6 +17,8 @@ from symbolic_data.token_ops import normalize_expression, normalize_skeleton
 # it is an optional `[baselines]` extra, not a core runtime dependency.
 
 from srbf.core import EvaluationModelAdapter, EvaluationResult, EvaluationSample
+from srbf.variable_renaming import (
+    E2E_FIRST_INDEX, NESYMRES_FIRST_INDEX, rename_variable_tokens, rename_variables_in_infix, skeleton_variable_names)
 from srbf.candidate_store import CandidateStoreWriter
 from flash_ansr.flash_ansr import FlashANSR
 from flash_ansr.refine import ConvergenceError
@@ -596,8 +598,13 @@ class E2EAdapter(EvaluationModelAdapter):
                 print("[E2EAdapter][debug] canonical infix:", canonical_infix, flush=True)
                 print("[E2EAdapter][debug] sympy infix:", predicted_expression, flush=True)
 
+            # E2E spells the columns it was handed x_0, x_1, ...; the ground truth spells the same
+            # columns x1, x2, ... , so both the stored expression and its prefix are mapped back.
+            names = skeleton_variable_names(used_variables or record.get("variables") or record.get("variable_names"))
+            predicted_expression = rename_variables_in_infix(predicted_expression, names, first_index=E2E_FIRST_INDEX)
             record["predicted_expression"] = predicted_expression
             predicted_prefix = self.simplipy_engine.read_infix(predicted_expression)  # engine grammar, not the raw reader tokens
+            predicted_prefix = rename_variable_tokens(predicted_prefix, names, first_index=E2E_FIRST_INDEX)
             record["predicted_expression_prefix"] = normalize_expression(predicted_prefix)
             record["predicted_skeleton_prefix"] = normalize_skeleton(predicted_prefix)
 
@@ -664,6 +671,7 @@ class NeSymReSAdapter(EvaluationModelAdapter):
         X_support = sample.x_support.copy()
         X_validation = sample.x_validation.copy()
 
+        used_variables: list[str] | None = None
         if self.remove_padding:
             variables = record.get("variables") or record.get("variable_names")
             mask, used_variables = _compute_variable_mask(variables, record.get("skeleton"))
@@ -698,9 +706,13 @@ class NeSymReSAdapter(EvaluationModelAdapter):
             return EvaluationResult(record)
 
         try:
-            predicted_expression = str(predicted_expr)
+            # NeSymReS spells the columns it was handed x_1, x_2, ...; the ground truth spells the
+            # same columns x1, x2, ... , so both the stored expression and its prefix are mapped back.
+            names = skeleton_variable_names(used_variables or record.get("variables") or record.get("variable_names"))
+            predicted_expression = rename_variables_in_infix(str(predicted_expr), names, first_index=NESYMRES_FIRST_INDEX)
             record["predicted_expression"] = predicted_expression
             predicted_prefix = self.simplipy_engine.read_infix(predicted_expression)  # engine grammar, not the raw reader tokens
+            predicted_prefix = rename_variable_tokens(predicted_prefix, names, first_index=NESYMRES_FIRST_INDEX)
             record["predicted_expression_prefix"] = normalize_expression(predicted_prefix)
             record["predicted_skeleton_prefix"] = normalize_skeleton(predicted_prefix)
         except Exception as exc:  # pragma: no cover - parse errors
