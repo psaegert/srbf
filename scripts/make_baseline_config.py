@@ -11,7 +11,9 @@ if method == "diffsym":
 elif method == "nesymres":
     # usage: make_baseline_config.py nesymres <models_dir with eq_setting.json, config.yaml, 100M.ckpt> <out.yaml> [ladder]
     models_dir, out = sys.argv[2:4]
-    ladder = [int(v) for v in sys.argv[4].split(",")] if len(sys.argv) > 4 else [1, 2, 4, 8, 16, 32, 128, 512]
+    # an unbroken doubling like every other method: the old default skipped 64 and 256 (no recorded reason, the
+    # gap showed as a blank column on the site) and reached for 512, which costs ~26 min/problem and never ran
+    ladder = [int(v) for v in sys.argv[4].split(",")] if len(sys.argv) > 4 else [1, 2, 4, 8, 16, 32, 64, 128, 256]
 elif method == "e2e":
     # usage: make_baseline_config.py e2e <model1.pt> <out.yaml> [ladder]; max_generated_output_len follows the campaign schedule
     model_path, out = sys.argv[2:4]
