@@ -178,6 +178,7 @@
         <a href="?release=2026-09" data-release="2026-09">2026-09 · current</a>
         <a href="?release=2026-07" data-release="2026-07">2026-07 · paper</a>
       </nav>
+      <div id="results-headline-v2" class="explorer-v2 headline-v2" hidden></div>
       <div id="results-explorer-v2" class="explorer-v2" hidden>
         <div class="loading">Loading the results explorer…</div>
       </div>
@@ -197,7 +198,11 @@
         code (\(\tfrac{n}{2}\log_2 \operatorname{FVU}\) plus the description length in bits) and
         judged by <code>srbf</code>'s canonical-form judge. E2E runs at its default settings, NeSymReS
         with its released model, and PySR, the Flash-ANSR T8 series and the training prior appear as
-        their units finish; a time axis from one reference machine follows the first measurements.
+        their units finish. Two fixed charts above the explorer carry the release's headline: what a
+        method recovers and how long its answer is, against what it costs. Cost is seconds per
+        problem, measured where each unit ran until the reference machine has timed every method
+        shown; the explorer's x axis switches between that and the candidate budget, which only the
+        methods that draw candidates have (PySR spends a time limit instead).
         Every metric of the 2026-07 release is available there under the same definition, plus
         symbolic recovery in canonical form, the MDL ratio, R², relative recovery, variable-set
         precision and recall, the Pareto rank and the generation time. Paired comparisons in 2026-09
@@ -812,6 +817,7 @@
   <script>
     (function () {
       var release = window.SRBF_RELEASE || "2026-09";
+      document.getElementById("results-headline-v2").hidden = release !== "2026-09";
       document.getElementById("results-explorer-v2").hidden = release !== "2026-09";
       document.getElementById("results-explorer").hidden = release !== "2026-07";
       document.querySelectorAll("#release-switch a").forEach(function (a) {
