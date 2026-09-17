@@ -26,11 +26,15 @@ NESYMRES_FIRST_INDEX = 1
 def skeleton_variable_names(columns: Sequence[str] | None) -> list[str]:
     """The ground truth's name for every column handed to the model, in column order.
 
-    A column that already carries an ``x<n>`` name keeps it (that is the skeleton's own spelling,
-    e.g. after the unused columns were dropped); anything else is named by its position, because
-    the skeleton spells the i-th variable of a problem ``x<i+1>`` whatever the catalog calls it.
+    Columns that already carry ``x<n>`` names are the skeleton's own spelling (that is what is left
+    after unused columns are dropped) and keep them; otherwise every column is named by its
+    position, because the skeleton spells the i-th variable of a problem ``x<i+1>`` whatever the
+    catalog calls it. All or nothing, so the result is always a bijection.
     """
-    return [str(c) if X_NAME.fullmatch(str(c)) else f"x{i + 1}" for i, c in enumerate(columns or [])]
+    cols = [str(c) for c in (columns or [])]
+    if cols and all(X_NAME.fullmatch(c) for c in cols):
+        return cols
+    return [f"x{i + 1}" for i in range(len(cols))]
 
 
 def rename_variable_tokens(tokens: Sequence[str] | None, names: Sequence[str], *, first_index: int) -> list[str] | None:
@@ -55,3 +59,28 @@ def rename_variables_in_infix(expression: str, names: Sequence[str], *, first_in
         return names[column] if 0 <= column < len(names) else m.group(0)
 
     return re.sub(r"\bx_(\d+)\b", sub, expression)
+
+
+def rename_named_variables(tokens: Sequence[str] | None, columns: Sequence[str]) -> list[str] | None:
+    """Rename a worker's answer, which speaks the column names it was handed, into the skeleton's.
+
+    Out-of-process workers are told the problem's variable names, so PySR answers in ``v1, v2`` on a
+    catalog that calls its columns that, while the ground truth spells the same columns ``x1, x2``.
+    A worker that ignores the names it was given and answers in ``x1, x2`` already (diffsym) is left
+    alone: only a token that IS one of the handed names is renamed. srbf spells a catalog's columns
+    ``v1..vn`` (measured across all 29 catalogs), so no handed name collides with an operator or a
+    named constant; a catalog that called a column ``e`` would need more care than this.
+    """
+    if tokens is None:
+        return None
+    m = dict(zip([str(c) for c in columns], skeleton_variable_names(columns)))
+    return [m.get(str(t), str(t)) for t in tokens]
+
+
+def rename_named_variables_in_infix(expression: str, columns: Sequence[str]) -> str:
+    """The same map on an infix string; longest name first, so ``v1`` never eats part of ``v11``."""
+    m = dict(zip([str(c) for c in columns], skeleton_variable_names(columns)))
+    names = sorted((n for n in m if n), key=len, reverse=True)
+    if not names:
+        return expression
+    return re.sub(r"\b(?:" + "|".join(re.escape(n) for n in names) + r")\b", lambda x: m[x.group(0)], expression)

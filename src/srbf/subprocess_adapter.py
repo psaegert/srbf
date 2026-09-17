@@ -32,6 +32,7 @@ from symbolic_data.token_ops import normalize_expression, normalize_skeleton
 
 from srbf.core import EvaluationModelAdapter, EvaluationResult, EvaluationSample
 from srbf.model_adapters import _compute_fvu_from_predictions, _compute_variable_mask
+from srbf.variable_renaming import rename_named_variables, rename_named_variables_in_infix, skeleton_variable_names
 from srbf.worker import MODELS_DIR, RUNNER_PATH
 
 BUILTIN_WORKERS: dict[str, Path] = {
@@ -453,11 +454,15 @@ class SubprocessAdapter(EvaluationModelAdapter):
             record["error"] = "worker returned no expression"
             record["prediction_success"] = False
             return EvaluationResult(record)
-        record["predicted_expression"] = str(expression)
+        # A worker answers in the column names it was handed (PySR spells them v1, v2 on a catalog
+        # that calls its columns that); the ground truth spells the same columns x1, x2, ... , so
+        # both the stored expression and its prefix are mapped back before anything is judged.
+        names = skeleton_variable_names(variables)
+        record["predicted_expression"] = rename_named_variables_in_infix(str(expression), variables)
         try:
             # read_infix, not the raw infix_to_prefix: the reader's own tokens ('**', 'neg' on a
             # literal) are not the engine grammar, and simplify/complexity refuse them.
-            prefix = list(self.simplipy_engine.read_infix(str(expression)))
+            prefix = rename_named_variables(list(self.simplipy_engine.read_infix(str(expression))), variables) or []
             record["predicted_expression_prefix"] = normalize_expression(prefix)
             record["predicted_skeleton_prefix"] = normalize_skeleton(prefix)
         except Exception as exc:  # noqa: BLE001 - parse errors vary by engine
@@ -470,7 +475,7 @@ class SubprocessAdapter(EvaluationModelAdapter):
         try:
             y_pred_raw, y_pred_val_raw = reply.get("y_pred"), reply.get("y_pred_val")
             if y_pred_raw is None or (X_val.shape[0] > 0 and y_pred_val_raw is None):
-                y_pred, y_pred_val = evaluate_prefix(self.simplipy_engine, prefix, variables, X_support, X_val)
+                y_pred, y_pred_val = evaluate_prefix(self.simplipy_engine, prefix, names, X_support, X_val)
             else:
                 y_pred = np.asarray(y_pred_raw, dtype=float).reshape(-1, 1)
                 y_pred_val = np.asarray(y_pred_val_raw if y_pred_val_raw is not None else [], dtype=float).reshape(-1, 1)
