@@ -410,3 +410,26 @@ class TestBaselineVariableDialect:
 
         # the engine stub tokenises without reordering, so this is E2E's own infix, mapped
         assert mapping["predicted_skeleton_prefix"] == ["x1", "+", "x2"]
+
+
+class TestWorkerVariableDialect:
+    """An out-of-process worker is told the problem's variable names and answers in them: PySR says
+    v1 on a catalog whose columns are called that, while the ground truth says x1."""
+
+    def test_the_handed_names_map_onto_the_skeletons(self) -> None:
+        assert variable_renaming.rename_named_variables(["+", "v1", "*", "<constant>", "v2"], ["v1", "v2"]) == [
+            "+", "x1", "*", "<constant>", "x2"]
+        assert variable_renaming.rename_named_variables_in_infix("v1 + 2*v2", ["v1", "v2"]) == "x1 + 2*x2"
+
+    def test_a_worker_that_ignores_the_names_is_left_alone(self) -> None:
+        # diffsym answers in x1, x2 whatever it is handed; those tokens are not the handed names
+        assert variable_renaming.rename_named_variables(["+", "x1", "x2"], ["v1", "v2"]) == ["+", "x1", "x2"]
+        assert variable_renaming.rename_named_variables(["+", "x3", "x4"], ["x3", "x4"]) == ["+", "x3", "x4"]
+
+    def test_a_longer_name_is_not_eaten_by_a_shorter_one(self) -> None:
+        assert variable_renaming.rename_named_variables_in_infix("v1 + v11", ["v1", "v11"]) == "x1 + x2"
+
+    def test_the_map_is_always_a_bijection(self) -> None:
+        # a mixed list (one x-name among catalog names) must not send two columns to the same name
+        names = variable_renaming.skeleton_variable_names(["v1", "x1"])
+        assert names == ["x1", "x2"] and len(set(names)) == 2
