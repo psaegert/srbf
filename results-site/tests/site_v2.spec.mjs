@@ -143,7 +143,7 @@ async function calibrated(chart) {
   await expect(chart).toHaveAttribute('aria-label', /reference machine/);
 }
 
-test('a time axis exists only where the reference machine has measured every method shown', async ({ page }) => {
+test('a time axis needs one calibrated method, and an uncalibrated one costs only its own points', async ({ page }) => {
   await page.goto('/');
   const axis = page.locator(V2 + ' .v2plot .v2xsel').first();
   if (!await hasRefTiming(page)) {
@@ -380,6 +380,46 @@ test('a method is added with its key, and a key that does not fit adds nothing',
   // and it is an ordinary method from there on: selectable, and carried by the URL like the rest
   await expect(page.locator(V2 + ' .v2methods input[type=checkbox][data-m="fixture-method"]')).toBeChecked();
   expect(errors).toEqual([]);
+});
+
+test('an untimed method leaves the time axis standing and is named under it', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.addInitScript({ content: FIXTURE });
+  await page.goto('/?release=2026-09&v=curves');
+  test.skip(!await hasRefTiming(page), 'no reference timing in this release yet');
+  await page.locator(V2 + ' .v2addmopen').click();
+  await page.locator(V2 + ' .v2addmkey').fill(FIXTURE_KEY);
+  await page.locator(V2 + ' [data-act="add-method-go"]').click();
+  await expect(page.locator(V2 + ' .v2methods')).toContainText('Fixture Method', { timeout: 20000 });
+  // the fixture overlay carries timing {}, so it has no position on the time axis
+  expect(await page.evaluate(() => !!(window.RESULTS_V2.timing || {})['fixture-method'])).toBe(false);
+
+  await pick(page, page.locator(V2 + ' .v2plot .v2xsel').first(), 'time');
+  const chart = page.locator(V2 + ' .v2view svg.v2chart').first();
+  await calibrated(chart);                                            // the axis stands, on the reference machine
+  await expect(chart).toContainText('E2E');                           // and the calibrated methods are still drawn
+  await expect(chart, 'an untimed method must not be drawn on a calibrated axis').not.toContainText('Fixture Method');
+  await expect(page.locator(V2 + ' .v2view'), 'and it must be named, not dropped in silence').toContainText('Fixture Method');
+  await expect(page.locator(V2 + ' .v2view .v2hint').first()).toContainText(/reference-machine time/);
+  expect(errors).toEqual([]);
+});
+
+test('an untimed method changes nothing else on the time axis', async ({ page }) => {
+  await page.addInitScript({ content: FIXTURE });
+  await page.goto('/?release=2026-09&v=curves');
+  test.skip(!await hasRefTiming(page), 'no reference timing in this release yet');
+  await pick(page, page.locator(V2 + ' .v2plot .v2xsel').first(), 'time');
+  const chart = page.locator(V2 + ' .v2view svg.v2chart').first();
+  await calibrated(chart);
+  const before = await chart.textContent();                           // every drawn point, with its value and its pool
+
+  await page.locator(V2 + ' .v2addmopen').click();
+  await page.locator(V2 + ' .v2addmkey').fill(FIXTURE_KEY);
+  await page.locator(V2 + ' [data-act="add-method-go"]').click();
+  await expect(page.locator(V2 + ' .v2methods')).toContainText('Fixture Method', { timeout: 20000 });
+  // the point of the whole arrangement: an uncalibrated method costs its own points and nothing else -- same
+  // methods, same values, same matched pool, because it never enters the set the axis is drawn over
+  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toHaveText(before);
 });
 
 test('the page says nothing about what it does not show', async ({ page }) => {

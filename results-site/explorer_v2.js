@@ -95,7 +95,7 @@
     mcnemar: "Exact McNemar test on the laws the two methods disagree on (one recovered, the other did not): two-sided binomial p-value, no asymptotics. The difference of paired rates carries a 95 % Wald interval.",
     signtest: "Paired mean difference with a t-interval over laws where both methods have a finite value, plus a two-sided exact sign test on the wins and losses.",
     draw1: "One draw per problem so far. These are paired contrasts on the same laws, not the repeated-draw noise margins of the 2026-07 release; those follow when draws 2 and up exist.",
-    time: "Seconds per problem on ONE reference machine (solomon: RTX 4090, 16 refiner workers, a frozen 262-problem subset), the only timing this benchmark publishes. Seconds measured where a unit happened to run depend on the node, its GPU and whatever shared it, so they are not comparable between methods and are never drawn: until the reference machine has timed every method in a chart, that chart has no time axis.",
+    time: "Seconds per problem on ONE reference machine (solomon: RTX 4090, 16 refiner workers, a frozen 262-problem subset), the only timing this benchmark publishes. Seconds measured where a unit happened to run depend on the node, its GPU and whatever shared it, so they are not comparable between methods and are never drawn: a method the reference machine has not timed has no position here, so it is left out of the chart and named underneath; a chart with no timed method at all has no time axis.",
     candidates: "Samples, beam width, candidates or draws per problem: the budget a generative method spends. PySR's budget is a time limit rather than a count, so it has no position on this axis and appears on the time axis only.",
     provenance: "Who chose each method's configuration. Upstream defaults: nothing tuned. Author-blessed: the method's authors chose it (Flash-ANSR shares authors with the benchmark). Maintainer-chosen: the benchmark maintainers set it."
   };
@@ -385,13 +385,13 @@
       s += '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 20) + '" y2="' + ly + '" stroke="' + col + '" stroke-width="3"/><text x="' + (lx + 26) + '" y="' + (ly + 4) + '" class="leg">' + esc(sr.label) + '</text>'; ly += 20; });
     return s + "</svg>";
   }
-  // x positions. The budget axis is the method's own ladder. The time axis is seconds per problem: the
-  // reference machine where it has measured every shown method, the runs themselves otherwise -- one
-  // chart uses one source for all of its methods, never a mixture.
+  // x positions. The budget axis is the method's own ladder. The time axis is seconds per problem, always from
+  // the reference machine -- one chart uses one source for all of its methods, never a mixture.
   // The x position of a time axis is a CALIBRATED time or it does not exist. Seconds measured where a unit
   // happened to run -- a cluster node, its GPU, whatever else was on it -- are not comparable between methods, so
-  // they are never an axis and never published: a method without a reference-machine row has no time position, and
-  // a chart with any such method has no time axis at all.
+  // they are never an axis and never published. A method the reference machine has not timed therefore has no
+  // position on this axis: it is left out of the chart and named underneath, exactly as a method whose budget is
+  // a time limit is left out of the candidate axis. The rest of the chart is unaffected.
   function refTime(m, r) { var t = (D.timing[m] || {})[String(r)]; return t > 0 ? t : null; }
   function hasRefTime(k) { return !!(D.timing[k] && Object.keys(D.timing[k]).length); }
   function timeSource(keys) { return keys.length && keys.every(hasRefTime) ? "ref" : null; }
@@ -453,7 +453,9 @@
   }
   function xOf(m, r, cs, src) { return state.xaxis === "time" ? timeOf(m, r, cs, src) : r; }
   function hasCandidateBudget(m) { return (m.budget || "candidates") !== "seconds"; }   // PySR's budget is seconds
-  function axisMethods(shown) { return state.xaxis === "time" ? shown : shown.filter(hasCandidateBudget); }
+  function onAxis(m) { return state.xaxis === "time" ? hasRefTime(m.key) : hasCandidateBudget(m); }
+  function axisMethods(shown) { return shown.filter(onAxis); }
+  function offAxis(shown) { return shown.filter(function (m) { return !onAxis(m); }); }
   function anyTime() { return Object.keys(D.timing).some(hasRefTime); }   // a reference row, or no time axis
   function timeRange(tmin, tmax) { tmin = Math.pow(10, Math.floor(Math.log10(tmin))); tmax = Math.pow(10, Math.ceil(Math.log10(tmax))); if (tmax <= tmin) { tmax = tmin * 10; } return [tmin, tmax]; }
 
@@ -471,7 +473,7 @@
       if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: pts }); } });
     if (title == null) { title = metric.label; }   // the statistic is named once per block, not on every chart
     if (pending && !series.length) { return chartSVG({ title: title, aria: aria, series: [], empty: "loading the distribution…" }); }
-    if (!series.length) { return chartSVG({ title: title, aria: aria, series: [], empty: state.cats.length ? (shown.length ? (state.xaxis === "time" ? "the reference machine has not timed every method shown yet" : "no finished units for this selection yet") : "no method selected") : "no catalog selected" }); }
+    if (!series.length) { return chartSVG({ title: title, aria: aria, series: [], empty: state.cats.length ? (shown.length ? (state.xaxis === "time" ? "the reference machine has not timed any method shown yet" : "no finished units for this selection yet") : "no method selected") : "no catalog selected" }); }
     if (metric.kind === "rate") { ymin = 0; ymax = Math.min(1, Math.max(0.05, ymax * 1.05)); }
     else if (tfOf(metric) === "log2") { ymin = Math.min(ymin, -0.3); ymax = Math.max(ymax, 0.3); }
     else { var pad = (ymax - ymin) * 0.08 || 0.1; ymin -= pad; ymax += pad; }
@@ -523,10 +525,17 @@
     var main = root.querySelector(".v2main");
     var add = '<button type="button" class="v2addplot" data-act="add-plot" aria-label="Add a plot"><span class="v2plus" aria-hidden="true">+</span><span>add plot</span></button>';
     if (!state.plots.length) { return '<div class="v2charts">' + add + '</div><p class="v2hint">No plot yet: add one, then choose what goes on each axis.</p>'; }
-    // a candidate count is a budget only a generative method spends; on that axis the others have no position
-    var dropped = state.plots.some(function (p) { return p.x === "rung"; })
-      ? shown.filter(function (m) { return !hasCandidateBudget(m); }) : [];
-    var note = dropped.length ? '<p class="v2hint">' + esc(dropped.map(function (m) { return m.label; }).join(", ")) + " spends a time budget, not " + term("candidates", "a candidate count") + ": on that axis " + (dropped.length > 1 ? "they are" : "it is") + " not drawn.</p>" : "";
+    // Each budget axis leaves some methods without a position. They are named here rather than dropped in silence.
+    var note = ["rung", "time"].map(function (ax) {
+      if (!state.plots.some(function (p) { return p.x === ax; })) { return ""; }
+      var off = withState({ xaxis: ax }, function () { return offAxis(shown); });
+      if (!off.length) { return ""; }
+      var names = esc(off.map(function (m) { return m.label; }).join(", ")), many = off.length > 1;
+      return '<p class="v2hint">' + names + (ax === "rung"
+        ? (many ? " spend" : " spends") + " a time budget, not " + term("candidates", "a candidate count")
+        : (many ? " have" : " has") + " no " + term("time", "reference-machine time") + " yet") +
+        ": on that axis " + (many ? "they are" : "it is") + " not drawn.</p>";
+    }).join("");
     var cards = inBlock(main, state.plots.length + 1, function () {
       return state.plots.map(function (p, i) { return plotCard(p, i, shown); }).join("");
     });
@@ -551,20 +560,23 @@
       function () {
         var shown = shownMethods();
         if (!shown.length) { return '<p class="v2hint">No method has finished units in this release yet.</p>'; }
-        var keys = shown.map(function (m) { return m.key; }), src = timeSource(keys);
+        var drawn = axisMethods(shown), off = offAxis(shown);
+        var keys = drawn.map(function (m) { return m.key; }), src = timeSource(keys);
         var charts = HEADLINE.map(function (h) {
           var ms = (h.key ? [h.key] : [h.x, h.y]).map(function (k) { return METRIC[k]; });
           if (ms.some(function (m) { return !m; })) { return ""; }
           if (state.stat === "median") { ms.forEach(function (m) { if (m.kind === "cont") { ensure("hist/" + m.key + ".js", scheduleRender); } }); }
-          var svg = h.key ? curveChart(ms[0], shown, hlText(h.title)) : frontChart(ms[0], ms[1], shown, hlText(h.title));
+          var svg = h.key ? curveChart(ms[0], drawn, hlText(h.title)) : frontChart(ms[0], ms[1], shown, hlText(h.title));
           return '<figure class="v2hlfig">' + svg + "<figcaption>" + esc(hlText(h.caption)) + "</figcaption></figure>";
         }).join("");
         return '<h2 class="v2hltitle">Recovery, cost and length</h2>' +
           '<p class="v2hlsub">One point per budget, ' + (state.stat === "mean" ? "mean" : "median") + ' over all ' + CATS.length + ' catalogs (' +
           term("matched", "matched") + '), with ' + term("wilson", "95 % intervals") + '.</p>' +
           '<div class="v2hlcharts">' + charts + "</div>" +
-          '<p class="v2hint">' + (src === "ref" ? term("time", "Fit time on the reference machine")
-            : "Budget per problem. " + term("time", "A time axis appears once the reference machine has timed every method shown") +
+          '<p class="v2hint">' + (src === "ref" ? term("time", "Fit time on the reference machine") +
+              (off.length ? "; " + esc(off.map(function (m) { return m.label; }).join(", ")) + " not timed there yet, so " +
+                (off.length > 1 ? "they are" : "it is") + " left out of the first chart" : "")
+            : "Budget per problem. " + term("time", "A time axis appears once the reference machine has timed a method shown") +
               ": seconds measured wherever a unit happened to run are not comparable between methods, so this release does not publish them") + ".</p>";
       }); });
   }
@@ -679,7 +691,7 @@
     var plots = plotMetrics().filter(function (k) { return PAIRED_KEYS.indexOf(k) >= 0; }).map(function (k) { return METRIC[k]; });
     var ctl = '<p class="v2hint">Every method is read as method \u2212 ' + esc(base.label) + ' on the same laws \u00b7 ' + term("draw1", "draw 1") + '</p>';
     if (!plots.length) { return ctl + '<p class="v2hint">None of the plotted metrics has paired contrasts. Paired contrasts exist for: ' + esc(PAIRED_KEYS.map(function (k) { return METRIC[k] ? mname(METRIC[k]) : k; }).join(", ")) + '.</p>'; }
-    var src = timeSource(keys);
+    var src = timeSource(axisMethods(others).map(function (m) { return m.key; }));   // the drawn set, not the baseline
     var charts = inBlock(root.querySelector(".v2main"), plots.length, function () { return plots.map(function (p) { var series = [], ymin = Infinity, ymax = -Infinity, tmin = Infinity, tmax = -Infinity;
       axisMethods(others).forEach(function (m) { var pts = []; D.rungs.forEach(function (r) { var use = poolCats(m.key, r, keys).filter(function (c) { return cell(base.key, c, r); }); if (!use.length) { return; } var x = xOf(m.key, r, use, src); if (x === null) { return; } var st = pairedStat(p, m.key, base.key, r, use); if (!st || !isFinite(st.v)) { return; }
           pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, thin: false, title: m.label + " − " + base.label + " @ " + r + ": " + fmtDelta(p, st.v) + " [" + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + "], n = " + st.n + " laws, p = " + fmtP(st.p) });
