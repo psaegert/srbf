@@ -355,7 +355,10 @@
   function chartSVG(opts) {
     var nr = narrow(), W = opts.width || hostWidth(), L = 62, T = opts.title ? 34 : 16, R = nr ? 16 : 180, series = opts.series;
     var B = nr ? 56 + 20 * Math.max(1, series.length) : 52, H = plotHeight(W) + B;
-    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="v2chart" role="img" aria-label="' + esc(opts.aria || opts.title) + '">' + (opts.title ? '<text x="' + L + '" y="18" class="ct">' + esc(opts.title) + "</text>" : "");
+    // A narrow chart shortens the visible axis label to "(s, ref)"; the calibration is named in full here, so
+    // every width -- and every screen reader -- says which clock these seconds came from.
+    var aria = (opts.aria || opts.title || "") + (opts.timeAxis && opts.timeSource === "ref" ? ", timed on the reference machine" : "");
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="v2chart" role="img" aria-label="' + esc(aria) + '">' + (opts.title ? '<text x="' + L + '" y="18" class="ct">' + esc(opts.title) + "</text>" : "");
     if (opts.empty) { return s + '<text x="' + W / 2 + '" y="' + H / 2 + '" class="tick" text-anchor="middle">' + esc(opts.empty) + '</text></svg>'; }
     var ymin = opts.ymin, ymax = opts.ymax; if (!(ymax > ymin)) { ymax = ymin + 1; }
     var timeAxis = opts.timeAxis, tmin = opts.tmin, tmax = opts.tmax;

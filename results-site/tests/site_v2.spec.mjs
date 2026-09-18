@@ -136,6 +136,13 @@ test('terms and metric help open a floating explanation', async ({ page }) => {
 const hasRefTiming = (page) => page.evaluate(() => Object.keys(window.RESULTS_V2.timing || {})
   .some((k) => Object.keys(window.RESULTS_V2.timing[k]).length));
 
+// A chart on the time axis says so at every width: the visible label shortens to "fit time (s, ref)" on a narrow
+// screen, so the calibration itself is asserted on the aria-label, which is width-independent.
+async function calibrated(chart) {
+  await expect(chart).toContainText('fit time');
+  await expect(chart).toHaveAttribute('aria-label', /reference machine/);
+}
+
 test('a time axis exists only where the reference machine has measured every method shown', async ({ page }) => {
   await page.goto('/');
   const axis = page.locator(V2 + ' .v2plot .v2xsel').first();
@@ -148,7 +155,7 @@ test('a time axis exists only where the reference machine has measured every met
     await page.keyboard.press('Escape');
   } else {
     await expect(axis).toHaveAttribute('data-k', 'time');
-    await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('reference machine');
+    await calibrated(page.locator(V2 + ' .v2view svg.v2chart').first());
   }
   // whatever the state, nothing anywhere may say a time was measured "as run"
   expect(await page.content()).not.toContain('as run');
@@ -185,7 +192,7 @@ test('the candidate axis names itself and is offered beside time', async ({ page
   for (const label of seconds) { await expect(page.locator(V2 + ' .v2view')).toContainText(label); }
   if (await hasRefTiming(page)) {
     await pick(page, page.locator(V2 + ' .v2plot .v2xsel').first(), 'time');
-    await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('reference machine');
+    await calibrated(page.locator(V2 + ' .v2view svg.v2chart').first());
   }
   expect(errors).toEqual([]);
 });
@@ -198,7 +205,8 @@ test('the headline stands above the explorer with its two fixed charts', async (
   await expect(head.locator('.v2hltitle')).toBeVisible();
   await expect(head.locator('svg.v2chart')).toHaveCount(2);
   await expect(head.locator('svg.v2chart').first()).toContainText(await hasRefTiming(page) ? 'Recovery vs time' : 'Recovery vs budget');
-  await expect(head.locator('svg.v2chart').first()).toContainText(await hasRefTiming(page) ? 'reference machine' : 'candidates');   // narrow screens shorten the label
+  if (await hasRefTiming(page)) { await calibrated(head.locator('svg.v2chart').first()); }
+  else { await expect(head.locator('svg.v2chart').first()).toContainText('candidates'); }
   // the second headline chart is the trade-off: description length on x, fit error on y
   await expect(head.locator('svg.v2chart').nth(1)).toContainText('Fit vs length');
   await expect(head.locator('svg.v2chart').nth(1)).toContainText('MDL ratio');   // the metric's own name, as everywhere else
