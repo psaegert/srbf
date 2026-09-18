@@ -145,6 +145,8 @@ def test_brute_force_adapter_identity(simplipy_engine: SimpliPyEngine) -> None:
 # fit still spent the time" is not silently reintroduced as a bug fix. (Method failures are already counted where
 # they belong: on the y axis, where every error is a miss.) The upstream defects that produce those failures stay
 # unpatched by the same ruling: baselines are benchmarked as they ship.
+
+
 def _toy_sample() -> EvaluationSample:
     x = np.linspace(-1.0, 1.0, 8).reshape(-1, 1)
     return EvaluationSample(x_support=x, y_support=(2.0 * x).reshape(-1, 1),
