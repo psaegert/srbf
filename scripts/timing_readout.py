@@ -36,11 +36,17 @@ def load_rung(root: Path, results_dir: str, model: str, catalogs: dict, rung: in
             snap = pickle.load(fh)
         n = int(m["count"])
         idx = snap.get("eval_row_index") or list(range(len(snap["fit_time"])))
+        # Failures do not count towards the time (owner 2026-09-18). A row fails when it carries an error or
+        # prediction_success is False -- whether or not a fit_time was recorded: a fit that returned nothing still
+        # has one, and the out-of-process worker protocol times every row. Decided here, once, for every adapter.
+        errors, success = snap.get("error") or [], snap.get("prediction_success") or []
+        failed = {int(i) for j, i in enumerate(idx) if i is not None
+                  and ((j < len(errors) and errors[j]) or (j < len(success) and success[j] is False))}
         cols = {}
         for key in ("fit_time", "generation_time", "refinement_time"):
             arr = np.full(n, np.nan)
             for i, v in zip(idx, snap.get(key) or []):
-                if i is None or int(i) >= n:
+                if i is None or int(i) >= n or int(i) in failed:
                     continue
                 try:
                     f = float(v)
