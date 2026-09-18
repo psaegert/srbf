@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 import pytest
 from simplipy import SimpliPyEngine
@@ -5,7 +7,8 @@ from simplipy import SimpliPyEngine
 from symbolic_data import LampleChartonCatalog
 from srbf.baselines import BruteForceModel, LampleChartonModel
 from srbf.core import EvaluationSample
-from srbf.model_adapters import BruteForceAdapter, FlashANSRAdapter, LampleChartonAdapter
+from srbf.model_adapters import (BruteForceAdapter, E2EAdapter, FlashANSRAdapter, LampleChartonAdapter,
+                                 NeSymReSAdapter, _evaluate_refiner_baseline)
 
 
 def test_flash_ansr_adapter_rejects_unknown_complexity_string() -> None:
@@ -134,3 +137,59 @@ def test_brute_force_adapter_identity(simplipy_engine: SimpliPyEngine) -> None:
     np.testing.assert_allclose(values["y_pred_val"].squeeze(), sample.y_validation.squeeze(), atol=1e-3)
     assert values["predicted_expression"]
     assert values["predicted_skeleton_prefix"] is not None
+
+# ---- a failed fit is NOT a timed fit -----------------------------------------------------------------------------
+# Owner 2026-09-18: "Failures do not count towards the time." The compute axis is the cost of the problems a method
+# actually answers; a row that raised carries no fit_time, so the read-out drops it and the published seconds are the
+# mean over answered problems. This is a deliberate choice, not an oversight -- these tests pin it, so that "a failed
+# fit still spent the time" is not silently reintroduced as a bug fix. (Method failures are already counted where
+# they belong: on the y axis, where every error is a miss.) The upstream defects that produce those failures stay
+# unpatched by the same ruling: baselines are benchmarked as they ship.
+def _toy_sample() -> EvaluationSample:
+    x = np.linspace(-1.0, 1.0, 8).reshape(-1, 1)
+    return EvaluationSample(x_support=x, y_support=(2.0 * x).reshape(-1, 1),
+                            x_validation=np.empty((0, 1)), y_validation=np.empty((0, 1)),
+                            metadata={"benchmark_eq_id": "toy"})
+
+
+class _RaisingModel:
+    """A model whose fit burns a measurable slice of time and then raises, like NeSymReS on a wide support box."""
+
+    def fit(self, *args, **kwargs):
+        time.sleep(0.01)
+        raise ValueError("upstream blew up")
+
+    def __call__(self, *args, **kwargs):     # the NeSymReS adapter calls a fitfunc, not a .fit
+        return self.fit(*args, **kwargs)
+
+
+def _failed(values) -> None:
+    assert values["prediction_success"] is False and "upstream blew up" in values["error"]
+    assert values.get("fit_time") is None, "a failed fit must carry no time (owner 2026-09-18)"
+
+
+def test_flash_ansr_adapter_does_not_time_a_failed_fit() -> None:
+    _failed(FlashANSRAdapter(model=_RaisingModel()).evaluate_sample(_toy_sample()).values)
+
+
+def test_refiner_baseline_does_not_time_a_failed_fit() -> None:
+    _failed(_evaluate_refiner_baseline(_RaisingModel(), _toy_sample()).values)
+
+
+def test_e2e_adapter_does_not_time_a_failed_fit() -> None:
+    # The constructor imports torch and the upstream package; only the fit path is under test, so build the shell.
+    adapter = E2EAdapter.__new__(E2EAdapter)
+    adapter._estimator = _RaisingModel()
+    adapter.debug = False
+    _failed(adapter.evaluate_sample(_toy_sample()).values)
+
+
+def test_nesymres_adapter_does_not_time_a_failed_fit() -> None:
+    adapter = NeSymReSAdapter.__new__(NeSymReSAdapter)
+    adapter.model = _RaisingModel()
+    adapter.fitfunc = _RaisingModel()
+    adapter.remove_padding = False
+    adapter.debug = False
+    adapter._max_variables = None
+    adapter._warned_feature_mismatch = False
+    _failed(adapter.evaluate_sample(_toy_sample()).values)
