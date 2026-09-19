@@ -5,7 +5,8 @@
 #   2. the baselines' timing ladders on the subset, in the owner's order of 2026-09-16: E2E (candidates_per_bag
 #      1..2048), NeSymReS (beam_width 1..512), diffsym (n_samples 1..128) -- E2E and NeSymReS in the legacy venv;
 #      ORDER (owner 2026-09-19, superseding 2026-09-18): one PySR run on the whole suite first (step 3b), then the
-#      T8 rows with the 120M ahead of the 20M and the 3M (step 4), then NeSymReS's remaining rungs (64, 256, 512;
+#      T8 rows raised TOGETHER, one rung at a time ("roughly balanced so I have some results for all models";
+#      no size waits for another's whole ladder; step 4), then NeSymReS's remaining rungs (64, 256, 512;
 #      step 4c -- rung 512 alone costs more than every ladder before it; the marks make its finished rungs
 #      no-ops), and PySR's second run on the suite after every other row (step 6).
 #   3. PySR alone (the hybrid at ratio 1: all of the budget to PySR, the same clock) at the three budgets;
@@ -53,6 +54,7 @@ E2E_LADDER=${E2E_LADDER:-1,2,4,8,16,32,64,128,256}   # default settings only (ow
 NESYMRES_LADDER=${NESYMRES_LADDER:-1,2,4,8,16,32,64,128,256,512}
 DIFFSYM_LADDER=${DIFFSYM_LADDER:-1,2,4,8,16,32,64,128}
 SCORING=${SCORING:-}                         # the score study's ruling (e.g. S0 or S1); the T8 rows refuse to run without it
+T8_STAGES=${T8_STAGES:-64 128 256 512 1024 2048 4096 8192 16384 32768 65536}   # owner 2026-09-19: the T8 sizes rise together
 BUDGET_HOURS=${BUDGET_HOURS:-100}            # owner 2026-09-16: 100 h per model row; rungs that do not fit are skipped (run_timing_ladder.py)
 
 export FLASH_ANSR_ROOT=$R PYTHONUNBUFFERED=1 OMP_NUM_THREADS=1 CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
@@ -171,24 +173,28 @@ if [ "${RUN_PYSR_SUITE:-1}" = 1 ] && [ -x "$PYSR" ]; then
 else say "RUN_PYSR_SUITE=0 or no PySR environment at $PYSR: PySR on the suite skipped"; fi
 
 # ---- 4. the T8 rows: only with the scoring ruling ------------------------------------------------------------------
-ladder() {   # name path config
-    local name=$1 path=$2 cfg=$3
+ladder() {   # name path config [up-to-rung]: with a rung, stop after it and leave the row unmarked
+    local name=$1 path=$2 cfg=$3 top=${4:-}
     [ -d "$path" ] || { say "skip ladder $name: no model at $path"; return 0; }
     done_ ladder_$name && return 0
     stop_requested
-    say "ladder $name ($path) on $cfg"
+    say "ladder $name ($path) on $cfg${top:+ up to rung $top}"
     $PY $S/run_timing_ladder.py -c $cfg --data-dir $R/hybrid_data --model-name $name --model-path $path \
-        --refiner-workers $REFINER_WORKERS --root $R --budget-hours $BUDGET_HOURS 2>&1 | grep -v Warning | tee -a $LOG
+        --refiner-workers $REFINER_WORKERS --root $R --budget-hours $BUDGET_HOURS ${top:+--up-to $top} 2>&1 | grep -v Warning | tee -a $LOG
     ls $R/timing/$name/marks/*.failed > /dev/null 2>&1 && { say "ladder $name has failed units; not marked done"; return 1; }
-    mark ladder_$name
+    [ -n "$top" ] || mark ladder_$name
 }
 if [ -z "$SCORING" ]; then
     say "SCORING unset: T8 ladders and hybrid T-curves not run (owner 2026-09-16: decide the scoring first)"
 else
 say "T8 rows under scoring ruling '$SCORING' (the scaling configs in $CFG_DIR must carry that ranking)"
-ladder t8-120m "$M120" $CFG_DIR/flash-ansr-v25.0-T8-120M_srbf.yaml   # owner 2026-09-19: the 120M ahead of the other sizes
-ladder t8-20m  "$M20"  $CFG_DIR/flash-ansr-v25.0-T8-20M_srbf.yaml
-ladder t8-3m   "$M3"   $CFG_DIR/flash-ansr-v25.0-T8-3M_srbf.yaml
+t8_rows() {   # [up-to-rung]
+    ladder t8-3m   "$M3"   $CFG_DIR/flash-ansr-v25.0-T8-3M_srbf.yaml   ${1:-}
+    ladder t8-20m  "$M20"  $CFG_DIR/flash-ansr-v25.0-T8-20M_srbf.yaml  ${1:-}
+    ladder t8-120m "$M120" $CFG_DIR/flash-ansr-v25.0-T8-120M_srbf.yaml ${1:-}
+}
+for top in $T8_STAGES; do t8_rows $top; done      # every size reaches a rung before any size goes above it
+t8_rows                                           # whatever is left, and the rows' done marks
 [ -n "$RL20" ]  && ladder rl-20m  "$RL20"  $CFG_DIR/flash-ansr-v25.0-T8-20M_srbf.yaml
 [ -n "$RL3" ]   && ladder rl-3m   "$RL3"   $CFG_DIR/flash-ansr-v25.0-T8-3M_srbf.yaml
 [ -n "$RL120" ] && ladder rl-120m "$RL120" $CFG_DIR/flash-ansr-v25.0-T8-120M_srbf.yaml

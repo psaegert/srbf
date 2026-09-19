@@ -54,3 +54,12 @@ def test_full_suite_mode_leaves_each_catalog_whole(tmp_path: Path) -> None:
         block = derived["experiments"][cat]
         assert block["data_source"]["catalog"] == select_experiment(cfg, cat)["data_source"]["catalog"]
         assert all("/results/evaluation/suite/pysr/" in v for v in block["runner"]["output"].values)
+
+
+def test_up_to_leaves_the_rungs_above_for_a_later_call(tmp_path: Path) -> None:
+    """The queue raises several model rows together, one rung at a time: a call stops after --up-to."""
+    _config(tmp_path)
+    out = subprocess.run([sys.executable, str(ROOT / "scripts" / "run_timing_ladder.py"), "-c", str(tmp_path / "pysr_suite.yaml"),
+                          "--full-suite", "--model-name", "pysr", "--root", str(tmp_path), "--experiments", "nguyen",
+                          "--up-to", "2", "--dry-run"], check=True, capture_output=True, text=True).stdout
+    assert "ladder=1" in out and "ladder=2" in out and "ladder=4" not in out

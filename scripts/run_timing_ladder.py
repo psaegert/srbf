@@ -6,7 +6,7 @@ here (the Helix draw ladders carry it); this is the protocol's time axis on the 
     FLASH_ANSR_ROOT=<root> CUDA_VISIBLE_DEVICES=0 python scripts/run_timing_ladder.py \\
         -c configs/evaluation/scaling/flash-ansr-v25.0-T8-20M_srbf.yaml --data-dir <root>/hybrid_data \\
         --model-name t8-20m [--model-path DIR] [--rungs 1,2,4,...] [--experiments a,b] [--refiner-workers 16]
-        [--budget-hours 100] [--dry-run]
+        [--budget-hours 100] [--up-to RUNG] [--dry-run]
 
 Budget (owner 2026-09-16: 100 h per model row, no method gets more): rung-major, the wall time of every finished
 unit is recorded in its marker; before a rung starts, its cost is projected from the previous rung times the
@@ -135,6 +135,8 @@ def main() -> int:
     ap.add_argument("--model-name", required=True, help="output directory name under results/evaluation/timing/")
     ap.add_argument("--model-path", help="override the config's model_path (an RL checkpoint directory, say)")
     ap.add_argument("--rungs", help="comma-separated rungs (default: the config's ladder)")
+    ap.add_argument("--up-to", type=int, help="stop after this rung; the rungs above it stay for a later call (the queue "
+                    "raises several model rows together, one rung at a time)")
     ap.add_argument("--experiments", help="comma-separated experiments (default: all in the config)")
     ap.add_argument("--refiner-workers", type=int, help="pin refiner_workers in every adapter block")
     ap.add_argument("--root", default=os.environ.get("FLASH_ANSR_ROOT"), help="FLASH_ANSR_ROOT (default: the environment)")
@@ -156,6 +158,8 @@ def main() -> int:
         wanted = a.experiments.split(",")
         experiments = [e for e in experiments if e in wanted]
     ladder = [int(c) for c in a.rungs.split(",")] if a.rungs else ladder_of(cfg, experiments[0])
+    if a.up_to is not None:
+        ladder = [c for c in ladder if c <= a.up_to]
     if a.full_suite == bool(a.data_dir):
         sys.exit("pass exactly one of --data-dir (the frozen subset) and --full-suite")
     data_dir = None if a.full_suite else Path(a.data_dir)
