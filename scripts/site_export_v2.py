@@ -35,9 +35,12 @@ import numpy as np
 # key, label, param, color, group, provenance, unit-file key, selection rule (how the method picks the
 # one answer it submits; that is the method's own business, and the page says whose rule it is)
 METHODS = [
-    ("e2e", "E2E", "candidates per bag", "#2f6fd0", "baseline", "upstream_default", "e2e",
+    # a learned baseline carries its size in its name, like the Flash-ANSR series: parameters counted from the released
+    # checkpoints (E2E model1.pt: embedder 6.2 M + encoder 12.6 M + decoder 74.6 M = 93.5 M; NeSymReS 100M.ckpt: 26.4 M --
+    # the "100M" of that file name is the 100 million equations it was trained on, not its size)
+    ("e2e", "E2E 93M", "candidates per bag", "#2f6fd0", "baseline", "upstream_default", "e2e",
      "Refines its decoded trees with BFGS and submits the one with the lowest error on the data it was given."),
-    ("nesymres-100M", "NeSymReS", "beam width", "#e8842a", "baseline", "upstream_default", "nesymres",
+    ("nesymres-100M", "NeSymReS 26M", "beam width", "#e8842a", "baseline", "upstream_default", "nesymres",
      "Beam search, then BFGS on the constants; submits the beam candidate that fits the data best."),
     ("PySR", "PySR", "iterations", "#d62728", "baseline", "upstream_default", "pysr",
      "Evolutionary search; submits the pick of its own hall of fame, its own accuracy-versus-complexity rule."),
@@ -46,7 +49,7 @@ METHODS = [
     ("T8-3M", "Flash-ANSR T8-3M", "draws", "#8fcf8a", "flash-ansr", "author_blessed", None, None),
     ("T8-20M", "Flash-ANSR T8-20M", "draws", "#3e9b4a", "flash-ansr", "author_blessed", None, None),
     ("T8-120M", "Flash-ANSR T8-120M", "draws", "#1b5e20", "flash-ansr", "author_blessed", None, None),
-    ("prior", "training prior", "draws", "#9a9a9a", "reference", "author_blessed", None,
+    ("prior", "Flash-ANSR prior", "draws", "#9a9a9a", "reference", "author_blessed", None,
      "Draws skeletons from Flash-ANSR's training prior with no model and no data, then refines and picks them the way Flash-ANSR does: what the prior alone is worth.")]
 FLASH_ANSR_SELECTION = ("Fits the constants of every candidate it draws and submits the one with the best two-part code: "
                         "(n/2) log2 FVU plus the description length of the expression in bits.")

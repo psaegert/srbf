@@ -62,8 +62,8 @@
         <strong>srbf</strong> puts symbolic regression methods on the same problems, with the same
         data, and reads every answer with one judge. This page is its live results. The methods
         entered so far are <strong>E2E</strong>, <strong>NeSymReS</strong>, <strong>PySR</strong>
-        and the <strong>Flash-ANSR</strong> series, plus <strong>Prior</strong>, a reference that
-        samples candidates from a training prior with no model at all. Any method can be entered:
+        and the <strong>Flash-ANSR</strong> series, plus the <strong>Flash-ANSR prior</strong>, a
+        reference that samples candidates from Flash-ANSR's training prior with no model at all. Any method can be entered:
         it needs an adapter, a configuration, and a name for whoever chose it.
         Views are organized on two axes:
       </p>
@@ -206,9 +206,9 @@
         and every answer is read the same way: the predicted expression and the law are compared in
         one certified canonical form, and the prediction is scored on held-out points it never saw.
         How a method arrives at the answer it submits is its own affair, and the explorer names that
-        rule next to it, together with who chose its configuration. E2E runs at its default settings
-        and NeSymReS with its released model; PySR, the Flash-ANSR series and the training-prior
-        reference appear as they finish: a pooled number is shown for a budget once a method has
+        rule next to it, together with who chose its configuration. E2E (93M parameters) runs at its default
+        settings and NeSymReS (26M parameters) with its released model, the one trained on 100 million
+        equations; PySR, the Flash-ANSR series and the Flash-ANSR prior appear as they finish: a pooled number is shown for a budget once a method has
         finished every selected catalog there, so every point is over the same laws. Two fixed charts above the explorer carry the
         release's headline: what a method recovers against what it costs, and how well an answer fits
         against how long it is. Cost is seconds per problem on one reference machine, the only timing

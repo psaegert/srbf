@@ -55,7 +55,7 @@ default. Client-side routing only: `?release=2026-09` (or nothing) opens the cur
 
 | Release | Explorer | Data | Scope |
 |---------|----------|------|-------|
-| 2026-09 (current) | `explorer_v2.js` | `data/2026-09/results.js` | 29 catalogs, the Flash-ANSR T8 series under the two-part code, PySR, NeSymReS, E2E at its default settings, the training-prior reference; fit times from one reference machine once measured. |
+| 2026-09 (current) | `explorer_v2.js` | `data/2026-09/results.js` | 29 catalogs, the Flash-ANSR T8 series under the two-part code, PySR, NeSymReS, E2E at its default settings, the Flash-ANSR prior reference; fit times from one reference machine once measured. |
 | 2026-07 (paper) | `explorer.js` | `results_data.js`, `paired_data.js` | The paper's methods and sweeps, unchanged. |
 
 The 2026-09 data come from the full-metric readout (`readout_full.py` in flash-ansr-research/scripts/baselines:
