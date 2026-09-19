@@ -18,7 +18,7 @@ async function pick(page, trigger, key) {
   await page.locator(`.v2picker .v2pickitem[data-k="${key}"]`).click();
   await expect(page.locator('.v2picker')).toHaveCount(0);
 }
-const VIEWS = ['curves', 'table', 'matrix', 'dist', 'paired'];
+const VIEWS = ['curves', 'table', 'matrix', 'dist', 'ranks', 'paired'];
 // the 2026-07 site's 21 metrics under their schema-2 keys: none may be missing from a release
 const LEGACY_METRICS = ['numeric_recovery_val', 'expr_length_ratio', 'log10_fvu_val', 'log10_fvu_fit', 'numeric_recovery_fit', 'success',
   'skeleton_match_raw', 'f1_score', 'precision_score', 'recall_score', 'edit_distance_norm', 'zss_edit_distance', 'expr_length_ratio_abserr',
@@ -465,3 +465,157 @@ test('a chart is drawn at the width it is given', async ({ page }) => {
   expect(box.width).toBeGreaterThan(500);                                  // a chart, not a thumbnail
   expect(Math.abs(Number(viewBox.split(' ')[2]) - box.width)).toBeLessThan(2);   // 1 unit = 1 px: 12 px of label is 12 px
 });
+
+// ---- Distribution: a distribution is what the view shows, in four readings ------------------------------------
+test('the distribution view opens on histograms of a continuous metric', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/?release=2026-09');
+  await page.locator(V2 + ' .v2tab[data-view="dist"]').click();
+  const chart = page.locator(V2 + ' .v2view svg.v2chart').first();
+  await expect(chart).toBeVisible({ timeout: 15000 });
+  await expect(chart).toHaveAttribute('aria-label', /one histogram per method/);
+  // the metric it opens on is continuous, whatever the Catalogs view is looking at
+  const kind = await page.evaluate(() => { const k = document.querySelector('#results-explorer-v2 .v2viewbar .v2pick').dataset.k; return window.RESULTS_V2.metrics.find((m) => m.key === k).kind; });
+  expect(kind).toBe('cont');
+  // one filled histogram and one box per method drawn, and every panel states how many laws it holds
+  const panels = await chart.locator('polygon').count();
+  expect(panels).toBeGreaterThanOrEqual(2);
+  expect(await chart.locator('rect[fill-opacity="0.28"]').count()).toBe(panels);
+  await expect(chart).toContainText(/n = [\d,]+ of [\d,]+/);
+  expect(errors).toEqual([]);
+});
+
+test('every reading of a distribution draws, and the choice travels in the link', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/?release=2026-09&v=dist&dm=log10_fvu_val');
+  const chart = page.locator(V2 + ' .v2view svg.v2chart').first();
+  await expect(chart).toBeVisible({ timeout: 15000 });
+  for (const [mode, label] of [['ecdf', /cumulative distribution/], ['cats', /per catalog/], ['rungs', /along the ladder|median, middle half/], ['hist', /one histogram per method/]]) {
+    await page.locator(V2 + ` .v2viewbar button[data-set="dmode:${mode}"]`).click();
+    await expect(page.locator(V2 + ` .v2viewbar button[data-set="dmode:${mode}"]`)).toHaveAttribute('aria-pressed', 'true');
+    await expect(chart).toHaveAttribute('aria-label', label);
+    expect(page.url()).toContain('dv=' + mode);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow, mode).toBeLessThanOrEqual(0);
+  }
+  // the cumulative curves can be read out of all laws: a method that leaves laws unanswered then ends below 100 %
+  await page.goto('/?release=2026-09&v=dist&dm=log10_fvu_val&dv=ecdf&dn=all');
+  await expect(page.locator(V2 + ' .v2viewbar button[data-set="dnorm:all"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator(V2 + ' .v2view')).toContainText('ends below 100');
+  expect(errors).toEqual([]);
+});
+
+test('the budget of a snapshot is stepped on the display itself', async ({ page }) => {
+  await page.goto('/?release=2026-09&v=dist&dm=log10_fvu_val&r=16');
+  const sel = page.locator(V2 + ' .v2viewbar select[data-state="rung"]');
+  await expect(sel).toHaveValue('16');
+  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('at budget 16');
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label^="higher"]').click();
+  await expect(sel).toHaveValue('32');
+  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('at budget 32');
+  await expect(page.locator(V2 + ' select.v2rung')).toHaveValue('32');   // one budget, two places to set it
+  await sel.selectOption('8');
+  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('at budget 8');
+  // the Catalogs matrix and the by-catalog table carry the same stepper
+  await page.locator(V2 + ' .v2tab[data-view="matrix"]').click();
+  await expect(page.locator(V2 + ' .v2viewbar select[data-state="rung"]')).toHaveValue('8');
+});
+
+test('a rate is shown per catalog, with a way to a distribution', async ({ page }) => {
+  await page.goto('/?release=2026-09&v=dist&dm=numeric_recovery_val&r=16');
+  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toHaveAttribute('aria-label', /per catalog/);
+  await expect(page.locator(V2 + ' .v2viewbar button[data-set^="dmode:"]')).toHaveCount(0);   // no reading applies to a hit-or-miss
+  await page.locator(V2 + ' .v2view button[data-set="dmetric:log10_fvu_val"]').click();
+  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toHaveAttribute('aria-label', /one histogram per method/);
+});
+
+// ---- Ranks ---------------------------------------------------------------------------------------------------------
+test('the ranks view places the methods, names what it ranks on and how it holds them equal', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/?release=2026-09&v=ranks&x=rung&r=16');
+  const chart = page.locator(V2 + ' .v2view svg.v2rankchart');
+  await expect(chart).toBeVisible({ timeout: 15000 });
+  await expect(chart).toHaveAttribute('aria-label', /Mean rank on .* budget 16/);
+  await expect(chart).toContainText('critical difference');
+  await expect(page.locator(V2 + ' .v2viewbar .v2tag-primary')).toBeVisible();
+  // mean ranks: one per ranked method, each within [1, k], and they sum to k (k + 1) / 2 as ranks must
+  const ranks = await page.locator(V2 + ' .v2ranktable tbody tr td:nth-child(3)').allTextContents();
+  const k = ranks.length;
+  expect(k).toBeGreaterThanOrEqual(2);
+  const vals = ranks.map(Number);
+  for (const v of vals) { expect(v).toBeGreaterThanOrEqual(1); expect(v).toBeLessThanOrEqual(k); }
+  expect(Math.abs(vals.reduce((a, b) => a + b, 0) - k * (k + 1) / 2)).toBeLessThan(0.02 * k);
+  expect(vals.slice().sort((a, b) => a - b)).toEqual(vals);   // the standings are in order
+  // head to head: k x k, and a pair's two shares plus their ties make 100 %
+  await expect(page.locator(V2 + ' .v2h2h tbody tr')).toHaveCount(k);
+  const cell = (r, c) => page.locator(V2 + ` .v2h2h tbody tr:nth-child(${r}) td:nth-child(${c + 1})`).textContent();
+  const num = (t) => parseFloat(t), tied = (t) => parseFloat(t.split('%')[1]);
+  const ab = await cell(1, 2), ba = await cell(2, 1);
+  expect(Math.abs(num(ab) + num(ba) + tied(ab) - 100)).toBeLessThan(1.6);
+  // the standings along the ladder
+  await expect(page.locator(V2 + ' .v2view svg.v2chart').last()).toContainText('Comparisons won');
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+  expect(errors).toEqual([]);
+});
+
+test('ranks follow the selection: another metric, fewer methods, fewer catalogs', async ({ page }) => {
+  await page.goto('/?release=2026-09&v=ranks&x=rung&r=16');
+  const rows = page.locator(V2 + ' .v2ranktable tbody tr');
+  await expect(rows.first()).toBeVisible({ timeout: 15000 });
+  const k = await rows.count();
+  const laws = () => page.locator(V2 + ' .v2view').textContent().then((t) => +t.match(/within each of ([\d,]+) laws/)[1].replace(/,/g, ''));
+  const all = await laws();
+  await page.locator(V2 + ' button[data-act="phys"]').click();
+  await expect.poll(laws).toBeLessThan(all);
+  await page.locator(V2 + ' button[data-act="all"]').click();
+  if (k > 2) {
+    await page.locator(V2 + ' .v2methods input[type=checkbox]:checked').first().uncheck();
+    await expect(rows).toHaveCount(k - 1);
+  }
+  // only metrics that can be ranked are offered, and an exploratory one says so
+  await page.locator(V2 + ' .v2viewbar .v2pick').click();
+  const offered = await page.locator('.v2picker .v2pickitem').count();
+  expect(offered).toBe(await page.evaluate(() => window.RESULTS_V2_RANKS['2026-09'].keys.length));
+  await page.locator('.v2picker .v2pickitem[data-k="mdl_ratio"]').click();
+  await expect(page.locator(V2 + ' .v2view svg.v2rankchart')).toHaveAttribute('aria-label', /MDL ratio/);
+  await expect(page.locator(V2 + ' .v2viewbar .v2tag-primary')).toHaveCount(0);
+  expect(page.url()).toContain('rm=mdl_ratio');
+});
+
+test('ranks hold the methods equal on reference-machine time when it exists', async ({ page }) => {
+  await page.goto('/?release=2026-09&v=ranks&x=time');
+  if (!(await hasRefTiming(page))) { test.skip(); }
+  const chart = page.locator(V2 + ' .v2view svg.v2rankchart');
+  await expect(chart).toBeVisible({ timeout: 15000 });
+  await expect(chart).toHaveAttribute('aria-label', /s per problem/);
+  await expect(page.locator(V2 + ' .v2viewbar select[data-state="tbudget"]')).toBeVisible();
+  await expect(page.locator(V2 + ' .v2viewbar select[data-state="rung"]')).toHaveCount(0);
+  // every ranked method's budget was timed within the limit
+  const limit = await page.locator(V2 + ' .v2viewbar select[data-state="tbudget"]').evaluate((s) => parseFloat(s.options[s.selectedIndex].text));
+  const secs = await page.locator(V2 + ' .v2ranktable tbody tr td:nth-child(2) .v2ci-txt').allTextContents();
+  expect(secs.length).toBeGreaterThanOrEqual(2);
+  for (const t of secs) { expect(parseFloat(t)).toBeLessThanOrEqual(limit); }
+  await page.locator(V2 + ' .v2viewbar button[data-set="xaxis:rung"]').click();
+  await expect(chart).toHaveAttribute('aria-label', /budget \d+/);
+});
+
+test('a method that has only begun a budget does not shrink the pool of the others', async ({ page }) => {
+  // the release payload, with one more method that has finished a single catalog at budget 16
+  await page.route('**/data/2026-09/results.js', async (route) => {
+    const res = await route.fetch();
+    const add = `;(function () { var D = window.RESULTS_V2;
+      var donor = D.methods.filter(function (m) { return D.cells[m.key] && Object.keys(D.cells[m.key]).length > 3; })[0];
+      var cat = Object.keys(D.cells[donor.key]).filter(function (c) { return D.cells[donor.key][c]['16']; })[0];
+      D.methods.push({ key: 'fixture-begun', label: 'Fixture just begun', param: 'draws', budget: 'candidates', color: '#555555', group: 'baseline', provenance: 'upstream_default', selection: '' });
+      D.cells['fixture-begun'] = {}; D.cells['fixture-begun'][cat] = { '16': D.cells[donor.key][cat]['16'] }; D.status['fixture-begun'] = [1, 100]; })();`;
+    await route.fulfill({ response: res, body: (await res.text()) + add });
+  });
+  await page.goto('/?release=2026-09&v=table&rows=rungs&p=numeric_recovery_val&x=rung');
+  await expect(page.locator(V2 + ' .v2methods')).toContainText('Fixture just begun');
+  const row16 = page.locator(V2 + ' .v2table tbody tr').filter({ has: page.locator('td:first-child', { hasText: /^16$/ }) });
+  await expect(row16).toBeVisible({ timeout: 15000 });
+  const catalogs = await row16.locator('td:nth-child(2)').textContent();
+  expect(+catalogs.match(/\((\d+) catalogs\)/)[1]).toBeGreaterThan(1);
+});
+

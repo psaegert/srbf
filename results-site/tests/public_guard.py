@@ -2,7 +2,8 @@
 
 Fatal checks, run before the Playwright suite in CI and locally:
   1. index.html references neither a private/ path nor index.local.html;
-  2. every method key in data/*/results.js, data/*/hist/*.js and data/*/paired.js is in the public allowlist below
+  2. every method key in data/*/results.js, data/*/hist/*.js, data/*/paired.js and data/*/ranks.js is in the public
+     allowlist below
      (the list names PUBLIC methods only; a private method's key must never appear here);
   3. every release payload carries the complete metric registry (at least the 2026-07 site's metrics, under their
      schema-2 keys) so a regenerated release cannot silently lose metrics;
@@ -47,6 +48,15 @@ def payload_of(text: str, var: str) -> Any:
 def keys_in_wrapped(text: str, pattern: str) -> set[str] | None:
     m = re.search(pattern, text, re.S)
     return set(json.loads(m.group(1))) if m else None
+
+
+def rank_methods(text: str) -> set[str] | None:
+    """Every method key a ranks.js names: the methods with a time-budget rung, and both sides of every pair."""
+    at = re.search(r"\.at,(\{.*?\})\);Object\.assign", text, re.S)
+    pairs = re.search(r"\.pairs,(\{.*\})\);\}\)\(\);\s*$", text, re.S)
+    if not at or not pairs:
+        return None
+    return set(json.loads(at.group(1))) | {k for pair in json.loads(pairs.group(1)) for k in pair.split("|")}
 
 
 SEALED_FIELDS = {"v", "kdf", "iter", "salt", "iv", "ct"}
@@ -116,6 +126,10 @@ def selftest() -> list[str]:
             bad.append("selftest: check_no_as_run_time accepted an as-run time metric")
     finally:
         probe.unlink(missing_ok=True)
+    ranks = ('window.RESULTS_V2_RANKS=window.RESULTS_V2_RANKS||{};(function(){var R=window.RESULTS_V2_RANKS;R["t"]=R["t"]||{};'
+             'Object.assign(R["t"].at,{"e2e":{"t1":4}});Object.assign(R["t"].pairs,{"hidden-method|e2e":{"nguyen":{"4":[12,3,4]}}});})();\n')
+    if "hidden-method" not in (rank_methods(ranks) or set()):
+        bad.append("selftest: rank_methods missed a method named only in a pair")
     return bad
 
 
@@ -155,6 +169,13 @@ def main() -> int:
                 extra = sorted({k for pair in ks for k in pair.split("|")} - PUBLIC_METHODS)
                 if extra:
                     failures.append(f"{pj}: non-public method keys {extra}")
+        rj = js.parent / "ranks.js"
+        if rj.exists():
+            named = rank_methods(rj.read_text(encoding="utf-8"))
+            if named is None:
+                failures.append(f"{rj}: not a ranks file")
+            elif sorted(named - PUBLIC_METHODS):
+                failures.append(f"{rj}: non-public method keys {sorted(named - PUBLIC_METHODS)}")
     for pub in sorted((SITE / "data").rglob("*.js")):
         if pub.name != "sealed.js":     # the sealed payload is encrypted and is not a published number
             failures.extend(check_no_as_run_time(pub))

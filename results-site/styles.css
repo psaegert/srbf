@@ -656,3 +656,34 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
   .v2pickcols { columns: 1; }
 }
 @media (prefers-reduced-motion: reduce) { .explorer-v2 .v2matrix td { transition: none; } }
+
+/* Controls that belong to one display sit on it: which budget a snapshot is taken at, how a distribution is drawn. */
+.explorer-v2 .v2viewbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin: 0 0 12px; padding: 8px 12px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+.explorer-v2 .v2segwrap { display: inline-flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
+.explorer-v2 .v2seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.explorer-v2 .v2segbtn { font: inherit; font-size: 13px; color: var(--ink-soft); background: var(--surface); border: none; border-left: 1px solid var(--line); padding: 4px 10px; cursor: pointer; }
+.explorer-v2 .v2segbtn:first-child { border-left: none; }
+.explorer-v2 .v2segbtn:hover, .explorer-v2 .v2segbtn:focus-visible { color: var(--ink); background: var(--accent-soft); outline: none; }
+.explorer-v2 .v2segbtn.on { background: var(--accent); color: #fff; }
+.explorer-v2 .v2step { display: inline-flex; align-items: stretch; gap: 3px; }
+.explorer-v2 .v2stepbtn { font: inherit; font-size: 11px; line-height: 1; color: var(--ink-soft); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 0 8px; min-height: 28px; cursor: pointer; }
+.explorer-v2 .v2stepbtn:hover:not([disabled]), .explorer-v2 .v2stepbtn:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+.explorer-v2 .v2stepbtn[disabled] { opacity: .35; cursor: default; }
+.explorer-v2 .v2stepsel { min-height: 28px; font-variant-numeric: tabular-nums; }
+.explorer-v2 .v2viewbar .v2pick { max-width: 100%; border-color: var(--line); background: var(--surface); font-weight: 600; }
+.explorer-v2 .v2distwide { max-width: 980px; }
+.explorer-v2 .v2one { grid-template-columns: minmax(0, 980px); }
+.explorer-v2 .v2stripe { fill: var(--ink); fill-opacity: .035; stroke: none; }
+.explorer-v2 .v2cd { stroke: var(--ink); stroke-width: 2; }
+.explorer-v2 .v2clique { fill: var(--ink); fill-opacity: .07; stroke: var(--ink-faint); stroke-width: 1; }
+.explorer-v2 .v2tag-primary { color: var(--accent); border-color: var(--accent); }
+.explorer-v2 .v2h2h td, .explorer-v2 .v2h2h th { text-align: center; }
+.explorer-v2 .v2h2h td:first-child, .explorer-v2 .v2h2h th:first-child { text-align: left; }
+@media (max-width: 700px) {
+  .explorer-v2 .v2viewbar { gap: 8px 12px; padding: 8px; }
+  .explorer-v2 .v2segbtn { padding: 5px 8px; }
+}
+/* A wide table scrolls sideways: the row label stays in view, and a method's name sits at the start of its columns. */
+.explorer-v2 .v2table th[colspan] { text-align: left; padding-left: 14px; }
+.explorer-v2 .v2table td:first-child, .explorer-v2 .v2table th:first-child { position: sticky; left: 0; z-index: 1; background: var(--surface); }

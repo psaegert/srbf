@@ -7,8 +7,10 @@
  * window.RESULTS_V2_PRIVATE, if a LOCAL build provides it, is merged in (results-site/README.md, "Local-only
  * methods"); the public page never references such a file.
  * Views: Curves (every plotted metric vs budget or time) | Table (rungs, or catalogs at one rung) | Catalogs (matrix
- * of one metric at one rung) | Distribution (histograms at one rung; per-catalog rates for rate metrics) | Paired Δ
- * (each method against a baseline on the same laws: exact McNemar for rates, paired t + sign test otherwise).
+ * of one metric at one rung) | Distribution (per-method histograms, cumulative curves, a box per catalog, quartiles
+ * along the ladder; per-catalog rates for rate metrics) | Ranks (mean rank within each law, critical difference,
+ * head-to-head table; from the pairwise outcomes in <base>ranks.js) | Paired Δ (each method against a baseline on
+ * the same laws: exact McNemar for rates, paired t + sign test otherwise).
  * State lives in the URL (?release=...&v=...) for sharing and in localStorage for convenience; colours in the same
  * first-party cookie the 2026-07 explorer uses (srbf_colors), written only on an explicit change. */
 (function () {
@@ -86,7 +88,7 @@
     harness_tuned: "Configuration: maintainer-chosen, set by the benchmark maintainers."
   };
   var TERMS = {
-    matched: "Matched pooling: at every rung only the catalogs that EVERY shown method has finished are pooled, so the methods are compared on the same laws. Own pooling: each method over whatever it has finished.",
+    matched: "Matched pooling: at every rung only the catalogs that EVERY shown method has finished are pooled, so the methods are compared on the same laws. A method that has only begun a rung (less than half of what the others have there) does not shrink their pool: its own rung is thin instead. Own pooling: each method over whatever it has finished.",
     thin: "A rung is thin when its pool holds fewer than half the laws of the method's largest pool (units still running). Thin rungs are hidden unless you show them; they draw with hollow markers.",
     wilson: "95 % Wilson score interval for a rate; t-interval for a mean; order-statistic interval for a median (from the pooled histogram). A band is the region the ladder could occupy: the interval box of every point and the hull between consecutive ones, in both axes where both are measured. Crosses draw the same intervals as bars through each point. Either, both or neither.",
     median: "The median is read from a 128-bin histogram per cell, so it is exact to a bin. Ratios and times are binned on a log scale.",
@@ -97,6 +99,12 @@
     draw1: "One draw per problem so far. These are paired contrasts on the same laws, not the repeated-draw noise margins of the 2026-07 release; those follow when draws 2 and up exist.",
     time: "Seconds per problem on ONE reference machine (solomon: RTX 4090, 16 refiner workers, a frozen 262-problem subset), the only timing this benchmark publishes. Seconds measured where a unit happened to run depend on the node, its GPU and whatever shared it, so they are not comparable between methods and are never drawn: a method the reference machine has not timed has no position here, so it is left out of the chart and named underneath; a chart with no timed method at all has no time axis.",
     candidates: "Samples, beam width, candidates or draws per problem: the budget a generative method spends. PySR's budget is a number of search iterations rather than a candidate count, so it has no position on this axis and appears on the time axis only.",
+    rungs: "A budget is one rung of a method's own ladder: samples, beam width, candidates or draws per problem, or search iterations for PySR. A snapshot at budget 64 reads every method at rung 64 of its ladder. The Ranks view can hold the methods equal on reference-machine time instead.",
+    tbudget: "Every method is read at the largest rung of its ladder that the reference machine timed at or under this many seconds per problem. A method whose smallest rung already takes longer sits out; a method whose whole ladder fits is read at its largest timed rung, which is its worst case: more time could only help it.",
+    worstrank: "Within one law the methods are ordered by the chosen metric. A method that returned no usable answer for that law is placed behind every method that did; methods with the same value, or all without an answer, share the mean of the places they occupy. Every law hands out the same places, so easy and hard laws count alike and a win by a hair counts like a win by a mile.",
+    friedman: "Friedman's omnibus test asks whether the spread of mean ranks is larger than interchangeable methods would produce by chance. It is computed here without the correction for ties, which can only make it more cautious. Groups are drawn only when it rejects at 5 %.",
+    cd: "Nemenyi's critical difference at 5 %: the smallest gap between two mean ranks that counts as real after allowing for every pair being compared at once. It shrinks with the number of laws and grows with the number of methods.",
+    winshare: "The share of head-to-head comparisons a method wins, a tie counting as half: over every other ranked method and every law. It is the mean rank rescaled to 0 to 100 %, so it does not change meaning when the number of ranked methods does.",
     provenance: "Who chose each method's configuration. Upstream defaults: nothing tuned. Author-blessed: the method's authors chose it (Flash-ANSR shares authors with the benchmark). Maintainer-chosen: the benchmark maintainers set it."
   };
   var COOKIE = "srbf_colors";
@@ -113,12 +121,16 @@
   var DEFAULTS = function () {
     return { view: "curves", cats: CATS.slice(), methods: D.methods.filter(withData).map(function (m) { return m.key; }),
       plots: D.metrics.filter(function (m) { return m.tier === "main"; }).map(function (m) { return { x: defaultAxis(), y: m.key }; }),
-      focus: "numeric_recovery_val", stat: "mean", pool: "matched", band: true, cross: false, thin: false, xaxis: anyTime() ? "time" : "rung", rung: 64, base: null, tier: "main", q: "", rows: "rungs" };
+      focus: "numeric_recovery_val", stat: "mean", pool: "matched", band: true, cross: false, thin: false, xaxis: anyTime() ? "time" : "rung", rung: 64, base: null, tier: "main", q: "", rows: "rungs",
+      // the Distribution view reads a continuous metric by default (a rate has no distribution over laws), the Ranks
+      // view the primary ranking metric; each display remembers its own
+      dmetric: "log10_fvu_val", dmode: "hist", dnorm: "ok", rmetric: (D.rank_keys || ["log10_fvu_val"])[0], tbudget: null };
   };
   var state = DEFAULTS();
-  var LS = "srbf-v2-" + REL + ".4";   // bumped whenever a default changes (.2 time axis, .3 mean, .4 bands), so a saved state cannot pin the old one
+  var LS = "srbf-v2-" + REL + ".5";   // bumped whenever a default changes (.2 time axis, .3 mean, .4 bands, .5 per-view metrics), so a saved state cannot pin the old one
+  var rungChosen = false;   // a budget from a link or from storage is kept; otherwise the first render picks one that has data
   function loadState() {
-    try { var s = JSON.parse(localStorage.getItem(LS) || "null"); if (s) { Object.keys(state).forEach(function (k) { if (s[k] !== undefined) { state[k] = s[k]; } }); } } catch (e) { /* no storage */ }
+    try { var s = JSON.parse(localStorage.getItem(LS) || "null"); if (s) { rungChosen = s.rung !== undefined; Object.keys(state).forEach(function (k) { if (s[k] !== undefined) { state[k] = s[k]; } }); } } catch (e) { /* no storage */ }
     var q = new URLSearchParams(window.location.search); var any = false;
     var preset = { all: CATS, phys: CATS.filter(function (c) { return CAT[c].group === "physics"; }), classic: CATS.filter(function (c) { return CAT[c].group === "classical"; }), synth: CATS.filter(function (c) { return CAT[c].group === "synthetic"; }), none: [] };
     if (q.has("v")) { state.view = q.get("v"); any = true; }
@@ -133,11 +145,19 @@
     if (q.has("cross")) { state.cross = q.get("cross") !== "0"; any = true; }
     if (q.has("thin")) { state.thin = q.get("thin") === "1"; any = true; }
     if (q.has("x")) { state.xaxis = q.get("x") === "time" ? "time" : "rung"; any = true; }
-    if (q.has("r")) { var r = parseInt(q.get("r"), 10); if (D.rungs.indexOf(r) >= 0) { state.rung = r; } any = true; }
+    if (q.has("r")) { var r = parseInt(q.get("r"), 10); if (D.rungs.indexOf(r) >= 0) { state.rung = r; rungChosen = true; } any = true; }
+    if (q.has("dm") && METRIC[q.get("dm")]) { state.dmetric = q.get("dm"); any = true; }
+    if (q.has("dv")) { state.dmode = q.get("dv"); any = true; }
+    if (q.has("dn")) { state.dnorm = q.get("dn") === "all" ? "all" : "ok"; any = true; }
+    if (q.has("rm") && METRIC[q.get("rm")]) { state.rmetric = q.get("rm"); any = true; }
+    if (q.has("t")) { state.tbudget = q.get("t"); any = true; }
     if (q.has("b")) { state.base = q.get("b"); any = true; }
     if (q.has("rows")) { state.rows = q.get("rows") === "cats" ? "cats" : "rungs"; any = true; }
     if (q.has("tier")) { state.tier = q.get("tier") === "all" ? "all" : "main"; }
-    if (["curves", "table", "matrix", "dist", "paired"].indexOf(state.view) < 0) { state.view = "curves"; }
+    if (["curves", "table", "matrix", "dist", "ranks", "paired"].indexOf(state.view) < 0) { state.view = "curves"; }
+    if (["hist", "ecdf", "cats", "rungs"].indexOf(state.dmode) < 0) { state.dmode = "hist"; }
+    if (!METRIC[state.dmetric]) { state.dmetric = "log10_fvu_val"; }
+    if (!METRIC[state.rmetric]) { state.rmetric = (D.rank_keys || ["log10_fvu_val"])[0]; }
     if (!Array.isArray(state.cats)) { state.cats = CATS.slice(); }
     if (!Array.isArray(state.methods)) { state.methods = DEFAULTS().methods; }
     if (!Array.isArray(state.plots)) { state.plots = DEFAULTS().plots; }
@@ -168,6 +188,9 @@
     q.set("release", REL); q.set("v", state.view); q.set("c", catsParam()); q.set("m", sharedMethods().join(",")); q.set("p", state.plots.map(plotKey).join(","));
     q.set("f", state.focus); q.set("s", state.stat); q.set("pool", state.pool); q.set("band", state.band ? "1" : "0"); q.set("cross", state.cross ? "1" : "0"); q.set("thin", state.thin ? "1" : "0");
     q.set("x", state.xaxis); q.set("r", String(state.rung)); if (state.base) { q.set("b", state.base); } q.set("rows", state.rows);
+    ["dm", "dv", "dn", "rm", "t"].forEach(function (k) { q.delete(k); });   // a link carries only what its display reads
+    if (state.view === "dist") { q.set("dm", state.dmetric); q.set("dv", state.dmode); q.set("dn", state.dnorm); }
+    if (state.view === "ranks") { q.set("rm", state.rmetric); if (state.tbudget) { q.set("t", state.tbudget); } }
     try { window.history.replaceState(null, "", "?" + q.toString() + window.location.hash); } catch (e) { /* file:// */ }
   }
 
@@ -244,12 +267,18 @@
   function cell(m, c, r) { var x = D.cells[m] && D.cells[m][c] && D.cells[m][c][String(r)]; return x && x.state === "complete" ? x : null; }
   function hasRung(m, r) { return CATS.some(function (c) { return cell(m, c, r); }); }
   function shownMethods() { return D.methods.filter(function (m) { return state.methods.indexOf(m.key) >= 0 && withData(m); }); }
+  function coverAt(m, r) { return laws(state.cats.filter(function (c) { return cell(m, c, r); })); }
+  // Matched pooling holds the methods to the same laws. A method that has only begun a rung (less than half of what
+  // the furthest method has there) would shrink everyone's pool to its few catalogs, so it does not constrain the
+  // others: it is pooled on what it shares with them, which makes its own rung thin, and thin rungs are set aside.
   function poolCats(m, r, shown) {
     if (!hasRung(m, r)) { return []; }
     var sel = state.cats.filter(function (c) { return cell(m, c, r); });
     if (state.pool !== "matched") { return sel; }
     var present = shown.filter(function (k) { return hasRung(k, r); });
-    return sel.filter(function (c) { return present.every(function (k) { return cell(k, c, r); }); });
+    var top = Math.max.apply(null, present.map(function (k) { return coverAt(k, r); }).concat([0]));
+    var binding = present.filter(function (k) { return k === m || coverAt(k, r) >= 0.5 * top; });
+    return sel.filter(function (c) { return binding.every(function (k) { return cell(k, c, r); }); });
   }
   function laws(cs) { return cs.reduce(function (a, c) { return a + CAT[c].laws; }, 0); }
   function thinMap(m, shown) { var pools = {}, mx = 0; D.rungs.forEach(function (r) { var n = laws(poolCats(m, r, shown)); pools[r] = n; if (n > mx) { mx = n; } }); var thin = {}; D.rungs.forEach(function (r) { thin[r] = pools[r] > 0 && pools[r] < 0.5 * mx; }); return { pools: pools, thin: thin }; }
@@ -372,9 +401,9 @@
     };
     if (timeAxis) { for (var t = tmin; t <= tmax * 1.0001; t *= 10) { s += '<line x1="' + xs(t).toFixed(1) + '" y1="' + T + '" x2="' + xs(t).toFixed(1) + '" y2="' + (H - B) + '" class="grid"/>' + xtext(xs(t), (t >= 1 ? t : t.toPrecision(1)) + " s"); } }
     else { D.rungs.forEach(function (r) { var e = Math.round(Math.log2(r)); s += '<line x1="' + xs(r).toFixed(1) + '" y1="' + (H - B) + '" x2="' + xs(r).toFixed(1) + '" y2="' + (H - B + (e % 2 ? 3 : 5)) + '" class="grid"/>'; if (e % 2) { return; } s += xtext(xs(r), String(r >= 1024 ? (r / 1024) + "k" : r)); }); }
-    var xlab = timeAxis
+    var xlab = opts.xlabel || (timeAxis
       ? (nr ? "fit time (s, ref)" : "fit time per problem (s, log, reference machine)")
-      : (nr ? "candidates / problem" : "candidates per problem (log scale)");
+      : (nr ? "candidates / problem" : "candidates per problem (log scale)"));
     s += '<text x="' + ((L + W - R) / 2).toFixed(0) + '" y="' + (H - B + 32) + '" class="tick" text-anchor="middle">' + esc(xlab) + '</text>';
     if (opts.ylabel) { s += '<text transform="translate(14,' + ((T + H - B) / 2).toFixed(0) + ') rotate(-90)" class="tick" text-anchor="middle">' + esc(opts.ylabel) + "</text>"; }
     var ly = nr ? H - B + 46 : T + 6, lx = nr ? L : W - R + 10;
@@ -490,8 +519,9 @@
   }
   function pickerGroups(axis) {
     var gs = axis === "x" ? [{ title: "budget spent", items: [AXIS.time, AXIS.rung] }] : [];
+    var only = axis === "focus" && state.view === "ranks" ? ((ranksOf() || {}).keys || D.rank_keys || []) : null;   // a ranking needs a continuous metric every method has
     MGROUPS.forEach(function (g) {
-      var ms = D.metrics.filter(function (m) { return m.group === g; });
+      var ms = D.metrics.filter(function (m) { return m.group === g && (!only || only.indexOf(m.key) >= 0); });
       if (ms.length) { gs.push({ title: g, items: ms }); }
     });
     return gs;
@@ -607,7 +637,7 @@
       rowsOut.push(["all selected", String(laws(state.cats))].concat(tds2.map(function (x) { return x.raw; })));
     }
     lastTable = { header: [state.rows === "cats" ? "catalog" : "rung", "laws"].concat(shown.reduce(function (a, m) { return a.concat(plots.map(function (p) { return m.label + " · " + mname(p); })); }, [])), rows: rowsOut };
-    var ctl = '<div class="v2row v2tablectl"><span class="v2lab">rows</span><label><input type="radio" name="v2rows" value="rungs"' + (state.rows === "rungs" ? " checked" : "") + '> every rung</label><label><input type="radio" name="v2rows" value="cats"' + (state.rows === "cats" ? " checked" : "") + '> catalogs at rung ' + state.rung + '</label>' +
+    var ctl = '<div class="v2row v2tablectl"><span class="v2lab">rows</span><label><input type="radio" name="v2rows" value="rungs"' + (state.rows === "rungs" ? " checked" : "") + '> every rung</label><label><input type="radio" name="v2rows" value="cats"' + (state.rows === "cats" ? " checked" : "") + '> catalogs at one budget</label>' + (state.rows === "cats" ? rungStepper(shown) : "") +
       '<span class="v2spacer"></span><button type="button" class="v2btn" data-act="copy-tsv">copy as TSV</button><button type="button" class="v2btn" data-act="csv">download CSV</button></div>';
     return ctl + '<div class="v2table-wrap"><table class="v2table"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div><p class="v2hint">' + (anyCI() ? "Brackets: 95 % interval (" + term("wilson", "Wilson / t / order statistic") + "). " : "") + term("regime", "Rates count every law; continuous metrics describe successful predictions") + ".</p>";
   }
@@ -617,54 +647,195 @@
   function renderMatrix(shown) {
     var p = METRIC[state.focus], r = state.rung, rgb = accentRGB();
     if (!shown.length) { return '<p class="v2hint">Select at least one method.</p>'; }
+    var bar = '<div class="v2viewbar"><span class="v2segwrap"><span class="v2lab">metric</span>' + pickButton("v2viewpick", 'data-axis="focus" aria-label="metric shown in the matrix"', p.key) + " " + mhelp(p) + "</span>" + rungStepper(shown) + "</div>";
+    var asked = shown; shown = withAt(shown, r);
     var cats = state.cats.slice().sort(function (a, b) { return CAT[b].laws - CAT[a].laws; }).filter(function (c) { return shown.some(function (m) { return cell(m.key, c, r); }); });
-    if (!cats.length) { return '<p class="v2hint">No finished units at rung ' + r + ' for this selection.</p>'; }
+    if (!cats.length) { return bar + '<p class="v2hint">Nothing finished at budget ' + r + " for this selection: step to another budget above.</p>"; }
     var vals = {}, all = [], pending = false;
     cats.forEach(function (c) { vals[c] = {}; shown.forEach(function (m) { if (!cell(m.key, c, r)) { return; } var st = stat(p, m.key, r, [c]); if (st && st.pending) { pending = true; return; } if (st && isFinite(st.v)) { vals[c][m.key] = st; all.push(st.v); } }); });
-    if (pending && !all.length) { return '<p class="v2hint">Loading the distribution…</p>'; }
+    if (pending && !all.length) { return bar + '<p class="v2hint">Loading the distribution…</p>'; }
     var lo = Math.min.apply(null, all), hi = Math.max.apply(null, all), ideal = tfOf(p) === "log2" ? 0 : 1;
     var score = function (v) { if (!(hi > lo)) { return 0.5; } if (p.higher === null) { var dm = Math.max(Math.abs(lo - ideal), Math.abs(hi - ideal)); return dm ? 1 - Math.abs(v - ideal) / dm : 1; } var t = (v - lo) / (hi - lo); return p.higher ? t : 1 - t; };
     var h = '<div class="v2table-wrap"><table class="v2table v2matrix"><thead><tr><th>catalog</th><th>laws</th>' + shown.map(function (m) { return '<th><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + '</th>'; }).join("") + '</tr></thead><tbody>';
     cats.forEach(function (c) { h += '<tr><td>' + esc(c) + ' <span class="v2hint">' + GROUPS[CAT[c].group] + '</span></td><td>' + CAT[c].laws + '</td>' + shown.map(function (m) { var st = vals[c][m.key]; if (!st) { return '<td class="v2na">' + (cell(m.key, c, r) ? "…" : "") + '</td>'; } var a = 0.06 + 0.5 * score(st.v); return '<td style="background:rgba(' + rgb.join(",") + "," + a.toFixed(2) + ')" title="' + esc(fmt(p, st.lo) + " to " + fmt(p, st.hi) + ", n = " + st.n) + '">' + fmt(p, st.v, st.edge) + '</td>'; }).join("") + '</tr>'; });
     var pooled = shown.map(function (m) { var use = cats.filter(function (c) { return cell(m.key, c, r); }); var st = use.length ? stat(p, m.key, r, use) : null; return '<td>' + (st && !st.pending ? cellText(st, p) : "") + '</td>'; }).join("");
     h += '<tr class="v2total"><td>all listed</td><td>' + laws(cats) + '</td>' + pooled + '</tr></tbody></table></div>';
-    return '<p class="v2hint">' + esc(p.label) + " at rung " + r + ", one cell per catalog; darker = better" + (p.higher === null ? " (closer to 1)" : "") + ". " + (p.kind === "cont" ? (state.stat === "mean" ? term("mean", "Means") : term("median", "Medians")) + " over successful predictions." : term("regime", "Rates over every law") + ".") + "</p>" + h;
+    return bar + missingNote(asked, shown, "at budget " + r) + '<p class="v2hint">' + esc(p.label) + " at budget " + r + ", one cell per catalog; darker = better" + (p.higher === null ? " (closer to 1)" : "") + ". " + (p.kind === "cont" ? (state.stat === "mean" ? term("mean", "Means") : term("median", "Medians")) + " over successful predictions." : term("regime", "Rates over every law") + ".") + "</p>" + h;
+  }
+
+  // ---- controls that live on the display itself -----------------------------------------------------------------
+  // The sidebar holds what every display shares. What only ONE display can use -- which budget a snapshot is taken
+  // at, how a distribution is drawn -- sits on that display, next to what it changes.
+  function seg(key, cur, opts, labelHtml, aria) {
+    return '<span class="v2segwrap">' + (labelHtml ? '<span class="v2lab">' + labelHtml + "</span>" : "") + '<span class="v2seg" role="group" aria-label="' + esc(aria) + '">' +
+      opts.map(function (o) { return '<button type="button" class="v2segbtn' + (o[0] === cur ? " on" : "") + '" data-set="' + key + ":" + o[0] + '" aria-pressed="' + (o[0] === cur ? "true" : "false") + '"' + (o[2] ? ' title="' + esc(o[2]) + '"' : "") + ">" + esc(o[1]) + "</button>"; }).join("") + "</span></span>";
+  }
+  function stepper(key, cur, values, labelOf, labelHtml, aria) {   // values in order; cur may sit between them
+    var i = values.indexOf(cur), prev = null, next = null;
+    if (i >= 0) { prev = i > 0 ? values[i - 1] : null; next = i < values.length - 1 ? values[i + 1] : null; }
+    else { values.forEach(function (v) { if (v < cur) { prev = v; } else if (v > cur && next === null) { next = v; } }); }
+    var all = i >= 0 ? values : values.concat([cur]);
+    var btn = function (to, glyph, word) { return '<button type="button" class="v2stepbtn" ' + (to === null ? "disabled" : 'data-set="' + key + ":" + to + '"') + ' aria-label="' + esc(word + " " + aria) + '">' + glyph + "</button>"; };
+    return '<span class="v2segwrap"><span class="v2lab">' + labelHtml + '</span><span class="v2step">' + btn(prev, "◀", "lower") +
+      '<select class="v2stepsel" data-state="' + key + '" aria-label="' + esc(aria) + '">' + all.map(function (v) { return '<option value="' + v + '"' + (v === cur ? " selected" : "") + ">" + esc(labelOf(v) + (values.indexOf(v) < 0 ? " (nothing finished)" : "")) + "</option>"; }).join("") + "</select>" +
+      btn(next, "▶", "higher") + "</span></span>";
+  }
+  function rungsWith(shown) { return D.rungs.filter(function (r) { return shown.some(function (m) { return state.cats.some(function (c) { return cell(m.key, c, r); }); }); }); }
+  function rungStepper(shown) { return stepper("rung", state.rung, rungsWith(shown), function (r) { return String(r); }, term("rungs", "budget"), "budget per problem"); }
+  function bestRung(shown) {   // the largest budget that the most methods have (all but) finished
+    var best = null, top = 0, full = laws(state.cats.length ? state.cats : CATS);
+    D.rungs.forEach(function (r) { var n = shown.filter(function (m) { return coverAt(m.key, r) >= 0.5 * full; }).length; if (n && n >= top) { top = n; best = r; } });
+    return best;
+  }
+  function withAt(shown, r) { return shown.filter(function (m) { return state.cats.some(function (c) { return cell(m.key, c, r); }); }); }
+  function missingNote(shown, present, what) {
+    var gone = shown.filter(function (m) { return present.indexOf(m) < 0; });
+    if (!gone.length) { return ""; }
+    return '<p class="v2hint">' + esc(gone.map(function (m) { return m.label; }).join(", ")) + (gone.length > 1 ? " have" : " has") + " nothing finished " + what + ".</p>";
   }
 
   // ---- Distribution ----------------------------------------------------------------------------------------------
+  // Four readings of the same pooled histograms: one histogram per method, the cumulative curves of all of them on
+  // one axis, a box per catalog, and the quartiles along the ladder. A rate has no distribution over laws (every
+  // law is a hit or a miss), so a rate shows how it is spread over the catalogs instead.
+  var DMODES = [["hist", "histograms", "One histogram per method, on a shared axis"], ["ecdf", "cumulative", "The share of laws at or below each value, all methods on one axis"],
+    ["cats", "by catalog", "A box per catalog and method: 5th, 25th, 50th, 75th and 95th percentile"], ["rungs", "along the ladder", "Median and interquartile range at every budget"]];
+  function qv(ph, q) { return binVal(ph, quantileBin(ph, Math.max(1, Math.ceil(q * ph.n)))); }
+  function five(ph) { return [0.05, 0.25, 0.5, 0.75, 0.95].map(function (q) { return qv(ph, q); }); }
+  function viewRange(phs) {   // the bins that hold 99 % of what is shown, so an empty tail does not squeeze the rest
+    var lo = Infinity, hi = -Infinity;
+    phs.forEach(function (ph) { lo = Math.min(lo, quantileBin(ph, Math.max(1, Math.ceil(0.005 * ph.n)))); hi = Math.max(hi, quantileBin(ph, Math.ceil(0.995 * ph.n))); });
+    var nb = phs[0].nb, pad = Math.max(2, Math.round(0.04 * (hi - lo + 1)));
+    lo = Math.max(0, lo - pad); hi = Math.min(nb - 1, hi + pad);
+    if (hi - lo < 8) { lo = Math.max(0, lo - 4); hi = Math.min(nb - 1, hi + 4); }
+    var w = (phs[0].hi - phs[0].lo) / nb;
+    return { b0: lo, b1: hi, lo: phs[0].lo + lo * w, hi: phs[0].lo + (hi + 1) * w, w: w };
+  }
+  function distHead(shown, p) {
+    var cont = p.kind !== "rate";
+    return '<div class="v2viewbar">' + '<span class="v2segwrap"><span class="v2lab">metric</span>' + pickButton("v2viewpick", 'data-axis="focus" aria-label="metric whose distribution is shown"', p.key) + " " + mhelp(p) + "</span>" +
+      (cont ? seg("dmode", state.dmode, DMODES, "show", "how the distribution is drawn") : "") +
+      (cont && state.dmode === "rungs" ? "" : rungStepper(shown)) +
+      (cont && state.dmode === "ecdf" ? seg("dnorm", state.dnorm, [["ok", "answered laws", "100 % is every law the method answered with a finite value"], ["all", "all laws", "100 % is every law in the pool: a law without an answer never enters the curve"]], "out of", "what the cumulative share is a share of") : "") +
+      (cont && state.dmode === "rungs" ? seg("xaxis", state.xaxis, [["time", "time"], ["rung", "candidates"]].filter(function (o) { return o[0] !== "time" || anyTime(); }), "x axis", "what the ladder is drawn against") : "") + "</div>";
+  }
+  function boxSVG(f, xs, yc, h, col, title) {   // whiskers 5-95, box 25-75, median tick
+    var x = f.map(function (v) { return xs(v).toFixed(1); });
+    return '<g><title>' + esc(title) + '</title><line x1="' + x[0] + '" y1="' + yc + '" x2="' + x[4] + '" y2="' + yc + '" stroke="' + col + '" stroke-width="1.5" stroke-opacity="0.7"/>' +
+      '<rect x="' + x[1] + '" y="' + (yc - h / 2).toFixed(1) + '" width="' + Math.max(1.5, xs(f[3]) - xs(f[1])).toFixed(1) + '" height="' + h + '" fill="' + col + '" fill-opacity="0.28" stroke="' + col + '" stroke-width="1.2"/>' +
+      '<line x1="' + x[2] + '" y1="' + (yc - h / 2 - 2).toFixed(1) + '" x2="' + x[2] + '" y2="' + (yc + h / 2 + 2).toFixed(1) + '" stroke="' + col + '" stroke-width="2.4"/></g>';
+  }
+  function fiveText(p, f) { return "median " + fmt(p, f[2]) + ", middle half " + fmt(p, f[1]) + " to " + fmt(p, f[3]) + ", 5th to 95th percentile " + fmt(p, f[0]) + " to " + fmt(p, f[4]); }
+  function xAxisSVG(p, vr, xs, T, yb, W, L, R) {
+    var s = "";
+    ticksFor(p, vr.lo, vr.hi).forEach(function (g) { if (g < vr.lo - 1e-9 || g > vr.hi + 1e-9) { return; } s += '<line x1="' + xs(g).toFixed(1) + '" y1="' + T + '" x2="' + xs(g).toFixed(1) + '" y2="' + yb + '" class="grid"/><text x="' + xs(g).toFixed(1) + '" y="' + (yb + 16) + '" class="tick" text-anchor="middle">' + esc(tickLabel(p, g)) + "</text>"; });
+    return s + '<text x="' + ((L + W - R) / 2).toFixed(0) + '" y="' + (yb + 33) + '" class="tick" text-anchor="middle">' + esc(axisName(p)) + "</text>";
+  }
+  function renderDistRate(shown, p, r) {   // per-catalog rates: a dot plot with Wilson intervals
+    var present = withAt(shown, r), nr = narrow(), W = hostWidth(), T = 34, R = 16;
+    var cats = state.cats.slice().sort(function (a, b) { return CAT[b].laws - CAT[a].laws; }).filter(function (c) { return present.some(function (m) { return cell(m.key, c, r); }); });
+    var swap = '<p class="v2hint">A rate is a hit or a miss on every law, so what varies is the catalog. ' + '<button type="button" class="v2btn" data-set="dmetric:log10_fvu_val">show the distribution of log10 FVU instead</button></p>';
+    if (!cats.length) { return swap + '<p class="v2hint">Nothing finished at budget ' + r + " for this selection: step to another budget above.</p>"; }
+    var rowH = Math.max(20, 7 * present.length + 8), B1 = 44 + 18 * present.length, Hh = T + cats.length * rowH + B1, Lw = nr ? 110 : 150;
+    var s = '<svg viewBox="0 0 ' + W + " " + Hh + '" class="v2chart v2dist" role="img" aria-label="' + esc(p.label) + ' per catalog"><text x="' + Lw + '" y="18" class="ct">' + esc(p.label) + " per catalog at budget " + r + "</text>";
+    var xs = function (v) { return Lw + v * (W - Lw - R); };
+    [0, 0.25, 0.5, 0.75, 1].forEach(function (g) { s += '<line x1="' + xs(g) + '" y1="' + T + '" x2="' + xs(g) + '" y2="' + (Hh - B1) + '" class="grid"/><text x="' + xs(g) + '" y="' + (Hh - B1 + 16) + '" class="tick" text-anchor="middle">' + (100 * g) + "%</text>"; });
+    cats.forEach(function (c, i) { var yy = T + (i + 0.5) * rowH; s += '<text x="' + (Lw - 8) + '" y="' + (yy + 4) + '" class="tick" text-anchor="end">' + esc(c) + " · " + CAT[c].laws + "</text>";
+      if (i % 2) { s += '<rect x="' + Lw + '" y="' + (yy - rowH / 2) + '" width="' + (W - Lw - R) + '" height="' + rowH + '" class="v2stripe"/>'; }
+      present.forEach(function (m, j) { var st = cell(m.key, c, r) ? stat(p, m.key, r, [c]) : null; if (!st) { return; } var yj = yy + (j - (present.length - 1) / 2) * 7, col = colorOf(m);
+        s += '<line x1="' + xs(st.lo).toFixed(1) + '" y1="' + yj.toFixed(1) + '" x2="' + xs(st.hi).toFixed(1) + '" y2="' + yj.toFixed(1) + '" stroke="' + col + '" stroke-width="2" stroke-opacity="0.4"/>';
+        s += '<circle cx="' + xs(st.v).toFixed(1) + '" cy="' + yj.toFixed(1) + '" r="3.2" fill="' + col + '"><title>' + esc(m.label + " on " + c + ": " + fmt(p, st.v) + " [" + fmt(p, st.lo) + ", " + fmt(p, st.hi) + "], n = " + st.n) + "</title></circle>"; }); });
+    var ly = Hh - B1 + 34; present.forEach(function (m) { s += '<circle cx="' + (Lw + 6) + '" cy="' + ly + '" r="4" fill="' + colorOf(m) + '"/><text x="' + (Lw + 16) + '" y="' + (ly + 4) + '" class="leg">' + esc(m.label + (m.local ? " (local)" : "")) + "</text>"; ly += 18; });
+    return swap + s + "</svg>" + '<p class="v2hint">One row per catalog, largest first; one dot per method with its ' + term("wilson", "95 % Wilson interval") + ".</p>" + missingNote(shown, present, "at budget " + r);
+  }
   function renderDist(shown) {
-    var p = METRIC[state.focus], r = state.rung, keys = shown.map(function (m) { return m.key; });
+    var p = METRIC[state.dmetric], r = state.rung, keys = shown.map(function (m) { return m.key; });
     if (!shown.length) { return '<p class="v2hint">Select at least one method.</p>'; }
-    var nr = narrow(), W = hostWidth(), L = 62, T = 34, R = 16;
-    if (p.kind === "rate") {   // per-catalog rates: a dot plot with Wilson intervals
-      var cats = state.cats.slice().sort(function (a, b) { return CAT[b].laws - CAT[a].laws; }).filter(function (c) { return shown.some(function (m) { return cell(m.key, c, r); }); });
-      if (!cats.length) { return '<p class="v2hint">No finished units at rung ' + r + '.</p>'; }
-      var rowH = 20, B1 = 44 + 18 * shown.length, Hh = T + cats.length * rowH + B1, Lw = nr ? 110 : 150;
-      var s = '<svg viewBox="0 0 ' + W + ' ' + Hh + '" class="v2chart v2dist" role="img" aria-label="' + esc(p.label) + ' per catalog"><text x="' + Lw + '" y="18" class="ct">' + esc(p.label) + " per catalog at rung " + r + '</text>';
-      var xs = function (v) { return Lw + v * (W - Lw - R); };
-      [0, 0.25, 0.5, 0.75, 1].forEach(function (g) { s += '<line x1="' + xs(g) + '" y1="' + T + '" x2="' + xs(g) + '" y2="' + (Hh - B1) + '" class="grid"/><text x="' + xs(g) + '" y="' + (Hh - B1 + 16) + '" class="tick" text-anchor="middle">' + (100 * g) + '%</text>'; });
-      cats.forEach(function (c, i) { var yy = T + (i + 0.5) * rowH; s += '<text x="' + (Lw - 8) + '" y="' + (yy + 4) + '" class="tick" text-anchor="end">' + esc(c) + ' · ' + CAT[c].laws + '</text>';
-        shown.forEach(function (m, j) { var st = cell(m.key, c, r) ? stat(p, m.key, r, [c]) : null; if (!st) { return; } var yj = yy + (j - (shown.length - 1) / 2) * Math.min(6, rowH / (shown.length + 1)); var col = colorOf(m);
-          if (anyCI()) { s += '<line x1="' + xs(st.lo).toFixed(1) + '" y1="' + yj.toFixed(1) + '" x2="' + xs(st.hi).toFixed(1) + '" y2="' + yj.toFixed(1) + '" stroke="' + col + '" stroke-width="2" stroke-opacity="0.45"/>'; }
-          s += '<circle cx="' + xs(st.v).toFixed(1) + '" cy="' + yj.toFixed(1) + '" r="3.5" fill="' + col + '"><title>' + esc(m.label + " on " + c + ": " + fmt(p, st.v) + " [" + fmt(p, st.lo) + ", " + fmt(p, st.hi) + "], n = " + st.n) + '</title></circle>'; }); });
-      var ly = Hh - B1 + 34; shown.forEach(function (m) { s += '<circle cx="' + (Lw + 6) + '" cy="' + ly + '" r="4" fill="' + colorOf(m) + '"/><text x="' + (Lw + 16) + '" y="' + (ly + 4) + '" class="leg">' + esc(m.label + (m.local ? " (local)" : "")) + '</text>'; ly += 20; });
-      return s + "</svg>" + '<p class="v2hint">Each dot is one catalog; bars are ' + term("wilson", "95 % Wilson intervals") + '. Catalogs sorted by size. Pick a continuous metric under Focus for a histogram.</p>';
-    }
-    if (!ready("hist/" + p.key + ".js")) { ensure("hist/" + p.key + ".js", scheduleRender); return '<p class="v2hint">Loading the distribution…</p>'; }
-    var H0 = histOf(p.key); if (!H0) { return '<p class="v2hint">No distribution available for ' + esc(p.label) + '.</p>'; }
-    var series = [], ymax = 0;
-    shown.forEach(function (m) { var use = poolCats(m.key, r, keys); if (!use.length) { return; } var ph = pooledHist(p.key, m.key, r, use); if (!ph) { return; } var bw = (ph.hi - ph.lo) / ph.nb; var dens = ph.h.map(function (c) { return c / ph.n / bw; }); ymax = Math.max(ymax, Math.max.apply(null, dens)); series.push({ m: m, ph: ph, dens: dens, med: binVal(ph, quantileBin(ph, ph.n / 2)), laws: laws(use) }); });
-    if (!series.length) { return '<p class="v2hint">No finished units at rung ' + r + ' for this selection.</p>'; }
-    var B = 44 + 18 * series.length, H = 300 + B, lo = H0.lo, hi = H0.hi, xs2 = function (x) { return L + (x - lo) / (hi - lo) * (W - L - R); }, y2 = function (v) { return T + (1 - v / (ymax * 1.05)) * (H - T - B); };
-    var s2 = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="v2chart v2dist" role="img" aria-label="' + esc(p.label) + ' distribution"><text x="' + L + '" y="18" class="ct">' + esc(p.label) + " at rung " + r + '</text>';
-    ticksFor(p, lo, hi).forEach(function (g) { s2 += '<line x1="' + xs2(g).toFixed(1) + '" y1="' + T + '" x2="' + xs2(g).toFixed(1) + '" y2="' + (H - B) + '" class="grid"/><text x="' + xs2(g).toFixed(1) + '" y="' + (H - B + 16) + '" class="tick" text-anchor="middle">' + esc(tickLabel(p, g)) + '</text>'; });
-    s2 += '<text x="' + ((L + W - R) / 2) + '" y="' + (H - B + 32) + '" class="tick" text-anchor="middle">' + esc(axisName(p)) + '</text><text transform="translate(14,' + ((T + H - B) / 2) + ') rotate(-90)" class="tick" text-anchor="middle">density</text>';
-    var ly2 = H - B + 46;
-    series.forEach(function (sr) { var col = colorOf(sr.m), pts = []; for (var i = 0; i < sr.ph.nb; i++) { var x0 = lo + i * (hi - lo) / sr.ph.nb, x1 = x0 + (hi - lo) / sr.ph.nb; pts.push(xs2(x0).toFixed(1) + "," + y2(sr.dens[i]).toFixed(1)); pts.push(xs2(x1).toFixed(1) + "," + y2(sr.dens[i]).toFixed(1)); }
-      s2 += '<polygon points="' + xs2(lo).toFixed(1) + "," + y2(0).toFixed(1) + " " + pts.join(" ") + " " + xs2(hi).toFixed(1) + "," + y2(0).toFixed(1) + '" fill="' + col + '" fill-opacity="0.12" stroke="none"/><polyline fill="none" stroke="' + col + '" stroke-width="1.8" points="' + pts.join(" ") + '"/>';
-      s2 += '<line x1="' + xs2(sr.med).toFixed(1) + '" y1="' + T + '" x2="' + xs2(sr.med).toFixed(1) + '" y2="' + (H - B) + '" stroke="' + col + '" stroke-width="1.5" stroke-dasharray="5 4"><title>' + esc(sr.m.label + " median " + fmt(p, sr.med)) + '</title></line>';
-      s2 += '<line x1="' + L + '" y1="' + ly2 + '" x2="' + (L + 20) + '" y2="' + ly2 + '" stroke="' + col + '" stroke-width="3"/><text x="' + (L + 26) + '" y="' + (ly2 + 4) + '" class="leg">' + esc(sr.m.label + (sr.m.local ? " (local)" : "") + " · median " + fmt(p, sr.med) + " · n = " + sr.ph.n + " over " + sr.laws + " laws") + '</text>'; ly2 += 18; });
-    return s2 + "</svg>" + '<p class="v2hint">Histograms over the successful predictions of the pooled catalogs (128 bins; values outside the axis are pooled into the edge bins). Dashed lines: ' + term("median", "medians") + '.</p>';
+    var head = distHead(shown, p);
+    if (p.kind === "rate") { return head + renderDistRate(shown, p, r); }
+    if (!ready("hist/" + p.key + ".js")) { ensure("hist/" + p.key + ".js", scheduleRender); return head + '<p class="v2hint">Loading the distribution…</p>'; }
+    if (!histOf(p.key)) { return head + '<p class="v2hint">This release holds no distribution for ' + esc(p.label) + ".</p>"; }
+    if (state.dmode === "rungs") { return head + renderDistLadder(shown, p); }
+    var series = [], aside = [];
+    shown.forEach(function (m) { var use = state.dmode === "cats" ? state.cats.filter(function (c) { return cell(m.key, c, r); }) : poolCats(m.key, r, keys); if (!use.length) { return; }
+      if (state.dmode !== "cats" && !state.thin && thinMap(m.key, keys).thin[r]) { aside.push(m); return; }
+      var ph = pooledHist(p.key, m.key, r, use); if (!ph) { return; }
+      var rows = use.reduce(function (a, c) { return a + cell(m.key, c, r).n; }, 0); series.push({ m: m, ph: ph, f: five(ph), use: use, laws: laws(use), rows: rows }); });
+    var gone = missingNote(shown, series.map(function (sr) { return sr.m; }).concat(aside), "at budget " + r) +
+      (aside.length ? '<p class="v2hint">' + esc(aside.map(function (m) { return m.label; }).join(", ")) + (aside.length > 1 ? " have" : " has") + " only begun this budget and " + (aside.length > 1 ? "are" : "is") + " set aside: " + term("thin", "show thin rungs") + " to include " + (aside.length > 1 ? "them" : "it") + ", or read " + (aside.length > 1 ? "them" : "it") + " by catalog.</p>" : "");
+    if (!series.length) { return head + '<p class="v2hint">Nothing finished at budget ' + r + " for this selection: step to another budget above.</p>"; }
+    var pooled = state.pool === "matched" && state.dmode !== "cats" ? " Every method is read on the same " + series[0].laws.toLocaleString() + " laws (" + series[0].use.length + " catalogs all of them have finished)." : "";
+    var body = state.dmode === "ecdf" ? distEcdf(series, p, r) : state.dmode === "cats" ? distCats(series, p, r) : distHists(series, p, r);
+    return head + body + '<p class="v2hint">' + (state.dmode === "cats" ? "" : (state.dmode === "ecdf" && state.dnorm === "all" ? "" : "Successful predictions only: a law without an answer has no value to place.") + pooled + " ") + term("median", "Read from 128-bin histograms") + "; values beyond the binned range sit in the outermost bins.</p>" + gone;
+  }
+  function distHists(series, p, r) {
+    var nr = narrow(), W = hostWidth(), L = nr ? 14 : 150, R = 16, T = 34, ph0 = series[0].ph, vr = viewRange(series.map(function (sr) { return sr.ph; }));
+    var nmax = Math.max.apply(null, series.map(function (sr) { return sr.ph.n; })), f = nmax < 150 ? 4 : nmax < 600 ? 2 : 1;   // fewer laws, wider bins
+    var panelH = nr ? 118 : 96, gap = 16, boxH = 22, capH = nr ? 34 : 0, step = panelH + boxH + capH + gap, H = T + series.length * step + 34;
+    var xs = function (x) { return L + (Math.min(vr.hi, Math.max(vr.lo, x)) - vr.lo) / (vr.hi - vr.lo) * (W - L - R); };
+    var groups = series.map(function (sr) { var g = []; for (var b = vr.b0; b <= vr.b1; b += f) { var c = 0; for (var j = b; j < Math.min(b + f, vr.b1 + 1); j++) { c += sr.ph.h[j]; } g.push({ b: b, share: c / sr.ph.n, edge: (b === 0 && vr.b0 === 0) || (b + f > ph0.nb - 1 && vr.b1 === ph0.nb - 1) }); } return g; });
+    var top = 0; groups.forEach(function (g) { g.forEach(function (x) { if (!x.edge) { top = Math.max(top, x.share); } }); }); if (!top) { groups.forEach(function (g) { g.forEach(function (x) { top = Math.max(top, x.share); }); }); }
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" class="v2chart v2distwide" role="img" aria-label="' + esc(p.label) + ' distribution, one histogram per method"><text x="' + L + '" y="18" class="ct">' + esc(p.label) + " at budget " + r + "</text>";
+    s += xAxisSVG(p, vr, xs, T, H - 34 - gap + 6, W, L, R);
+    series.forEach(function (sr, i) { var y0 = T + i * step, yb = y0 + panelH, col = colorOf(sr.m), pts = [], cl = [];
+      var yOf = function (v) { return yb - Math.min(1, v / (top * 1.08)) * (panelH - 14); };
+      groups[i].forEach(function (x) { var x0 = xs(vr.lo + (x.b - vr.b0) * vr.w), x1 = xs(vr.lo + (Math.min(x.b + f, vr.b1 + 1) - vr.b0) * vr.w); pts.push(x0.toFixed(1) + "," + yOf(x.share).toFixed(1), x1.toFixed(1) + "," + yOf(x.share).toFixed(1)); if (x.share > top * 1.08) { cl.push({ x: (x0 + x1) / 2, share: x.share }); } });
+      s += '<line x1="' + L + '" y1="' + yb + '" x2="' + (W - R) + '" y2="' + yb + '" class="grid"/>';
+      s += '<polygon points="' + xs(vr.lo).toFixed(1) + "," + yb + " " + pts.join(" ") + " " + xs(vr.hi).toFixed(1) + "," + yb + '" fill="' + col + '" fill-opacity="0.22" stroke="none"/><polyline fill="none" stroke="' + col + '" stroke-width="1.6" points="' + pts.join(" ") + '"/>';
+      cl.forEach(function (c) { var right = c.x > (L + W - R) / 2; s += '<text x="' + (right ? c.x - 6 : c.x + 6).toFixed(1) + '" y="' + (y0 + 12) + '" class="tick" text-anchor="' + (right ? "end" : "start") + '">' + (right ? "" : "▲ ") + (100 * c.share).toFixed(0) + " % in the outermost bin" + (right ? " ▲" : "") + "</text>"; });
+      s += boxSVG(sr.f, xs, yb + boxH / 2 + 3, 9, col, sr.m.label + ": " + fiveText(p, sr.f));
+      var name = sr.m.label + (sr.m.local ? " (local)" : ""), cap = "median " + fmt(p, sr.f[2]) + " · n = " + sr.ph.n.toLocaleString() + " of " + sr.rows.toLocaleString() + " laws";
+      if (nr) { s += '<rect x="' + L + '" y="' + (yb + boxH + 9) + '" width="10" height="10" rx="2" fill="' + col + '"/><text x="' + (L + 15) + '" y="' + (yb + boxH + 18) + '" class="leg">' + esc(name) + '</text><text x="' + L + '" y="' + (yb + boxH + 33) + '" class="tick">' + esc(cap) + "</text>"; }
+      else { s += '<rect x="10" y="' + (y0 + 8) + '" width="10" height="10" rx="2" fill="' + col + '"/><text x="25" y="' + (y0 + 17) + '" class="leg">' + esc(name) + '</text><text x="10" y="' + (y0 + 36) + '" class="tick">median ' + esc(fmt(p, sr.f[2])) + '</text><text x="10" y="' + (y0 + 52) + '" class="tick">n = ' + sr.ph.n.toLocaleString() + " of " + sr.rows.toLocaleString() + "</text>"; } });
+    return s + "</svg>" + '<p class="v2hint">Height: the share of the method’s answered laws in each bin, on one scale for every panel. Under each histogram: 5th to 95th percentile (line), middle half (box), median (tick).</p>';
+  }
+  function distEcdf(series, p, r) {
+    var nr = narrow(), W = hostWidth(), L = 62, T = 34, R = nr ? 16 : 180, B = nr ? 56 + 20 * series.length : 52, H = plotHeight(W) + B;
+    var vr = viewRange(series.map(function (sr) { return sr.ph; })), all = state.dnorm === "all", low = p.higher === true;   // a law without an answer sits at the worse end
+    var xs = function (x) { return L + (Math.min(vr.hi, Math.max(vr.lo, x)) - vr.lo) / (vr.hi - vr.lo) * (W - L - R); }, y = function (v) { return T + (1 - v) * (H - T - B); };
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" class="v2chart" role="img" aria-label="' + esc(p.label) + ' cumulative distribution"><text x="' + (nr ? 10 : L) + '" y="18" class="ct">' + esc(nr ? p.short + " @ " + r + ": share at or below" : p.label + " at budget " + r + ": share of " + (all ? "all" : "answered") + " laws at or below") + "</text>";
+    [0, 0.25, 0.5, 0.75, 1].forEach(function (g) { s += '<line x1="' + L + '" y1="' + y(g).toFixed(1) + '" x2="' + (W - R) + '" y2="' + y(g).toFixed(1) + '" class="grid' + (g === 0.5 ? " zero" : "") + '"/><text x="' + (L - 6) + '" y="' + (y(g) + 4).toFixed(1) + '" class="tick" text-anchor="end">' + (100 * g) + "%</text>"; });
+    s += xAxisSVG(p, vr, xs, T, H - B, W, L, R);
+    var ly = nr ? H - B + 50 : T + 6, lx = nr ? L : W - R + 10;
+    series.forEach(function (sr) { var col = colorOf(sr.m), den = all ? sr.rows : sr.ph.n, cum = all && low ? sr.rows - sr.ph.n : 0, pts = [];
+      for (var b = 0; b < sr.ph.nb; b++) { var before = cum; cum += sr.ph.h[b]; if (b < vr.b0) { continue; } if (b > vr.b1) { break; } var x0 = vr.lo + (b - vr.b0) * vr.w; if (!pts.length) { pts.push(xs(x0).toFixed(1) + "," + y(before / den).toFixed(1)); } pts.push(xs(x0 + vr.w).toFixed(1) + "," + y(before / den).toFixed(1), xs(x0 + vr.w).toFixed(1) + "," + y(cum / den).toFixed(1)); }
+      s += '<polyline fill="none" stroke="' + col + '" stroke-width="2" points="' + pts.join(" ") + '"><title>' + esc(sr.m.label + ": " + fiveText(p, sr.f) + "; " + sr.ph.n + " answered of " + sr.rows + " laws") + "</title></polyline>";
+      s += '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 20) + '" y2="' + ly + '" stroke="' + col + '" stroke-width="3"/><text x="' + (lx + 26) + '" y="' + (ly + 4) + '" class="leg">' + esc(sr.m.label + (sr.m.local ? " (local)" : "")) + "</text>"; ly += 20; });
+    return s + "</svg>" + '<p class="v2hint">' + (p.higher === true ? "Further right is better: a curve that stays low longer holds more of its laws at high values." : p.higher === false ? "Further left is better: a curve that rises early holds more of its laws at low values." : "Closer to 1 is better: a curve that rises steeply around 1 is the tighter one.") +
+      (all ? " Out of all laws, a method that leaves laws unanswered " + (low ? "starts above 0 %." : "ends below 100 %.") : "") + "</p>";
+  }
+  function distCats(series, p, r) {
+    var nr = narrow(), W = hostWidth(), T = 34, R = 16, Lw = nr ? 110 : 160, per = {}, phs = [];
+    var cats = state.cats.slice().sort(function (a, b) { return CAT[b].laws - CAT[a].laws; });
+    cats.forEach(function (c) { series.forEach(function (sr) { if (sr.use.indexOf(c) < 0) { return; } var ph = pooledHist(p.key, sr.m.key, r, [c]); if (!ph) { return; } (per[c] = per[c] || {})[sr.m.key] = ph; phs.push(ph); }); });
+    cats = cats.filter(function (c) { return per[c]; });
+    if (!phs.length) { return '<p class="v2hint">No catalog holds a finite value at budget ' + r + ".</p>"; }
+    var vr = viewRange(phs), rowH = Math.max(22, 11 * series.length + 8), B = 44 + 18 * series.length, H = T + (cats.length + 1) * rowH + B;
+    var xs = function (x) { return Lw + (Math.min(vr.hi, Math.max(vr.lo, x)) - vr.lo) / (vr.hi - vr.lo) * (W - Lw - R); };
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" class="v2chart v2distwide" role="img" aria-label="' + esc(p.label) + ' per catalog"><text x="' + Lw + '" y="18" class="ct">' + esc(p.label) + " per catalog at budget " + r + "</text>";
+    s += xAxisSVG(p, vr, xs, T, H - B, W, Lw, R);
+    var row = function (label, i, get, bold) { var yy = T + (i + 0.5) * rowH;
+      if (i % 2) { s += '<rect x="' + Lw + '" y="' + (yy - rowH / 2) + '" width="' + (W - Lw - R) + '" height="' + rowH + '" class="v2stripe"/>'; }
+      s += '<text x="' + (Lw - 8) + '" y="' + (yy + 4) + '" class="' + (bold ? "leg" : "tick") + '" text-anchor="end">' + esc(label) + "</text>";
+      series.forEach(function (sr, j) { var ph = get(sr); if (!ph) { return; } var yj = yy + (j - (series.length - 1) / 2) * 11; s += boxSVG(five(ph), xs, yj, 7, colorOf(sr.m), sr.m.label + " on " + label + ": " + fiveText(p, five(ph)) + ", n = " + ph.n); }); };
+    cats.forEach(function (c, i) { row(c + " · " + CAT[c].laws, i, function (sr) { return per[c][sr.m.key]; }, false); });
+    row("all listed", cats.length, function (sr) { return sr.ph; }, true);
+    var ly = H - B + 46; series.forEach(function (sr) { s += '<rect x="' + (Lw + 1) + '" y="' + (ly - 6) + '" width="10" height="10" rx="2" fill="' + colorOf(sr.m) + '"/><text x="' + (Lw + 16) + '" y="' + (ly + 4) + '" class="leg">' + esc(sr.m.label + (sr.m.local ? " (local)" : "")) + "</text>"; ly += 18; });
+    return s + "</svg>" + '<p class="v2hint">One row per catalog, largest first; per method the 5th to 95th percentile (line), the middle half (box) and the median (tick) of its answered laws. Tap or hover a box for its numbers.</p>';
+  }
+  function renderDistLadder(shown, p) {
+    var drawn = axisMethods(shown), keys = drawn.map(function (m) { return m.key; }), src = timeSource(keys), series = [], ymin = Infinity, ymax = -Infinity, tmin = Infinity, tmax = -Infinity;
+    drawn.forEach(function (m) { var tm = thinMap(m.key, keys), pts = [];
+      D.rungs.forEach(function (r) { var use = poolCats(m.key, r, keys); if (!use.length || (tm.thin[r] && !state.thin)) { return; } var x = xOf(m.key, r, use, src); if (x === null) { return; } var ph = pooledHist(p.key, m.key, r, use); if (!ph) { return; } var f = five(ph);
+        pts.push({ x: x, v: f[2], lo: f[1], hi: f[3], thin: tm.thin[r], title: m.label + " @ " + r + ": " + fiveText(p, f) + ", n = " + ph.n });
+        ymin = Math.min(ymin, f[1]); ymax = Math.max(ymax, f[3]); if (state.xaxis === "time") { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); } });
+      if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: pts }); } });
+    var title = narrow() ? p.short + ": median, middle half" : p.label + ": median and middle half along the ladder", off = offAxis(shown);
+    var note = off.length ? '<p class="v2hint">' + esc(off.map(function (m) { return m.label; }).join(", ")) + (off.length > 1 ? " have" : " has") + " no position on this axis: switch the x axis above.</p>" : "";
+    if (!series.length) { return chartSVG({ title: title, aria: title, series: [], empty: "nothing to draw on this axis yet" }) + note; }
+    var pad = (ymax - ymin) * 0.08 || 0.1; ymin -= pad; ymax += pad; var tr = state.xaxis === "time" ? timeRange(tmin, tmax) : [0, 0];
+    var svg = withState({ band: true, cross: false }, function () { return chartSVG({ title: title, aria: title, series: series, ymin: ymin, ymax: ymax, ticks: ticksFor(p, ymin, ymax), tick: function (g) { return tickLabel(p, g); }, ylabel: axisName(p), timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: tfOf(p) === "log2" ? 0 : undefined }); });
+    return '<div class="v2charts v2one">' + svg + "</div>" + '<p class="v2hint">Line: the median of the answered laws. Band: their middle half (25th to 75th percentile), not a confidence interval. Tap or hover a point for all five percentiles.</p>' + note;
   }
 
   // ---- Paired ----------------------------------------------------------------------------------------------------
@@ -706,25 +877,152 @@
     var r = state.rung, rows = "";
     others.forEach(function (m) { rows += '<tr><td><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + '</td>' + plots.map(function (p) { var use = poolCats(m.key, r, keys).filter(function (c) { return cell(base.key, c, r); }); var st = use.length ? pairedStat(p, m.key, base.key, r, use) : null; if (!st) { return '<td class="v2na">–</td><td class="v2na">–</td><td class="v2na">–</td>'; } var sig = st.p !== null && st.p < 0.05; return '<td' + (sig ? ' class="v2sig"' : "") + '>' + fmtDelta(p, st.v) + ' <span class="v2ci-txt">[' + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + ']</span></td><td>' + fmtP(st.p) + '</td><td class="v2hint">' + st.wins + " / " + st.losses + " of " + st.n + '</td>'; }).join("") + '</tr>'; });
     var anyRow = others.some(function (m) { return plots.some(function (p) { var use = poolCats(m.key, r, keys).filter(function (c) { return cell(base.key, c, r); }); return use.length && pairedStat(p, m.key, base.key, r, use); }); });
-    var table = '<h3 class="v2h">At rung ' + r + '</h3>' + (anyRow ? "" : '<p class="v2hint">No matched cells with the baseline at rung ' + r + ' yet: pick another rung under Options.</p>') + '<div class="v2table-wrap"><table class="v2table"><thead><tr><th>method − ' + esc(base.label) + '</th>' + plots.map(function (p) { return '<th colspan="3">' + esc(mname(p)) + " " + mhelp(p) + '</th>'; }).join("") + '</tr><tr><th></th>' + plots.map(function () { return '<th>Δ [95 %]</th><th>p</th><th>wins / losses</th>'; }).join("") + '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    var table = '<h3 class="v2h">At one budget</h3><div class="v2viewbar">' + rungStepper(shown) + "</div>" + (anyRow ? "" : '<p class="v2hint">No catalog is finished by both a method and the baseline at budget ' + r + ": step to another budget above.</p>") + '<div class="v2table-wrap"><table class="v2table"><thead><tr><th>method − ' + esc(base.label) + '</th>' + plots.map(function (p) { return '<th colspan="3">' + esc(mname(p)) + " " + mhelp(p) + '</th>'; }).join("") + '</tr><tr><th></th>' + plots.map(function () { return '<th>Δ [95 %]</th><th>p</th><th>wins / losses</th>'; }).join("") + '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
       '<p class="v2hint">Rates: ' + term("mcnemar", "exact McNemar") + ' on the laws the pair disagrees on; wins / losses count those laws. Continuous metrics: ' + term("signtest", "paired mean difference and exact sign test") + ' over laws where both have a finite value; ratios and times are read as multiplicative factors. Bold: p below 0.05, uncorrected.</p>';
     return ctl + '<div class="v2charts">' + charts.join("") + "</div>" + table;
   }
 
+  // ---- Ranks -----------------------------------------------------------------------------------------------------
+  // Within every law the methods are placed 1st, 2nd, ... on one continuous metric; a method without a usable answer
+  // is placed last, ties share a place. The release ships PAIRWISE outcomes per catalog (ranks.js), and a mean rank
+  // is 1 + sum over opponents of (their wins + half the ties) / laws, so any roster of methods over any set of
+  // catalogs is ranked here, on the same laws for every method. A snapshot is taken at one budget: every method at
+  // the same rung of its own ladder, or every method at the largest rung the reference machine timed within a time
+  // budget. The Friedman omnibus test is computed without the tie correction, which can only understate it; the
+  // critical difference is Nemenyi's at 5 %.
+  function ranksOf() { var R = window.RESULTS_V2_RANKS && window.RESULTS_V2_RANKS[REL]; return R && R.keys ? R : null; }
+  var NEMENYI = [0, 0, 1.960, 2.343, 2.569, 2.728, 2.850, 2.949, 3.031, 3.102, 3.164, 3.219, 3.268, 3.313, 3.354, 3.391, 3.426, 3.458, 3.489, 3.517, 3.544];   // q(0.05, k, inf) / sqrt(2)
+  function gammaQ(a, x) {   // regularised upper incomplete gamma: the chi-square tail
+    if (!(x > 0)) { return 1; }
+    var gl = lgamma(a), i;
+    if (x < a + 1) { var ap = a, sum = 1 / a, del = sum; for (i = 0; i < 500; i++) { ap += 1; del *= x / ap; sum += del; if (Math.abs(del) < Math.abs(sum) * 1e-14) { break; } } return Math.max(0, 1 - sum * Math.exp(-x + a * Math.log(x) - gl)); }
+    var b = x + 1 - a, c = 1e300, d = 1 / b, h = d;
+    for (i = 1; i < 500; i++) { var an = -i * (i - a); b += 2; d = an * d + b; if (Math.abs(d) < 1e-300) { d = 1e-300; } c = b + an / c; if (Math.abs(c) < 1e-300) { c = 1e-300; } d = 1 / d; var dl = d * c; h *= dl; if (Math.abs(dl - 1) < 1e-14) { break; } }
+    return Math.min(1, Math.exp(-x + a * Math.log(x) - gl) * h);
+  }
+  function isTimeSlot(slot) { return String(slot).charAt(0) === "t"; }
+  function slotRung(R, key, slot) { if (!isTimeSlot(slot)) { return +slot; } var r = (R.at[key] || {})[slot]; return r === undefined ? null : r; }
+  function slotSeconds(R, slot) { return R.seconds[R.budgets.indexOf(slot)]; }
+  function slotLabel(R, slot) { return isTimeSlot(slot) ? slotSeconds(R, slot) + " s per problem" : "budget " + slot; }
+  function lastTimed(key) { var rs = Object.keys(D.timing[key] || {}).map(Number); return rs.length ? Math.max.apply(null, rs) : null; }
+  function ranking(R, shown, slot, ki) {
+    var out = { roster: [], out: [], thin: [], blind: [], cats: [], n: 0 };
+    var cand = [], paired = function (a, b) { return R.pairs[a + "|" + b] || R.pairs[b + "|" + a]; };
+    shown.forEach(function (m) { var r = slotRung(R, m.key, slot); var has = r !== null && state.cats.some(function (c) { return cell(m.key, c, r); });
+      if (has) { cand.push({ m: m, r: r, cover: laws(state.cats.filter(function (c) { return cell(m.key, c, r); })) }); } else { out.out.push(m); } });
+    cand = cand.filter(function (x) { var ok = cand.length < 2 || cand.some(function (z) { return z !== x && paired(x.m.key, z.m.key); }); if (!ok) { out.blind.push(x.m); } return ok; });   // an overlay sealed before rankings existed
+    var top = Math.max.apply(null, cand.map(function (x) { return x.cover; }).concat([0]));
+    cand.forEach(function (x) { if (x.cover < 0.5 * top && !state.thin) { out.thin.push(x.m); } else { out.roster.push(x); } });
+    var ro = out.roster, k = ro.length; if (k < 2) { return out; }
+    var pair = function (a, b, c) { var e = R.pairs[a + "|" + b], flip = false; if (!e) { e = R.pairs[b + "|" + a]; flip = true; } var t = e && e[c] && e[c][String(slot)]; if (!t) { return null; } var wa = t[1 + 2 * ki], wb = t[2 + 2 * ki]; return { n: t[0], wa: flip ? wb : wa, wb: flip ? wa : wb }; };
+    out.cats = state.cats.filter(function (c) { return ro.every(function (x) { return cell(x.m.key, c, x.r); }) && ro.every(function (x, i) { return ro.every(function (z, j) { return j <= i || pair(x.m.key, z.m.key, c); }); }); });
+    if (!out.cats.length) { return out; }
+    var beat = ro.map(function () { return ro.map(function () { return { w: 0, t: 0, n: 0 }; }); });
+    ro.forEach(function (x, i) { ro.forEach(function (z, j) { if (j <= i) { return; } out.cats.forEach(function (c) { var t = pair(x.m.key, z.m.key, c); beat[i][j].w += t.wa; beat[j][i].w += t.wb; beat[i][j].t += t.n - t.wa - t.wb; beat[j][i].t += t.n - t.wa - t.wb; beat[i][j].n += t.n; beat[j][i].n += t.n; }); }); });
+    out.n = beat[0][1].n; out.beat = beat; out.k = k;
+    var key = R.keys[ki];
+    ro.forEach(function (x, i) { var lost = 0; ro.forEach(function (z, j) { if (j !== i) { lost += (beat[j][i].w + 0.5 * beat[j][i].t) / beat[j][i].n; } });
+      x.rank = 1 + lost; x.share = 1 - lost / (k - 1);
+      x.blank = out.cats.reduce(function (a, c) { var ce = cell(x.m.key, c, x.r), t = ce.m[key]; return a + ce.n - (t ? t[0] : 0); }, 0);
+      x.capped = isTimeSlot(slot) && lastTimed(x.m.key) === x.r; });
+    var dev = ro.reduce(function (a, x) { return a + Math.pow(x.rank - (k + 1) / 2, 2); }, 0);
+    out.chi2 = 12 * out.n / (k * (k + 1)) * dev; out.p = gammaQ((k - 1) / 2, out.chi2 / 2);
+    out.cd = (NEMENYI[k] || NEMENYI[NEMENYI.length - 1]) * Math.sqrt(k * (k + 1) / (6 * out.n));
+    out.order = ro.slice().sort(function (a, b) { return a.rank - b.rank; });
+    out.cliques = [];
+    out.order.forEach(function (x, i) { var g = out.order.filter(function (z, j) { return j >= i && z.rank - x.rank <= out.cd; }); if (g.length > 1 && !out.cliques.some(function (q) { return g.every(function (z) { return q.indexOf(z) >= 0; }); })) { out.cliques.push(g); } });
+    return out;
+  }
+  function rankSlots(R) { return state.xaxis === "time" ? R.budgets.filter(function (b) { return D.methods.filter(function (m) { return (R.at[m.key] || {})[b] !== undefined; }).length >= 2; }) : null; }
+  function bestBudget(R, shown) {   // the smallest time budget that the most methods can run within
+    var best = null, top = 0; R.budgets.forEach(function (b) { var n = shown.filter(function (m) { return slotRung(R, m.key, b) !== null; }).length; if (n > top) { top = n; best = b; } }); return best;
+  }
+  function renderRanks(shown) {
+    if (!ready("ranks.js")) { ensure("ranks.js", scheduleRender); return '<p class="v2hint">Loading the rankings…</p>'; }
+    var R = ranksOf(); if (!R) { return '<p class="v2hint">This release holds no rankings yet.</p>'; }
+    if (R.keys.indexOf(state.rmetric) < 0) { state.rmetric = R.keys[0]; }
+    var timed = state.xaxis === "time" && anyTime(), budgets = timed ? rankSlots(R) : [];
+    if (timed && budgets.indexOf(state.tbudget) < 0) { state.tbudget = bestBudget(R, shown) || budgets[0] || null; }
+    var slot = timed ? state.tbudget : String(state.rung), ki = R.keys.indexOf(state.rmetric), p = METRIC[state.rmetric];
+    var head = '<div class="v2viewbar"><span class="v2segwrap"><span class="v2lab">ranked on</span>' + pickButton("v2viewpick", 'data-axis="focus" aria-label="metric the methods are ranked on"', p.key) + " " + mhelp(p) +
+      (ki === 0 ? ' <span class="v2tag v2tag-primary" title="The ranking to quote: declared before the results were read.">primary</span>' : ' <span class="v2tag" title="For browsing; the ranking to quote is the primary one.">exploratory</span>') + "</span>" +
+      seg("xaxis", timed ? "time" : "rung", [["time", "the same time", "Every method at the largest budget the reference machine timed within the time limit"], ["rung", "the same budget", "Every method at the same rung of its own ladder"]].filter(function (o) { return o[0] !== "time" || anyTime(); }), "every method at", "what the methods are held equal on") +
+      (timed ? stepper("tbudget", state.tbudget, budgets, function (b) { return slotSeconds(R, b) + " s"; }, term("tbudget", "time limit"), "time limit per problem") : rungStepper(shown)) + "</div>";
+    if (shown.length < 2) { return head + '<p class="v2hint">Select at least two methods to rank.</p>'; }
+    if (slot === null) { return head + '<p class="v2hint">The reference machine has not timed two of the selected methods yet.</p>'; }
+    var lg = ranking(R, shown, slot, ki);
+    var sitOut = (lg.out.length ? '<p class="v2hint">' + esc(lg.out.map(function (m) { return m.label; }).join(", ")) + (timed ? " cannot finish a problem within " + slotSeconds(R, slot) + " s on the reference machine (or " + (lg.out.length > 1 ? "have" : "has") + " not been timed there) and " + (lg.out.length > 1 ? "sit" : "sits") + " out." : (lg.out.length > 1 ? " have" : " has") + " nothing finished at budget " + slot + " and " + (lg.out.length > 1 ? "sit" : "sits") + " out.") + "</p>" : "") +
+      (lg.blind.length ? '<p class="v2hint">' + esc(lg.blind.map(function (m) { return m.label; }).join(", ")) + (lg.blind.length > 1 ? " carry" : " carries") + " no pairwise outcomes in this release and " + (lg.blind.length > 1 ? "sit" : "sits") + " out.</p>" : "") +
+      (lg.thin.length ? '<p class="v2hint">' + esc(lg.thin.map(function (m) { return m.label; }).join(", ")) + (lg.thin.length > 1 ? " have" : " has") + " finished less than half of the laws the others have here and " + (lg.thin.length > 1 ? "sit" : "sits") + " out, so the rest are not reduced to those few laws. " + term("thin", "Show thin rungs") + " to rank them anyway.</p>" : "");
+    if (lg.roster.length < 2 || !lg.cats.length) { return head + '<p class="v2hint">Fewer than two of the selected methods share a finished catalog at ' + esc(slotLabel(R, slot)) + ": step to another one above.</p>" + sitOut; }
+    return head + rankDiagram(R, lg, p, slot) + sitOut + rankTables(R, lg, p, slot, timed) + rankLadder(R, shown, p, ki, timed);
+  }
+  function rankDiagram(R, lg, p, slot) {
+    var nr = narrow(), W = hostWidth(), k = lg.k, Lw = nr ? 138 : 190, Rr = nr ? 44 : 56, T = 64, rowH = 30, B = 42, H = T + k * rowH + B;
+    var xs = function (v) { return Lw + (v - 1) / (k - 1) * (W - Lw - Rr); }, reject = lg.p < 0.05;
+    var title = "Mean rank on " + p.label + " · " + slotLabel(R, slot);
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" class="v2chart v2distwide v2rankchart" role="img" aria-label="' + esc(title) + '"><text x="' + (nr ? 10 : Lw) + '" y="18" class="ct">' + esc(nr ? "Mean rank · " + slotLabel(R, slot) : title) + "</text>";
+    for (var g = 1; g <= k; g++) { s += '<line x1="' + xs(g).toFixed(1) + '" y1="' + T + '" x2="' + xs(g).toFixed(1) + '" y2="' + (H - B) + '" class="grid"/><text x="' + xs(g).toFixed(1) + '" y="' + (H - B + 16) + '" class="tick" text-anchor="middle">' + g + "</text>"; }
+    s += '<text x="' + ((Lw + W - Rr) / 2).toFixed(0) + '" y="' + (H - B + 33) + '" class="tick" text-anchor="middle">mean rank (1 = best of ' + k + ")</text>";
+    var cdw = Math.max(2, xs(1 + lg.cd) - xs(1));
+    s += '<g><title>' + esc("Critical difference " + lg.cd.toFixed(3)) + '</title><line x1="' + xs(1).toFixed(1) + '" y1="46" x2="' + (xs(1) + cdw).toFixed(1) + '" y2="46" class="v2cd"/><line x1="' + xs(1).toFixed(1) + '" y1="41" x2="' + xs(1).toFixed(1) + '" y2="51" class="v2cd"/><line x1="' + (xs(1) + cdw).toFixed(1) + '" y1="41" x2="' + (xs(1) + cdw).toFixed(1) + '" y2="51" class="v2cd"/>' +
+      '<text x="' + (xs(1) + cdw + 8).toFixed(1) + '" y="50" class="tick">critical difference ' + lg.cd.toFixed(2) + "</text></g>";
+    if (reject) { lg.cliques.forEach(function (q) { var is = q.map(function (x) { return lg.order.indexOf(x); }), rs = q.map(function (x) { return x.rank; });
+      s += '<rect x="' + (xs(Math.min.apply(null, rs)) - 9).toFixed(1) + '" y="' + (T + Math.min.apply(null, is) * rowH + 3) + '" width="' + (xs(Math.max.apply(null, rs)) - xs(Math.min.apply(null, rs)) + 18).toFixed(1) + '" height="' + ((Math.max.apply(null, is) - Math.min.apply(null, is) + 1) * rowH - 6) + '" rx="6" class="v2clique"/>'; }); }
+    lg.order.forEach(function (x, i) { var yy = T + (i + 0.5) * rowH, col = colorOf(x.m);
+      s += '<text x="' + (Lw - 12) + '" y="' + (yy + 4) + '" class="leg" text-anchor="end">' + esc(x.m.label + (x.m.local ? " (local)" : "")) + "</text>";
+      s += '<line x1="' + xs(1).toFixed(1) + '" y1="' + yy + '" x2="' + xs(x.rank).toFixed(1) + '" y2="' + yy + '" stroke="' + col + '" stroke-width="2" stroke-opacity="0.3"/>';
+      s += '<circle cx="' + xs(x.rank).toFixed(1) + '" cy="' + yy + '" r="6.5" fill="' + (x.capped ? "var(--surface)" : col) + '" stroke="' + col + '" stroke-width="2.5"><title>' + esc(x.m.label + ": mean rank " + x.rank.toFixed(2) + " of " + k + " at budget " + x.r + (x.capped ? ", its largest timed budget" : "") + "; wins " + (100 * x.share).toFixed(1) + " % of its comparisons; no answer on " + x.blank + " laws") + "</title></circle>";
+      s += '<text x="' + (xs(x.rank) + 12).toFixed(1) + '" y="' + (yy + 4) + '" class="tick">' + x.rank.toFixed(2) + "</text>"; });
+    return s + "</svg>" + '<p class="v2hint">' + k + " methods placed 1st to " + k + (k === 2 ? "nd" : k === 3 ? "rd" : "th") + " within each of " + lg.n.toLocaleString() + " laws (" + lg.cats.length + " catalogs every ranked method has finished); " + term("worstrank", "no answer ranks last, ties share a place") + ". " +
+      (reject ? term("friedman", "The omnibus test finds real rank differences") + " (p " + (lg.p < 0.001 ? "< 0.001" : "= " + lg.p.toFixed(3)) + ")" + (lg.cliques.length ? "; a shaded band joins methods closer than the " + term("cd", "critical difference") + ": no reliable difference between them, which is not the same as equal" : "; every gap exceeds the " + term("cd", "critical difference")) + "."
+        : "<b>" + term("friedman", "The omnibus test does not find rank differences") + " (p = " + lg.p.toFixed(3) + "), so no groups are drawn.</b>") +
+      (lg.order.some(function (x) { return x.capped; }) ? " A hollow dot is a method at its largest timed budget: more time could only move it left." : "") + "</p>";
+  }
+  function rankTables(R, lg, p, slot, timed) {
+    var k = lg.k, ord = lg.order, idx = ord.map(function (x) { return lg.roster.indexOf(x); });
+    var t1 = '<h3 class="v2h">Standings</h3><div class="v2table-wrap"><table class="v2table v2ranktable"><thead><tr><th>method</th><th>' + (timed ? "budget within " + slotSeconds(R, slot) + " s" : "budget") + "</th><th>mean rank</th><th>" + term("winshare", "comparisons won") + "</th><th>laws without an answer</th></tr></thead><tbody>" +
+      ord.map(function (x) { return '<tr><td><span class="v2sw" style="background:' + colorOf(x.m) + '"></span>' + esc(x.m.label) + "</td><td>" + x.r + (timed && refTime(x.m.key, x.r) ? ' <span class="v2ci-txt">' + refTime(x.m.key, x.r).toFixed(2) + " s</span>" : "") + "</td><td><b>" + x.rank.toFixed(2) + "</b></td><td>" + (100 * x.share).toFixed(1) + " %</td><td>" + x.blank.toLocaleString() + ' <span class="v2ci-txt">of ' + lg.n.toLocaleString() + "</span></td></tr>"; }).join("") + "</tbody></table></div>";
+    var t2 = '<h3 class="v2h">Head to head</h3><div class="v2table-wrap"><table class="v2table v2matrix v2h2h"><thead><tr><th>row beats column on</th>' + ord.map(function (x) { return '<th><span class="v2sw" style="background:' + colorOf(x.m) + '"></span>' + esc(x.m.label) + "</th>"; }).join("") + "</tr></thead><tbody>" +
+      ord.map(function (x, a) { return '<tr><td><span class="v2sw" style="background:' + colorOf(x.m) + '"></span>' + esc(x.m.label) + "</td>" + ord.map(function (z, b) { if (a === b) { return '<td class="v2na">·</td>'; } var e = lg.beat[idx[a]][idx[b]], w = e.w / e.n, l = lg.beat[idx[b]][idx[a]].w / e.n, rgb = accentRGB();
+        return '<td style="background:rgba(' + rgb.join(",") + "," + (0.04 + 0.5 * w).toFixed(2) + ')" title="' + esc(x.m.label + " beats " + z.m.label + " on " + e.w + ", ties on " + e.t + " and loses on " + lg.beat[idx[b]][idx[a]].w + " of " + e.n + " laws") + '">' + (w > l ? "<b>" : "") + (100 * w).toFixed(1) + " %" + (w > l ? "</b>" : "") + ' <span class="v2ci-txt">' + (100 * e.t / e.n).toFixed(0) + " % tied</span></td>"; }).join("") + "</tr>"; }).join("") + "</tbody></table></div>" +
+      '<p class="v2hint">Share of the laws on which the row’s answer is better than the column’s on ' + esc(p.label) + "; the rest are ties or losses. Bold: the row wins more often than it loses.</p>";
+    return t1 + t2;
+  }
+  function rankLadder(R, shown, p, ki, timed) {
+    var slots = timed ? rankSlots(R) : D.rungs.map(String), by = {}, tmin = Infinity, tmax = -Infinity;
+    slots.forEach(function (slot) { var lg = ranking(R, shown, slot, ki); if (lg.roster.length < 2 || !lg.cats.length) { return; }
+      var x = timed ? slotSeconds(R, slot) : +slot; if (timed) { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); }
+      lg.roster.forEach(function (e) { (by[e.m.key] = by[e.m.key] || { m: e.m, pts: [] }).pts.push({ x: x, v: e.share, lo: NaN, hi: NaN, thin: e.capped, title: e.m.label + " at " + slotLabel(R, slot) + ": wins " + (100 * e.share).toFixed(1) + " % of its comparisons, mean rank " + e.rank.toFixed(2) + " of " + lg.k + ", " + lg.n + " laws" }); }); });
+    var series = shown.filter(function (m) { return by[m.key]; }).map(function (m) { return { label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: by[m.key].pts }; });
+    if (!series.length) { return ""; }
+    var title = narrow() ? "Comparisons won" : "Comparisons won, along " + (timed ? "the time limit" : "the ladder"), rate = { kind: "rate", fmt: "pct", hist: null }, tr = timed ? timeRange(tmin, tmax) : [0, 0];
+    var svg = withState({ band: false, cross: false }, function () { return chartSVG({ title: title, aria: title, series: series, ymin: 0, ymax: 1, ticks: [0, 0.25, 0.5, 0.75, 1], tick: function (g) { return tickLabel(rate, g); }, ylabel: narrow() ? "won" : "comparisons won", timeAxis: timed, timeSource: "budget", tmin: tr[0], tmax: tr[1], zero: 0.5, xlabel: timed ? (narrow() ? "time limit (s, ref)" : "time limit per problem (s, log, reference machine)") : (narrow() ? "budget / problem" : "budget per problem (log scale)") }); });
+    return '<h3 class="v2h">Along ' + (timed ? "the time limit" : "the ladder") + '</h3><div class="v2charts v2one">' + svg + "</div>" +
+      '<p class="v2hint">' + term("winshare", "Comparisons won") + " is the mean rank on a scale that does not depend on how many methods are ranked, so it can be followed across budgets where the roster changes: 100 % beats every other method on every law, 50 % breaks even." + (timed ? " A hollow marker is a method at its largest timed budget." : "") + "</p>";
+  }
+
   // ---- shell -----------------------------------------------------------------------------------------------------
-  var VIEWS = [["curves", "Curves"], ["table", "Tables"], ["matrix", "Catalogs"], ["dist", "Distribution"], ["paired", "Paired Δ"]];
+  var VIEWS = [["curves", "Curves"], ["table", "Tables"], ["matrix", "Catalogs"], ["dist", "Distribution"], ["ranks", "Ranks"], ["paired", "Paired Δ"]];
+  // the metric a single-metric display shows: each of them keeps its own
+  function focusKey() { return state.view === "dist" ? "dmetric" : state.view === "ranks" ? "rmetric" : "focus"; }
   // Each display carries its own controls. A control that cannot change what is on screen is not shown.
   var USES = {
     curves: { stat: 1, pool: 1, ci: 1, thin: 1 },
     table: { plots: 1, rows: 1, stat: 1, pool: 1, ci: 1, rung: 1 },
     matrix: { focus: 1, stat: 1, rung: 1 },
-    dist: { focus: 1, stat: 1, rung: 1 },
+    dist: { focus: 1, rung: 1, pool: 1, thin: 1 },
+    ranks: { focus: 1, rung: 1, thin: 1 },
     paired: { plots: 1, base: 1, ci: 1, xaxis: 1, rung: 1 }
   };
   function usesFor(view) {
     var u = {}, src = USES[view] || {};
     Object.keys(src).forEach(function (k) { u[k] = src[k]; });
     if (view === "table" && state.rows !== "cats") { delete u.rung; }   // the budget only binds the by-catalog table
+    if (view === "dist" && METRIC[state.dmetric].kind !== "rate" && state.dmode === "rungs") { delete u.rung; }
+    if (view === "dist" && (METRIC[state.dmetric].kind === "rate" || state.dmode === "cats")) { delete u.pool; }
+    if (view === "dist" && (METRIC[state.dmetric].kind === "rate" || state.dmode === "cats")) { delete u.thin; }
+    if (view === "ranks" && state.xaxis === "time" && anyTime()) { delete u.rung; }
     return u;
   }
   function shell() {
@@ -743,7 +1041,7 @@
       '<div class="v2panel v2panel-show"><h3><span class="v2showtitle">Plots</span> <span class="v2hint v2metcount"></span></h3>' +
       '<div class="v2row" data-uses="plots"><input type="search" class="v2q" placeholder="filter metrics" aria-label="filter metrics"><label><input type="checkbox" class="v2tier"> show all ' + D.metrics.length + '</label></div>' +
       '<div class="v2metrics" data-uses="plots">' + metricList + '</div>' +
-      '<div class="v2row" data-uses="focus"><span class="v2lab">metric</span>' + pickButton("v2focus", 'data-axis="focus" aria-label="metric shown in this view"', state.focus) + '</div>' +
+      '<div class="v2row" data-uses="focus"><span class="v2lab">metric</span>' + pickButton("v2focus", 'data-axis="focus" aria-label="metric shown in this view"', state[focusKey()]) + '</div>' +
       '<div class="v2row" data-uses="rows"><span class="v2lab">rows</span><label><input type="radio" name="v2rows" value="rungs"> one per budget</label><label><input type="radio" name="v2rows" value="cats"> one per catalog</label></div>' +
       '<div class="v2row" data-uses="base"><span class="v2lab">baseline</span><select class="v2base" aria-label="baseline method">' + D.methods.filter(withData).map(function (m) { return '<option value="' + m.key + '">' + esc(m.label) + '</option>'; }).join("") + '</select></div>' +
       '<div class="v2row" data-uses="rung"><span class="v2lab">budget</span><select class="v2rung" aria-label="budget per problem">' + D.rungs.map(function (r) { return '<option value="' + r + '">' + r + '</option>'; }).join("") + '</select><span class="v2hint">candidates or iterations, per method</span></div></div>' +
@@ -779,14 +1077,15 @@
     root.querySelectorAll("input[name=v2pool]").forEach(function (i) { i.checked = i.value === state.pool; });
     root.querySelectorAll("input[name=v2xaxis]").forEach(function (i) { i.checked = i.value === state.xaxis; });
     root.querySelector(".v2band").checked = state.band; root.querySelector(".v2cross").checked = state.cross; root.querySelector(".v2thin").checked = state.thin;
-    setPick(root.querySelector(".v2focus"), state.focus); root.querySelector(".v2rung").value = String(state.rung);
+    setPick(root.querySelector(".v2focus"), state[focusKey()]); root.querySelector(".v2rung").value = String(state.rung);
     root.querySelectorAll("input[name=v2rows]").forEach(function (i) { i.checked = i.value === state.rows; });
     if (state.base) { root.querySelector(".v2base").value = state.base; }
     root.querySelectorAll(".v2tab").forEach(function (b) { b.classList.toggle("active", b.dataset.view === state.view); b.setAttribute("aria-selected", b.dataset.view === state.view ? "true" : "false"); });
     root.querySelectorAll(".v2swatch").forEach(function (i) { var m = D.methods.filter(function (x) { return x.key === i.dataset.m; })[0]; if (m && document.activeElement !== i) { i.value = colorOf(m); } });
     root.querySelectorAll(".v2reset").forEach(function (b) { b.hidden = !userColors[b.dataset.m]; });
-    root.querySelector(".v2metcount").textContent = state.view === "matrix" || state.view === "dist" ? "" : plotMetrics().length + " plotted";
-    root.querySelector(".v2showtitle").textContent = state.view === "matrix" || state.view === "dist" ? "Metric" : state.view === "paired" ? "Contrast" : "Plots";
+    var single = state.view === "matrix" || state.view === "dist" || state.view === "ranks";
+    root.querySelector(".v2metcount").textContent = single ? "" : plotMetrics().length + " plotted";
+    root.querySelector(".v2showtitle").textContent = single ? "Metric" : state.view === "paired" ? "Contrast" : "Plots";
     var uses = usesFor(state.view);   // hide every control this display cannot use, then the panels left empty
     root.querySelectorAll("[data-uses]").forEach(function (el) { el.hidden = !el.dataset.uses.split(" ").some(function (k) { return uses[k]; }); });
     root.querySelectorAll(".v2panel").forEach(function (p) {
@@ -801,17 +1100,25 @@
     try {
       syncControls();
       var shown = shownMethods(), view = root.querySelector(".v2view");
+      if (!rungChosen) { rungChosen = true; var br = bestRung(shown); if (br) { state.rung = br; } syncControls(); }
       if (state.stat === "median" && state.view !== "dist" && state.view !== "paired") {   // histograms the current view needs
         (state.view === "matrix" ? [METRIC[state.focus]] : D.metrics.filter(function (m) { return plotAxes().indexOf(m.key) >= 0; })).forEach(function (m) { if (m.kind === "cont") { ensure("hist/" + m.key + ".js", scheduleRender); } });
       }
       renderHeadline();
-      view.innerHTML = state.view === "table" ? renderTable(shown) : state.view === "matrix" ? renderMatrix(shown) : state.view === "dist" ? renderDist(shown) : state.view === "paired" ? renderPaired(shown) : renderCurves(shown);
+      view.innerHTML = state.view === "table" ? renderTable(shown) : state.view === "matrix" ? renderMatrix(shown) : state.view === "dist" ? renderDist(shown) : state.view === "ranks" ? renderRanks(shown) : state.view === "paired" ? renderPaired(shown) : renderCurves(shown);
       if (pickerFor && !document.body.contains(pickerFor)) { closePicker(); }
       root.querySelector(".v2err").textContent = ""; save();
     } catch (e) { root.querySelector(".v2err").textContent = "The explorer hit an error while drawing: " + (e && e.message ? e.message : e) + ". Reload the page, or press “all” under Catalogs to reset the selection."; if (window.console) { console.error(e); } }
   }
 
   // ---- events ----------------------------------------------------------------------------------------------------
+  var SETTABLE = { rung: 1, dmode: 1, dnorm: 1, dmetric: 1, xaxis: 1, tbudget: 1 };
+  function setState(key, val) {
+    if (!SETTABLE[key]) { return; }
+    if (key === "rung") { var r = parseInt(val, 10); if (D.rungs.indexOf(r) >= 0) { state.rung = r; } return; }
+    if (key === "dmetric" && !METRIC[val]) { return; }
+    state[key] = val;
+  }
   shell();
   root.addEventListener("change", function (e) {
     var t = e.target;
@@ -821,6 +1128,7 @@
     else if (t.name === "v2stat") { state.stat = t.value; } else if (t.name === "v2pool") { state.pool = t.value; } else if (t.name === "v2xaxis") { state.xaxis = t.value; } else if (t.name === "v2rows") { state.rows = t.value; }
     else if (t.classList.contains("v2band")) { state.band = t.checked; } else if (t.classList.contains("v2cross")) { state.cross = t.checked; } else if (t.classList.contains("v2thin")) { state.thin = t.checked; } else if (t.classList.contains("v2tier")) { state.tier = t.checked ? "all" : "main"; }
     else if (t.classList.contains("v2rung")) { state.rung = parseInt(t.value, 10); } else if (t.classList.contains("v2base")) { state.base = t.value; }
+    else if (t.dataset.state) { setState(t.dataset.state, t.value); }
     else if (t.classList.contains("v2swatch")) { userColors[t.dataset.m] = t.value; writeCookie(userColors); root.querySelector(".v2cookie").hidden = false; }
     else { return; }
     render();
@@ -829,6 +1137,7 @@
   root.addEventListener("click", function (e) {
     var b = e.target.closest ? e.target.closest("button") : null; if (!b || !root.contains(b) || b.classList.contains("v2help")) { return; }
     if (b.dataset.view) { state.view = b.dataset.view; render(); return; }
+    if (b.dataset.set) { var kv = b.dataset.set.split(":"); setState(kv[0], kv.slice(1).join(":")); render(); return; }
     if (b.classList.contains("v2reset")) { delete userColors[b.dataset.m]; writeCookie(userColors); render(); return; }
     if (b.classList.contains("v2rmplot")) { state.plots.splice(+b.dataset.i, 1); render(); return; }
     var act = b.dataset.act; if (!act) { return; }
@@ -899,7 +1208,7 @@
     pickerEl.addEventListener("click", function (e) {
       var it = e.target.closest ? e.target.closest(".v2pickitem") : null;
       if (!it || it.disabled) { return; }
-      if (axis === "focus") { state.focus = it.dataset.k; }
+      if (axis === "focus") { state[focusKey()] = it.dataset.k; }
       else if (btn.dataset.i !== undefined) { state.plots[+btn.dataset.i][axis] = it.dataset.k; }
       closePicker(); render();
     });

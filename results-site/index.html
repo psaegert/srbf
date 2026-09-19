@@ -210,17 +210,18 @@
         and NeSymReS with its released model; PySR, the Flash-ANSR series and the training-prior
         reference appear as their units finish. Two fixed charts above the explorer carry the
         release's headline: what a method recovers against what it costs, and how well an answer fits
-        against how long it is. Cost is seconds per problem, measured where each unit ran until the
-        reference machine has timed every method shown; the explorer's x axis switches between that
-        and the candidate budget, which only the methods that draw candidates have (PySR spends a
-        time limit instead).
+        against how long it is. Cost is seconds per problem on one reference machine, the only timing
+        this release publishes; the explorer's x axis switches between that and the candidate budget,
+        which only the methods that draw candidates have (PySR spends search iterations instead).
         Every metric of the 2026-07 release is available there under the same definition, plus
         symbolic recovery in canonical form, the MDL ratio, R², relative recovery, variable-set
         precision and recall, the Pareto rank and the generation time. Paired comparisons in 2026-09
         are draw-1 contrasts on the same laws (exact McNemar for rates, paired t and sign tests
-        otherwise); the repeated-draw noise margins and the Ranks view described below belong to
-        <strong>2026-07 (paper)</strong> and return for 2026-09 once further draws exist. The rest of
-        this section describes the 2026-07 release.
+        otherwise); the repeated-draw noise margins described below belong to
+        <strong>2026-07 (paper)</strong> and return for 2026-09 once further draws exist. Both
+        releases have a <a href="#ranks">Ranks</a> view; the Distribution view of 2026-09 shows, for
+        any metric, one histogram per method, the cumulative curves, a box per catalog and the
+        quartiles along the ladder. The rest of this section describes the 2026-07 release.
       </p>
 
       <h3>Provenance</h3>
@@ -468,6 +469,17 @@
         (held-out log&#8321;&#8320; FVU); every other metric's ranking is
         exploratory browsing; the metric menu is grouped accordingly, and a small badge on the
         Metric control says which kind is on screen.
+      </p>
+      <p>
+        In <strong>2026-09</strong> the ranking follows the selection: any set of methods, over any
+        set of catalogs, always on the laws every ranked method has finished. The methods are held
+        equal either on the rung of their own ladder or on time, each at the largest budget the
+        reference machine timed within the chosen limit per problem; a method that cannot finish
+        within it sits out, and one whose whole ladder fits is drawn hollow. A method without a
+        usable answer for a law ranks last on it, on every ranking metric. Under the diagram, the
+        standings give each method's mean rank and the share of head-to-head comparisons it wins, a
+        table sets every method against every other, and a curve follows the standings along the
+        ladder.
       </p>
     </section>
 

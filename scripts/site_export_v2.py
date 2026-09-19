@@ -145,7 +145,16 @@ METRICS = [
 RATE_KEYS = [m[0] for m in METRICS if m[4] == "rate"]
 CONT_KEYS = [m[0] for m in METRICS if m[4] == "cont"]
 HIST_SPECS = {m[0]: m[8] for m in METRICS if m[8]}
+METRIC_HIGHER = {m[0]: m[5] for m in METRICS}
 PAIRED_KEYS = ["numeric_recovery_val", "symbolic_recovery", "success", "log10_fvu_val", "r2_val", "mdl_ratio", "expr_length_ratio", "f1_score"]
+# The Ranks view: within every law the methods are placed 1st, 2nd, ... on one continuous metric, a method without a
+# usable answer last. A mean rank over any set of laws and any roster of methods follows from PAIRWISE outcomes alone
+# (rank_i = 1 + sum_j [j beats i] + 0.5 [j ties i]), and pairwise counts add up over catalogs, so that is what ships:
+# per pair x catalog x slot, [n laws, then (wins of the first, wins of the second) per rank key]. A slot is a rung
+# ("64": both methods at that rung) or a time budget ("t3": each method at its largest rung the reference machine
+# timed at or under 3 s per problem). The first key is the primary league.
+RANK_KEYS = ["log10_fvu_val", "r2_val", "mdl_ratio", "expr_length_ratio", "f1_score"]
+TIME_BUDGETS = [0.1, 0.3, 1, 3, 10, 30, 100, 300, 1000]
 
 
 def registry_json() -> list[dict[str, Any]]:
@@ -259,6 +268,46 @@ def paired_cell(rows_a: dict[int, dict[str, Any]], rows_b: dict[int, dict[str, A
     return {"n": len(common), "m": out}
 
 
+def budget_key(t: float) -> str:
+    return "t" + ("%g" % t)
+
+
+def rank_score(value: float | None, higher: bool | None) -> float:
+    """Oriented so that larger is better; a law without a usable value scores -inf (placed last). `higher` None
+    marks a ratio whose ideal is 1: closer to 1 on the log scale is better."""
+    if value is None or math.isnan(value):
+        return -math.inf
+    if higher is True:
+        return value
+    if higher is False:
+        return -value
+    return -abs(math.log(value)) if value > 0 and math.isfinite(value) else -math.inf
+
+
+def rank_pair_cell(rows_a: dict[int, dict[str, Any]], rows_b: dict[int, dict[str, Any]]) -> list[int] | None:
+    common = sorted(set(rows_a) & set(rows_b))
+    if not common:
+        return None
+    out = [len(common)]
+    for k in RANK_KEYS:
+        higher = METRIC_HIGHER[k]
+        wa = wb = 0
+        for i in common:
+            sa, sb = rank_score(rows_a[i][k], higher), rank_score(rows_b[i][k], higher)
+            if sa > sb:
+                wa += 1
+            elif sb > sa:
+                wb += 1
+        out += [wa, wb]
+    return out
+
+
+def rung_within(timing: dict[str, Any], key: str, budget: float, have: set[int]) -> int | None:
+    """The largest rung of `key` the reference machine timed at or under `budget` seconds (and that has results)."""
+    fits = [int(r) for r, sec in (timing.get(key) or {}).items() if sec is not None and sec <= budget and int(r) in have]
+    return max(fits) if fits else None
+
+
 # ---- status / catalogs / timing ---------------------------------------------------------------------------------
 def load_units(root: str, ukey: str | None, key: str) -> int | None:
     for cand in ([os.path.join(root, f"units_{ukey}_d1.txt")] if ukey else []) + [os.path.join(root, "t8s1_units_draw1.txt")]:
@@ -344,6 +393,35 @@ def main() -> None:
                 if pc:
                     paired.setdefault(ka + "|" + kb, {}).setdefault(c, {})[str(r)] = pc
 
+    tpath0 = os.path.join(a.root, "timing.json")
+    timing_all: dict[str, Any] = {}
+    if os.path.exists(tpath0):
+        timing_all = {k: v for k, v in json.load(open(tpath0)).items() if isinstance(v, dict) and not k.startswith("__")}
+
+    def leagues(pairs: list[tuple[str, str]], keys: list[str]) -> dict[str, Any]:
+        """Pairwise rank outcomes for `pairs`, and for every method of `keys` the rung a time budget buys it."""
+        rungs_of = {k: {r for (_c, r) in data.get(k, {}) if usable(k, r)} for k in {x for p in pairs for x in p} | set(keys)}
+        at: dict[str, dict[str, int]] = {k: {} for k in rungs_of}
+        for k in rungs_of:
+            for t in TIME_BUDGETS:
+                r = rung_within(timing_all, k, t, rungs_of[k])
+                if r is not None:
+                    at[k][budget_key(t)] = r
+        out: dict[str, Any] = {}
+        for ka, kb in pairs:
+            slots = [(str(r), r, r) for r in sorted(rungs_of[ka] & rungs_of[kb])]
+            slots += [(b, at[ka][b], at[kb][b]) for b in (budget_key(t) for t in TIME_BUDGETS) if b in at[ka] and b in at[kb]]
+            for slot, ra, rb in slots:
+                for c in sizes:
+                    rows_a, rows_b = data.get(ka, {}).get((c, ra)), data.get(kb, {}).get((c, rb))
+                    if not rows_a or not rows_b:
+                        continue
+                    pc = rank_pair_cell(rows_a, rows_b)
+                    if pc:
+                        out.setdefault(ka + "|" + kb, {}).setdefault(c, {})[slot] = pc
+        return {"keys": RANK_KEYS, "budgets": [budget_key(t) for t in TIME_BUDGETS], "seconds": TIME_BUDGETS,
+                "at": {k: at[k] for k in keys}, "pairs": out}
+
     def build(keys: list[str], base: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
         methods = [m for m in METHODS if m[0] in keys]
         cells: dict[str, Any] = {}
@@ -374,7 +452,7 @@ def main() -> None:
                    "release": {"id": a.release, "title": a.title or a.release, "notes": a.notes, "generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
                                "scoring": "Every method submits one answer per problem and chooses it by its own rule; the rule is named next to the method, along with who chose its configuration.",
                                "judge": "One judge for every answer: the predicted expression and the law are compared in one certified canonical form (SimpliPy acj-5-4-llm, f64), and numeric recovery is float32 precision on 512 held-out points."},
-                   "catalogs": cats, "rungs": RUNGS, "nb": NB, "metrics": registry_json(), "paired_keys": PAIRED_KEYS,
+                   "catalogs": cats, "rungs": RUNGS, "nb": NB, "metrics": registry_json(), "paired_keys": PAIRED_KEYS, "rank_keys": RANK_KEYS,
                    # budget: what one rung of the ladder buys. "candidates" is a count a generative method draws;
                    # PySR's rungs are search iterations, which have no place on the candidate axis of the site.
                    "methods": [{"key": k, "label": l, "param": p, "budget": p if p in ("iterations", "seconds") else "candidates",
@@ -384,7 +462,7 @@ def main() -> None:
                    "cells": cells, "status": status, "timing": timing, "timing_note": timing_note}
         return payload, hists, paired
 
-    def write_set(payload: dict[str, Any], hists: dict[str, Any], paired: dict[str, Any], out_js: str, out_dir: str, var: str, note: str) -> None:
+    def write_set(payload: dict[str, Any], hists: dict[str, Any], paired: dict[str, Any], ranks: dict[str, Any], out_js: str, out_dir: str, var: str, note: str) -> None:
         os.makedirs(os.path.join(out_dir, "hist"), exist_ok=True)
         with open(out_js, "w") as fh:
             fh.write(f"window.{var} = " + json.dumps(payload, separators=(",", ":")) + ";\n")
@@ -397,17 +475,23 @@ def main() -> None:
         with open(os.path.join(out_dir, "paired.js"), "w") as fh:
             fh.write("window.RESULTS_V2_PAIRED=window.RESULTS_V2_PAIRED||{};(function(){var R=window.RESULTS_V2_PAIRED;R[%s]=R[%s]||{};Object.assign(R[%s],%s);})();\n" % (
                 rel, rel, rel, json.dumps(paired, separators=(",", ":"))))
+        with open(os.path.join(out_dir, "ranks.js"), "w") as fh:   # merged like paired.js: an overlay adds its pairs and its own budget rungs
+            fh.write("window.RESULTS_V2_RANKS=window.RESULTS_V2_RANKS||{};(function(){var R=window.RESULTS_V2_RANKS;R[%s]=R[%s]||{keys:%s,budgets:%s,seconds:%s,at:{},pairs:{}};Object.assign(R[%s].at,%s);Object.assign(R[%s].pairs,%s);})();\n" % (
+                rel, rel, json.dumps(ranks["keys"]), json.dumps(ranks["budgets"]), json.dumps(ranks["seconds"]), rel, json.dumps(ranks["at"], separators=(",", ":")),
+                rel, json.dumps(ranks["pairs"], separators=(",", ":"))))
         with_data = [k for k in payload["cells"] if payload["cells"][k]]
         print(f"{note}: {out_js} ({os.path.getsize(out_js) // 1024} kB), hist/ {len(hists)} files, paired {len(paired)} pairs; methods with data: {with_data}; status {payload['status']}")
 
     payload, hists, paired = build(public, rel_base(out_dir, site_dir))
-    write_set(payload, hists, paired, a.out, out_dir, "RESULTS_V2", f"public release {a.release}")
+    ranks = leagues([(ka, kb) for i, ka in enumerate(public) for kb in public[i + 1:]], public)
+    write_set(payload, hists, paired, ranks, a.out, out_dir, "RESULTS_V2", f"public release {a.release}")
     if private:
         pdir = os.path.abspath(a.private_dir)
         os.makedirs(pdir, exist_ok=True)
         ppayload, phists, ppaired = build(private, rel_base(pdir, site_dir))
         contrasts([(ka, kb) for ka in private for kb in public], ppaired)   # private-vs-public contrasts stay private
-        write_set(ppayload, phists, ppaired, os.path.join(pdir, "results_v2_private.js"), pdir, "RESULTS_V2_PRIVATE", f"private overlay ({len(private)} method(s), never inside the deployed tree)")
+        pranks = leagues([(ka, kb) for i, ka in enumerate(private) for kb in private[i + 1:]] + [(ka, kb) for ka in private for kb in public], private)
+        write_set(ppayload, phists, ppaired, pranks, os.path.join(pdir, "results_v2_private.js"), pdir, "RESULTS_V2_PRIVATE", f"private overlay ({len(private)} method(s), never inside the deployed tree)")
 
 
 if __name__ == "__main__":

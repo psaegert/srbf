@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Copy lint for the results site: banned patterns in VIEWER-FACING text.
 
-Two surfaces: the full prose of index.html, and the string literals of explorer.js
-(comments are internal and exempt). Every entry here is a fixed bug that must not return —
+Three surfaces: the full prose of index.html, and the string literals of explorer.js and
+explorer_v2.js (comments are internal and exempt). Every entry here is a fixed bug that must not return —
 extend the list whenever a new wording bug is fixed.
 """
 import re
@@ -85,6 +85,7 @@ def main() -> int:
     surfaces = {
         "index.html": (SITE / "index.html").read_text(encoding="utf-8"),
         "explorer.js (strings)": "\n".join(js_strings((SITE / "explorer.js").read_text(encoding="utf-8"))),
+        "explorer_v2.js (strings)": "\n".join(js_strings((SITE / "explorer_v2.js").read_text(encoding="utf-8"))),
     }
     drift = va_drift(surfaces["index.html"])
     if drift:
@@ -97,7 +98,8 @@ def main() -> int:
     # em-dash budget: AI prose overuses them; colons, semicolons and structure read better.
     # index.html allows 0; explorer.js strings allow 2 (the matrix-diagonal placeholders).
     for name, text, budget in [("index.html", surfaces["index.html"], 0),
-                               ("explorer.js (strings)", surfaces["explorer.js (strings)"], 2)]:
+                               ("explorer.js (strings)", surfaces["explorer.js (strings)"], 2),
+                               ("explorer_v2.js (strings)", surfaces["explorer_v2.js (strings)"], 0)]:
         count = text.count("—") + text.count("&mdash;")
         if count > budget:
             failures.append(f"{name}: {count} em-dashes (budget {budget}) — rewrite with "
@@ -106,7 +108,7 @@ def main() -> int:
         print(f"COPY LINT: {len(failures)} banned pattern(s) found:\n")
         print("\n".join(failures))
         return 1
-    print(f"copy lint clean ({len(BANNED)} banned patterns checked on 2 surfaces)")
+    print(f"copy lint clean ({len(BANNED)} banned patterns checked on {len(surfaces)} surfaces)")
     return 0
 
 
