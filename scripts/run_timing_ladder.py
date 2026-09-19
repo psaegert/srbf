@@ -95,18 +95,21 @@ def budget_decision(rung_seconds: dict[int, float], done_rungs: list[int], next_
     return True, f"rung {next_rung} projected {projected / 3600:.1f} h, spent {spent / 3600:.1f} h of {budget_seconds / 3600:.1f} h"
 
 
-def timing_config(cfg: Any, experiments: list[str], data_dir: Path, model_name: str, model_path: str | None,
+def timing_config(cfg: Any, experiments: list[str], data_dir: Path | None, model_name: str, model_path: str | None,
                   refiner_workers: int | None) -> dict:
+    """The derived config: every data source pointed at its frozen file (``data_dir``), or left as the config
+    draws it -- the whole catalog -- when ``data_dir`` is None (--full-suite)."""
     import copy
 
     out = copy.deepcopy(cfg)
     for e in experiments:
         block = out["experiments"][e]
-        frozen = data_dir / f"{e}.npz"
-        if not frozen.exists():
-            raise FileNotFoundError(f"{frozen}: freeze the subset first (scripts/freeze_timing_subset.py)")
         block["data_source"] = dict(block.get("data_source") or select_experiment(cfg, e)["data_source"])
-        block["data_source"]["catalog"] = str(frozen)
+        if data_dir is not None:
+            frozen = data_dir / f"{e}.npz"
+            if not frozen.exists():
+                raise FileNotFoundError(f"{frozen}: freeze the subset first (scripts/freeze_timing_subset.py)")
+            block["data_source"]["catalog"] = str(frozen)
         adapter = block["model_adapter"] = dict(block.get("model_adapter") or select_experiment(cfg, e)["model_adapter"])
         if model_path:
             adapter["model_path"] = model_path
@@ -114,7 +117,7 @@ def timing_config(cfg: Any, experiments: list[str], data_dir: Path, model_name: 
             adapter["refiner_workers"] = int(refiner_workers)
         runner = block["runner"] = dict(block.get("runner") or select_experiment(cfg, e)["runner"])
         output = runner["output"]
-        prefix = f"{{{{ROOT}}}}/results/evaluation/timing/{model_name}/{e}/"
+        prefix = f"{{{{ROOT}}}}/results/evaluation/{'timing' if data_dir is not None else 'suite'}/{model_name}/{e}/"
         if isinstance(output, Sweep):
             runner["output"] = Sweep([prefix + Path(v).name for v in output.values], name=output.name)
         else:
@@ -125,7 +128,10 @@ def timing_config(cfg: Any, experiments: list[str], data_dir: Path, model_name: 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("-c", "--config", required=True, help="a scaling config with a `ladder` sweep axis")
-    ap.add_argument("--data-dir", required=True, help="the frozen timing subset (<catalog>.npz + timing_subset.json)")
+    ap.add_argument("--data-dir", help="the frozen timing subset (<catalog>.npz + timing_subset.json); required unless --full-suite")
+    ap.add_argument("--full-suite", action="store_true",
+                    help="run every catalog as the config draws it (the whole suite) instead of the frozen subset: a "
+                         "method evaluated on the reference machine itself, whose run is its measurement (owner 2026-09-19)")
     ap.add_argument("--model-name", required=True, help="output directory name under results/evaluation/timing/")
     ap.add_argument("--model-path", help="override the config's model_path (an RL checkpoint directory, say)")
     ap.add_argument("--rungs", help="comma-separated rungs (default: the config's ladder)")
@@ -150,13 +156,16 @@ def main() -> int:
         wanted = a.experiments.split(",")
         experiments = [e for e in experiments if e in wanted]
     ladder = [int(c) for c in a.rungs.split(",")] if a.rungs else ladder_of(cfg, experiments[0])
-    data_dir = Path(a.data_dir)
-    work = Path(a.root) / "timing" / a.model_name
+    if a.full_suite == bool(a.data_dir):
+        sys.exit("pass exactly one of --data-dir (the frozen subset) and --full-suite")
+    data_dir = None if a.full_suite else Path(a.data_dir)
+    work = Path(a.root) / ("suite" if a.full_suite else "timing") / a.model_name
     marks = work / "marks"
     marks.mkdir(parents=True, exist_ok=True)
     derived = timing_config(cfg, experiments, data_dir, a.model_name, a.model_path, a.refiner_workers)
     config_path = work / (Path(a.config).stem + ".timing.yaml")
-    header = (f"# Timing ladder of {a.model_name} on the frozen subset {data_dir}; derived from {a.config} by "
+    scope = "the whole suite" if data_dir is None else f"the frozen subset {data_dir}"
+    header = (f"# Timing ladder of {a.model_name} on {scope}; derived from {a.config} by "
               f"scripts/run_timing_ladder.py; do not edit by hand.\n")
     config_path.write_text(header + yaml.dump(derived, sort_keys=False, width=200))
     plan = [(e, c) for c in ladder for e in experiments]

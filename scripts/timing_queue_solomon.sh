@@ -39,6 +39,9 @@ M3=${M3:-$K/models/flash-ansr-v25.0-T8-3M}
 M120=${M120:-$K/models/flash-ansr-v25.0-T8-120M}
 RL20=${RL20:-}; RL3=${RL3:-}; RL120=${RL120:-}     # RL checkpoint directories (empty: row skipped)
 PYSR_REPEATS=${PYSR_REPEATS:-1}
+PYSR=${PYSR:-$HOME/venvs/pysr23/bin/python}          # PySR's own environment: the full-suite runs' worker
+PYSR_SUITE_LADDER=${PYSR_SUITE_LADDER:-1,2,4,8,16,32,64,128,256,512,1024}   # iterations, bottom up
+PYSR_SUITE_RUNS=${PYSR_SUITE_RUNS:-3}                # owner 2026-09-10: three PySR runs, all on solomon
 # the baselines (owner's order 2026-09-16: e2e, nesymres, diffsym, pysr -- before any T8 row)
 VENV_LEGACY=${VENV_LEGACY:-$K/venv_legacy}              # srbf[baselines] + patched NeSymReS/E2E clones (build_solomon_baselines.sh)
 E2E_MODEL=${E2E_MODEL:-$HOME/Projects/flash-ansr/models/e2e/model1.pt}
@@ -144,6 +147,26 @@ elif $PY -c 'import flash_ansr_hybrid' 2>/dev/null; then
         done
     done
 else say "flash_ansr_hybrid not importable: PySR-alone skipped"; fi
+
+# ---- 3b. PySR on the whole suite (owner 2026-09-19) ------------------------------------------------------------
+# PySR is evaluated on the full srbf suite here, on the reference machine, so its main evaluation IS its measured
+# time: no separate timing run. One problem at a time with the whole machine, iterations bottom up; each run is
+# its own root (a fresh draw of every catalog, like another FLASH_ANSR_ROOT for a Flash-ANSR draw).
+pysr_suite_run() {   # run index
+    local i=$1 RR=$K/pysr_suite/run$1
+    done_ pysr_suite_run$i && return 0
+    stop_requested
+    mkdir -p $RR/configs
+    $PY $S/make_pysr_suite_config.py --from $CFG_DIR/flash-ansr-v25.0-T8-20M_srbf.yaml --python $PYSR \
+        --out $RR/configs/pysr_suite.yaml --ladder $PYSR_SUITE_LADDER | tee -a $LOG
+    say "pysr suite run $i: iterations $PYSR_SUITE_LADDER, root $RR, worker $PYSR"
+    $PY $S/run_timing_ladder.py -c $RR/configs/pysr_suite.yaml --full-suite --model-name pysr --root $RR 2>&1 | grep -v Warning | tee -a $LOG
+    ls $RR/suite/pysr/marks/*.failed > /dev/null 2>&1 && { say "pysr suite run $i has failed units; not marked done"; return 1; }
+    mark pysr_suite_run$i
+}
+if [ "${RUN_PYSR_SUITE:-1}" = 1 ] && [ -x "$PYSR" ]; then
+    for i in $(seq 1 $PYSR_SUITE_RUNS); do pysr_suite_run $i || break; done
+else say "RUN_PYSR_SUITE=0 or no PySR environment at $PYSR: PySR on the suite skipped"; fi
 
 # ---- 4. the T8 rows: only with the scoring ruling ------------------------------------------------------------------
 ladder() {   # name path config
