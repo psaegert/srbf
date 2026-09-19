@@ -6,6 +6,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.1] - 2026-09-19
+
+### Fixed
+- **The `flash_ansr_hybrid` adapter builds again.** Its builder read `emission` from the Flash-ANSR
+  adapter, which has not carried it since the flash-ansr 0.17 port made emission a sampling policy
+  of the `flash_ansr` block; every hybrid config failed at build time with an `AttributeError`. The
+  builder now takes emission from the `flash_ansr` block, as the Flash-ANSR builder does.
+- **`scripts/make_hybrid_config.py` writes configs this release can run:** adapter type
+  `flash_ansr_hybrid` (not the retired `flash_ansr_pysr`); a `pysr:` block holding only
+  `PySRSettings` fields, since PySR runs in-process (the worker-protocol keys and the `--pysr-python`,
+  `--worker-log` and `--engine` options are gone); `draws` instead of `choices`; and
+  `ranking: {mode: mdl}`, the two-part code, instead of the fixed `mdl_strength: 1.0e-2`.
+
+### Changed
+- **Timing read-out: failures do not count towards the time.** `scripts/timing_readout.py` drops
+  every row that carries an error or `prediction_success: False`, whether or not a `fit_time` was
+  recorded, so the reported seconds are the mean over the problems a method answered. Before, a fit
+  that returned without a surviving candidate was still counted.
+- **`scripts/site_export_v2.py` publishes no as-run wall clock:** `fit_time` and `generation_time`
+  are no longer release metrics; the only time a release carries is the reference-machine table.
+
+### Added
+- `scripts/timing_queue_solomon.sh`: `RUN_PYSR=0` and `RUN_NESYMRES=0` defer the PySR-alone and
+  NeSymReS rows of the timing queue.
+
 ## [0.20.0] - 2026-09-16
 
 ### Changed
