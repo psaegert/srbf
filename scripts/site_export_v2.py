@@ -303,7 +303,8 @@ def rank_pair_cell(rows_a: dict[int, dict[str, Any]], rows_b: dict[int, dict[str
 
 
 def rung_within(timing: dict[str, Any], key: str, budget: float, have: set[int]) -> int | None:
-    """The largest rung of `key` the reference machine timed at or under `budget` seconds (and that has results)."""
+    """The largest rung of `key` the reference machine timed at or under `budget` seconds, among the rungs in `have`
+    (the caller passes the rungs the method has finished)."""
     fits = [int(r) for r, sec in (timing.get(key) or {}).items() if sec is not None and sec <= budget and int(r) in have]
     return max(fits) if fits else None
 
@@ -401,10 +402,13 @@ def main() -> None:
     def leagues(pairs: list[tuple[str, str]], keys: list[str]) -> dict[str, Any]:
         """Pairwise rank outcomes for `pairs`, and for every method of `keys` the rung a time budget buys it."""
         rungs_of = {k: {r for (_c, r) in data.get(k, {}) if usable(k, r)} for k in {x for p in pairs for x in p} | set(keys)}
+        # a time budget buys a rung the method has FINISHED: every catalog, every law (the site shows no pooled number
+        # for a rung that is still running, so a budget must not point at one)
+        finished = {k: {r for r in rungs_of[k] if all(len(data[k].get((c, r), {})) >= n for c, n in sizes.items())} for k in rungs_of}
         at: dict[str, dict[str, int]] = {k: {} for k in rungs_of}
         for k in rungs_of:
             for t in TIME_BUDGETS:
-                r = rung_within(timing_all, k, t, rungs_of[k])
+                r = rung_within(timing_all, k, t, finished[k])
                 if r is not None:
                     at[k][budget_key(t)] = r
         out: dict[str, Any] = {}

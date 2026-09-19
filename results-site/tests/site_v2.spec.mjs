@@ -108,12 +108,13 @@ test('catalog and method controls change the pooled charts', async ({ page }) =>
 });
 
 test('the view state round-trips through the URL', async ({ page }) => {
-  await page.goto('/?release=2026-09&v=matrix&f=mdl_ratio&r=16&c=phys&s=mean&pool=own&ci=0');
+  await page.goto('/?release=2026-09&v=matrix&f=mdl_ratio&r=16&c=phys&s=mean&pool=own&thin=1&ci=0');   // pool= and thin= are old links: read, ignored
   await expect(page.locator(V2 + ' .v2tab.active')).toHaveAttribute('data-view', 'matrix');
   await expect(page.locator(V2 + ' .v2focus')).toHaveAttribute('data-k', 'mdl_ratio');
   await expect(page.locator(V2 + ' select.v2rung')).toHaveValue('16');
   await expect(page.locator(V2 + ' input[name="v2stat"][value="mean"]')).toBeChecked();
-  await expect(page.locator(V2 + ' input[name="v2pool"][value="own"]')).toBeChecked();
+  await expect(page.locator(V2 + ' input[name="v2pool"]')).toHaveCount(0);
+  await expect(page.locator(V2 + ' .v2thin')).toHaveCount(0);
   await expect(page.locator(V2 + ' .v2band')).not.toBeChecked();   // the legacy ci=0 link still means "no interval"
   await expect(page.locator(V2 + ' .v2catcount')).toContainText('8 of');
   await page.locator(V2 + ' .v2tab[data-view="table"]').click();
@@ -127,8 +128,8 @@ test('terms and metric help open a floating explanation', async ({ page }) => {
   await expect(page.locator('.v2pop')).toContainText('Share of laws');
   await page.keyboard.press('Escape');
   await expect(page.locator('.v2pop')).toHaveCount(0);
-  await page.locator(V2 + ' .v2panel .v2term[data-term="matched"]').first().click();
-  await expect(page.locator('.v2pop')).toContainText('Matched pooling');
+  await page.locator(V2 + ' .v2view .v2term[data-term="complete"]').first().click();
+  await expect(page.locator('.v2pop')).toContainText('EVERY selected catalog');
 });
 
 // A published time is a CALIBRATED time. Seconds measured wherever a unit happened to run are not comparable
@@ -270,7 +271,8 @@ test('each display carries only the controls it can use', async ({ page }) => {
     .filter((e) => !e.hidden).flatMap((e) => e.dataset.uses.split(' ')));
   await page.goto('/?release=2026-09&v=curves');
   const curves = await shown();
-  for (const k of ['stat', 'pool', 'thin']) { expect(curves, k).toContain(k); }
+  for (const k of ['stat', 'ci']) { expect(curves, k).toContain(k); }
+  for (const k of ['pool', 'thin']) { expect(curves, k).not.toContain(k); }   // a pooled number is complete or absent: nothing to switch
   for (const k of ['plots', 'xaxis', 'focus', 'rung', 'base', 'rows']) { expect(curves, k).not.toContain(k); }
   await page.locator(V2 + ' .v2tab[data-view="table"]').click();
   await expect.poll(shown).toContain('plots');
@@ -600,27 +602,38 @@ test('ranks hold the methods equal on reference-machine time when it exists', as
   await expect(chart).toHaveAttribute('aria-label', /budget \d+/);
 });
 
-test('a method part-way through a budget does not shrink the pool of the others, even with the largest catalog', async ({ page }) => {
-  // the release payload, with one more method that has finished a single catalog at budget 16: the largest one
+test('a pooled number appears only where a method has finished every selected catalog', async ({ page }) => {
+  // the release payload, with one more method that has finished a single catalog at budget 16: the one corpus that
+  // is four fifths of the laws, which is as close to the whole as a part can come
   await page.route('**/data/2026-09/results.js', async (route) => {
     const res = await route.fetch();
     const add = `;(function () { var D = window.RESULTS_V2;
       var donor = D.methods.filter(function (m) { return D.cells[m.key] && Object.keys(D.cells[m.key]).length > 3; })[0];
       var cat = D.catalogs.slice().sort(function (a, b) { return b.laws - a.laws; }).map(function (c) { return c.key; })
-        .filter(function (c) { return D.cells[donor.key][c] && D.cells[donor.key][c]['16']; })[0];   // the one corpus that is four fifths of the laws
+        .filter(function (c) { return D.cells[donor.key][c] && D.cells[donor.key][c]['16']; })[0];
       D.methods.push({ key: 'fixture-begun', label: 'Fixture just begun', param: 'draws', budget: 'candidates', color: '#555555', group: 'baseline', provenance: 'upstream_default', selection: '' });
-      D.cells['fixture-begun'] = {}; D.cells['fixture-begun'][cat] = { '16': D.cells[donor.key][cat]['16'] }; D.status['fixture-begun'] = [1, 100]; })();`;
+      D.cells['fixture-begun'] = {}; D.cells['fixture-begun'][cat] = { '16': D.cells[donor.key][cat]['16'] }; D.status['fixture-begun'] = [1, 100];
+      window.FIXTURE_CAT = cat; })();`;
     await route.fulfill({ response: res, body: (await res.text()) + add });
   });
   await page.goto('/?release=2026-09&v=table&rows=rungs&p=numeric_recovery_val&x=rung');
   await expect(page.locator(V2 + ' .v2methods')).toContainText('Fixture just begun');
   const row16 = page.locator(V2 + ' .v2table tbody tr').filter({ has: page.locator('td:first-child', { hasText: /^16$/ }) });
   await expect(row16).toBeVisible({ timeout: 15000 });
-  const catalogs = await row16.locator('td:nth-child(2)').textContent();
-  expect(+catalogs.match(/\((\d+) catalogs\)/)[1]).toBeGreaterThan(1);
-  // and its own point, which is not the mean over the selected laws, is set aside until thin rungs are asked for
+  // the others are still pooled over everything, and the newcomer shows nothing at all
+  const all = await page.evaluate(() => window.RESULTS_V2.catalogs.length);
+  expect(+(await row16.locator('td:nth-child(2)').textContent()).match(/\((\d+) catalogs\)/)[1]).toBe(all);
   await expect(row16.locator('td').last()).toHaveText('');
-  await page.locator(V2 + ' .v2thin').check();
+  await expect(page.locator(V2 + ' .v2view svg circle[fill="var(--surface)"]')).toHaveCount(0);   // no hollow markers anywhere
+  // narrowed to the catalog it HAS finished, it is complete there and gets its number
+  const cat = await page.evaluate(() => window.FIXTURE_CAT);
+  await page.locator(V2 + ' button[data-act="none"]').click();
+  await page.locator(V2 + ` .v2cats input[data-c="${cat}"]`).check();
   await expect(row16.locator('td').last()).not.toHaveText('');
+  // and it is ranked there, but not over the whole selection
+  await page.goto('/?release=2026-09&v=ranks&x=rung&r=16&c=all');
+  await expect(page.locator(V2 + ' .v2ranktable')).toBeVisible({ timeout: 15000 });
+  await expect(page.locator(V2 + ' .v2ranktable')).not.toContainText('Fixture just begun');
+  await expect(page.locator(V2 + ' .v2view')).toContainText(/Fixture just begun ha(s|ve) not finished every selected catalog/);
 });
 
