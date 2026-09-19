@@ -361,6 +361,32 @@ class TestHangPolicy:
         finally:
             adapter.close()
 
+    def test_a_problem_that_runs_far_longer_than_the_ones_before_it_is_overdue(self, engine, tmp_path) -> None:
+        """2026-09-19: PySR's stalls are BUSY (one thread, after the search, turning a pathological result into
+        sympy), so no CPU measure tells them from a healthy fit. Time does: the limit is a multiple of the median
+        answered request of the run, with a floor, once there is a history."""
+        worker = _write_worker(tmp_path, self.WORKER.format(mark=str(tmp_path / "hung-once")))
+        adapter = SubprocessAdapter(worker=worker, simplipy_engine=engine, drop_unused_variables=False, timeout=600,
+                                    hang_overdue_factor=20, hang_overdue_floor_s=2.0, hang_overdue_min_history=3,
+                                    hang_log=str(tmp_path / "hangs.jsonl"))
+        adapter.prepare()
+        try:
+            first = adapter.evaluate_sample(_sample(eq_id="spins")).to_mapping()      # 5 s, busy, no history yet:
+            assert first["prediction_success"] is True and first["worker_hangs"] == 0   # nothing to call it overdue by
+            adapter._answered_s.clear()
+            for _ in range(3):
+                assert adapter.evaluate_sample(_sample(eq_id="fine")).to_mapping()["prediction_success"] is True
+            assert adapter._overdue_limit() == 2.0                                     # 20 x a few ms, held up by the floor
+            row = adapter.evaluate_sample(_sample(eq_id="spins")).to_mapping()         # busy for 5 s: overdue at 2 s, twice
+            assert row["prediction_success"] is False and row["worker_hangs"] == 2 and "overdue" in row["error"]
+            events = self._log(tmp_path)
+            assert [e["kind"] for e in events] == ["overdue", "overdue"] and [e["outcome"] for e in events] == ["retry", "failed"]
+            assert all(e["limit_s"] == 2.0 and 2.0 <= e["seconds"] < 5.0 for e in events)
+            assert adapter.evaluate_sample(_sample(eq_id="fine")).to_mapping()["prediction_success"] is True
+            assert adapter._restarts == 0
+        finally:
+            adapter.close()
+
     def test_a_busy_worker_is_not_a_hang(self, engine, tmp_path) -> None:
         adapter = self._adapter(engine, tmp_path)
         adapter.prepare()

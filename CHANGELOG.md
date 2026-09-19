@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.3] - 2026-09-19
+
+### Added
+- **A second sign of a hang: overdue** (opt-in: `hang_overdue_factor` on a worker-backed adapter). A worker
+  can be stuck while busy, and then no CPU measure tells it from a healthy one: PySR's stalls are one
+  thread, after the search has ended, turning a pathological hall-of-fame entry into sympy, which is what
+  a one-iteration fit looks like anyway. Time gives it away. A problem is overdue after
+  `max(hang_overdue_floor_s, hang_overdue_factor x the median answered request of the run)` (floor 60 s),
+  once `hang_overdue_min_history` requests (10) have answered; it is then handled like any other hang:
+  retried once in a fresh worker, failed on the second, logged with `kind: overdue`, its seconds and the
+  limit. The limit scales with the rung by construction. `make_pysr_suite_config.py` turns it on (30 x).
+
 ## [0.20.2] - 2026-09-19
 
 ### Added

@@ -47,6 +47,8 @@ def main() -> int:
     ap.add_argument("--engine", default="acj-5-4-llm", help="the SimpliPy engine PySR's answers are parsed with")
     ap.add_argument("--save-every", type=int, default=8)
     ap.add_argument("--hang-after-idle-s", type=float, default=60.0, help="seconds without CPU activity that make a hang")
+    ap.add_argument("--hang-overdue-factor", type=float, default=30.0, help="a fit is overdue after this many times the median answered fit of its unit")
+    ap.add_argument("--hang-overdue-floor-s", type=float, default=60.0, help="... and never before this many seconds")
     a = ap.parse_args()
 
     ladder = [int(r) for r in a.ladder.split(",")]
@@ -67,6 +69,11 @@ def main() -> int:
                 # Owner 2026-09-19: a minute without CPU activity while a problem is in flight is a hang; the
                 # problem is retried once in a fresh worker, a second hang fails it, every hang is logged apart.
                 "hang_after_idle_s": a.hang_after_idle_s,
+                # PySR's stalls are busy, not idle (one thread, after the search, turning a pathological result into
+                # sympy), so the second sign is time: overdue after max(60 s, 30 x the median answered fit of the
+                # unit). At one iteration 99 % of 3,664 fits took 2.0-2.7 s and eleven took 10 s to over an hour.
+                "hang_overdue_factor": a.hang_overdue_factor,
+                "hang_overdue_floor_s": a.hang_overdue_floor_s,
                 "hang_log": "{{ROOT}}/suite/pysr/hangs.jsonl",
                 "worker_log": f"{{{{ROOT}}}}/suite/pysr/worker_logs/{cat}.log",
                 "max_restarts": 100,                     # crashes only (hangs restart outside this budget)

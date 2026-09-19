@@ -256,6 +256,10 @@ def _subprocess_common_kwargs(config: Mapping[str, Any]) -> dict[str, Any]:
         hang_after_idle_s=None if config.get("hang_after_idle_s") is None
         else coerce_float(config["hang_after_idle_s"], "model_adapter.hang_after_idle_s"),
         hang_idle_cpu_s=coerce_float(config.get("hang_idle_cpu_s", 1.0), "model_adapter.hang_idle_cpu_s"),
+        hang_overdue_factor=None if config.get("hang_overdue_factor") is None
+        else coerce_float(config["hang_overdue_factor"], "model_adapter.hang_overdue_factor"),
+        hang_overdue_floor_s=coerce_float(config.get("hang_overdue_floor_s", 60.0), "model_adapter.hang_overdue_floor_s"),
+        hang_overdue_min_history=int(config.get("hang_overdue_min_history", 10)),
         hang_log=substitute_root_path(str(config["hang_log"])) if config.get("hang_log") else None,
     )
 

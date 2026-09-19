@@ -55,7 +55,13 @@ class WorkerCrashed(WorkerError):
 
 
 class WorkerHang(WorkerTimeout):
-    """The worker's process tree stopped using the CPU while a problem was in flight; it has been killed."""
+    """A worker judged hung while a problem was in flight, and killed. ``kind`` says by which sign: ``idle`` (its
+    process tree stopped using the CPU) or ``overdue`` (the problem ran many times longer than the problems before
+    it -- a worker that is stuck while busy looks healthy to every CPU measure)."""
+
+    def __init__(self, message: str, kind: str = "idle") -> None:
+        super().__init__(message)
+        self.kind = kind
 
 
 def tree_cpu_seconds(pid: int) -> float | None:
@@ -303,23 +309,31 @@ class WorkerProcess:
         except (BrokenPipeError, OSError, ValueError) as exc:
             raise WorkerCrashed(self._describe(f"write to worker failed: {exc}")) from exc
 
-    def _receive(self, timeout: float | None, *, expect: str, watch: bool = False) -> dict[str, Any]:
+    def _receive(self, timeout: float | None, *, expect: str, watch: bool = False,
+                 overdue_s: float | None = None) -> dict[str, Any]:
         """The next ``expect`` message. With ``watch`` and an idle window set, the worker's process tree is
         sampled while it works: under ``hang_idle_cpu_s`` CPU seconds over ``hang_after_idle_s`` seconds of
-        wall is a hang (owner 2026-09-19: a minute of suspicious inactivity), whatever the hard timeout says."""
-        deadline = None if timeout is None else time.monotonic() + timeout
+        wall is a hang (owner 2026-09-19: a minute of suspicious inactivity), whatever the hard timeout says.
+        ``overdue_s`` is the caller's second sign of a hang: a reply that has not come after that many seconds."""
+        began = time.monotonic()
+        deadline = None if timeout is None else began + timeout
         window = self.hang_after_idle_s if watch else None
         samples: collections.deque[tuple[float, float]] = collections.deque()
         pid = self._proc.pid if self._proc is not None else None
         while True:
             remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
-            wait = remaining if window is None else (2.0 if remaining is None else min(remaining, 2.0))
+            polled = window is not None or overdue_s is not None
+            wait = remaining if not polled else (2.0 if remaining is None else min(remaining, 2.0))
             try:
                 line = self._lines.get(timeout=wait)
             except queue.Empty:
                 if deadline is not None and time.monotonic() >= deadline:
                     self.kill()
                     raise WorkerTimeout(self._describe(f"no reply within {timeout:.0f} s")) from None
+                if overdue_s is not None and time.monotonic() - began >= overdue_s:
+                    self.kill()
+                    raise WorkerHang(self._describe(
+                        f"overdue: no reply after {time.monotonic() - began:.0f} s (limit {overdue_s:.0f} s)"), "overdue") from None
                 cpu = tree_cpu_seconds(pid) if (window is not None and pid is not None) else None
                 if cpu is not None and window is not None:
                     now = time.monotonic()
@@ -348,12 +362,12 @@ class WorkerProcess:
                 return message
             self._output.append(f"[protocol] unexpected message {kind!r} while waiting for {expect!r}")
 
-    def request(self, payload: Mapping[str, Any], timeout: float | None) -> dict[str, Any]:
+    def request(self, payload: Mapping[str, Any], timeout: float | None, overdue_s: float | None = None) -> dict[str, Any]:
         """Send one ``fit`` request and return its ``result`` (a worker-side error is inside it)."""
         self._next_id += 1
         self._send({**payload, "type": "fit", "id": self._next_id})
         while True:
-            reply = self._receive(timeout, expect="result", watch=True)
+            reply = self._receive(timeout, expect="result", watch=True, overdue_s=overdue_s)
             if reply.get("id") == self._next_id:
                 return reply
             self._output.append(f"[protocol] stale result id {reply.get('id')!r}")
@@ -396,6 +410,9 @@ class SubprocessAdapter(EvaluationModelAdapter):
         worker_log: str | None = None,
         hang_after_idle_s: float | None = None,
         hang_idle_cpu_s: float = 1.0,
+        hang_overdue_factor: float | None = None,
+        hang_overdue_floor_s: float = 60.0,
+        hang_overdue_min_history: int = 10,
         hang_log: str | None = None,
     ) -> None:
         self.worker = resolve_worker(worker)
@@ -405,6 +422,17 @@ class SubprocessAdapter(EvaluationModelAdapter):
         # row's `worker_hangs`; hang restarts do not spend max_restarts, which stays the budget for crashes.
         self.hang_after_idle_s = None if hang_after_idle_s is None else float(hang_after_idle_s)
         self.hang_idle_cpu_s = float(hang_idle_cpu_s)
+        # The second sign of a hang (2026-09-19): OVERDUE. PySR's stalls are not idle -- the search has ended and
+        # one thread is busy for minutes to hours turning a pathological hall-of-fame entry into sympy, which is
+        # exactly what a healthy one-iteration fit looks like to a CPU counter. What gives it away is time: the
+        # problems before it took 2 s and this one has taken 60. So a problem is overdue after
+        # max(hang_overdue_floor_s, hang_overdue_factor x the median successful request of THIS run), once
+        # hang_overdue_min_history requests have answered; before that only the idle window and the hard timeout
+        # apply. The limit scales with the rung by construction. Off unless hang_overdue_factor is set.
+        self.hang_overdue_factor = None if hang_overdue_factor is None else float(hang_overdue_factor)
+        self.hang_overdue_floor_s = float(hang_overdue_floor_s)
+        self.hang_overdue_min_history = int(hang_overdue_min_history)
+        self._answered_s: list[float] = []            # wall seconds of the requests that answered, this run
         self.hang_log = hang_log
         self.simplipy_engine = simplipy_engine
         self.python = python or sys.executable
@@ -477,6 +505,15 @@ class SubprocessAdapter(EvaluationModelAdapter):
         except WorkerError as exc:
             self._dead_reason = str(exc)
 
+    def _overdue_limit(self) -> float | None:
+        """Seconds after which the problem in flight is overdue, or None while the rule is off or has too little
+        to go on. The median, not the mean or the maximum: one slow answer must not move the bar."""
+        if self.hang_overdue_factor is None or len(self._answered_s) < self.hang_overdue_min_history:
+            return None
+        ordered = sorted(self._answered_s)
+        median = ordered[len(ordered) // 2] if len(ordered) % 2 else 0.5 * (ordered[len(ordered) // 2 - 1] + ordered[len(ordered) // 2])
+        return max(self.hang_overdue_floor_s, self.hang_overdue_factor * median)
+
     def _log_hang(self, record: Mapping[str, Any], **event: Any) -> None:
         """One JSON line per hang event (and per recovery), for the statistics reported later."""
         if not self.hang_log:
@@ -523,13 +560,16 @@ class SubprocessAdapter(EvaluationModelAdapter):
         payload = {"x": X_support.tolist(), "y": y_support.tolist(), "x_val": X_val.tolist(),
                    "variables": variables, "meta": {**_json_meta(record), **dict(extra_meta or {})}}
         hangs = 0
+        policy = self.hang_after_idle_s is not None or self.hang_overdue_factor is not None
         while True:
             started = time.monotonic()
+            limit = self._overdue_limit()
             try:
-                reply = self._process.request(payload, self.timeout)
+                reply = self._process.request(payload, self.timeout, overdue_s=limit)
+                self._answered_s.append(time.monotonic() - started)
                 break
             except WorkerTimeout as exc:
-                if self.hang_after_idle_s is None:       # no hang policy: the historical timeout handling
+                if not policy:                           # no hang policy: the historical timeout handling
                     record["error"] = f"{type(exc).__name__}: {str(exc).splitlines()[0]}"
                     record["error_detail"] = str(exc)
                     record["prediction_success"] = False
@@ -537,9 +577,9 @@ class SubprocessAdapter(EvaluationModelAdapter):
                     return EvaluationResult(record)
                 hangs += 1
                 window_cpu = self._process.last_window_cpu_s if self._process is not None else None
-                self._log_hang(record, attempt=hangs, kind="idle" if isinstance(exc, WorkerHang) else "timeout",
+                self._log_hang(record, attempt=hangs, kind=exc.kind if isinstance(exc, WorkerHang) else "timeout",
                                seconds=time.monotonic() - started, window_cpu_s=window_cpu,
-                               outcome="retry" if hangs == 1 else "failed")
+                               outcome="retry" if hangs == 1 else "failed", limit_s=limit)
                 self._restart_after_hang(str(exc))
                 if hangs >= 2 or self._process is None:
                     record["error"] = f"hung twice ({type(exc).__name__}: {str(exc).splitlines()[0]})"
@@ -554,7 +594,7 @@ class SubprocessAdapter(EvaluationModelAdapter):
                 record["worker_hangs"] = hangs
                 self._recover(str(exc))
                 return EvaluationResult(record)
-        if self.hang_after_idle_s is not None:
+        if policy:
             record["worker_hangs"] = hangs
             if hangs:
                 self._log_hang(record, attempt=hangs + 1, kind="answer", seconds=None, window_cpu_s=None,

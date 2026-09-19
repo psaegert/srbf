@@ -45,6 +45,12 @@ def test_pysr_runs_as_it_ships_with_iterations_as_the_ladder(tmp_path: Path) -> 
     assert adapter["max_restarts"] >= 100 and adapter["worker_log"].endswith(f"/worker_logs/{cat}.log")
 
 
+def test_the_hang_policy_is_on_with_both_signs(tmp_path: Path) -> None:
+    cfg = _config(tmp_path)
+    adapter = select_experiment(cfg, list(cfg["experiments"])[0])["model_adapter"]
+    assert adapter["hang_after_idle_s"] == 60 and adapter["hang_overdue_factor"] == 30 and adapter["hang_overdue_floor_s"] == 60
+
+
 def test_full_suite_mode_leaves_each_catalog_whole(tmp_path: Path) -> None:
     rtl = _module("run_timing_ladder")
     cfg = _config(tmp_path)
