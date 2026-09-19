@@ -20,7 +20,6 @@ set -u
 K=${K:-$HOME/srbf_clock_kit}                 # the clock kit: venv, scripts, the r-sweep under $K/hybrid
 S=${S:-$K/scripts}
 VENV=${VENV:-$K/venv}                        # the venv the campaign runs in (never modified while a run is live)
-PYSR=${PYSR:-$HOME/venvs/pysr23/bin/python}
 R=${R:-$K/timing}                            # the timing root (FLASH_ANSR_ROOT of every timing run)
 RULE=${RULE:-50:40,20:4,10:2}                # 262 problems, nested in the r-sweep's 50:10,10:2
 RSTAR=${RSTAR:-}                             # the hybrid ratio the r-sweep picked; required for steps 3-4
@@ -118,12 +117,12 @@ hybrid_cell() {   # name model_path budget ratios
     [ -d "$path" ] || { say "skip hybrid $name: no model at $path"; return 0; }
     done_ hybrid_$name && return 0
     stop_requested
-    mkdir -p $HR $R/snapshots/$name $R/logs/pysr_worker/$name
+    mkdir -p $HR $R/snapshots/$name
     ln -sfn $R/hybrid_data $HR/hybrid_data          # the frozen subset; the driver reuses existing files
-    $PY $S/make_hybrid_config.py --model-path $path --model-name $name --pysr-python $PYSR --budget $budget \
+    $PY $S/make_hybrid_config.py --model-path $path --model-name $name --budget $budget \
         --ratios $ratios --k-seeds $K_SEEDS --snapshot-dir $R/snapshots/$name --out $R/configs/$name.yaml \
         --device cuda --refiner-workers $REFINER_WORKERS --landing-tolerance 0.01 --pysr-overhead 4.0 \
-        --pricing-reserve 0.2 --worker-log $R/logs/pysr_worker/$name | tee -a $LOG
+        --pricing-reserve 0.2 | tee -a $LOG
     say "hybrid $name: budget $budget s, ratios $ratios, model $path"
     $PY $S/run_hybrid_sweep.py --config $R/configs/$name.yaml --root $HR --subset-rule $RULE 2>&1 | grep -v "Warning\|warn" | tee -a $LOG
     local n_done=$(ls $HR/hybrid_marks/*.done 2>/dev/null | wc -l)

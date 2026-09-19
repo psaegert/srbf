@@ -40,7 +40,6 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model-path", required=True)
     ap.add_argument("--model-name", required=True)
-    ap.add_argument("--pysr-python", required=True)
     ap.add_argument("--budget", type=float, default=100.0)
     ap.add_argument("--ratios", default="0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1")
     ap.add_argument("--k-seeds", type=int, default=100)
@@ -52,8 +51,6 @@ def main() -> int:
     ap.add_argument("--no-ladder", action="store_true")
     ap.add_argument("--n-support", type=int, default=512)
     ap.add_argument("--max-len", type=int, default=160)
-    ap.add_argument("--worker-log", default=None)
-    ap.add_argument("--engine", default="acj-5-4-llm", help="simplipy engine the PySR sub-adapter parses its answers with")
     ap.add_argument("--landing-tolerance", type=float, default=0.01)
     ap.add_argument("--pysr-overhead", type=float, default=4.0)
     ap.add_argument("--pricing-reserve", type=float, default=0.2)
@@ -72,9 +69,9 @@ def main() -> int:
             "evaluation_config": {
                 "n_support": a.n_support, "n_restarts": 8, "refiner_method": "curve_fit_lm",
                 "refiner_p0_noise": "normal", "refiner_p0_noise_kwargs": {"loc": 0.0, "scale": 5},
-                "ranking": {"mode": "mdl", "mdl_strength": 1.0e-2}, "prune_constant_budget": 0,
+                "ranking": {"mode": "mdl"}, "prune_constant_budget": 0,
                 "generation_config": {"method": "softmax_sampling", "kwargs": {
-                    "choices": 1024, "top_k": 0, "top_p": 1, "max_len": a.max_len, "batch_size": 128,
+                    "draws": 1024, "top_k": 0, "top_p": 1, "max_len": a.max_len, "batch_size": 128,
                     "temperature": 1, "valid_only": True, "simplify": True, "unique": True}},
                 "device": a.device,
             },
@@ -83,17 +80,15 @@ def main() -> int:
             flash["constant_ladder"] = True
         if a.refiner_workers is not None:
             flash["refiner_workers"] = a.refiner_workers
-        pysr = {"type": "pysr", "python": a.pysr_python, "simplipy_engine": a.engine, "timeout_in_seconds": 100000,
-                "niterations": 100, "model_selection": "best", "warmup": True, "startup_timeout": 1800, "timeout": 600}  # worker protocol timeout: a stalled PySR is a failed row either way; 7,200 s cost 2 h of wall on 2026-09-12
-        if a.worker_log:
-            a_log = Path(a.worker_log)
-            a_log.mkdir(parents=True, exist_ok=True)
-            pysr["worker_log"] = str(a_log / f"{cat}.log")
+        # PySR runs in-process inside flash-ansr-hybrid (its PySRSettings); the clock sets its timeout and the
+        # iteration ceiling, so only the model pick and the warm-up are ours to set. Any other key here would be
+        # forwarded to PySRRegressor as a kwarg.
+        pysr = {"model_selection": "best", "warmup": True}
         experiments[cat] = {
             "data_source": {"catalog": cat, "sampling": {"n_support": a.n_support, "n_validation": 512, "noise": 0.0,
                                                          "problems_per_expression": 1}},
             "model_adapter": {
-                "config_provenance": "author_blessed", "type": "flash_ansr_pysr",
+                "config_provenance": "author_blessed", "type": "flash_ansr_hybrid",
                 "flash_ansr": flash, "pysr": pysr,
                 "hybrid": {
                     "budget_s": a.budget, "ratio": Sweep("ratio", list(ratios)), "ratios": list(ratios), "k_seeds": a.k_seeds,
