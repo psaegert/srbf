@@ -54,6 +54,40 @@ class WorkerCrashed(WorkerError):
     """The worker exited or reported a fatal error."""
 
 
+class WorkerHang(WorkerTimeout):
+    """The worker's process tree stopped using the CPU while a problem was in flight; it has been killed."""
+
+
+def tree_cpu_seconds(pid: int) -> float | None:
+    """CPU seconds (user + system, all threads) used so far by ``pid`` and every live descendant, read from
+    /proc; None where /proc is unavailable (the idle watchdog then stays off and the hard timeout remains)."""
+    tick = os.sysconf("SC_CLK_TCK") if hasattr(os, "sysconf") else 100
+    children: dict[int, list[int]] = collections.defaultdict(list)
+    used: dict[int, float] = {}
+    try:
+        entries = os.listdir("/proc")
+    except OSError:
+        return None
+    for entry in entries:
+        if not entry.isdigit():
+            continue
+        try:
+            with open(f"/proc/{entry}/stat", encoding="utf-8") as fh:
+                fields = fh.read().rsplit(")", 1)[1].split()
+        except (OSError, IndexError):
+            continue                                # the process ended while we looked
+        children[int(fields[1])].append(int(entry))  # fields[1] = ppid (field 4 of stat)
+        used[int(entry)] = (int(fields[11]) + int(fields[12])) / tick   # utime + stime (fields 14, 15)
+    if pid not in used:
+        return None
+    total, stack = 0.0, [pid]
+    while stack:
+        current = stack.pop()
+        total += used.get(current, 0.0)
+        stack.extend(children.get(current, []))
+    return total
+
+
 def resolve_worker(worker: str | Path) -> Path:
     """A built-in worker name (``example``, ``pysr``) or a script path, as an existing file."""
     if isinstance(worker, str) and worker in BUILTIN_WORKERS:
@@ -115,8 +149,13 @@ class WorkerProcess:
         startup_timeout: float = 600.0,
         log_path: str | None = None,
         stderr_tail: int = 200,
+        hang_after_idle_s: float | None = None,
+        hang_idle_cpu_s: float = 1.0,
     ) -> None:
         self.python = python
+        self.hang_after_idle_s = None if hang_after_idle_s is None else float(hang_after_idle_s)
+        self.hang_idle_cpu_s = float(hang_idle_cpu_s)
+        self.last_window_cpu_s: float | None = None   # CPU seconds of the worker tree over the last idle window
         self.worker = Path(worker)
         self.options = dict(options)
         self.env = {str(k): str(v) for k, v in (env or {}).items()}
@@ -264,15 +303,36 @@ class WorkerProcess:
         except (BrokenPipeError, OSError, ValueError) as exc:
             raise WorkerCrashed(self._describe(f"write to worker failed: {exc}")) from exc
 
-    def _receive(self, timeout: float | None, *, expect: str) -> dict[str, Any]:
+    def _receive(self, timeout: float | None, *, expect: str, watch: bool = False) -> dict[str, Any]:
+        """The next ``expect`` message. With ``watch`` and an idle window set, the worker's process tree is
+        sampled while it works: under ``hang_idle_cpu_s`` CPU seconds over ``hang_after_idle_s`` seconds of
+        wall is a hang (owner 2026-09-19: a minute of suspicious inactivity), whatever the hard timeout says."""
         deadline = None if timeout is None else time.monotonic() + timeout
+        window = self.hang_after_idle_s if watch else None
+        samples: collections.deque[tuple[float, float]] = collections.deque()
+        pid = self._proc.pid if self._proc is not None else None
         while True:
             remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
+            wait = remaining if window is None else (2.0 if remaining is None else min(remaining, 2.0))
             try:
-                line = self._lines.get(timeout=remaining)
+                line = self._lines.get(timeout=wait)
             except queue.Empty:
-                self.kill()
-                raise WorkerTimeout(self._describe(f"no reply within {timeout:.0f} s")) from None
+                if deadline is not None and time.monotonic() >= deadline:
+                    self.kill()
+                    raise WorkerTimeout(self._describe(f"no reply within {timeout:.0f} s")) from None
+                cpu = tree_cpu_seconds(pid) if (window is not None and pid is not None) else None
+                if cpu is not None and window is not None:
+                    now = time.monotonic()
+                    samples.append((now, cpu))
+                    while len(samples) > 1 and now - samples[1][0] >= window:
+                        samples.popleft()                   # keep exactly one sample at or beyond the window edge
+                    if now - samples[0][0] >= window:
+                        self.last_window_cpu_s = cpu - samples[0][1]
+                        if self.last_window_cpu_s < self.hang_idle_cpu_s:
+                            self.kill()
+                            raise WorkerHang(self._describe(
+                                f"no CPU activity: {self.last_window_cpu_s:.2f} CPU s in the last {window:.0f} s")) from None
+                continue
             if line is None:
                 code = self._proc.poll() if self._proc is not None else None
                 raise WorkerCrashed(self._describe(f"worker exited (returncode {code})"))
@@ -293,7 +353,7 @@ class WorkerProcess:
         self._next_id += 1
         self._send({**payload, "type": "fit", "id": self._next_id})
         while True:
-            reply = self._receive(timeout, expect="result")
+            reply = self._receive(timeout, expect="result", watch=True)
             if reply.get("id") == self._next_id:
                 return reply
             self._output.append(f"[protocol] stale result id {reply.get('id')!r}")
@@ -334,8 +394,18 @@ class SubprocessAdapter(EvaluationModelAdapter):
         drop_unused_variables: bool = True,
         max_restarts: int = 1,
         worker_log: str | None = None,
+        hang_after_idle_s: float | None = None,
+        hang_idle_cpu_s: float = 1.0,
+        hang_log: str | None = None,
     ) -> None:
         self.worker = resolve_worker(worker)
+        # The hang policy (off unless hang_after_idle_s is set): a worker that goes idle for that long while a
+        # problem is in flight, or misses the hard timeout, is killed and the problem retried ONCE in a fresh
+        # worker; a second hang fails the row. Every hang is logged to hang_log (JSON lines) and counted in the
+        # row's `worker_hangs`; hang restarts do not spend max_restarts, which stays the budget for crashes.
+        self.hang_after_idle_s = None if hang_after_idle_s is None else float(hang_after_idle_s)
+        self.hang_idle_cpu_s = float(hang_idle_cpu_s)
+        self.hang_log = hang_log
         self.simplipy_engine = simplipy_engine
         self.python = python or sys.executable
         self.options = dict(options or {})
@@ -377,6 +447,7 @@ class SubprocessAdapter(EvaluationModelAdapter):
         process = WorkerProcess(
             python=self.python, worker=self.worker, options=self.options, env=self.env, cwd=self.cwd,
             startup_timeout=self.startup_timeout, log_path=self.worker_log,
+            hang_after_idle_s=self.hang_after_idle_s, hang_idle_cpu_s=self.hang_idle_cpu_s,
         )
         process.start()
         self._process = process
@@ -395,6 +466,30 @@ class SubprocessAdapter(EvaluationModelAdapter):
             self._spawn()
         except WorkerError as exc:
             self._dead_reason = str(exc)
+
+    def _restart_after_hang(self, reason: str) -> None:
+        """A hang kills the worker; its restart does not spend the crash budget (max_restarts)."""
+        if self._process is not None:
+            self._process.kill()
+            self._process = None
+        try:
+            self._spawn()
+        except WorkerError as exc:
+            self._dead_reason = str(exc)
+
+    def _log_hang(self, record: Mapping[str, Any], **event: Any) -> None:
+        """One JSON line per hang event (and per recovery), for the statistics reported later."""
+        if not self.hang_log:
+            return
+        keys = ("benchmark_eq_id", "eq_id", "catalog", "ground_truth_infix", "skeleton_hash")
+        line = {"time": time.strftime("%Y-%m-%dT%H:%M:%S"), "worker": self.worker.stem,
+                **{k: record.get(k) for k in keys if record.get(k) is not None}, **event}
+        try:
+            os.makedirs(os.path.dirname(os.path.abspath(self.hang_log)) or ".", exist_ok=True)
+            with open(self.hang_log, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(line, default=str) + "\n")
+        except OSError:
+            pass                                          # a lost log line never fails the problem
 
     # -- evaluation --------------------------------------------------------------------------
     def evaluate_sample(self, sample: EvaluationSample, *, extra_meta: Mapping[str, Any] | None = None) -> EvaluationResult:
@@ -427,14 +522,43 @@ class SubprocessAdapter(EvaluationModelAdapter):
 
         payload = {"x": X_support.tolist(), "y": y_support.tolist(), "x_val": X_val.tolist(),
                    "variables": variables, "meta": {**_json_meta(record), **dict(extra_meta or {})}}
-        try:
-            reply = self._process.request(payload, self.timeout)
-        except WorkerError as exc:
-            record["error"] = f"{type(exc).__name__}: {str(exc).splitlines()[0]}"
-            record["error_detail"] = str(exc)
-            record["prediction_success"] = False
-            self._recover(str(exc))
-            return EvaluationResult(record)
+        hangs = 0
+        while True:
+            started = time.monotonic()
+            try:
+                reply = self._process.request(payload, self.timeout)
+                break
+            except WorkerTimeout as exc:
+                if self.hang_after_idle_s is None:       # no hang policy: the historical timeout handling
+                    record["error"] = f"{type(exc).__name__}: {str(exc).splitlines()[0]}"
+                    record["error_detail"] = str(exc)
+                    record["prediction_success"] = False
+                    self._recover(str(exc))
+                    return EvaluationResult(record)
+                hangs += 1
+                window_cpu = self._process.last_window_cpu_s if self._process is not None else None
+                self._log_hang(record, attempt=hangs, kind="idle" if isinstance(exc, WorkerHang) else "timeout",
+                               seconds=time.monotonic() - started, window_cpu_s=window_cpu,
+                               outcome="retry" if hangs == 1 else "failed")
+                self._restart_after_hang(str(exc))
+                if hangs >= 2 or self._process is None:
+                    record["error"] = f"hung twice ({type(exc).__name__}: {str(exc).splitlines()[0]})"
+                    record["error_detail"] = str(exc)
+                    record["prediction_success"] = False
+                    record["worker_hangs"] = hangs
+                    return EvaluationResult(record)
+            except WorkerError as exc:
+                record["error"] = f"{type(exc).__name__}: {str(exc).splitlines()[0]}"
+                record["error_detail"] = str(exc)
+                record["prediction_success"] = False
+                record["worker_hangs"] = hangs
+                self._recover(str(exc))
+                return EvaluationResult(record)
+        if self.hang_after_idle_s is not None:
+            record["worker_hangs"] = hangs
+            if hangs:
+                self._log_hang(record, attempt=hangs + 1, kind="answer", seconds=None, window_cpu_s=None,
+                               outcome="recovered")
 
         record["fit_time"] = reply.get("fit_time")
         for key, value in (reply.get("extra") or {}).items():

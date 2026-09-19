@@ -253,6 +253,10 @@ def _subprocess_common_kwargs(config: Mapping[str, Any]) -> dict[str, Any]:
         drop_unused_variables=bool(config.get("drop_unused_variables", True)),
         max_restarts=coerce_int(config.get("max_restarts", 1), "model_adapter.max_restarts"),
         worker_log=substitute_root_path(str(worker_log)) if worker_log else None,
+        hang_after_idle_s=None if config.get("hang_after_idle_s") is None
+        else coerce_float(config["hang_after_idle_s"], "model_adapter.hang_after_idle_s"),
+        hang_idle_cpu_s=coerce_float(config.get("hang_idle_cpu_s", 1.0), "model_adapter.hang_idle_cpu_s"),
+        hang_log=substitute_root_path(str(config["hang_log"])) if config.get("hang_log") else None,
     )
 
 

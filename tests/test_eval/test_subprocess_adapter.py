@@ -302,3 +302,71 @@ class TestConfig:
         monkeypatch.setattr(run_config, "resolve_simplipy_engine", lambda cfg, adapter_name: object())
         with pytest.raises(ValueError, match="worker"):
             run_config.build_model_adapter({"type": "subprocess", "simplipy_engine": "unused"})
+
+
+class TestHangPolicy:
+    """Owner 2026-09-19: a worker that shows no CPU activity for a minute while a problem is in flight is hung;
+    the problem is retried once in a fresh worker, a second hang fails it, and every hang is logged apart for
+    statistics. The window is 2 s here instead of 60 s; everything else is the production path."""
+
+    WORKER = '''
+        import os, time
+        MARK = {mark!r}
+        def fit(x, y, *, x_val, variables, meta, options, state):
+            eq = meta.get("eq_id")
+            if eq == "sleeps":                       # a deadlock: alive, silent, no CPU
+                time.sleep(3600)
+            if eq == "sleeps-once" and not os.path.exists(MARK):
+                open(MARK, "w").close()
+                time.sleep(3600)
+            if eq == "spins":                        # working hard for longer than the window, then answers
+                end = time.time() + 5.0
+                while time.time() < end:
+                    pass
+            return {{"expression": "2*x1 - 0.5*x2 + 1"}}
+    '''
+
+    def _adapter(self, engine, tmp_path):
+        worker = _write_worker(tmp_path, self.WORKER.format(mark=str(tmp_path / "hung-once")))
+        return SubprocessAdapter(worker=worker, simplipy_engine=engine, drop_unused_variables=False, timeout=600,
+                                 hang_after_idle_s=2.0, hang_log=str(tmp_path / "hangs.jsonl"))
+
+    def _log(self, tmp_path):
+        path = tmp_path / "hangs.jsonl"
+        return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+    def test_a_silent_worker_is_retried_once_then_failed(self, engine, tmp_path) -> None:
+        adapter = self._adapter(engine, tmp_path)
+        adapter.prepare()
+        try:
+            row = adapter.evaluate_sample(_sample(eq_id="sleeps")).to_mapping()
+            assert row["prediction_success"] is False and row["error"].startswith("hung twice")
+            assert row["worker_hangs"] == 2 and "WorkerHang" in row["error"]
+            events = self._log(tmp_path)
+            assert [e["outcome"] for e in events] == ["retry", "failed"] and all(e["kind"] == "idle" for e in events)
+            assert all(e["eq_id"] == "sleeps" and e["window_cpu_s"] < 1.0 for e in events)
+            assert adapter._restarts == 0                                   # hangs never spend the crash budget
+            after = adapter.evaluate_sample(_sample(eq_id="fine")).to_mapping()
+            assert after["prediction_success"] is True and after["worker_hangs"] == 0
+        finally:
+            adapter.close()
+
+    def test_a_hang_that_does_not_recur_is_recovered(self, engine, tmp_path) -> None:
+        adapter = self._adapter(engine, tmp_path)
+        adapter.prepare()
+        try:
+            row = adapter.evaluate_sample(_sample(eq_id="sleeps-once")).to_mapping()
+            assert row["prediction_success"] is True and row["worker_hangs"] == 1
+            assert [e["outcome"] for e in self._log(tmp_path)] == ["retry", "recovered"]
+        finally:
+            adapter.close()
+
+    def test_a_busy_worker_is_not_a_hang(self, engine, tmp_path) -> None:
+        adapter = self._adapter(engine, tmp_path)
+        adapter.prepare()
+        try:
+            row = adapter.evaluate_sample(_sample(eq_id="spins")).to_mapping()
+            assert row["prediction_success"] is True and row["worker_hangs"] == 0
+            assert self._log(tmp_path) == []
+        finally:
+            adapter.close()

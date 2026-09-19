@@ -6,6 +6,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.2] - 2026-09-19
+
+### Added
+- **A hang policy for out-of-process workers** (opt-in: `hang_after_idle_s` on a worker-backed adapter).
+  While a problem is in flight, the worker's process tree is sampled from `/proc`; less than
+  `hang_idle_cpu_s` CPU seconds (default 1) over `hang_after_idle_s` seconds of wall is a hang, and so is a
+  missed hard `timeout`. The problem is retried once in a fresh worker and a second hang fails it. Every
+  hang is written to `hang_log` (JSON lines: problem, attempt, kind, seconds, CPU in the window, outcome)
+  and counted in the row's `worker_hangs`. Hang restarts do not spend `max_restarts`, which stays the
+  budget for crashes. Without the key nothing changes.
+- **PySR on the whole suite, on the reference machine.** `scripts/make_pysr_suite_config.py` writes one
+  experiment per catalog with the data sources and runners of a Flash-ANSR scaling config, PySR with
+  upstream defaults, the iteration count as the ladder, and the hang policy on (60 s);
+  `scripts/run_timing_ladder.py --full-suite` runs such a config unit by unit on whole catalogs, and the
+  solomon timing queue runs it (three runs, `RUN_PYSR_SUITE=0` skips them).
+- `scripts/stop_timing_queue.sh`: stops the timing queue without corrupting its marks (the queue first,
+  processes matched by their exact command, any mark written while stopping rolled back).
+
 ## [0.20.1] - 2026-09-19
 
 ### Fixed

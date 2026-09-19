@@ -46,6 +46,7 @@ def main() -> int:
     ap.add_argument("--guard-seconds", type=int, default=3600, help="PySR's timeout_in_seconds: a runaway guard, not the budget")
     ap.add_argument("--engine", default="acj-5-4-llm", help="the SimpliPy engine PySR's answers are parsed with")
     ap.add_argument("--save-every", type=int, default=8)
+    ap.add_argument("--hang-after-idle-s", type=float, default=60.0, help="seconds without CPU activity that make a hang")
     a = ap.parse_args()
 
     ladder = [int(r) for r in a.ladder.split(",")]
@@ -61,8 +62,14 @@ def main() -> int:
                 "python": a.python,
                 "niterations": Sweep(list(ladder), name="ladder"),
                 "timeout_in_seconds": a.guard_seconds,
-                "timeout": a.guard_seconds + 600,        # the worker protocol's per-problem limit: a stalled search is a failed row
+                "timeout": a.guard_seconds + 600,        # the hard backstop: a worker that hangs while still burning CPU
                 "startup_timeout": 1800,                 # the first import compiles SymbolicRegression.jl
+                # Owner 2026-09-19: a minute without CPU activity while a problem is in flight is a hang; the
+                # problem is retried once in a fresh worker, a second hang fails it, every hang is logged apart.
+                "hang_after_idle_s": a.hang_after_idle_s,
+                "hang_log": "{{ROOT}}/suite/pysr/hangs.jsonl",
+                "worker_log": f"{{{{ROOT}}}}/suite/pysr/worker_logs/{cat}.log",
+                "max_restarts": 100,                     # crashes only (hangs restart outside this budget)
                 "padding": False,
                 "simplipy_engine": a.engine,
             },
