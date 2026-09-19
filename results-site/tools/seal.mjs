@@ -11,7 +11,7 @@
 // The key comes from the environment, never from argv: an argument is visible in `ps` and lands in shell history.
 // Nothing derived from the key is written. Losing it costs one reseal.
 import { webcrypto as crypto } from "node:crypto";
-import { gzipSync } from "node:zlib";
+import { gzipSync, gunzipSync } from "node:zlib";
 import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -58,8 +58,19 @@ if (!files.length) { console.error("no payload scripts under " + src); process.e
 const plain = Buffer.from(files.map((f) => readFileSync(f, "utf8")).join("\n;\n"), "utf8");
 const gz = gzipSync(plain, { level: 9 });
 const envelope = await seal(gz, passphrase);
+
+// The file is only worth writing if the page can open it: read the envelope back the way the page does.
+async function opens(env, pass, expected) {
+  const u8 = (b64) => new Uint8Array(Buffer.from(b64, "base64"));
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pass), "PBKDF2", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: u8(env.salt), iterations: env.iter, hash: "SHA-256" },
+    base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+  const back = Buffer.from(await crypto.subtle.decrypt({ name: "AES-GCM", iv: u8(env.iv) }, key, u8(env.ct)));
+  return gunzipSync(back).equals(expected);
+}
+if (!(await opens(envelope, passphrase, plain))) { console.error("the sealed payload does not open to what was sealed; nothing written"); process.exit(1); }
 writeFileSync(out, "window.RESULTS_V2_SEALED=window.RESULTS_V2_SEALED||{};window.RESULTS_V2_SEALED[" +
   JSON.stringify(release) + "]=" + JSON.stringify(envelope) + ";\n");
 console.log(files.length + " file(s) from " + relative(SITE, src) + ": " +
   (plain.length / 1048576).toFixed(2) + " MB -> " + (gz.length / 1048576).toFixed(2) + " MB gzip -> " +
-  (statSync(out).size / 1048576).toFixed(2) + " MB at " + relative(SITE, out));
+  (statSync(out).size / 1048576).toFixed(2) + " MB at " + relative(SITE, out) + "; opened again with the key: identical");
