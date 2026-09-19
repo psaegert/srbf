@@ -4,6 +4,10 @@
 #   1. freeze the 262-problem timing subset, nested in the hybrid r-sweep's frozen subset;
 #   2. the baselines' timing ladders on the subset, in the owner's order of 2026-09-16: E2E (candidates_per_bag
 #      1..2048), NeSymReS (beam_width 1..512), diffsym (n_samples 1..128) -- E2E and NeSymReS in the legacy venv;
+#      ORDER (owner 2026-09-18, superseding the 2026-09-16 order): the T8 rows first (their low rungs ahead of
+#      everything), then diffsym and PySR, and NeSymReS's remaining rungs (64, 256, 512) LAST -- rung 512 alone
+#      costs more than everything before it. RUN_NESYMRES=0 defers that row; run it with RUN_NESYMRES=1 and the
+#      extended ladder 1,2,4,8,16,32,64,128,256,512 at the very end (the marks make the finished rungs no-ops).
 #   3. PySR alone (the hybrid at ratio 1: all of the budget to PySR, the same clock) at the three budgets;
 #   4. ONLY WITH SCORING SET (the score study's ruling, owner 2026-09-16: "for our T8 series models we need to decide
 #      which scoring we use before we can evaluate them"): the T8 timing ladders (every rung 1..65,536) for the base
@@ -105,7 +109,9 @@ baseline_ladder() {   # name config-generator-args... ; runs in $BL_PY (its venv
 }
 if [ -x $VENV_LEGACY/bin/python ] && $VENV_LEGACY/bin/python -c 'import symbolicregression, nesymres' 2>/dev/null; then
     [ -f "$E2E_MODEL" ] && BL_PY=$VENV_LEGACY/bin/python BL_LADDER=$E2E_LADDER baseline_ladder e2e e2e "$E2E_MODEL"
+    if [ "${RUN_NESYMRES:-1}" = 1 ]; then
     [ -f "$NESYMRES_DIR/100M.ckpt" ] && BL_PY=$VENV_LEGACY/bin/python BL_LADDER=$NESYMRES_LADDER baseline_ladder nesymres-100M nesymres "$NESYMRES_DIR"
+    else say "RUN_NESYMRES=0: the NeSymReS row is deferred (owner 2026-09-18: its rungs 64, 256 and 512 run last)"; fi
 fi
 if [ -x "$DIFFSYM_PY" ] && [ -f "$DIFFSYM_MODEL" ]; then
     BL_PY=$PY BL_LADDER=$DIFFSYM_LADDER baseline_ladder diffsym-v4.0 diffsym "$DIFFSYM_PY" "$DIFFSYM_MODEL" "$DIFFSYM_CFG"
@@ -129,7 +135,9 @@ hybrid_cell() {   # name model_path budget ratios
     [ "$n_done" -ge 29 ] || { say "hybrid $name: only $n_done/29 cells done; not marked"; return 1; }
     mark hybrid_$name
 }
-if $PY -c 'import flash_ansr_hybrid' 2>/dev/null; then
+if [ "${RUN_PYSR:-1}" != 1 ]; then
+    say "RUN_PYSR=0: PySR alone is deferred (2026-09-19: srbf 0.20.0 cannot build the hybrid adapter; fixed on main 7f30172)"
+elif $PY -c 'import flash_ansr_hybrid' 2>/dev/null; then
     for T in $BUDGETS; do
         for rep in $(seq 1 $PYSR_REPEATS); do
             hybrid_cell pysr-T$T-r$rep "$M20" $T 1        # ratio 1: PySR gets the whole budget, the model is idle
