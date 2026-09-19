@@ -600,13 +600,14 @@ test('ranks hold the methods equal on reference-machine time when it exists', as
   await expect(chart).toHaveAttribute('aria-label', /budget \d+/);
 });
 
-test('a method that has only begun a budget does not shrink the pool of the others', async ({ page }) => {
-  // the release payload, with one more method that has finished a single catalog at budget 16
+test('a method part-way through a budget does not shrink the pool of the others, even with the largest catalog', async ({ page }) => {
+  // the release payload, with one more method that has finished a single catalog at budget 16: the largest one
   await page.route('**/data/2026-09/results.js', async (route) => {
     const res = await route.fetch();
     const add = `;(function () { var D = window.RESULTS_V2;
       var donor = D.methods.filter(function (m) { return D.cells[m.key] && Object.keys(D.cells[m.key]).length > 3; })[0];
-      var cat = Object.keys(D.cells[donor.key]).filter(function (c) { return D.cells[donor.key][c]['16']; })[0];
+      var cat = D.catalogs.slice().sort(function (a, b) { return b.laws - a.laws; }).map(function (c) { return c.key; })
+        .filter(function (c) { return D.cells[donor.key][c] && D.cells[donor.key][c]['16']; })[0];   // the one corpus that is four fifths of the laws
       D.methods.push({ key: 'fixture-begun', label: 'Fixture just begun', param: 'draws', budget: 'candidates', color: '#555555', group: 'baseline', provenance: 'upstream_default', selection: '' });
       D.cells['fixture-begun'] = {}; D.cells['fixture-begun'][cat] = { '16': D.cells[donor.key][cat]['16'] }; D.status['fixture-begun'] = [1, 100]; })();`;
     await route.fulfill({ response: res, body: (await res.text()) + add });
@@ -617,5 +618,9 @@ test('a method that has only begun a budget does not shrink the pool of the othe
   await expect(row16).toBeVisible({ timeout: 15000 });
   const catalogs = await row16.locator('td:nth-child(2)').textContent();
   expect(+catalogs.match(/\((\d+) catalogs\)/)[1]).toBeGreaterThan(1);
+  // and its own point, which is not the mean over the selected laws, is set aside until thin rungs are asked for
+  await expect(row16.locator('td').last()).toHaveText('');
+  await page.locator(V2 + ' .v2thin').check();
+  await expect(row16.locator('td').last()).not.toHaveText('');
 });
 

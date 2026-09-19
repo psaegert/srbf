@@ -88,8 +88,8 @@
     harness_tuned: "Configuration: maintainer-chosen, set by the benchmark maintainers."
   };
   var TERMS = {
-    matched: "Matched pooling: at every rung only the catalogs that EVERY shown method has finished are pooled, so the methods are compared on the same laws. A method that has only begun a rung (less than half of what the others have there) does not shrink their pool: its own rung is thin instead. Own pooling: each method over whatever it has finished.",
-    thin: "A rung is thin when its pool holds fewer than half the laws of the method's largest pool (units still running). Thin rungs are hidden unless you show them; they draw with hollow markers.",
+    matched: "Matched pooling: at every rung the methods are pooled over the catalogs they have all finished, so they are compared on the same laws. Only a method that has all but finished a rung (nine tenths of the selected laws) holds the others to its catalogs; one that is part-way through does not shrink their pool, and its own rung is thin instead. Own pooling: each method over whatever it has finished.",
+    thin: "A rung is thin when its pool holds fewer than nine tenths of the selected laws (units still running). The catalogs differ too much for a part to stand for the whole, so thin rungs are hidden unless you show them; they draw with hollow markers.",
     wilson: "95 % Wilson score interval for a rate; t-interval for a mean; order-statistic interval for a median (from the pooled histogram). A band is the region the ladder could occupy: the interval box of every point and the hull between consecutive ones, in both axes where both are measured. Crosses draw the same intervals as bars through each point. Either, both or neither.",
     median: "The median is read from a 128-bin histogram per cell, so it is exact to a bin. Ratios and times are binned on a log scale.",
     mean: "The default. A mean is taken over the finite values of the pooled laws, so an exactly recovered law (log10 FVU = -inf) is counted by the recovery rates and by the median, but not by the mean; every point reports how many finite values it averaged and how many it had. Switch to the median where that matters.",
@@ -268,20 +268,24 @@
   function hasRung(m, r) { return CATS.some(function (c) { return cell(m, c, r); }); }
   function shownMethods() { return D.methods.filter(function (m) { return state.methods.indexOf(m.key) >= 0 && withData(m); }); }
   function coverAt(m, r) { return laws(state.cats.filter(function (c) { return cell(m, c, r); })); }
-  // Matched pooling holds the methods to the same laws. A method that has only begun a rung (less than half of what
-  // the furthest method has there) would shrink everyone's pool to its few catalogs, so it does not constrain the
-  // others: it is pooled on what it shares with them, which makes its own rung thin, and thin rungs are set aside.
+  // A pooled point stands for the selected catalogs only if it holds (nearly) all of their laws: the catalogs differ
+  // far too much for a part to speak for the whole (one synthetic corpus is four fifths of the laws, and recovery on
+  // it is a fraction of recovery elsewhere). FULL is that bar, for two decisions:
+  //  * matched pooling holds the methods to the same laws, but only a method that has all but finished a rung
+  //    constrains the others there. One that is part-way through -- a few small catalogs, or the one large corpus
+  //    alone -- would otherwise reduce every method's point to those catalogs;
+  //  * a point whose pool falls short of the bar is thin: hollow, and set aside unless thin rungs are asked for.
+  var FULL = 0.9;
   function poolCats(m, r, shown) {
     if (!hasRung(m, r)) { return []; }
     var sel = state.cats.filter(function (c) { return cell(m, c, r); });
     if (state.pool !== "matched") { return sel; }
-    var present = shown.filter(function (k) { return hasRung(k, r); });
-    var top = Math.max.apply(null, present.map(function (k) { return coverAt(k, r); }).concat([0]));
-    var binding = present.filter(function (k) { return k === m || coverAt(k, r) >= 0.5 * top; });
+    var whole = laws(state.cats);
+    var binding = shown.filter(function (k) { return k === m || (hasRung(k, r) && coverAt(k, r) >= FULL * whole); });
     return sel.filter(function (c) { return binding.every(function (k) { return cell(k, c, r); }); });
   }
   function laws(cs) { return cs.reduce(function (a, c) { return a + CAT[c].laws; }, 0); }
-  function thinMap(m, shown) { var pools = {}, mx = 0; D.rungs.forEach(function (r) { var n = laws(poolCats(m, r, shown)); pools[r] = n; if (n > mx) { mx = n; } }); var thin = {}; D.rungs.forEach(function (r) { thin[r] = pools[r] > 0 && pools[r] < 0.5 * mx; }); return { pools: pools, thin: thin }; }
+  function thinMap(m, shown) { var pools = {}, whole = laws(state.cats), thin = {}; D.rungs.forEach(function (r) { var n = laws(poolCats(m, r, shown)); pools[r] = n; thin[r] = n > 0 && n < FULL * whole; }); return { pools: pools, thin: thin }; }
   function wilson(a, b) { if (!b) { return null; } var p = a / b, z2 = Z * Z; var ctr = (p + z2 / (2 * b)) / (1 + z2 / b), half = Z * Math.sqrt(p * (1 - p) / b + z2 / (4 * b * b)) / (1 + z2 / b); return { v: p, lo: ctr - half, hi: ctr + half, n: b }; }
   function binVal(h, i) { return h.lo + (i + 0.5) * (h.hi - h.lo) / h.nb; }
   function addHist(acc, hc, nb) { if (hc.length && Array.isArray(hc[0])) { hc.forEach(function (p) { acc[p[0]] += p[1]; }); } else { for (var i = 0; i < nb; i++) { acc[i] += hc[i] || 0; } } }
@@ -600,8 +604,8 @@
           return '<figure class="v2hlfig">' + svg + "<figcaption>" + esc(hlText(h.caption)) + "</figcaption></figure>";
         }).join("");
         return '<h2 class="v2hltitle">Recovery, cost and length</h2>' +
-          '<p class="v2hlsub">One point per budget, ' + (state.stat === "mean" ? "mean" : "median") + ' over all ' + CATS.length + ' catalogs (' +
-          term("matched", "matched") + '), with ' + term("wilson", "95 % intervals") + '.</p>' +
+          '<p class="v2hlsub">One point per budget a method has all but finished: the ' + (state.stat === "mean" ? "mean" : "median") + ' over the ' + laws(CATS).toLocaleString() + ' laws of all ' + CATS.length + ' catalogs (' +
+          term("matched", "matched") + ", " + term("thin", "at least nine tenths of them") + '), with ' + term("wilson", "95 % intervals") + '.</p>' +
           '<div class="v2hlcharts">' + charts + "</div>" +
           '<p class="v2hint">' + (src === "ref" ? term("time", "Fit time on the reference machine") +
               (off.length ? "; " + esc(off.map(function (m) { return m.label; }).join(", ")) + " not timed there yet, so " +
@@ -684,7 +688,7 @@
   function rungStepper(shown) { return stepper("rung", state.rung, rungsWith(shown), function (r) { return String(r); }, term("rungs", "budget"), "budget per problem"); }
   function bestRung(shown) {   // the largest budget that the most methods have (all but) finished
     var best = null, top = 0, full = laws(state.cats.length ? state.cats : CATS);
-    D.rungs.forEach(function (r) { var n = shown.filter(function (m) { return coverAt(m.key, r) >= 0.5 * full; }).length; if (n && n >= top) { top = n; best = r; } });
+    D.rungs.forEach(function (r) { var n = shown.filter(function (m) { return coverAt(m.key, r) >= FULL * full; }).length; if (n && n >= top) { top = n; best = r; } });
     return best;
   }
   function withAt(shown, r) { return shown.filter(function (m) { return state.cats.some(function (c) { return cell(m.key, c, r); }); }); }
@@ -912,7 +916,7 @@
       if (has) { cand.push({ m: m, r: r, cover: laws(state.cats.filter(function (c) { return cell(m.key, c, r); })) }); } else { out.out.push(m); } });
     cand = cand.filter(function (x) { var ok = cand.length < 2 || cand.some(function (z) { return z !== x && paired(x.m.key, z.m.key); }); if (!ok) { out.blind.push(x.m); } return ok; });   // an overlay sealed before rankings existed
     var top = Math.max.apply(null, cand.map(function (x) { return x.cover; }).concat([0]));
-    cand.forEach(function (x) { if (x.cover < 0.5 * top && !state.thin) { out.thin.push(x.m); } else { out.roster.push(x); } });
+    cand.forEach(function (x) { if (x.cover < FULL * top && !state.thin) { out.thin.push(x.m); } else { out.roster.push(x); } });
     var ro = out.roster, k = ro.length; if (k < 2) { return out; }
     var pair = function (a, b, c) { var e = R.pairs[a + "|" + b], flip = false; if (!e) { e = R.pairs[b + "|" + a]; flip = true; } var t = e && e[c] && e[c][String(slot)]; if (!t) { return null; } var wa = t[1 + 2 * ki], wb = t[2 + 2 * ki]; return { n: t[0], wa: flip ? wb : wa, wb: flip ? wa : wb }; };
     out.cats = state.cats.filter(function (c) { return ro.every(function (x) { return cell(x.m.key, c, x.r); }) && ro.every(function (x, i) { return ro.every(function (z, j) { return j <= i || pair(x.m.key, z.m.key, c); }); }); });
@@ -953,7 +957,7 @@
     var lg = ranking(R, shown, slot, ki);
     var sitOut = (lg.out.length ? '<p class="v2hint">' + esc(lg.out.map(function (m) { return m.label; }).join(", ")) + (timed ? " cannot finish a problem within " + slotSeconds(R, slot) + " s on the reference machine (or " + (lg.out.length > 1 ? "have" : "has") + " not been timed there) and " + (lg.out.length > 1 ? "sit" : "sits") + " out." : (lg.out.length > 1 ? " have" : " has") + " nothing finished at budget " + slot + " and " + (lg.out.length > 1 ? "sit" : "sits") + " out.") + "</p>" : "") +
       (lg.blind.length ? '<p class="v2hint">' + esc(lg.blind.map(function (m) { return m.label; }).join(", ")) + (lg.blind.length > 1 ? " carry" : " carries") + " no pairwise outcomes in this release and " + (lg.blind.length > 1 ? "sit" : "sits") + " out.</p>" : "") +
-      (lg.thin.length ? '<p class="v2hint">' + esc(lg.thin.map(function (m) { return m.label; }).join(", ")) + (lg.thin.length > 1 ? " have" : " has") + " finished less than half of the laws the others have here and " + (lg.thin.length > 1 ? "sit" : "sits") + " out, so the rest are not reduced to those few laws. " + term("thin", "Show thin rungs") + " to rank them anyway.</p>" : "");
+      (lg.thin.length ? '<p class="v2hint">' + esc(lg.thin.map(function (m) { return m.label; }).join(", ")) + (lg.thin.length > 1 ? " have" : " has") + " not finished this budget (less than nine tenths of the laws the others have) and " + (lg.thin.length > 1 ? "sit" : "sits") + " out, so the rest are not reduced to those few laws. " + term("thin", "Show thin rungs") + " to rank them anyway.</p>" : "");
     if (lg.roster.length < 2 || !lg.cats.length) { return head + '<p class="v2hint">Fewer than two of the selected methods share a finished catalog at ' + esc(slotLabel(R, slot)) + ": step to another one above.</p>" + sitOut; }
     return head + rankDiagram(R, lg, p, slot) + sitOut + rankTables(R, lg, p, slot, timed) + rankLadder(R, shown, p, ki, timed);
   }
@@ -1009,7 +1013,7 @@
   // Each display carries its own controls. A control that cannot change what is on screen is not shown.
   var USES = {
     curves: { stat: 1, pool: 1, ci: 1, thin: 1 },
-    table: { plots: 1, rows: 1, stat: 1, pool: 1, ci: 1, rung: 1 },
+    table: { plots: 1, rows: 1, stat: 1, pool: 1, ci: 1, rung: 1, thin: 1 },
     matrix: { focus: 1, stat: 1, rung: 1 },
     dist: { focus: 1, rung: 1, pool: 1, thin: 1 },
     ranks: { focus: 1, rung: 1, thin: 1 },
@@ -1019,6 +1023,7 @@
     var u = {}, src = USES[view] || {};
     Object.keys(src).forEach(function (k) { u[k] = src[k]; });
     if (view === "table" && state.rows !== "cats") { delete u.rung; }   // the budget only binds the by-catalog table
+    if (view === "table" && state.rows === "cats") { delete u.thin; delete u.pool; }   // one catalog per row: nothing is pooled, nothing is thin
     if (view === "dist" && METRIC[state.dmetric].kind !== "rate" && state.dmode === "rungs") { delete u.rung; }
     if (view === "dist" && (METRIC[state.dmetric].kind === "rate" || state.dmode === "cats")) { delete u.pool; }
     if (view === "dist" && (METRIC[state.dmetric].kind === "rate" || state.dmode === "cats")) { delete u.thin; }
