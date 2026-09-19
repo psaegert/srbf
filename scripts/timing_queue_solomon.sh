@@ -4,10 +4,10 @@
 #   1. freeze the 262-problem timing subset, nested in the hybrid r-sweep's frozen subset;
 #   2. the baselines' timing ladders on the subset, in the owner's order of 2026-09-16: E2E (candidates_per_bag
 #      1..2048), NeSymReS (beam_width 1..512), diffsym (n_samples 1..128) -- E2E and NeSymReS in the legacy venv;
-#      ORDER (owner 2026-09-18, superseding the 2026-09-16 order): the T8 rows first (their low rungs ahead of
-#      everything), then diffsym and PySR, and NeSymReS's remaining rungs (64, 256, 512) LAST -- rung 512 alone
-#      costs more than everything before it. RUN_NESYMRES=0 defers that row; run it with RUN_NESYMRES=1 and the
-#      extended ladder 1,2,4,8,16,32,64,128,256,512 at the very end (the marks make the finished rungs no-ops).
+#      ORDER (owner 2026-09-19, superseding 2026-09-18): one PySR run on the whole suite first (step 3b), then the
+#      T8 rows with the 120M ahead of the 20M and the 3M (step 4), then NeSymReS's remaining rungs (64, 256, 512;
+#      step 4c -- rung 512 alone costs more than every ladder before it; the marks make its finished rungs
+#      no-ops), and PySR's second run on the suite after every other row (step 6).
 #   3. PySR alone (the hybrid at ratio 1: all of the budget to PySR, the same clock) at the three budgets;
 #   4. ONLY WITH SCORING SET (the score study's ruling, owner 2026-09-16: "for our T8 series models we need to decide
 #      which scoring we use before we can evaluate them"): the T8 timing ladders (every rung 1..65,536) for the base
@@ -41,7 +41,7 @@ RL20=${RL20:-}; RL3=${RL3:-}; RL120=${RL120:-}     # RL checkpoint directories (
 PYSR_REPEATS=${PYSR_REPEATS:-1}
 PYSR=${PYSR:-$HOME/venvs/pysr23/bin/python}          # PySR's own environment: the full-suite runs' worker
 PYSR_SUITE_LADDER=${PYSR_SUITE_LADDER:-1,2,4,8,16,32,64,128,256,512,1024}   # iterations, bottom up
-PYSR_SUITE_RUNS=${PYSR_SUITE_RUNS:-3}                # owner 2026-09-10: three PySR runs, all on solomon
+PYSR_SUITE_RUNS=${PYSR_SUITE_RUNS:-2}                # owner 2026-09-19: two PySR runs, both on solomon; run 1 ahead of the T8 rows, run 2 last
 # the baselines (owner's order 2026-09-16: e2e, nesymres, diffsym, pysr -- before any T8 row)
 VENV_LEGACY=${VENV_LEGACY:-$K/venv_legacy}              # srbf[baselines] + patched NeSymReS/E2E clones (build_solomon_baselines.sh)
 E2E_MODEL=${E2E_MODEL:-$HOME/Projects/flash-ansr/models/e2e/model1.pt}
@@ -50,7 +50,7 @@ DIFFSYM_PY=${DIFFSYM_PY:-$K/diffsym/.venv/bin/python}
 DIFFSYM_MODEL=${DIFFSYM_MODEL:-$K/models/diffsym-v4.0/best.pt}
 DIFFSYM_CFG=${DIFFSYM_CFG:-$K/diffsym/configs/v4.0}
 E2E_LADDER=${E2E_LADDER:-1,2,4,8,16,32,64,128,256}   # default settings only (owner 2026-09-16); extend after the 4090 memory probe
-NESYMRES_LADDER=${NESYMRES_LADDER:-1,2,4,8,16,32,128,512}
+NESYMRES_LADDER=${NESYMRES_LADDER:-1,2,4,8,16,32,64,128,256,512}
 DIFFSYM_LADDER=${DIFFSYM_LADDER:-1,2,4,8,16,32,64,128}
 SCORING=${SCORING:-}                         # the score study's ruling (e.g. S0 or S1); the T8 rows refuse to run without it
 BUDGET_HOURS=${BUDGET_HOURS:-100}            # owner 2026-09-16: 100 h per model row; rungs that do not fit are skipped (run_timing_ladder.py)
@@ -112,10 +112,12 @@ baseline_ladder() {   # name config-generator-args... ; runs in $BL_PY (its venv
 }
 if [ -x $VENV_LEGACY/bin/python ] && $VENV_LEGACY/bin/python -c 'import symbolicregression, nesymres' 2>/dev/null; then
     [ -f "$E2E_MODEL" ] && BL_PY=$VENV_LEGACY/bin/python BL_LADDER=$E2E_LADDER baseline_ladder e2e e2e "$E2E_MODEL"
-    if [ "${RUN_NESYMRES:-1}" = 1 ]; then
-    [ -f "$NESYMRES_DIR/100M.ckpt" ] && BL_PY=$VENV_LEGACY/bin/python BL_LADDER=$NESYMRES_LADDER baseline_ladder nesymres-100M nesymres "$NESYMRES_DIR"
-    else say "RUN_NESYMRES=0: the NeSymReS row is deferred (owner 2026-09-18: its rungs 64, 256 and 512 run last)"; fi
 fi
+nesymres_row() {   # step 4c calls it: after the T8 rows (owner 2026-09-18/19)
+    [ -x $VENV_LEGACY/bin/python ] && $VENV_LEGACY/bin/python -c 'import nesymres' 2>/dev/null || { say "no NeSymReS in $VENV_LEGACY: row skipped"; return 0; }
+    [ -f "$NESYMRES_DIR/100M.ckpt" ] || { say "no NeSymReS checkpoint in $NESYMRES_DIR: row skipped"; return 0; }
+    BL_PY=$VENV_LEGACY/bin/python BL_LADDER=$NESYMRES_LADDER baseline_ladder nesymres-100M nesymres "$NESYMRES_DIR"
+}
 if [ -x "$DIFFSYM_PY" ] && [ -f "$DIFFSYM_MODEL" ]; then
     BL_PY=$PY BL_LADDER=$DIFFSYM_LADDER baseline_ladder diffsym-v4.0 diffsym "$DIFFSYM_PY" "$DIFFSYM_MODEL" "$DIFFSYM_CFG"
 fi
@@ -165,7 +167,7 @@ pysr_suite_run() {   # run index
     mark pysr_suite_run$i
 }
 if [ "${RUN_PYSR_SUITE:-1}" = 1 ] && [ -x "$PYSR" ]; then
-    for i in $(seq 1 $PYSR_SUITE_RUNS); do pysr_suite_run $i || break; done
+    pysr_suite_run 1                                     # the remaining runs: step 6, after every other row
 else say "RUN_PYSR_SUITE=0 or no PySR environment at $PYSR: PySR on the suite skipped"; fi
 
 # ---- 4. the T8 rows: only with the scoring ruling ------------------------------------------------------------------
@@ -184,9 +186,9 @@ if [ -z "$SCORING" ]; then
     say "SCORING unset: T8 ladders and hybrid T-curves not run (owner 2026-09-16: decide the scoring first)"
 else
 say "T8 rows under scoring ruling '$SCORING' (the scaling configs in $CFG_DIR must carry that ranking)"
+ladder t8-120m "$M120" $CFG_DIR/flash-ansr-v25.0-T8-120M_srbf.yaml   # owner 2026-09-19: the 120M ahead of the other sizes
 ladder t8-20m  "$M20"  $CFG_DIR/flash-ansr-v25.0-T8-20M_srbf.yaml
 ladder t8-3m   "$M3"   $CFG_DIR/flash-ansr-v25.0-T8-3M_srbf.yaml
-ladder t8-120m "$M120" $CFG_DIR/flash-ansr-v25.0-T8-120M_srbf.yaml
 [ -n "$RL20" ]  && ladder rl-20m  "$RL20"  $CFG_DIR/flash-ansr-v25.0-T8-20M_srbf.yaml
 [ -n "$RL3" ]   && ladder rl-3m   "$RL3"   $CFG_DIR/flash-ansr-v25.0-T8-3M_srbf.yaml
 [ -n "$RL120" ] && ladder rl-120m "$RL120" $CFG_DIR/flash-ansr-v25.0-T8-120M_srbf.yaml
@@ -204,6 +206,9 @@ else
         [ -n "$RL120" ] && hybrid_cell hyb-rl-120m-T$T "$RL120" $T $RSTAR
     done
 fi
+
+# ---- 4c. NeSymReS's remaining rungs, after the T8 rows ------------------------------------------------------------
+nesymres_row
 fi   # SCORING
 
 # ---- 5. read-out --------------------------------------------------------------------------------------------------
@@ -212,6 +217,11 @@ if [ -n "$models" ]; then
     ref=t8-20m; echo ",$models," | grep -q ",t8-20m," || ref=${models%%,*}
     $PY $S/timing_readout.py --root $R --manifest $R/hybrid_data/timing_subset.json --models $models --reference $ref \
         --out $R/REPORT_ladders.md --json $R/REPORT_ladders.json 2>&1 | tail -2 | tee -a $LOG
+fi
+
+# ---- 6. PySR's remaining runs on the suite: after every other row (owner 2026-09-19) ---------------------------------
+if [ "${RUN_PYSR_SUITE:-1}" = 1 ] && [ -x "$PYSR" ]; then
+    for i in $(seq 2 $PYSR_SUITE_RUNS); do pysr_suite_run $i || break; done
 fi
 say "queue finished"
 echo TIMING_QUEUE_DONE | tee -a $LOG
