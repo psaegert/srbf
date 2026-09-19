@@ -328,7 +328,9 @@ def _build_flash_ansr_hybrid_adapter(config: Mapping[str, Any]) -> FlashANSRHybr
     options = dict(hybrid)
     snapshot_dir = options.pop("snapshot_dir", None)
     flash = _build_flash_ansr_adapter(flash_cfg)
-    options.setdefault("emission", flash.emission)
+    # The emission format is a sampling policy read from the flash_ansr block (flash-ansr 0.17); the adapter
+    # does not keep it, so take it from the same place the flash_ansr builder does.
+    options.setdefault("emission", str(flash_cfg.get("emission", "fittable")))
     regressor = HybridRegressor(
         flash.model, HybridConfig.from_mapping({**options, "pysr": dict(pysr_cfg)}),
         snapshot_dir=substitute_root_path(str(snapshot_dir)) if snapshot_dir else None)

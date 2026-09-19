@@ -77,3 +77,44 @@ def test_builder_validates_blocks_before_importing_the_method():
         build_model_adapter({"type": "flash_ansr_hybrid", "hybrid": {"ratio": 0.5}})
     with pytest.raises(ValueError):
         build_model_adapter({"type": "flash_ansr_pysr"})                     # the old type is gone
+
+
+def test_builder_runs_against_the_real_flash_adapter(monkeypatch):
+    # The fakes above carry an `emission` attribute; the real FlashANSRAdapter lost it in the flash-ansr 0.17
+    # port (emission became a sampling policy read from the flash_ansr block). The builder kept reading
+    # `flash.emission`, so every real hybrid cell died at build time (solomon, 2026-09-19) while these tests
+    # stayed green. Build through the real class and a stand-in flash_ansr_hybrid that records its config.
+    import sys
+    import types
+
+    from srbf import config as srbf_config
+    from srbf.model_adapters import FlashANSRAdapter
+
+    seen = {}
+
+    class HybridConfig:
+        @classmethod
+        def from_mapping(cls, value):
+            seen["config"] = dict(value)
+            return value
+
+    class HybridRegressor:
+        def __init__(self, model, cfg, *, snapshot_dir=None):
+            seen["model"], seen["snapshot_dir"] = model, snapshot_dir
+
+    monkeypatch.setitem(sys.modules, "flash_ansr_hybrid",
+                        types.SimpleNamespace(HybridConfig=HybridConfig, HybridRegressor=HybridRegressor))
+    real = FlashANSRAdapter.__new__(FlashANSRAdapter)       # the real class, so attribute access is the real one's
+    real.model = object()
+    monkeypatch.setattr(srbf_config, "_build_flash_ansr_adapter", lambda cfg: real)
+
+    adapter = srbf_config.build_model_adapter({
+        "type": "flash_ansr_hybrid",
+        "flash_ansr": {"type": "flash_ansr", "model_path": "/m", "emission": "fittable"},
+        "hybrid": {"budget_s": 10, "ratio": 1.0, "snapshot_dir": "/tmp/snap"},
+        "pysr": {"model_selection": "best", "warmup": True},
+    })
+    assert isinstance(adapter, FlashANSRHybridAdapter)
+    assert seen["model"] is real.model
+    assert seen["config"]["emission"] == "fittable"          # taken from the flash_ansr block, not the adapter
+    assert seen["config"]["pysr"] == {"model_selection": "best", "warmup": True}
