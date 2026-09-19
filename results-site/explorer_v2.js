@@ -96,7 +96,7 @@
     signtest: "Paired mean difference with a t-interval over laws where both methods have a finite value, plus a two-sided exact sign test on the wins and losses.",
     draw1: "One draw per problem so far. These are paired contrasts on the same laws, not the repeated-draw noise margins of the 2026-07 release; those follow when draws 2 and up exist.",
     time: "Seconds per problem on ONE reference machine (solomon: RTX 4090, 16 refiner workers, a frozen 262-problem subset), the only timing this benchmark publishes. Seconds measured where a unit happened to run depend on the node, its GPU and whatever shared it, so they are not comparable between methods and are never drawn: a method the reference machine has not timed has no position here, so it is left out of the chart and named underneath; a chart with no timed method at all has no time axis.",
-    candidates: "Samples, beam width, candidates or draws per problem: the budget a generative method spends. PySR's budget is a time limit rather than a count, so it has no position on this axis and appears on the time axis only.",
+    candidates: "Samples, beam width, candidates or draws per problem: the budget a generative method spends. PySR's budget is a number of search iterations rather than a candidate count, so it has no position on this axis and appears on the time axis only.",
     provenance: "Who chose each method's configuration. Upstream defaults: nothing tuned. Author-blessed: the method's authors chose it (Flash-ANSR shares authors with the benchmark). Maintainer-chosen: the benchmark maintainers set it."
   };
   var COOKIE = "srbf_colors";
@@ -452,7 +452,7 @@
       xlabel: xlabel || axisName(xm), ylabel: ylabel == null ? axisName(ym) : ylabel, xzero: 0 });
   }
   function xOf(m, r, cs, src) { return state.xaxis === "time" ? timeOf(m, r, cs, src) : r; }
-  function hasCandidateBudget(m) { return (m.budget || "candidates") !== "seconds"; }   // PySR's budget is seconds
+  function hasCandidateBudget(m) { return (m.budget || "candidates") === "candidates"; }   // PySR's budget is search iterations
   function onAxis(m) { return state.xaxis === "time" ? hasRefTime(m.key) : hasCandidateBudget(m); }
   function axisMethods(shown) { return shown.filter(onAxis); }
   function offAxis(shown) { return shown.filter(function (m) { return !onAxis(m); }); }
@@ -532,7 +532,7 @@
       if (!off.length) { return ""; }
       var names = esc(off.map(function (m) { return m.label; }).join(", ")), many = off.length > 1;
       return '<p class="v2hint">' + names + (ax === "rung"
-        ? (many ? " spend" : " spends") + " a time budget, not " + term("candidates", "a candidate count")
+        ? (many ? " spend " : " spends ") + (off.every(function (m) { return m.budget === "iterations"; }) ? "search iterations" : "a budget of its own kind") + ", not " + term("candidates", "a candidate count")
         : (many ? " have" : " has") + " no " + term("time", "reference-machine time") + " yet") +
         ": on that axis " + (many ? "they are" : "it is") + " not drawn.</p>";
     }).join("");
@@ -746,7 +746,7 @@
       '<div class="v2row" data-uses="focus"><span class="v2lab">metric</span>' + pickButton("v2focus", 'data-axis="focus" aria-label="metric shown in this view"', state.focus) + '</div>' +
       '<div class="v2row" data-uses="rows"><span class="v2lab">rows</span><label><input type="radio" name="v2rows" value="rungs"> one per budget</label><label><input type="radio" name="v2rows" value="cats"> one per catalog</label></div>' +
       '<div class="v2row" data-uses="base"><span class="v2lab">baseline</span><select class="v2base" aria-label="baseline method">' + D.methods.filter(withData).map(function (m) { return '<option value="' + m.key + '">' + esc(m.label) + '</option>'; }).join("") + '</select></div>' +
-      '<div class="v2row" data-uses="rung"><span class="v2lab">budget</span><select class="v2rung" aria-label="budget per problem">' + D.rungs.map(function (r) { return '<option value="' + r + '">' + r + '</option>'; }).join("") + '</select><span class="v2hint">candidates or seconds, per method</span></div></div>' +
+      '<div class="v2row" data-uses="rung"><span class="v2lab">budget</span><select class="v2rung" aria-label="budget per problem">' + D.rungs.map(function (r) { return '<option value="' + r + '">' + r + '</option>'; }).join("") + '</select><span class="v2hint">candidates or iterations, per method</span></div></div>' +
       // 2. what it is shown for
       '<div class="v2panel"><h3>Methods</h3><div class="v2methods">' + methList + '</div>' +
       '<div class="v2row v2addm"><button type="button" class="v2btn v2addmopen" data-act="add-method">add method</button>' +

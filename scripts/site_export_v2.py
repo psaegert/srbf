@@ -39,7 +39,7 @@ METHODS = [
      "Refines its decoded trees with BFGS and submits the one with the lowest error on the data it was given."),
     ("nesymres-100M", "NeSymReS", "beam width", "#e8842a", "baseline", "upstream_default", "nesymres",
      "Beam search, then BFGS on the constants; submits the beam candidate that fits the data best."),
-    ("PySR", "PySR", "seconds", "#d62728", "baseline", "harness_tuned", None,
+    ("PySR", "PySR", "iterations", "#d62728", "baseline", "upstream_default", "pysr",
      "Evolutionary search; submits the pick of its own hall of fame, its own accuracy-versus-complexity rule."),
     ("diffsym-v4.0", "diffsym v4.0", "samples", "#d6338f", "baseline", "author_blessed", "diffsym",
      "Diffusion sampling; submits its own best-scoring sample after refinement."),
@@ -376,8 +376,8 @@ def main() -> None:
                                "judge": "One judge for every answer: the predicted expression and the law are compared in one certified canonical form (SimpliPy acj-5-4-llm, f64), and numeric recovery is float32 precision on 512 held-out points."},
                    "catalogs": cats, "rungs": RUNGS, "nb": NB, "metrics": registry_json(), "paired_keys": PAIRED_KEYS,
                    # budget: what one rung of the ladder buys. "candidates" is a count a generative method draws;
-                   # "seconds" is a time limit (PySR), which has no place on the candidate axis of the site.
-                   "methods": [{"key": k, "label": l, "param": p, "budget": "seconds" if p == "seconds" else "candidates",
+                   # PySR's rungs are search iterations, which have no place on the candidate axis of the site.
+                   "methods": [{"key": k, "label": l, "param": p, "budget": p if p in ("iterations", "seconds") else "candidates",
                                 "color": col, "group": g, "provenance": prov,
                                 "selection": sel or (FLASH_ANSR_SELECTION if g == "flash-ansr" else "")}
                                for k, l, p, col, g, prov, _, sel in methods],

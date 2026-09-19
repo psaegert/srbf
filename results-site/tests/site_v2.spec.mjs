@@ -187,8 +187,8 @@ test('the candidate axis names itself and is offered beside time', async ({ page
   await page.goto('/?release=2026-09&v=curves');
   await pick(page, page.locator(V2 + ' .v2plot .v2xsel').first(), 'rung');
   await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('candidates');
-  // a method whose budget is a time limit has no position on this axis and is named instead of dropped silently
-  const seconds = await page.evaluate(() => (window.RESULTS_V2.methods || []).filter((m) => m.budget === 'seconds' && window.RESULTS_V2.cells[m.key] && Object.keys(window.RESULTS_V2.cells[m.key]).length).map((m) => m.label));
+  // a method whose budget is not a candidate count has no position on this axis and is named instead of dropped silently
+  const seconds = await page.evaluate(() => (window.RESULTS_V2.methods || []).filter((m) => (m.budget || 'candidates') !== 'candidates' && window.RESULTS_V2.cells[m.key] && Object.keys(window.RESULTS_V2.cells[m.key]).length).map((m) => m.label));
   for (const label of seconds) { await expect(page.locator(V2 + ' .v2view')).toContainText(label); }
   if (await hasRefTiming(page)) {
     await pick(page, page.locator(V2 + ' .v2plot .v2xsel').first(), 'time');
