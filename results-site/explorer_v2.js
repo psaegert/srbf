@@ -306,14 +306,34 @@
     else { s = v.toFixed(metric.fmt === "num1" ? 1 : metric.fmt === "num3" ? 3 : 2); }
     return (edge === -1 ? "≤ " : edge === 1 ? "≥ " : "") + s;
   }
-  function tickLabel(metric, x) { var tf = tfOf(metric); if (metric.kind === "rate") { return (100 * x).toFixed(0) + "%"; } if (tf === "log2") { var v = Math.pow(2, x); return v >= 1 ? String(v) : "1/" + String(Math.pow(2, -x)); } if (tf === "log10") { return Math.pow(10, x) + " s"; } return Math.abs(x) >= 100 ? x.toFixed(0) : x.toFixed(metric.fmt === "num3" ? 2 : 1); }
-  function ticksFor(metric, ymin, ymax) {
-    var tf = tfOf(metric), out = [];
-    if (tf === "log2" || tf === "log10") { for (var i = Math.ceil(ymin); i <= Math.floor(ymax); i++) { out.push(i); } if (out.length > 8) { out = out.filter(function (v) { return v % 2 === 0; }); } return out; }
-    if (metric.kind === "rate") { return [0, 1, 2, 3, 4].map(function (i) { return ymin + (ymax - ymin) * i / 4; }); }
-    var span = ymax - ymin, step = Math.pow(10, Math.floor(Math.log10(span / 4))); [1, 2, 5].some(function (f) { if (span / (step * f) <= 6) { step = step * f; return true; } return false; });
-    for (var t = Math.ceil(ymin / step) * step; t <= ymax + 1e-9; t += step) { out.push(t); } return out;
+  // ---- axes: ticks at round values, a range that follows what is drawn, labels that never crowd ------------------
+  function niceStep(span, target) { var raw = span / Math.max(1, target), p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; }
+  function roundNum(v) { if (!isFinite(v)) { return "–"; } var a = Math.abs(v); if (a >= 1000) { return Math.round(v).toLocaleString(); } var t = String(+v.toPrecision(a >= 100 ? 4 : 3)); return t === "-0" ? "0" : t; }
+  function linearTicks(lo, hi, target) {   // the round step (1, 2 or 5 times a power of ten) whose tick count comes closest to five, the coarser on a tie
+    var want = target || 5, span = Math.max(hi - lo, 1e-12), p = Math.pow(10, Math.floor(Math.log10(span))), best = null, bestD = Infinity;
+    [10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05].forEach(function (f) { var st = f * p, n = Math.floor(hi / st + 1e-9) - Math.ceil(lo / st - 1e-9) + 1, d = Math.abs(n - want) + (n < 3 ? 100 : 0); if (d < bestD) { bestD = d; best = st; } });
+    var step = best || niceStep(span, want), out = []; for (var t = Math.ceil(lo / step - 1e-9) * step; t <= hi + step * 1e-9; t += step) { out.push(+t.toFixed(10)); } return out;
   }
+  // a log axis, positions in exponents of `base`: powers of the base over a wide range, round VALUES over a narrow one
+  function logTicks(lo, hi, base, target) {
+    var span = hi - lo, out = [], k, lb = Math.log(base);
+    if (span * lb / Math.LN2 < 3.2) { return linearTicks(Math.pow(base, lo), Math.pow(base, hi), target || 5).filter(function (v) { return v > 0; }).map(function (v) { return Math.log(v) / lb; }); }
+    if (base === 10 && span <= 3.2) { for (k = Math.floor(lo); k <= Math.ceil(hi); k++) { [1, 2, 5].forEach(function (m) { var e = k + Math.log10(m); if (e >= lo - 1e-9 && e <= hi + 1e-9) { out.push(e); } }); } return out; }
+    var step = Math.max(1, Math.ceil(span / (target || 6)));
+    for (k = Math.ceil(lo / step - 1e-9) * step; k <= hi + 1e-9; k += step) { out.push(k); } return out;
+  }
+  function tickLabel(metric, x) { var tf = tfOf(metric); if (metric.kind === "rate") { return roundNum(100 * x) + "%"; } if (tf === "log2") { return roundNum(Math.pow(2, x)); } if (tf === "log10") { return roundNum(Math.pow(10, x)) + " s"; } return roundNum(x); }
+  function ticksFor(metric, ymin, ymax, target) { var tf = tfOf(metric); return tf === "log2" ? logTicks(ymin, ymax, 2, target) : tf === "log10" ? logTicks(ymin, ymax, 10, target) : linearTicks(ymin, ymax, target); }
+  // labels that would sit closer than `gap` pixels are dropped, the rounder value kept (an integer before a fraction)
+  function thinTicks(ticks, pos, gap, weight) {
+    var order = ticks.slice().sort(function (a, b) { return (weight ? weight(b) - weight(a) : 0) || a - b; }), kept = [];
+    order.forEach(function (t) { if (kept.every(function (k) { return Math.abs(pos(k) - pos(t)) >= gap; })) { kept.push(t); } });
+    return kept.sort(function (a, b) { return a - b; });
+  }
+  function roundness(v) { var a = Math.abs(v); if (a < 1e-12) { return 9; } var e = Math.floor(Math.log10(a)), m = a / Math.pow(10, e); return Math.abs(m - 1) < 1e-9 ? 3 : (Math.abs(m - 5) < 1e-9 || Math.abs(m - 2) < 1e-9 ? 2 : 1); }
+  // a reference value (the law itself, no difference) joins the range only when it is near what is drawn: far away
+  // it would leave most of the chart empty
+  function nearRange(lo, hi, ref, frac) { var span = Math.max(hi - lo, 1e-9); return ref >= lo - frac * span && ref <= hi + frac * span; }
 
   // ---- SVG chart: series of points {x, v, lo, hi, hollow, title} on a rung/time x axis -----------------------------
   function narrow() { return window.innerWidth < 700; }   // the viewport, like the CSS breakpoints: a container reflows, this does not
@@ -383,16 +403,23 @@
     if (opts.empty) { return s + '<text x="' + W / 2 + '" y="' + H / 2 + '" class="tick" text-anchor="middle">' + esc(opts.empty) + '</text></svg>'; }
     var ymin = opts.ymin, ymax = opts.ymax; if (!(ymax > ymin)) { ymax = ymin + 1; }
     var timeAxis = opts.timeAxis, tmin = opts.tmin, tmax = opts.tmax;
-    var xs = function (x) { return timeAxis ? L + (Math.log10(x) - Math.log10(tmin)) / (Math.log10(tmax) - Math.log10(tmin)) * (W - L - R) : L + Math.log2(x) / Math.log2(65536) * (W - L - R); };
+    var rmax = 4; series.forEach(function (sr) { sr.pts.forEach(function (p) { if (!timeAxis && p.x > rmax) { rmax = p.x; } }); });
+    var xs = function (x) { return timeAxis ? L + (Math.log10(x) - Math.log10(tmin)) / (Math.log10(tmax) - Math.log10(tmin)) * (W - L - R) : L + 8 + Math.log2(x) / Math.log2(rmax) * (W - L - R - 16); };
     var y = function (v) { return T + (1 - (v - ymin) / (ymax - ymin)) * (H - T - B); };
-    opts.ticks.forEach(function (g) { s += '<line x1="' + L + '" y1="' + y(g).toFixed(1) + '" x2="' + (W - R) + '" y2="' + y(g).toFixed(1) + '" class="grid"/><text x="' + (L - 6) + '" y="' + (y(g) + 4).toFixed(1) + '" class="tick" text-anchor="end">' + esc(opts.tick(g)) + '</text>'; });
+    thinTicks(opts.ticks, y, 20, roundness).forEach(function (g) { s += '<line x1="' + L + '" y1="' + y(g).toFixed(1) + '" x2="' + (W - R) + '" y2="' + y(g).toFixed(1) + '" class="grid"/><text x="' + (L - 6) + '" y="' + (y(g) + 4).toFixed(1) + '" class="tick" text-anchor="end">' + esc(opts.tick(g)) + '</text>'; });
     if (opts.zero !== undefined && opts.zero >= ymin && opts.zero <= ymax) { s += '<line x1="' + L + '" y1="' + y(opts.zero).toFixed(1) + '" x2="' + (W - R) + '" y2="' + y(opts.zero).toFixed(1) + '" class="grid zero" stroke-dasharray="4 4"/>'; }
     var xtext = function (a, label) {   // the outermost tick label leans inwards instead of over the edge
       var anchor = a > W - 30 ? "end" : (a < L + 14 ? "start" : "middle"), x = anchor === "end" ? Math.min(a, W - 2) : (anchor === "start" ? Math.max(a, 2) : a);
       return '<text x="' + x.toFixed(1) + '" y="' + (H - B + 16) + '" class="tick" text-anchor="' + anchor + '">' + label + "</text>";
     };
-    if (timeAxis) { for (var t = tmin; t <= tmax * 1.0001; t *= 10) { s += '<line x1="' + xs(t).toFixed(1) + '" y1="' + T + '" x2="' + xs(t).toFixed(1) + '" y2="' + (H - B) + '" class="grid"/>' + xtext(xs(t), (t >= 1 ? t : t.toPrecision(1)) + " s"); } }
-    else { D.rungs.forEach(function (r) { var e = Math.round(Math.log2(r)); s += '<line x1="' + xs(r).toFixed(1) + '" y1="' + (H - B) + '" x2="' + xs(r).toFixed(1) + '" y2="' + (H - B + (e % 2 ? 3 : 5)) + '" class="grid"/>'; if (e % 2) { return; } s += xtext(xs(r), String(r >= 1024 ? (r / 1024) + "k" : r)); }); }
+    if (timeAxis) {
+      var tt = logTicks(Math.log10(tmin), Math.log10(tmax), 10, nr ? 4 : 7).map(function (e) { return Math.pow(10, e); });
+      thinTicks(tt, xs, nr ? 46 : 58, roundness).forEach(function (t) { s += '<line x1="' + xs(t).toFixed(1) + '" y1="' + T + '" x2="' + xs(t).toFixed(1) + '" y2="' + (H - B) + '" class="grid"/>' + xtext(xs(t), roundNum(t) + " s"); });
+    } else {
+      var rr = D.rungs.filter(function (r) { return r <= rmax; });
+      rr.forEach(function (r) { s += '<line x1="' + xs(r).toFixed(1) + '" y1="' + (H - B) + '" x2="' + xs(r).toFixed(1) + '" y2="' + (H - B + 4) + '" class="grid"/>'; });
+      thinTicks(rr, xs, nr ? 34 : 44, function (r) { return Math.round(Math.log2(r)) % 2 ? 1 : 2; }).forEach(function (r) { s += xtext(xs(r), String(r >= 1024 ? (r / 1024) + "k" : r)); });
+    }
     var xlab = opts.xlabel || (timeAxis
       ? (nr ? "fit time (s, ref)" : "fit time per problem (s, log, reference machine)")
       : (nr ? "candidates / problem" : "candidates per problem (log scale)"));
@@ -430,8 +457,8 @@
     var xs = function (x) { return L + (x - xmin) / (xmax - xmin) * (W - L - R); };
     var y = function (v) { return T + (1 - (v - ymin) / (ymax - ymin)) * (H - T - B); };
     var clx = function (v) { return Math.min(xmax, Math.max(xmin, v)); }, cly = function (v) { return Math.min(ymax, Math.max(ymin, v)); };
-    opts.yticks.forEach(function (g) { s += '<line x1="' + L + '" y1="' + y(g).toFixed(1) + '" x2="' + (W - R) + '" y2="' + y(g).toFixed(1) + '" class="grid"/><text x="' + (L - 6) + '" y="' + (y(g) + 4).toFixed(1) + '" class="tick" text-anchor="end">' + esc(opts.ytick(g)) + "</text>"; });
-    opts.xticks.forEach(function (g) { s += '<line x1="' + xs(g).toFixed(1) + '" y1="' + T + '" x2="' + xs(g).toFixed(1) + '" y2="' + (H - B) + '" class="grid"/><text x="' + xs(g).toFixed(1) + '" y="' + (H - B + 16) + '" class="tick" text-anchor="middle">' + esc(opts.xtick(g)) + "</text>"; });
+    thinTicks(opts.yticks, y, 20, roundness).forEach(function (g) { s += '<line x1="' + L + '" y1="' + y(g).toFixed(1) + '" x2="' + (W - R) + '" y2="' + y(g).toFixed(1) + '" class="grid"/><text x="' + (L - 6) + '" y="' + (y(g) + 4).toFixed(1) + '" class="tick" text-anchor="end">' + esc(opts.ytick(g)) + "</text>"; });
+    thinTicks(opts.xticks, xs, nr ? 40 : 52, roundness).forEach(function (g) { s += '<line x1="' + xs(g).toFixed(1) + '" y1="' + T + '" x2="' + xs(g).toFixed(1) + '" y2="' + (H - B) + '" class="grid"/><text x="' + xs(g).toFixed(1) + '" y="' + (H - B + 16) + '" class="tick" text-anchor="middle">' + esc(opts.xtick(g)) + "</text>"; });
     if (opts.xzero !== undefined && opts.xzero > xmin && opts.xzero < xmax) { s += '<line x1="' + xs(opts.xzero).toFixed(1) + '" y1="' + T + '" x2="' + xs(opts.xzero).toFixed(1) + '" y2="' + (H - B) + '" class="grid zero" stroke-dasharray="4 4"/>'; }
     s += '<text x="' + ((L + W - R) / 2).toFixed(0) + '" y="' + (H - B + 32) + '" class="tick" text-anchor="middle">' + esc(opts.xlabel) + "</text>";
     s += '<text transform="translate(14,' + ((T + H - B) / 2).toFixed(0) + ') rotate(-90)" class="tick" text-anchor="middle">' + esc(opts.ylabel) + "</text>";
@@ -465,8 +492,9 @@
     if (title == null) { title = xm.short + " vs " + ym.short; }
     if (pending && !series.length) { return frontSVG({ title: title, aria: aria, series: [], empty: "loading the distributions\u2026" }); }
     if (!series.length) { return frontSVG({ title: title, aria: aria, series: [], empty: "no finished units for this selection yet" }); }
-    var xpad = (xmax - xmin) * 0.08 || 0.3, ypad = (ymax - ymin) * 0.08 || 0.3;
-    xmin = Math.min(xmin - xpad, -0.15); xmax += xpad; ymin -= ypad; ymax += ypad;   // keep the law's own length in view
+    var xpad = (xmax - xmin) * 0.06 || 0.3, ypad = (ymax - ymin) * 0.06 || 0.3;
+    if (nearRange(xmin, xmax, 0, 0.35)) { xmin = Math.min(xmin, 0); xmax = Math.max(xmax, 0); }   // the law's own length, when it is near
+    xmin -= xpad; xmax += xpad; ymin -= ypad; ymax += ypad;
     return frontSVG({ title: title, aria: aria, series: series, xmin: xmin, xmax: xmax, ymin: ymin, ymax: ymax,
       xticks: ticksFor(xm, xmin, xmax), xtick: function (g) { return tickLabel(xm, g); },
       yticks: ticksFor(ym, ymin, ymax), ytick: function (g) { return tickLabel(ym, g); },
@@ -478,7 +506,10 @@
   function axisMethods(shown) { return shown.filter(onAxis); }
   function offAxis(shown) { return shown.filter(function (m) { return !onAxis(m); }); }
   function anyTime() { return Object.keys(D.timing).some(hasRefTime); }   // a reference row, or no time axis
-  function timeRange(tmin, tmax) { tmin = Math.pow(10, Math.floor(Math.log10(tmin))); tmax = Math.pow(10, Math.ceil(Math.log10(tmax))); if (tmax <= tmin) { tmax = tmin * 10; } return [tmin, tmax]; }
+  function timeRange(tmin, tmax) {   // what is drawn plus a margin, not whole decades: a decade of nothing is a third of a chart
+    var lo = Math.log10(tmin), hi = Math.log10(tmax); if (!(hi - lo > 0.3)) { var mid = (lo + hi) / 2; lo = mid - 0.15; hi = mid + 0.15; }
+    var pad = 0.05 * (hi - lo) + 0.04; return [Math.pow(10, lo - pad), Math.pow(10, hi + pad)];
+  }
 
   // ---- Curves ----------------------------------------------------------------------------------------------------
   function curveChart(metric, shown, title, aria) {
@@ -495,9 +526,9 @@
     if (title == null) { title = metric.label; }   // the statistic is named once per block, not on every chart
     if (pending && !series.length) { return chartSVG({ title: title, aria: aria, series: [], empty: "loading the distribution…" }); }
     if (!series.length) { return chartSVG({ title: title, aria: aria, series: [], empty: state.cats.length ? (shown.length ? (state.xaxis === "time" ? "the reference machine has not timed any method shown yet" : "no finished units for this selection yet") : "no method selected") : "no catalog selected" }); }
-    if (metric.kind === "rate") { ymin = 0; ymax = Math.min(1, Math.max(0.05, ymax * 1.05)); }
-    else if (tfOf(metric) === "log2") { ymin = Math.min(ymin, -0.3); ymax = Math.max(ymax, 0.3); }
-    else { var pad = (ymax - ymin) * 0.08 || 0.1; ymin -= pad; ymax += pad; }
+    var pad = (ymax - ymin) * 0.06 || 0.05;
+    if (metric.kind === "rate") { var floor0 = nearRange(ymin, ymax, 0, 0.6); ymin = floor0 ? 0 : Math.max(0, ymin - pad); ymax = Math.min(1, Math.max(ymin + 0.02, ymax + pad)); }
+    else { if (tfOf(metric) === "log2" && nearRange(ymin, ymax, 0, 0.35)) { ymin = Math.min(ymin, 0); ymax = Math.max(ymax, 0); } ymin -= pad; ymax += pad; }
     var tr = state.xaxis === "time" ? timeRange(tmin, tmax) : [0, 0];
     return chartSVG({ title: title, aria: aria, series: series, ymin: ymin, ymax: ymax, ticks: ticksFor(metric, ymin, ymax), tick: function (g) { return tickLabel(metric, g); }, ylabel: axisName(metric), timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: tfOf(metric) === "log2" ? 0 : undefined });
   }
@@ -649,7 +680,7 @@
     var h = '<div class="v2table-wrap"><table class="v2table v2matrix"><thead><tr><th>catalog</th><th>laws</th>' + shown.map(function (m) { return '<th><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + '</th>'; }).join("") + '</tr></thead><tbody>';
     cats.forEach(function (c) { h += '<tr><td>' + esc(c) + ' <span class="v2hint">' + GROUPS[CAT[c].group] + '</span></td><td>' + CAT[c].laws + '</td>' + shown.map(function (m) { var st = vals[c][m.key]; if (!st) { return '<td class="v2na">' + (cell(m.key, c, r) ? "…" : "") + '</td>'; } var a = 0.06 + 0.5 * score(st.v); return '<td style="background:rgba(' + rgb.join(",") + "," + a.toFixed(2) + ')" title="' + esc(fmt(p, st.lo) + " to " + fmt(p, st.hi) + ", n = " + st.n) + '">' + fmt(p, st.v, st.edge) + '</td>'; }).join("") + '</tr>'; });
     var pooled = shown.map(function (m) { var use = poolCats(m.key, r); var st = use.length ? stat(p, m.key, r, use) : null; return '<td>' + (st && !st.pending ? cellText(st, p) : "") + '</td>'; }).join("");
-    h += '<tr class="v2total"><td>' + term("complete", "all selected") + '</td><td>' + laws(state.cats).toLocaleString() + '</td>' + pooled + '</tr></tbody></table></div>';
+    h += '<tr class="v2total"><td>all selected ' + help(TERMS.complete, "When is a pooled number shown?") + '</td><td>' + laws(state.cats).toLocaleString() + '</td>' + pooled + '</tr></tbody></table></div>';
     return bar + missingNote(asked, shown, "any selected catalog at budget " + r) + '<p class="v2hint">' + esc(p.label) + " at budget " + r + ", one cell per catalog; darker = better" + (p.higher === null ? " (closer to 1)" : "") + ". " + (p.kind === "cont" ? (state.stat === "mean" ? term("mean", "Means") : term("median", "Medians")) + " over successful predictions." : term("regime", "Rates over every law") + ".") + "</p>" + h;
   }
 
@@ -673,7 +704,7 @@
   // the budgets a stepper offers: where a selected method has finished a selected catalog, or -- for a display that
   // pools -- every selected catalog
   function rungsWith(shown, whole) { return D.rungs.filter(function (r) { return shown.some(function (m) { return whole ? poolCats(m.key, r).length : state.cats.some(function (c) { return cell(m.key, c, r); }); }); }); }
-  function rungStepper(shown, whole) { return stepper("rung", state.rung, rungsWith(shown, whole), function (r) { return String(r); }, term("rungs", "budget"), "budget per problem"); }
+  function rungStepper(shown, whole) { return stepper("rung", state.rung, rungsWith(shown, whole), function (r) { return String(r); }, "budget " + help(TERMS.rungs, "What is a budget?"), "budget per problem"); }
   function bestRung(shown) {   // the largest budget that the most methods have finished
     var best = null, top = 0;
     D.rungs.forEach(function (r) { var n = shown.filter(function (m) { return poolCats(m.key, r).length; }).length; if (n && n >= top) { top = n; best = r; } });
@@ -759,25 +790,32 @@
     return head + body + '<p class="v2hint">' + (state.dmode === "cats" ? "" : (state.dmode === "ecdf" && state.dnorm === "all" ? "" : "Successful predictions only: a law without an answer has no value to place.") + pooled + " ") + term("median", "Read from 128-bin histograms") + "; values beyond the binned range sit in the outermost bins.</p>" + gone;
   }
   function distHists(series, p, r) {
-    var nr = narrow(), W = hostWidth(), L = nr ? 14 : 150, R = 16, T = 34, ph0 = series[0].ph, vr = viewRange(series.map(function (sr) { return sr.ph; }));
+    var nr = narrow(), W = hostWidth(), L = nr ? 14 : 168, R = 16, T = 34, ph0 = series[0].ph, vr = viewRange(series.map(function (sr) { return sr.ph; }));
     var nmax = Math.max.apply(null, series.map(function (sr) { return sr.ph.n; })), f = nmax < 150 ? 4 : nmax < 600 ? 2 : 1;   // fewer laws, wider bins
     var panelH = nr ? 118 : 96, gap = 16, boxH = 22, capH = nr ? 34 : 0, step = panelH + boxH + capH + gap, H = T + series.length * step + 34;
     var xs = function (x) { return L + (Math.min(vr.hi, Math.max(vr.lo, x)) - vr.lo) / (vr.hi - vr.lo) * (W - L - R); };
     var groups = series.map(function (sr) { var g = []; for (var b = vr.b0; b <= vr.b1; b += f) { var c = 0; for (var j = b; j < Math.min(b + f, vr.b1 + 1); j++) { c += sr.ph.h[j]; } g.push({ b: b, share: c / sr.ph.n, edge: (b === 0 && vr.b0 === 0) || (b + f > ph0.nb - 1 && vr.b1 === ph0.nb - 1) }); } return g; });
-    var top = 0; groups.forEach(function (g) { g.forEach(function (x) { if (!x.edge) { top = Math.max(top, x.share); } }); }); if (!top) { groups.forEach(function (g) { g.forEach(function (x) { top = Math.max(top, x.share); }); }); }
+    // One scale for every panel, set by the body of the distributions: a lone spike (every law that fits no better
+    // than the mean lands in one bin) would flatten everything else, so it is cut at the scale and labelled instead.
+    var top = 0; groups.forEach(function (g) { var v = g.filter(function (x) { return !x.edge; }).map(function (x) { return x.share; }).sort(function (a, b) { return b - a; }); if (v.length) { top = Math.max(top, v.length > 1 && v[0] > 1.6 * v[1] ? v[1] : v[0]); } });
+    if (!top) { groups.forEach(function (g) { g.forEach(function (x) { top = Math.max(top, x.share); }); }); }
     var s = '<svg viewBox="0 0 ' + W + " " + H + '" class="v2chart v2distwide" role="img" aria-label="' + esc(p.label) + ' distribution, one histogram per method"><text x="' + L + '" y="18" class="ct">' + esc(p.label) + " at budget " + r + "</text>";
     s += xAxisSVG(p, vr, xs, T, H - 34 - gap + 6, W, L, R);
     series.forEach(function (sr, i) { var y0 = T + i * step, yb = y0 + panelH, col = colorOf(sr.m), pts = [], cl = [];
       var yOf = function (v) { return yb - Math.min(1, v / (top * 1.08)) * (panelH - 14); };
-      groups[i].forEach(function (x) { var x0 = xs(vr.lo + (x.b - vr.b0) * vr.w), x1 = xs(vr.lo + (Math.min(x.b + f, vr.b1 + 1) - vr.b0) * vr.w); pts.push(x0.toFixed(1) + "," + yOf(x.share).toFixed(1), x1.toFixed(1) + "," + yOf(x.share).toFixed(1)); if (x.share > top * 1.08) { cl.push({ x: (x0 + x1) / 2, share: x.share }); } });
+      groups[i].forEach(function (x) { var x0 = xs(vr.lo + (x.b - vr.b0) * vr.w), x1 = xs(vr.lo + (Math.min(x.b + f, vr.b1 + 1) - vr.b0) * vr.w); pts.push(x0.toFixed(1) + "," + yOf(x.share).toFixed(1), x1.toFixed(1) + "," + yOf(x.share).toFixed(1)); if (x.share > top * 1.08) { cl.push({ x0: x0, x1: x1, x: (x0 + x1) / 2, share: x.share, edge: x.edge }); } });
       s += '<line x1="' + L + '" y1="' + yb + '" x2="' + (W - R) + '" y2="' + yb + '" class="grid"/>';
       s += '<polygon points="' + xs(vr.lo).toFixed(1) + "," + yb + " " + pts.join(" ") + " " + xs(vr.hi).toFixed(1) + "," + yb + '" fill="' + col + '" fill-opacity="0.22" stroke="none"/><polyline fill="none" stroke="' + col + '" stroke-width="1.6" points="' + pts.join(" ") + '"/>';
-      cl.forEach(function (c) { var right = c.x > (L + W - R) / 2; s += '<text x="' + (right ? c.x - 6 : c.x + 6).toFixed(1) + '" y="' + (y0 + 12) + '" class="tick" text-anchor="' + (right ? "end" : "start") + '">' + (right ? "" : "▲ ") + (100 * c.share).toFixed(0) + " % in the outermost bin" + (right ? " ▲" : "") + "</text>"; });
+      // a bin taller than the scale is a broken bar: a slanted gap near its top, and its share written beside the gap
+      var nl = 0, nrr = 0; cl.forEach(function (c) { var right = c.x > (L + W - R) / 2, row = right ? nrr++ : nl++, by = y0 + 30, xa = (c.x0 - 2).toFixed(1), xb = (c.x1 + 2).toFixed(1);
+        s += '<path class="v2break" d="M' + xa + " " + by + " L" + xb + " " + (by - 4) + " L" + xb + " " + (by - 9) + " L" + xa + " " + (by - 5) + 'Z" fill="var(--surface)" stroke="none"/>' +
+          '<line x1="' + xa + '" y1="' + by + '" x2="' + xb + '" y2="' + (by - 4) + '" stroke="' + col + '" stroke-width="1.4"/><line x1="' + xa + '" y1="' + (by - 5) + '" x2="' + xb + '" y2="' + (by - 9) + '" stroke="' + col + '" stroke-width="1.4"/>';
+        s += '<text x="' + (right ? c.x0 - 8 : c.x1 + 8).toFixed(1) + '" y="' + (by + 14 * row) + '" class="tick" text-anchor="' + (right ? "end" : "start") + '">' + (100 * c.share).toFixed(0) + (c.edge ? " % in the outermost bin" : " % in this bin") + "</text>"; });
       s += boxSVG(sr.f, xs, yb + boxH / 2 + 3, 9, col, sr.m.label + ": " + fiveText(p, sr.f));
       var name = sr.m.label + (sr.m.local ? " (local)" : ""), cap = "median " + fmt(p, sr.f[2]) + " · n = " + sr.ph.n.toLocaleString() + " of " + sr.rows.toLocaleString() + " laws";
       if (nr) { s += '<rect x="' + L + '" y="' + (yb + boxH + 9) + '" width="10" height="10" rx="2" fill="' + col + '"/><text x="' + (L + 15) + '" y="' + (yb + boxH + 18) + '" class="leg">' + esc(name) + '</text><text x="' + L + '" y="' + (yb + boxH + 33) + '" class="tick">' + esc(cap) + "</text>"; }
       else { s += '<rect x="10" y="' + (y0 + 8) + '" width="10" height="10" rx="2" fill="' + col + '"/><text x="25" y="' + (y0 + 17) + '" class="leg">' + esc(name) + '</text><text x="10" y="' + (y0 + 36) + '" class="tick">median ' + esc(fmt(p, sr.f[2])) + '</text><text x="10" y="' + (y0 + 52) + '" class="tick">n = ' + sr.ph.n.toLocaleString() + " of " + sr.rows.toLocaleString() + "</text>"; } });
-    return s + "</svg>" + '<p class="v2hint">Height: the share of the method’s answered laws in each bin, on one scale for every panel. Under each histogram: 5th to 95th percentile (line), middle half (box), median (tick).</p>';
+    return s + "</svg>" + '<p class="v2hint">Height: the share of the method’s answered laws in each bin, on one scale for every panel; a bin taller than the scale is drawn broken, with its share beside it. Under each histogram: 5th to 95th percentile (line), middle half (box), median (tick).</p>';
   }
   function distEcdf(series, p, r) {
     var nr = narrow(), W = hostWidth(), L = 62, T = 34, R = nr ? 16 : 180, B = nr ? 56 + 20 * series.length : 52, H = plotHeight(W) + B;
@@ -861,15 +899,16 @@
         if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: pts }); } });
       var title = "Δ " + mname(p) + " vs " + base.label;
       if (!series.length) { return chartSVG({ title: title, aria: title, series: [], empty: "no matched cells with the baseline yet" }); }
-      ymin = Math.min(ymin, 0); ymax = Math.max(ymax, 0); var pad = (ymax - ymin) * 0.1 || 0.05; ymin -= pad; ymax += pad;
+      if (nearRange(ymin, ymax, 0, 0.35)) { ymin = Math.min(ymin, 0); ymax = Math.max(ymax, 0); } var pad = (ymax - ymin) * 0.08 || 0.05; ymin -= pad; ymax += pad;
       var tr = state.xaxis === "time" ? timeRange(tmin, tmax) : [0, 0];
-      var lin = { kind: "cont", fmt: "num2", hist: null };
-      return chartSVG({ title: title, aria: title, series: series, ymin: ymin, ymax: ymax, ticks: ticksFor(lin, ymin, ymax), tick: function (g) { return fmtDelta(p, g); }, ylabel: "", timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: 0 }); }); });
+      var ptf = tfOf(p), dticks = ptf === "log2" ? logTicks(ymin, ymax, 2) : ptf === "log10" ? logTicks(ymin, ymax, 10) : linearTicks(ymin, ymax);
+      var dtick = function (g) { return p.kind === "rate" ? (g > 0 ? "+" : "") + roundNum(100 * g) + " pp" : ptf === "log2" ? "× " + roundNum(Math.pow(2, g)) : ptf === "log10" ? "× " + roundNum(Math.pow(10, g)) : (g > 0 ? "+" : "") + roundNum(g); };
+      return chartSVG({ title: title, aria: title, series: series, ymin: ymin, ymax: ymax, ticks: dticks, tick: dtick, ylabel: "", timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: 0 }); }); });
     var r = state.rung, rows = "";
     others.forEach(function (m) { rows += '<tr><td><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + '</td>' + plots.map(function (p) { var use = bothDone(m.key, base.key, r); var st = use.length ? pairedStat(p, m.key, base.key, r, use) : null; if (!st) { return '<td class="v2na">–</td><td class="v2na">–</td><td class="v2na">–</td>'; } var sig = st.p !== null && st.p < 0.05; return '<td' + (sig ? ' class="v2sig"' : "") + '>' + fmtDelta(p, st.v) + ' <span class="v2ci-txt">[' + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + ']</span></td><td>' + fmtP(st.p) + '</td><td class="v2hint">' + st.wins + " / " + st.losses + " of " + st.n + '</td>'; }).join("") + '</tr>'; });
     var anyRow = others.some(function (m) { return plots.some(function (p) { var use = bothDone(m.key, base.key, r); return use.length && pairedStat(p, m.key, base.key, r, use); }); });
     var table = '<h3 class="v2h">At one budget</h3><div class="v2viewbar">' + rungStepper(shown, true) + "</div>" + (anyRow ? "" : '<p class="v2hint">No method and the baseline have both ' + term("complete", "finished every selected catalog") + " at budget " + r + ": step to another budget above, or narrow the catalogs.</p>") + '<div class="v2table-wrap"><table class="v2table"><thead><tr><th>method − ' + esc(base.label) + '</th>' + plots.map(function (p) { return '<th colspan="3">' + esc(mname(p)) + " " + mhelp(p) + '</th>'; }).join("") + '</tr><tr><th></th>' + plots.map(function () { return '<th>Δ [95 %]</th><th>p</th><th>wins / losses</th>'; }).join("") + '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
-      '<p class="v2hint">Rates: ' + term("mcnemar", "exact McNemar") + ' on the laws the pair disagrees on; wins / losses count those laws. Continuous metrics: ' + term("signtest", "paired mean difference and exact sign test") + ' over laws where both have a finite value; ratios and times are read as multiplicative factors. Bold: p below 0.05, uncorrected.</p>';
+      '<p class="v2hint">Rates: ' + term("mcnemar", "exact McNemar") + ' on the laws the pair disagrees on. Continuous metrics: ' + term("signtest", "mean difference and exact sign test") + ' over laws where both have a value; ratios and times read as factors. Bold: p below 0.05, uncorrected. <a href="#paired">How paired numbers are made</a></p>';
     return ctl + '<div class="v2charts">' + charts.join("") + "</div>" + table;
   }
 
@@ -954,7 +993,7 @@
     var head = '<div class="v2viewbar"><span class="v2segwrap"><span class="v2lab">ranked on</span>' + pickButton("v2viewpick", 'data-axis="focus" aria-label="metric the methods are ranked on"', p.key) + " " + mhelp(p) +
       (ki === 0 ? ' <span class="v2tag v2tag-primary" title="The ranking to quote: declared before the results were read.">primary</span>' : ' <span class="v2tag" title="For browsing; the ranking to quote is the primary one.">exploratory</span>') + "</span>" +
       seg("xaxis", timed ? "time" : "rung", [["time", "the same time", "Every method at the largest budget the reference machine timed within the time limit"], ["rung", "the same budget", "Every method at the same rung of its own ladder"]].filter(function (o) { return o[0] !== "time" || anyTime(); }), "every method at", "what the methods are held equal on") +
-      (timed ? stepper("tbudget", state.tbudget, budgets, function (b) { return slotSeconds(R, b) + " s"; }, term("tbudget", "time limit"), "time limit per problem") : rungStepper(shown, true)) + "</div>";
+      (timed ? stepper("tbudget", state.tbudget, budgets, function (b) { return slotSeconds(R, b) + " s"; }, "time limit " + help(TERMS.tbudget, "How is the time limit applied?"), "time limit per problem") : rungStepper(shown, true)) + "</div>";
     if (shown.length < 2) { return head + '<p class="v2hint">Select at least two methods to rank.</p>'; }
     if (slot === null) { return head + '<p class="v2hint">The reference machine has not timed two of the selected methods yet.</p>'; }
     var lg = ranking(R, shown, slot, ki);
@@ -980,14 +1019,14 @@
       s += '<line x1="' + xs(1).toFixed(1) + '" y1="' + yy + '" x2="' + xs(x.rank).toFixed(1) + '" y2="' + yy + '" stroke="' + col + '" stroke-width="2" stroke-opacity="0.3"/>';
       s += '<circle cx="' + xs(x.rank).toFixed(1) + '" cy="' + yy + '" r="6.5" fill="' + (x.capped ? "var(--surface)" : col) + '" stroke="' + col + '" stroke-width="2.5"><title>' + esc(x.m.label + ": mean rank " + x.rank.toFixed(2) + " of " + k + " at budget " + x.r + (x.capped ? ", the end of its finished, timed ladder" : "") + "; wins " + (100 * x.share).toFixed(1) + " % of its comparisons; no answer on " + x.blank + " laws") + "</title></circle>";
       s += '<text x="' + (xs(x.rank) + 12).toFixed(1) + '" y="' + (yy + 4) + '" class="tick">' + x.rank.toFixed(2) + "</text>"; });
-    return s + "</svg>" + '<p class="v2hint">' + k + " methods placed 1st to " + k + (k === 2 ? "nd" : k === 3 ? "rd" : "th") + " within each of " + lg.n.toLocaleString() + " laws (" + lg.cats.length + " catalogs); " + term("worstrank", "no answer ranks last, ties share a place") + ". " +
-      (reject ? term("friedman", "The omnibus test finds real rank differences") + " (p " + (lg.p < 0.001 ? "< 0.001" : "= " + lg.p.toFixed(3)) + ")" + (lg.cliques.length ? "; a shaded band joins methods closer than the " + term("cd", "critical difference") + ": no reliable difference between them, which is not the same as equal" : "; every gap exceeds the " + term("cd", "critical difference")) + "."
+    return s + "</svg>" + '<p class="v2hint">' + k + " methods ranked within each of " + lg.n.toLocaleString() + " laws (" + lg.cats.length + " catalogs); " + term("worstrank", "no answer ranks last, ties share a place") + ". " +
+      (reject ? (lg.cliques.length ? "A shaded band joins methods closer than the " + term("cd", "critical difference") + ": no reliable difference between them." : "Every gap exceeds the " + term("cd", "critical difference") + ".")
         : "<b>" + term("friedman", "The omnibus test does not find rank differences") + " (p = " + lg.p.toFixed(3) + "), so no groups are drawn.</b>") +
-      (lg.order.some(function (x) { return x.capped; }) ? " A hollow dot is a method the time limit does not hold back (its finished, timed ladder ends below it): its place is a worst case." : "") + "</p>";
+      (lg.order.some(function (x) { return x.capped; }) ? " A hollow dot is a method whose timed ladder ends below the limit: its place is a worst case." : "") + ' <a href="#ranks">How ranks are read</a></p>';
   }
   function rankTables(R, lg, p, slot, timed) {
     var k = lg.k, ord = lg.order, idx = ord.map(function (x) { return lg.roster.indexOf(x); });
-    var t1 = '<h3 class="v2h">Standings</h3><div class="v2table-wrap"><table class="v2table v2ranktable"><thead><tr><th>method</th><th>' + (timed ? "budget within " + slotSeconds(R, slot) + " s" : "budget") + "</th><th>mean rank</th><th>" + term("winshare", "comparisons won") + "</th><th>laws without an answer</th></tr></thead><tbody>" +
+    var t1 = '<h3 class="v2h">Standings</h3><div class="v2table-wrap"><table class="v2table v2ranktable"><thead><tr><th>method</th><th>' + (timed ? "budget within " + slotSeconds(R, slot) + " s" : "budget") + "</th><th>mean rank</th><th>comparisons won " + help(TERMS.winshare, "What is the share of comparisons won?") + "</th><th>laws without an answer</th></tr></thead><tbody>" +
       ord.map(function (x) { return '<tr><td><span class="v2sw" style="background:' + colorOf(x.m) + '"></span>' + esc(x.m.label) + "</td><td>" + x.r + (timed && refTime(x.m.key, x.r) ? ' <span class="v2ci-txt">' + refTime(x.m.key, x.r).toFixed(2) + " s</span>" : "") + "</td><td><b>" + x.rank.toFixed(2) + "</b></td><td>" + (100 * x.share).toFixed(1) + " %</td><td>" + x.blank.toLocaleString() + ' <span class="v2ci-txt">of ' + lg.n.toLocaleString() + "</span></td></tr>"; }).join("") + "</tbody></table></div>";
     var t2 = '<h3 class="v2h">Head to head</h3><div class="v2table-wrap"><table class="v2table v2matrix v2h2h"><thead><tr><th>row beats column on</th>' + ord.map(function (x) { return '<th><span class="v2sw" style="background:' + colorOf(x.m) + '"></span>' + esc(x.m.label) + "</th>"; }).join("") + "</tr></thead><tbody>" +
       ord.map(function (x, a) { return '<tr><td><span class="v2sw" style="background:' + colorOf(x.m) + '"></span>' + esc(x.m.label) + "</td>" + ord.map(function (z, b) { if (a === b) { return '<td class="v2na">·</td>'; } var e = lg.beat[idx[a]][idx[b]], w = e.w / e.n, l = lg.beat[idx[b]][idx[a]].w / e.n, rgb = accentRGB();
@@ -1005,21 +1044,23 @@
     var title = narrow() ? "Comparisons won" : "Comparisons won, along " + (timed ? "the time limit" : "the ladder"), rate = { kind: "rate", fmt: "pct", hist: null }, tr = timed ? timeRange(tmin, tmax) : [0, 0];
     var svg = withState({ band: false, cross: false }, function () { return chartSVG({ title: title, aria: title, series: series, ymin: 0, ymax: 1, ticks: [0, 0.25, 0.5, 0.75, 1], tick: function (g) { return tickLabel(rate, g); }, ylabel: narrow() ? "won" : "comparisons won", timeAxis: timed, timeSource: "budget", tmin: tr[0], tmax: tr[1], zero: 0.5, xlabel: timed ? (narrow() ? "time limit (s, ref)" : "time limit per problem (s, log, reference machine)") : (narrow() ? "budget / problem" : "budget per problem (log scale)") }); });
     return '<h3 class="v2h">Along ' + (timed ? "the time limit" : "the ladder") + '</h3><div class="v2charts v2one">' + svg + "</div>" +
-      '<p class="v2hint">' + term("winshare", "Comparisons won") + " is the mean rank on a scale that does not depend on how many methods are ranked, so it can be followed across budgets where the roster changes: 100 % beats every other method on every law, 50 % breaks even." + (timed ? " A hollow marker is a method the time limit does not hold back." : "") + "</p>";
+      '<p class="v2hint">' + term("winshare", "Comparisons won") + " is the mean rank on a fixed scale: 100 % beats every other method on every law, 50 % breaks even." + (timed ? " A hollow marker is a method whose timed ladder ends below the limit." : "") + "</p>";
   }
 
   // ---- shell -----------------------------------------------------------------------------------------------------
   var VIEWS = [["curves", "Curves"], ["table", "Tables"], ["matrix", "Catalogs"], ["dist", "Distribution"], ["ranks", "Ranks"], ["paired", "Paired Δ"]];
   // the metric a single-metric display shows: each of them keeps its own
   function focusKey() { return state.view === "dist" ? "dmetric" : state.view === "ranks" ? "rmetric" : "focus"; }
-  // Each display carries its own controls. A control that cannot change what is on screen is not shown.
+  // Each display carries its own controls. A control that cannot change what is on screen is not shown, and a
+  // control has one place: the metric, the budget and the row layout of a snapshot are chosen on the display itself
+  // (its bar), so the side panel never repeats them.
   var USES = {
     curves: { stat: 1, ci: 1 },
-    table: { plots: 1, rows: 1, stat: 1, ci: 1, rung: 1 },
-    matrix: { focus: 1, stat: 1, rung: 1 },
-    dist: { focus: 1, rung: 1 },
-    ranks: { focus: 1, rung: 1 },
-    paired: { plots: 1, base: 1, ci: 1, xaxis: 1, rung: 1 }
+    table: { plots: 1, stat: 1, ci: 1 },
+    matrix: { stat: 1 },
+    dist: {},
+    ranks: {},
+    paired: { plots: 1, base: 1, ci: 1, xaxis: 1 }
   };
   function usesFor(view) {
     var u = {}, src = USES[view] || {};
@@ -1037,7 +1078,7 @@
     var metricList = MGROUPS.map(function (g) { var ms = D.metrics.filter(function (m) { return m.group === g; }); return '<div class="v2mgroup" data-group="' + esc(g) + '"><h4>' + esc(g) + '</h4>' + ms.map(function (m) { return '<div class="v2metric" data-tier="' + m.tier + '" data-key="' + m.key + '"><label><input type="checkbox" data-p="' + m.key + '"> ' + esc(m.label) + '</label> ' + mhelp(m) + '</div>'; }).join("") + "</div>"; }).join("");
     root.innerHTML =
       '<div class="v2head"><div><div class="v2kicker">benchmark release ' + esc(rel.id) + '</div><p class="v2sub">' + esc(rel.title !== rel.id ? rel.title + " · " : "") + 'generated ' + esc(rel.generated) + '. ' + esc(rel.notes || "") + '</p></div><div class="v2row"><button type="button" class="v2btn" data-act="link">copy link to this view</button><span class="v2linkok v2hint" hidden>link copied</span></div></div>' +
-      '<details class="v2release"><summary>Protocol of this release</summary><ul><li><b>Choosing an answer.</b> ' + esc(rel.scoring || "") + '</li><li><b>Judging it.</b> ' + esc(rel.judge || "") + '</li><li><b>Data.</b> One problem per law: 512 support points and 512 validation points from the catalog\'s own ranges, no noise; ' + CATS.length + ' catalogs, ' + laws(CATS) + ' laws.</li><li><b>Configurations.</b> ' + term("provenance", "Who chose each method\'s configuration") + ' is shown next to every method.</li><li><b>Time axis.</b> ' + term("time", "Reference-machine timing") + (D.timing_note ? " · " + esc(D.timing_note) : "") + '</li><li><b>Statistics.</b> ' + term("regime", "Two regimes") + ', ' + term("matched", "matched pooling") + ', ' + term("wilson", "95 % intervals") + '.</li></ul></details>' +
+      '<details class="v2release"><summary>Protocol of this release</summary><ul><li><b>Choosing an answer.</b> ' + esc(rel.scoring || "") + '</li><li><b>Judging it.</b> ' + esc(rel.judge || "") + '</li><li><b>Data.</b> One problem per law: 512 support points and 512 validation points from the catalog\'s own ranges, no noise; ' + CATS.length + ' catalogs, ' + laws(CATS) + ' laws.</li><li><b>Configurations.</b> ' + term("provenance", "Who chose each method\'s configuration") + ' is shown next to every method.</li><li><b>Time axis.</b> ' + term("time", "Reference-machine timing") + (D.timing_note ? " · " + esc(D.timing_note) : "") + '</li><li><b>Statistics.</b> ' + term("regime", "Two regimes") + ', ' + term("complete", "complete budgets only") + ', ' + term("wilson", "95 % intervals") + '.</li></ul></details>' +
       '<div class="v2strip">' + strip + '</div>' +
       '<div class="v2tabs" role="tablist">' + VIEWS.map(function (v) { return '<button type="button" class="v2tab" role="tab" data-view="' + v[0] + '">' + v[1] + '</button>'; }).join("") + '</div>' +
       '<div class="v2layout"><aside class="v2side">' +
@@ -1059,8 +1100,8 @@
       '<div class="v2panel"><h3>Catalogs <span class="v2hint v2catcount"></span></h3><div class="v2row"><button type="button" data-act="all">all</button><button type="button" data-act="none">none</button><button type="button" data-act="phys">physics</button><button type="button" data-act="classic">classical</button><button type="button" data-act="synth">synthetic</button></div><div class="v2cats">' + catList + '</div></div>' +
       // 3. how the numbers are read
       '<div class="v2panel"><h3>Reading</h3>' +
-      '<div class="v2row" data-uses="stat"><span class="v2lab">statistic</span><label><input type="radio" name="v2stat" value="mean"> ' + term("mean", "mean") + '</label><label><input type="radio" name="v2stat" value="median"> ' + term("median", "median") + '</label></div>' +
-      '<div class="v2row" data-uses="xaxis"><span class="v2lab">x axis</span><label><input type="radio" name="v2xaxis" value="time" class="v2xtime"> ' + term("time", "time") + '</label><label><input type="radio" name="v2xaxis" value="rung"> ' + term("candidates", "candidates") + '</label><span class="v2hint v2xtimehint"></span></div>' +
+      '<div class="v2row" data-uses="stat"><span class="v2lab">statistic ' + help("Mean: " + TERMS.mean + " Median: " + TERMS.median, "How are the mean and the median taken?") + '</span><label><input type="radio" name="v2stat" value="mean"> mean</label><label><input type="radio" name="v2stat" value="median"> median</label></div>' +
+      '<div class="v2row" data-uses="xaxis"><span class="v2lab">x axis ' + help("Time: " + TERMS.time + " Candidates: " + TERMS.candidates, "What do the two x axes measure?") + '</span><label><input type="radio" name="v2xaxis" value="time" class="v2xtime"> time</label><label><input type="radio" name="v2xaxis" value="rung"> candidates</label><span class="v2hint v2xtimehint"></span></div>' +
       '<div class="v2row v2checks" data-uses="ci"><span class="v2lab" data-uses="ci">95 % intervals ' + help(TERMS.wilson) + '</span>' +
       '<label data-uses="ci"><input type="checkbox" class="v2band"> bands</label><label data-uses="ci"><input type="checkbox" class="v2cross"> crosses</label></div></div>' +
       '</aside><section class="v2main"><p class="v2err" role="alert"></p><div class="v2view"></div></section></div>';
@@ -1172,7 +1213,7 @@
     var el = e.target.closest ? e.target.closest(".v2term, .v2help") : null; var open = document.querySelector(".v2pop"); var prev = open && open._anchor; closePop();
     if (!el || prev === el || !(root.contains(el) || (headRoot && headRoot.contains(el)))) { return; }
     e.preventDefault();
-    var pop = document.createElement("div"); pop.className = "v2pop"; pop.textContent = el.classList.contains("v2help") ? el.dataset.help : (TERMS[el.dataset.term] || ""); pop._anchor = el; document.body.appendChild(pop);
+    var pop = document.createElement("div"); pop.className = "v2pop"; var tipText = el.classList.contains("v2help") ? el.dataset.help : TERMS[el.dataset.term]; if (!tipText) { if (window.console) { console.warn("srbf: no text for hint", el.dataset.term); } return; } pop.textContent = tipText; pop._anchor = el; document.body.appendChild(pop);
     var margin = 8; pop.style.maxWidth = Math.min(520, window.innerWidth - 2 * margin) + "px"; var r = el.getBoundingClientRect();
     var left = Math.min(Math.max(r.left, margin), window.innerWidth - pop.offsetWidth - margin), top = r.bottom + 6;
     if (top + pop.offsetHeight > window.innerHeight - margin && r.top - pop.offsetHeight - 6 > margin) { top = r.top - pop.offsetHeight - 6; }

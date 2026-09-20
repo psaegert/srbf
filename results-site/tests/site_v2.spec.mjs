@@ -277,10 +277,13 @@ test('each display carries only the controls it can use', async ({ page }) => {
   await page.locator(V2 + ' .v2tab[data-view="table"]').click();
   await expect.poll(shown).toContain('plots');
   await page.locator(V2 + ' .v2tab[data-view="matrix"]').click();
-  await expect.poll(shown).toContain('focus');
+  await expect.poll(shown).not.toContain('plots');
   const matrix = await shown();
-  for (const k of ['rung', 'stat']) { expect(matrix, k).toContain(k); }
-  for (const k of ['plots', 'xaxis', 'thin']) { expect(matrix, k).not.toContain(k); }   // one budget, one metric
+  expect(matrix, 'stat').toContain('stat');
+  // one budget, one metric, each chosen in one place: on the display's own bar, never repeated in the side panel
+  for (const k of ['plots', 'xaxis', 'thin', 'focus', 'rung', 'rows']) { expect(matrix, k).not.toContain(k); }
+  await expect(page.locator(V2 + ' .v2viewbar .v2viewpick')).toBeVisible();
+  await expect(page.locator(V2 + ' .v2viewbar select[data-state="rung"]')).toBeVisible();
   await page.locator(V2 + ' .v2tab[data-view="paired"]').click();
   await expect.poll(shown).toContain('base');
 });
@@ -484,6 +487,9 @@ test('the distribution view opens on histograms of a continuous metric', async (
   expect(panels).toBeGreaterThanOrEqual(2);
   expect(await chart.locator('rect[fill-opacity="0.28"]').count()).toBe(panels);
   await expect(chart).toContainText(/n = [\d,]+ of [\d,]+/);
+  // a bin taller than the shared scale is a broken bar with its share beside it: no arrow that could point at the panel above
+  if (await chart.locator('path.v2break').count()) { await expect(chart).toContainText(/\d+ % in (this|the outermost) bin/); }
+  await expect(chart).not.toContainText('\u25b2');
   expect(errors).toEqual([]);
 });
 
@@ -515,7 +521,7 @@ test('the budget of a snapshot is stepped on the display itself', async ({ page 
   await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label^="higher"]').click();
   await expect(sel).toHaveValue('32');
   await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('at budget 32');
-  await expect(page.locator(V2 + ' select.v2rung')).toHaveValue('32');   // one budget, two places to set it
+  await expect(page.locator(V2 + ' select.v2rung')).toBeHidden();   // the budget has one place: the display's bar
   await sel.selectOption('8');
   await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('at budget 8');
   // the Catalogs matrix and the by-catalog table carry the same stepper
@@ -682,4 +688,135 @@ test('outcomes at a time limit that compared another rung than the method sits o
   expect(names).not.toContain(label);
   expect(names.length).toBeGreaterThanOrEqual(2);
   await expect(page.locator(V2 + ' .v2view')).toContainText(new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ' carries no pairwise outcomes against all of the other selected methods at [\\d.]+ s per problem and sits out'));
+});
+
+// ---- design contract (2026-09-20): hints, labels, axes, the pinned column, the header ---------------------------
+test('no hint opens empty, in any display', async ({ page }) => {
+  for (const view of VIEWS) {
+    await page.goto(`/?release=2026-09&v=${view}&c=all`);
+    await expect(page.locator(V2 + ' .v2tab.active')).toHaveAttribute('data-view', view);
+    await page.waitForTimeout(600);
+    await page.evaluate(() => document.querySelectorAll('.explorer-v2 details').forEach((d) => { d.open = true; }));   // collapsed sections hold hints too
+    // every dotted term and every "?" on screen (the headline, the side panel and the display), each distinct one once
+    const hints = page.locator('.explorer-v2 .v2term:visible, .explorer-v2 .v2help:visible');
+    const n = await hints.count();
+    expect(n, view).toBeGreaterThan(0);
+    const seen = new Set();
+    for (let i = 0; i < n; i++) {
+      const h = hints.nth(i);
+      const key = (await h.getAttribute('data-term')) || (await h.getAttribute('data-help')) || '';
+      if (seen.has(key)) { continue; }
+      seen.add(key);
+      await h.scrollIntoViewIfNeeded();
+      await h.click();
+      const pop = page.locator('.v2pop');
+      await expect(pop, `${view}: hint ${i} (${key.slice(0, 40)})`).toBeVisible();
+      expect((await pop.textContent()).trim().length, `${view}: hint ${i} (${key.slice(0, 40)})`).toBeGreaterThan(20);
+      await page.keyboard.press('Escape');
+      await expect(pop).toHaveCount(0);
+    }
+  }
+});
+
+test('the text of an option selects the option: hints never sit inside a label', async ({ page }) => {
+  await page.goto('/?release=2026-09&v=curves');
+  await page.locator(V2 + ' label', { hasText: /^\s*median\s*$/ }).click();
+  await expect(page.locator(V2 + ' input[name="v2stat"][value="median"]')).toBeChecked();
+  await expect(page.locator('.v2pop')).toHaveCount(0);
+  for (const view of VIEWS) {
+    await page.goto(`/?release=2026-09&v=${view}`);
+    await expect(page.locator(V2 + ' .v2tab.active')).toHaveAttribute('data-view', view);
+    await expect(page.locator(V2 + ' label .v2term, ' + V2 + ' label .v2help, ' + V2 + ' button .v2term, ' + V2 + ' .v2lab .v2term'), view).toHaveCount(0);
+  }
+});
+
+test('axis ticks are round values with room between their labels', async ({ page }) => {
+  await page.setViewportSize({ width: 1360, height: 1000 });
+  for (const view of ['curves', 'dist', 'ranks', 'paired']) {
+    await page.goto(`/?release=2026-09&v=${view}&c=all`);
+    await expect(page.locator(V2 + ' .v2tab.active')).toHaveAttribute('data-view', view);
+    await expect(page.locator('.explorer-v2 svg.v2chart').first()).toBeVisible({ timeout: 15000 });
+    await page.waitForTimeout(800);
+    const report = await page.evaluate(() => {
+      const bad = [], num = (t) => parseFloat(t.replace(/\u2212/g, '-').replace(/[^\d.+-]/g, ''));
+      const mant = (v) => { const a = Math.abs(v); return a / Math.pow(10, Math.floor(Math.log10(a) + 1e-9)); };
+      const near = (a, b) => Math.abs(a - b) < 1e-6 * Math.max(1, Math.abs(a), Math.abs(b));
+      // a round axis: equal steps of 1, 2, 2.5 or 5 times a power of ten, or values that are each 1, 2 or 5 times one, or powers of two
+      const round = (vs) => {
+        if (vs.length < 2) { return true; }
+        const d = vs.slice(1).map((v, i) => v - vs[i]);
+        if (d.every((x) => near(x, d[0])) && [1, 2, 2.5, 5].some((m) => near(mant(d[0]), m))) { return true; }
+        if (vs.every((v) => v > 0 && near(Math.log2(v), Math.round(Math.log2(v))))) { return true; }
+        return vs.every((v) => v === 0 || [1, 2, 5].some((m) => near(mant(v), m)));
+      };
+      document.querySelectorAll('.explorer-v2 svg.v2chart').forEach((svg, ci) => {
+        const ticks = [...svg.querySelectorAll('text.tick')].filter((t) => /^[-+\u2212\u00d7\s]*[\d.,]+\s*(%|s|pp)?$/.test(t.textContent.trim()))
+          .map((t) => ({ r: t.getBoundingClientRect(), s: t.textContent.trim(), a: t.getAttribute('text-anchor') }));
+        const ys = ticks.filter((t) => t.a === 'end').sort((a, b) => a.r.top - b.r.top), xs = ticks.filter((t) => t.a === 'middle').sort((a, b) => a.r.left - b.r.left);
+        for (const [axis, list, gap] of [['y', ys, (a, b) => b.r.top - a.r.bottom], ['x', xs, (a, b) => b.r.left - a.r.right]]) {
+          if (!round(list.map((t) => num(t.s.replace(/,/g, ''))).sort((a, b) => a - b))) { bad.push(`chart ${ci} ${axis}: "${list.map((t) => t.s).join(' | ')}" is not a round axis`); }
+          for (let i = 1; i < list.length; i++) { if (gap(list[i - 1], list[i]) < 12) { bad.push(`chart ${ci} ${axis}: "${list[i - 1].s}" and "${list[i].s}" are ${Math.round(gap(list[i - 1], list[i]))} px apart`); } }
+        }
+      });
+      return bad;
+    });
+    expect(report, view).toEqual([]);
+  }
+});
+
+test('a chart hugs its data: neither a reference line nor a snapped axis leaves it mostly empty', async ({ page }) => {
+  await page.setViewportSize({ width: 1360, height: 1000 });
+  for (const view of ['curves', 'paired']) {
+    await page.goto(`/?release=2026-09&v=${view}&c=all`);
+    await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toBeVisible({ timeout: 15000 });
+    await page.waitForTimeout(800);
+    const fills = await page.evaluate(() => [...document.querySelectorAll('.explorer-v2 svg.v2chart')].map((svg, ci) => {
+      const marks = [...svg.querySelectorAll('circle')].map((c) => c.getBoundingClientRect()).filter((r) => r.width > 0);
+      const grid = [...svg.querySelectorAll('line.grid')].map((l) => l.getBoundingClientRect());
+      if (marks.length < 4 || !grid.length) { return null; }
+      const gx0 = Math.min(...grid.map((r) => r.left)), gx1 = Math.max(...grid.map((r) => r.right)), gy0 = Math.min(...grid.map((r) => r.top)), gy1 = Math.max(...grid.map((r) => r.bottom));
+      return { ci, w: (Math.max(...marks.map((r) => r.right)) - Math.min(...marks.map((r) => r.left))) / (gx1 - gx0), h: (Math.max(...marks.map((r) => r.bottom)) - Math.min(...marks.map((r) => r.top))) / (gy1 - gy0) };
+    }).filter(Boolean));
+    expect(fills.length, view).toBeGreaterThan(2);
+    for (const f of fills) { expect(f.w, `${view} chart ${f.ci} width`).toBeGreaterThan(0.8); expect(f.h, `${view} chart ${f.ci} height`).toBeGreaterThan(0.6); }
+  }
+});
+
+test('the pinned first column of a wide table sits flush left at any scroll position', async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 });
+  for (const view of ['table', 'matrix', 'ranks']) {
+    await page.goto(`/?release=2026-09&v=${view}&c=all`);
+    const wrap = page.locator(V2 + ' .v2view .v2table-wrap').last();
+    await expect(wrap).toBeVisible({ timeout: 15000 });
+    const gaps = await wrap.evaluate((w) => {
+      const out = [];
+      for (const x of [0, 60, w.scrollWidth]) {
+        w.scrollLeft = x;
+        const box = w.getBoundingClientRect(), left = box.left + w.clientLeft;
+        w.querySelectorAll('tbody tr td:first-child, thead tr th:first-child').forEach((c) => { out.push(Math.abs(c.getBoundingClientRect().left - left)); });
+      }
+      return Math.max(...out);
+    });
+    expect(gaps, view).toBeLessThanOrEqual(0.5);   // no sliver of the scrolled columns to the left of the pinned one
+  }
+});
+
+test('the page names itself once: the bar carries the name, the title says what the page is', async ({ page }) => {
+  await page.goto('/');
+  const name = 'Symbolic Regression Benchmark Framework';
+  await expect(page.locator('.site-header .brand')).toContainText(name);
+  await expect(page.locator('.site-header .brand .brand-mark')).toHaveCount(0);   // the icon already reads "srbf"
+  await expect(page.locator('main h1')).not.toContainText(name);
+  await expect(page.locator('main h1')).toHaveText('Benchmark results');
+});
+
+test('prose follows the release on screen', async ({ page }) => {
+  await page.goto('/?release=2026-09');
+  await expect(page.locator('#about h3', { hasText: 'Pooling and intervals' })).toBeVisible();
+  await expect(page.locator('#about h3', { hasText: 'Provenance' })).toBeHidden();
+  await expect(page.locator('#about h3', { hasText: 'Who chose each configuration' })).toBeVisible();
+  await page.goto('/?release=2026-07');
+  await expect(page.locator('#about h3', { hasText: 'Provenance' })).toBeVisible();
+  await expect(page.locator('#about h3', { hasText: 'Pooling and intervals' })).toBeHidden();
+  await expect(page.locator('#paired h3', { hasText: 'The noise margin' })).toBeVisible();
 });

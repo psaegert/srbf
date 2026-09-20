@@ -41,7 +41,7 @@
   <rect class="panel" x="48" y="80" width="290" height="78" rx="12"/>
   <text class="accent" x="70" y="106" font-size="11.5" font-weight="700" letter-spacing="1.4">DATASETS</text>
   <text class="ink" x="70" y="127" font-size="13">One formalism, any source:</text>
-  <text class="soft" x="70" y="145" font-size="13">FastSRB &#183; v23-val &#183; your own</text>
+  <text class="soft" x="70" y="145" font-size="13">Feynman &#183; Nguyen &#183; your own</text>
 
   <text class="accent" x="193" y="185" text-anchor="middle" font-size="23" font-weight="600">&#215;</text>
 
