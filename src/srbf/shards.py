@@ -85,12 +85,15 @@ def merge_shards(paths: Sequence[str], output: str, *, allow_partial: bool = Fal
     missing = sorted(set(range(count)) - set(indices))
     if missing and not allow_partial:
         raise ValueError(f"missing shards {missing} of {count}; pass --allow-partial to merge what is there")
-    columns = set(loaded[0][1])
-    for index, rows, _, path in loaded[1:]:
+    # A shard without problems (fewer problems than shards) is a member of the run with nothing to add.
+    filled = [item for item in loaded if any(len(values) for values in item[1].values())]
+    template = filled[0][1] if filled else loaded[0][1]
+    columns = set(template)
+    for index, rows, _, path in filled[1:]:
         if set(rows) != columns:
             raise ValueError(f"{path}: columns differ from the first shard ({sorted(set(rows) ^ columns)})")
-    merged: dict[str, list[Any]] = {column: [] for column in loaded[0][1]}
-    for index, rows, _, _ in sorted(loaded, key=lambda item: item[0]):
+    merged: dict[str, list[Any]] = {column: [] for column in template}
+    for index, rows, _, _ in sorted(filled, key=lambda item: item[0]):
         for column, values in rows.items():
             merged[column].extend(values)
     if "eval_row_index" in merged:

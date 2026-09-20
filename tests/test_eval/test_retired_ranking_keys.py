@@ -1,9 +1,8 @@
 """A retired ranking key must fail loudly, never fall through to a default.
 
-`parsimony` was never read by the flash_ansr adapter (it is a PySR key) and `length_penalty` was
-renamed to `node_penalty` on 2026-09-04. Either one left in a config would be ignored and the run
-would rank at whatever the default happens to be -- which is how every srbf run to date came to rank
-at penalty 0.0 while its config said 0.05. These tests pin the loud failure.
+`parsimony` is a PySR key that the flash_ansr adapter does not read, and the penalty's key is
+`node_penalty`, not `length_penalty`. Either one left in a config would be ignored and the run would
+rank at whatever the default happens to be. These tests pin the loud failure.
 """
 from __future__ import annotations
 

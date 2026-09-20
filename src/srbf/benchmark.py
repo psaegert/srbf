@@ -12,6 +12,7 @@ driver is model- and data-layer-agnostic.
 """
 from __future__ import annotations
 
+import os
 import warnings
 from collections import Counter
 from pathlib import Path
@@ -54,6 +55,9 @@ class Benchmark:
         # None (direct construction) => run() falls back to a caller-supplied meta label, then to
         # the conservative default; `from_config` always passes the validated config value.
         self.config_provenance = config_provenance
+        # The config file this run was built from (set by `from_config` / `runs_from_config`): `run()` records
+        # the same provenance for it as `srbf run` does, so a run driven from Python is documented alike.
+        self.config_path: Optional[str] = None
         # Resolved run parameters (set by `from_config`; `run()` falls back to these when its own
         # arguments are left None). `completed` => the configured target is already reached and `run()`
         # is a no-op. `total_limit` / `existing_results` are reporting-only (CLI summary).
@@ -75,15 +79,20 @@ class Benchmark:
         resume: bool | None = None,
         experiment: str | None = None,
         shard: tuple[int, int] | None = None,
+        build_adapter: bool = True,
     ) -> "Benchmark":
         """Build a ready-to-run `Benchmark` from a unified run config.
 
-        Mirrors the old ``build_evaluation_run`` flow, with one load-bearing ordering invariant: the
+        One ordering invariant carries weight: the
         model adapter (which loads the model, possibly onto a GPU) is built LAST -- after resume-load,
         the resolved-total/completed check, and the cheap model-free source build -- so resuming a
         mostly-finished sweep never reloads the model for an already-complete experiment.
         """
         from srbf import config as run_config
+
+        def built(benchmark: "Benchmark") -> "Benchmark":
+            benchmark.config_path = str(config) if isinstance(config, (str, os.PathLike)) else None
+            return benchmark
 
         raw_config = run_config.load_run_config(config)
         config_dict = run_config.select_experiment(raw_config, experiment)
@@ -135,9 +144,9 @@ class Benchmark:
             total_limit = limit_value
             remaining = max(0, limit_value - existing)
             if remaining == 0:
-                return cls(None, None, result_store=store, output_path=output_path,
-                           save_every=save_every, completed=True, total_limit=total_limit,
-                           existing_results=existing, config_provenance=config_provenance, shard=shard)
+                return built(cls(None, None, result_store=store, output_path=output_path,
+                                 save_every=save_every, completed=True, total_limit=total_limit,
+                                 existing_results=existing, config_provenance=config_provenance, shard=shard))
             target_override = remaining
         else:
             total_limit = None
@@ -150,9 +159,9 @@ class Benchmark:
         size_hint = getattr(source, "size_hint", None)
         pending = size_hint() if callable(size_hint) else None
         if pending is not None and pending <= 0:
-            return cls(None, None, result_store=store, output_path=output_path, save_every=save_every,
-                       completed=True, total_limit=total_limit if total_limit is not None else existing,
-                       existing_results=existing, config_provenance=config_provenance, shard=shard)
+            return built(cls(None, None, result_store=store, output_path=output_path, save_every=save_every,
+                             completed=True, total_limit=total_limit if total_limit is not None else existing,
+                             existing_results=existing, config_provenance=config_provenance, shard=shard))
         if total_limit is None and pending is not None:
             # Frozen catalog with no explicit total: the source's own count is the total. Set an explicit
             # remaining cap too (belt-and-braces with the source's bound). An OPEN generative source has
@@ -160,11 +169,13 @@ class Benchmark:
             total_limit = existing + pending
             remaining = pending
 
-        adapter = run_config.build_model_adapter(model_cfg)  # LAST: loads the model
+        # LAST: loads the model. `build_adapter=False` resolves a run's progress (existing_results, total_limit,
+        # completed) and nothing else: such a Benchmark is read, not run.
+        adapter = run_config.build_model_adapter(model_cfg) if build_adapter else None
 
-        return cls(source, adapter, result_store=store, output_path=output_path, save_every=save_every,
-                   limit=remaining, completed=False, total_limit=total_limit, existing_results=existing,
-                   config_provenance=config_provenance, shard=shard)
+        return built(cls(source, adapter, result_store=store, output_path=output_path, save_every=save_every,
+                         limit=remaining, completed=False, total_limit=total_limit, existing_results=existing,
+                         config_provenance=config_provenance, shard=shard))
 
     @classmethod
     def runs_from_config(
@@ -178,6 +189,7 @@ class Benchmark:
         experiment: str | None = None,
         sweep_filter: Mapping[str, Any] | None = None,
         shard: tuple[int, int] | None = None,
+        build_adapter: bool = True,
     ) -> "list[Benchmark]":
         """Expand a config (``experiments:`` map and/or inline ``!sweep``) into a list of Benchmarks.
 
@@ -213,14 +225,29 @@ class Benchmark:
                     resume=resume,
                     experiment=None,
                     shard=shard,
+                    build_adapter=build_adapter,
                 )
                 run_label: dict[str, Any] = {}
                 if exp_name is not None:
                     run_label["experiment"] = exp_name
                 run_label.update(labels)
                 bench.label = run_label
+                bench.config_path = str(config) if isinstance(config, (str, os.PathLike)) else None
                 benchmarks.append(bench)
         return benchmarks
+
+    def _leave_empty_shard_file(self, meta: Optional[Mapping[str, Any]]) -> None:
+        """A shard can hold no problem at all (a one-law catalog split eight ways). It is complete, not missing:
+        it writes its empty file, so that `srbf merge` finds every index of the run."""
+        if self.shard is None or self.output_path is None or self.existing_results:
+            return
+        path = Path(substitute_root_path(self.output_path))
+        if path.exists():
+            return
+        from srbf import config as run_config
+        provenance = self.config_provenance or run_config.coerce_config_provenance(dict(meta).get("config_provenance") if meta else None)
+        self.result_store.save(path, meta={**(meta or {}), "config_provenance": provenance,
+                                           "shard": {"index": self.shard[0], "count": self.shard[1]}})
 
     def run(
         self,
@@ -241,7 +268,13 @@ class Benchmark:
             if verbose:
                 target = self.total_limit if self.total_limit is not None else "configured"
                 print(f"Evaluation already completed ({self.existing_results}/{target}). Nothing to do.")
+            self._leave_empty_shard_file(meta)
             return self.result_store.snapshot()
+        if self.model_adapter is None:
+            raise RuntimeError("this Benchmark was built with build_adapter=False: it reports progress and cannot run")
+        if meta is None and self.config_path is not None:
+            from srbf.provenance import collect_provenance
+            meta = {**collect_provenance(self.config_path, None), **self.label}
 
         # The label declared in the config wins (from_config sets it); a directly-constructed
         # Benchmark falls back to a caller-supplied meta label (validated), then to the
@@ -274,6 +307,12 @@ class Benchmark:
         prepare_adapter = getattr(self.model_adapter, "prepare", None)
         if callable(prepare_adapter):
             prepare_adapter(data_source=self.source)
+
+        # What an out-of-process method reports about itself (its interpreter, package versions, checkpoint)
+        # is part of what ran: it is known once the worker is up, and goes beside the rest of the provenance.
+        worker_info = getattr(self.model_adapter, "worker_info", None)
+        if callable(worker_info):
+            meta["worker"] = worker_info() or None
 
         prepare_source = getattr(self.source, "prepare", None)
         if callable(prepare_source):

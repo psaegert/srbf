@@ -564,7 +564,7 @@ def pair_margin(
     that is indistinguishable from re-running the benchmark on two equally-good models with
     these two series' noise levels. Pair-specific by construction — a global max-over-models
     margin either starves quiet pairs of attainable 'equivalent' verdicts or dilutes the
-    regression gate (referee round, 2026-07-02).
+    regression gate.
 
     Returns ``{margin, sd}``; ``sd`` is the combined null SD for diagnostics (``margin/sd`` far
     from ~1.96 signals heavy tails).

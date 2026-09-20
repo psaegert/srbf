@@ -14,6 +14,8 @@ gets its engine from the loaded model; the other adapters require an explicit ``
 """
 from __future__ import annotations
 
+import importlib
+import os
 import copy
 import pickle
 from pathlib import Path
@@ -26,7 +28,6 @@ from srbf.model_adapters import (
     BruteForceAdapter,
     E2EAdapter,
     FlashANSRAdapter,
-    FlashANSRHybridAdapter,
     LampleChartonAdapter,
     NeSymReSAdapter,
 )
@@ -77,14 +78,25 @@ def build_catalog_source(
             "or an inline catalog config)."
         )
     return CatalogSource.from_catalog(
-        catalog=catalog,
+        catalog=os.path.expanduser(_substitute_root(catalog)) if isinstance(catalog, str) else _substitute_root(catalog),
         sampling=config.get("sampling"),
-        holdouts=config.get("holdouts"),
+        holdouts=_substitute_root(config.get("holdouts")),
         target_size=target_size,
         skip=skip,
         tokenizer_oov=str(config.get("tokenizer_oov", "unk")),
         shard=shard,
     )
+
+
+def _substitute_root(value: Any) -> Any:
+    """``{{ROOT}}`` replaced in every string of a nested config value (mappings, lists, strings)."""
+    if isinstance(value, str):
+        return substitute_root_path(value)
+    if isinstance(value, Mapping):
+        return {key: _substitute_root(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_substitute_root(item) for item in value]
+    return value
 
 
 # ---------------------------------------------------------------------------
@@ -114,11 +126,21 @@ def coerce_config_provenance(value: Any, field_name: str = "model_adapter.config
 
 def build_model_adapter(config: Mapping[str, Any]) -> Any:
     """Build the model adapter for a ``model_adapter`` config, dispatching on its ``type`` field."""
-    adapter_type = str(config.get("type", "flash_ansr")).lower()
-    builder = _ADAPTER_REGISTRY.get(adapter_type)
-    if builder is None:
-        raise ValueError(f"Unsupported model adapter type: {adapter_type}")
+    declared = str(config.get("type", "flash_ansr"))
     coerce_config_provenance(config.get("config_provenance"))  # reject invalid labels early
+    if ":" in declared:
+        # An adapter from another package: `type: mypackage.adapters:build` names a function that takes
+        # the model_adapter block and returns the adapter. Nothing in srbf has to be edited for it.
+        module_name, _, function_name = declared.partition(":")
+        try:
+            builder = getattr(importlib.import_module(module_name), function_name)
+        except (ImportError, AttributeError) as exc:
+            raise ValueError(f"model_adapter.type {declared!r}: cannot import {function_name!r} from {module_name!r} ({exc})") from exc
+        return builder(config)
+    builder = _ADAPTER_REGISTRY.get(declared.lower())
+    if builder is None:
+        raise ValueError(f"Unsupported model adapter type: {declared.lower()}; the built-in types are "
+                         f"{', '.join(sorted(_ADAPTER_REGISTRY))}, and 'package.module:function' names a builder of your own")
     return builder(config)
 
 
@@ -245,12 +267,12 @@ def _subprocess_common_kwargs(config: Mapping[str, Any]) -> dict[str, Any]:
     worker_log = config.get("worker_log")
     return dict(
         python=substitute_root_path(str(python)) if python else None,
-        options=dict(options),
+        options=_substitute_root(dict(options)),
         timeout=None if timeout is None else coerce_float(timeout, "model_adapter.timeout"),
         startup_timeout=coerce_float(config.get("startup_timeout", 600), "model_adapter.startup_timeout"),
-        env={str(k): str(v) for k, v in env.items()},
+        env={str(k): substitute_root_path(str(v)) for k, v in env.items()},
         cwd=substitute_root_path(str(cwd)) if cwd else None,
-        drop_unused_variables=bool(config.get("drop_unused_variables", True)),
+        drop_unused_variables=False,   # accepted in configs, ignored (see SubprocessAdapter)
         max_restarts=coerce_int(config.get("max_restarts", 1), "model_adapter.max_restarts"),
         worker_log=substitute_root_path(str(worker_log)) if worker_log else None,
         hang_after_idle_s=None if config.get("hang_after_idle_s") is None
@@ -305,44 +327,12 @@ def _build_pysr_adapter(config: Mapping[str, Any]) -> SubprocessAdapter:
     }
     common = _subprocess_common_kwargs(config)
     common["options"] = {**options, **common["options"]}
-    if "drop_unused_variables" not in config:
-        # PySR's historical key: padding=True keeps every column, padding=False drops the unused ones.
-        common["drop_unused_variables"] = not bool(config.get("padding", True))
+    # `padding` and `drop_unused_variables` are accepted and ignored: every method sees every column.
     return SubprocessAdapter(
         worker="pysr",
         simplipy_engine=resolve_simplipy_engine(config, adapter_name="pysr"),
         **common,
     )
-
-
-def _build_flash_ansr_hybrid_adapter(config: Mapping[str, Any]) -> FlashANSRHybridAdapter:
-    """The hybrid arm -- Flash-ANSR seeding PySR at a time budget. The METHOD lives in the
-    ``flash-ansr-hybrid`` package (``HybridRegressor``); srbf carries only this adapter. Blocks:
-    ``flash_ansr:`` (a full flash_ansr adapter block: the model, its refinement and ranking
-    settings, the device), ``hybrid:`` (flash-ansr-hybrid's ``HybridConfig`` fields -- ``budget_s``,
-    ``ratio``, ``ratios``, ``k_seeds``, the clock knobs -- plus ``snapshot_dir``, the per-problem
-    generation cache) and optionally ``pysr:`` (its ``PySRSettings``: ``maxsize``, ``parsimony``,
-    ``model_selection``, ``warmup``, further ``PySRRegressor`` kwargs)."""
-    flash_cfg = config.get("flash_ansr")
-    hybrid = config.get("hybrid")
-    pysr_cfg = config.get("pysr") or {}
-    if not isinstance(flash_cfg, Mapping) or not isinstance(hybrid, Mapping) or not isinstance(pysr_cfg, Mapping):
-        raise ValueError("flash_ansr_hybrid needs 'flash_ansr' and 'hybrid' mappings (and an optional 'pysr' mapping)")
-    try:
-        from flash_ansr_hybrid import HybridConfig, HybridRegressor
-    except ImportError as exc:  # pragma: no cover - environment dependent
-        raise ImportError("the flash_ansr_hybrid adapter needs the flash-ansr-hybrid package: pip install flash-ansr-hybrid") from exc
-
-    options = dict(hybrid)
-    snapshot_dir = options.pop("snapshot_dir", None)
-    flash = _build_flash_ansr_adapter(flash_cfg)
-    # The emission format is a sampling policy read from the flash_ansr block (flash-ansr 0.17); the adapter
-    # does not keep it, so take it from the same place the flash_ansr builder does.
-    options.setdefault("emission", str(flash_cfg.get("emission", "fittable")))
-    regressor = HybridRegressor(
-        flash.model, HybridConfig.from_mapping({**options, "pysr": dict(pysr_cfg)}),
-        snapshot_dir=substitute_root_path(str(snapshot_dir)) if snapshot_dir else None)
-    return FlashANSRHybridAdapter(flash, regressor)
 
 
 def _build_nesymres_adapter(config: Mapping[str, Any]) -> NeSymReSAdapter:
@@ -494,7 +484,7 @@ def reject_retired_ranking_keys(
     for dead, replacement in retired.items():
         if dead in config:
             raise ValueError(
-                f"{where}: '{dead}' is no longer read (moved to '{replacement}' on 2026-09-04). "
+                f"{where}: '{dead}' is not a key of this adapter; the key is '{replacement}'. "
                 f"Leaving it in place would silently rank at the default instead of your value. "
                 f"Say it as '{replacement}'."
             )
@@ -509,9 +499,8 @@ def resolve_ranking_block(config: Mapping[str, Any], eval_cfg: Mapping[str, Any]
     inside: unknown keys raise, retired keys raise, ``mode`` is required. Vocabulary validation is
     flash-ansr's own ``resolve_ranking`` -- never a second copy of the tuples.
 
-    The block is required, not defaulted, on purpose: every srbf flash_ansr run before 2026-09-04
-    ranked at an effective penalty of 0.0 while its config said 0.05, because the value it stated
-    lived under a key nothing read. A run must SAY how it ranks.
+    The block is required, not defaulted, on purpose: a run must SAY how it ranks, and a value stated
+    under a key that nothing reads would otherwise rank at the default without a word.
     """
     if "ranking" in config:
         block, where = config["ranking"], "model_adapter.ranking"
@@ -574,7 +563,6 @@ def _resolve_catalog_ref(config: Mapping[str, Any], *, adapter_name: str) -> str
 
 _ADAPTER_REGISTRY: dict[str, AdapterBuilder] = {
     "flash_ansr": _build_flash_ansr_adapter,
-    "flash_ansr_hybrid": _build_flash_ansr_hybrid_adapter,
     "pysr": _build_pysr_adapter,
     "subprocess": _build_subprocess_adapter,
     "nesymres": _build_nesymres_adapter,

@@ -185,7 +185,7 @@ def test_pysr_worker_warmup_can_be_disabled(monkeypatch):
 
 
 def test_pysr_config_builds_a_worker_backed_adapter(monkeypatch):
-    # type: pysr keeps its historical keys and now runs the shipped worker in a subprocess.
+    # type: pysr takes its own keys and runs the shipped worker in a subprocess.
     from srbf import config as run_config
     from srbf.subprocess_adapter import SubprocessAdapter
     monkeypatch.setattr(run_config, "resolve_simplipy_engine", lambda cfg, adapter_name: _DummyEngine())
@@ -196,7 +196,7 @@ def test_pysr_config_builds_a_worker_backed_adapter(monkeypatch):
     assert adapter.worker.name == "pysr_worker.py"
     assert adapter.python == "/opt/pysr-venv/bin/python"
     assert adapter.timeout == 120.0
-    assert adapter.drop_unused_variables is True          # padding: false
+    assert adapter.drop_unused_variables is False         # `padding` is accepted and ignored: every method sees every column
     assert adapter.options["timeout_in_seconds"] == 30 and adapter.options["niterations"] == 3
     assert adapter.options["maxsize"] is None and adapter.options["warmup"] is True
 
@@ -228,7 +228,7 @@ class TestEmissionConfig:
         return captured
 
     def test_emission_default_is_the_application_mode(self, monkeypatch) -> None:
-        # Owner ruling 2026-09-02: the model predicts the typed literals, the refiner fits
+        # The default: the model predicts the typed literals, the refiner fits
         # the placeholders -- <mask_fittable> is the default emission.
         assert self._generation_kwargs(monkeypatch, {})["emission"] == "fittable"
 
@@ -285,8 +285,7 @@ class TestRefineScopeConfig:
 class TestAnswerProvenanceColumns:
     """The flash_ansr adapter records where its rank-0 answer came from: how many predicted typed
     literals it kept frozen, whether it is a thawed duplicate (which typed token indices it re-fitted)
-    and the constant ladder's re-spelling record. Without them a campaign cannot attribute its own
-    answers (2026-09-12: the thaw lineage held 26 of 60 erbench-syneq rank-0 answers, invisible)."""
+    and the constant ladder's re-spelling record. Without them a run cannot attribute its own answers."""
 
     def test_rank0_provenance_lands_in_the_row(self, monkeypatch) -> None:
         import numpy as np
@@ -422,7 +421,7 @@ class TestWorkerVariableDialect:
         assert variable_renaming.rename_named_variables_in_infix("v1 + 2*v2", ["v1", "v2"]) == "x1 + 2*x2"
 
     def test_a_worker_that_ignores_the_names_is_left_alone(self) -> None:
-        # diffsym answers in x1, x2 whatever it is handed; those tokens are not the handed names
+        # a method may answer in x1, x2 whatever it is handed; those tokens are not the handed names
         assert variable_renaming.rename_named_variables(["+", "x1", "x2"], ["v1", "v2"]) == ["+", "x1", "x2"]
         assert variable_renaming.rename_named_variables(["+", "x3", "x4"], ["x3", "x4"]) == ["+", "x3", "x4"]
 
@@ -433,3 +432,46 @@ class TestWorkerVariableDialect:
         # a mixed list (one x-name among catalog names) must not send two columns to the same name
         names = variable_renaming.skeleton_variable_names(["v1", "x1"])
         assert names == ["x1", "x2"] and len(set(names)) == 2
+
+
+def test_an_adapter_from_another_package_is_named_by_its_builder(tmp_path, monkeypatch):
+    """`type: package.module:function` builds an adapter that lives outside srbf: no registry entry, no srbf edit."""
+    import sys
+
+    from srbf.config import build_model_adapter
+    (tmp_path / "my_method_plugin.py").write_text(
+        "class Adapter:\n    def __init__(self, config):\n        self.config = config\n\n\n"
+        "def build(config):\n    return Adapter(dict(config))\n")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    sys.modules.pop("my_method_plugin", None)
+    adapter = build_model_adapter({"type": "my_method_plugin:build", "config_provenance": "author_blessed", "beam": 4})
+    assert adapter.config["beam"] == 4
+    import pytest
+    with pytest.raises(ValueError, match="cannot import"):
+        build_model_adapter({"type": "my_method_plugin:missing"})
+    with pytest.raises(ValueError, match="package.module:function"):
+        build_model_adapter({"type": "no_such_type"})
+
+
+def test_the_root_token_is_replaced_in_worker_options_and_in_the_data_source(tmp_path, monkeypatch):
+    """`{{ROOT}}` means the same directory wherever a config names a file: worker options and holdouts too."""
+    from srbf import config as run_config
+    monkeypatch.setenv("FLASH_ANSR_ROOT", str(tmp_path))
+    monkeypatch.setattr(run_config, "resolve_simplipy_engine", lambda cfg, adapter_name: _DummyEngine())
+    adapter = run_config.build_model_adapter({
+        "type": "subprocess", "worker": "example", "simplipy_engine": "unused",
+        "options": {"checkpoint": "{{ROOT}}/models/mine/best.pt", "nested": {"paths": ["{{ROOT}}/a"]}, "beam": 4},
+        "env": {"MY_CACHE": "{{ROOT}}/cache"}})
+    assert adapter.options == {"checkpoint": f"{tmp_path}/models/mine/best.pt", "nested": {"paths": [f"{tmp_path}/a"]}, "beam": 4}
+    assert adapter.env["MY_CACHE"] == f"{tmp_path}/cache"
+
+    seen = {}
+    monkeypatch.setattr(run_config.CatalogSource, "from_catalog", classmethod(lambda cls, **kwargs: seen.update(kwargs)))
+    run_config.build_catalog_source({"catalog": "{{ROOT}}/catalogs/mine.yaml",
+                                     "holdouts": [{"exclude": "{{ROOT}}/models/mine/catalog_train.yaml"}]},
+                                    target_size=None, skip=0)
+    assert seen["catalog"] == f"{tmp_path}/catalogs/mine.yaml"
+    assert seen["holdouts"] == [{"exclude": f"{tmp_path}/models/mine/catalog_train.yaml"}]
+    monkeypatch.setenv("HOME", str(tmp_path))
+    run_config.build_catalog_source({"catalog": "~/catalogs/mine.yaml"}, target_size=None, skip=0)
+    assert seen["catalog"] == f"{tmp_path}/catalogs/mine.yaml"          # and a home-relative path is expanded

@@ -160,3 +160,37 @@ class TestMetaAndMerge:
         ResultStore({"eval_row_index": [0]}).save(plain, meta={"config_provenance": "harness_tuned"})
         with pytest.raises(ValueError, match="shard"):
             merge_shards([str(plain)], str(tmp_path / "o.pkl"))
+
+
+class TestEmptyShards:
+    """A one-law catalog split eight ways has seven shards without a problem. They are complete, not missing."""
+
+    def test_an_empty_shard_leaves_its_file(self, tmp_path) -> None:
+        out = tmp_path / "pagie.shard-1-of-2.pkl"
+        bench = Benchmark(None, None, output_path=str(out), completed=True, total_limit=0, existing_results=0, shard=(1, 2))
+        bench.run(verbose=False, progress=False, meta={"config_provenance": "harness_tuned"})
+        with out.open("rb") as f:
+            payload = pickle.load(f)
+        assert payload["__meta__"]["shard"] == {"index": 1, "count": 2}
+        assert all(len(v) == 0 for k, v in payload.items() if k != "__meta__")
+
+    def test_an_unsharded_finished_run_writes_nothing(self, tmp_path) -> None:
+        out = tmp_path / "pagie.pkl"
+        Benchmark(None, None, output_path=str(out), completed=True, total_limit=0, existing_results=0).run(verbose=False, progress=False)
+        assert not out.exists()
+
+    def test_merge_takes_the_columns_from_the_shards_that_hold_rows(self, tmp_path) -> None:
+        full = tmp_path / "pagie.shard-0-of-2.pkl"
+        empty = tmp_path / "pagie.shard-1-of-2.pkl"
+        _write_shard(full, [0], 0, 2)
+        ResultStore({}).save(empty, meta={"config_provenance": "harness_tuned", "shard": {"index": 1, "count": 2}})
+        summary = merge_shards([str(empty), str(full)], str(tmp_path / "pagie.pkl"))   # the empty one first, on purpose
+        assert summary["rows"] == 1 and summary["missing"] == []
+
+
+def test_a_progress_benchmark_reports_and_refuses_to_run(tmp_path) -> None:
+    bench = Benchmark(_ListSource([_sample(0)]), None, total_limit=1, existing_results=0)
+    assert bench.completed is False and bench.total_limit == 1
+    import pytest
+    with pytest.raises(RuntimeError, match="build_adapter=False"):
+        bench.run(verbose=False, progress=False)

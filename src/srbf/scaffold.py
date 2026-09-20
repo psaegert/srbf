@@ -28,13 +28,13 @@ import numpy as np
 
 
 def load(options):
-    """``options`` is the config's ``model_adapter.options`` block, verbatim."""
+    """``options`` is the config's ``model_adapter.options`` block ({{ROOT}} already replaced)."""
     # return {"model": MyModel.load(options["checkpoint"], device=options.get("device", "cuda"))}
     return {}
 
 
 def info(state):
-    """Anything worth recording with the results: package versions, checkpoint hashes."""
+    """Versions and hashes that identify what ran: stored with every result file, printed by `srbf check`."""
     return {"worker": "%NAME%", "numpy": np.__version__}
 
 
@@ -77,11 +77,10 @@ run:
     type: subprocess
     config_provenance: upstream_default   # docs/fairness.md: upstream_default | author_blessed | harness_tuned
     worker: '%WORKER%'
-    python: '%PYTHON%'                    # the interpreter of the method's OWN environment
-    options: {}                           # forwarded verbatim to load() and fit()
+    python: '%PYTHON%'   # the interpreter of the method's OWN environment
+    options: {}                           # handed to load() and fit(); {{ROOT}} is replaced in its strings
     simplipy_engine: acj-5-4-llm          # the engine the catalogs are judged with; keep it
     timeout: 3600                         # seconds per problem
-    drop_unused_variables: true
     worker_log: '{{ROOT}}/results/evaluation/%NAME%/worker.log'
   runner:
     output: '{{ROOT}}/results/evaluation/%NAME%/{catalog}.pkl'
@@ -199,7 +198,8 @@ def scaffold_adapter(name: str, *, directory: str | None = None, python: str | N
     for path, text in files.items():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
-    env_dir = python_ref.rsplit("/bin/python", 1)[0] if python is None else None
+    # {{ROOT}} belongs to the config language; a command the user pastes into a shell gets the real path
+    env_dir = python_ref.rsplit("/bin/python", 1)[0].replace("{{ROOT}}", os.environ.get("FLASH_ANSR_ROOT") or ".") if python is None else None
     steps = [f"write your method into fit() in {_from_cwd(worker_path)}"]
     if env_dir is not None:
         steps.append(f"create its environment: python -m venv \"{env_dir}\" && \"{env_dir}/bin/pip\" install -r {requirements_ref}"

@@ -41,12 +41,12 @@ def test_single_run_configs_and_flash_ansr_names(tmp_path):
     config.write_text(
         "run:\n"
         "  data_source: {catalog: nguyen}\n"
-        "  model_adapter: {type: flash_ansr, model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M'}\n"
+        "  model_adapter: {type: flash_ansr, model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'}\n"
         f"  runner: {{output: '{tmp_path}/nguyen.pkl'}}\n"
     )
     _snapshot(tmp_path / "nguyen.pkl", 2)
     (run,) = runs_from_config(str(config))
-    assert (run.model, run.benchmark, run.scaling, run.axis) == ("flash-ansr-v25.0-T7-3M", "nguyen", None, "scaling")
+    assert (run.model, run.benchmark, run.scaling, run.axis) == ("flash-ansr-v25.0-T8-3M", "nguyen", None, "scaling")
 
 
 def test_model_names_from_adapter_blocks():
@@ -56,4 +56,4 @@ def test_model_names_from_adapter_blocks():
     assert _model_name({"type": "subprocess", "worker": "/x/mymethod_worker.py"}) == "mymethod"
     assert _model_name({"type": "subprocess", "worker": "pysr"}) == "pysr"
     assert _model_name({"type": "pysr"}) == "pysr"
-    assert _model_name({"type": "flash_ansr", "model_path": "{{ROOT}}/models/psaegert/flash-ansr-v25.0-T7-3M/"}) == "flash-ansr-v25.0-T7-3M"
+    assert _model_name({"type": "flash_ansr", "model_path": "{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M/"}) == "flash-ansr-v25.0-T8-3M"

@@ -292,8 +292,8 @@ class TestRegressionAndScope:
 
     def test_recovery_metric_independent_of_scoring_module(self):
         # the scoring fix cannot move is_perfect_fit: numeric.py does not import scoring.py.
-        # Checked as an IMPORT, not a substring: the substring form also convicted a comment
-        # that merely names flash_ansr.scoring to explain a shared contract (2026-08-26).
+        # Checked as an IMPORT, not a substring: a comment may name flash_ansr.scoring to explain a
+        # shared contract.
         import ast
         import srbf.metrics.numeric as numeric_mod
         tree = ast.parse(inspect.getsource(numeric_mod))

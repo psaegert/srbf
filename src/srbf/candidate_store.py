@@ -23,13 +23,11 @@ Layout: one compressed .npz per (problem) under <out_dir>/, columns:
   const_vals  float64 [sum(n_const)]   (optional) flat fitted constants
   const_off   int64   [n_cand + 1]     (optional) CSR offsets into const_vals
 
-Widened 2026-08-27 for the f64 + byte-token migration. `tokens` was uint8, which a byte-alphabet
-vocabulary (95 -> 335) overflows; `fvu` and `const_vals` were float32, which silently FLUSHED a
-genuine FVU of ~1e-50 to 0.0 on disk -- it then read back as a perfect recovery. Readers must key
-off each column's stored dtype: files written before this date carry uint8/float32 and stay
-readable, since np.load reports the dtype it saved. Re-measured after the widening:
-**57.9 compressed B/candidate** at the 50k-unique self-test shape (the pre-widening
-figure this docstring used to quote is no longer comparable).
+The widths are chosen for what the columns hold: `tokens` must address a byte-alphabet vocabulary
+(more than 255 ids), and `fvu` and `const_vals` are float64 because a float32 column flushes a
+genuine FVU of ~1e-50 to 0.0, which reads back as a perfect recovery. Readers key off each column's
+stored dtype (np.load reports the dtype it saved), so files with narrower columns stay readable.
+About **58 compressed B/candidate** at the 50k-unique self-test shape.
 Per-problem files keep both write-time and read-time (analysis) memory bounded to one problem.
 """
 from __future__ import annotations

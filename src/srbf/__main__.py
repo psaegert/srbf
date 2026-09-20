@@ -10,9 +10,9 @@ import argparse
 import sys
 
 
-def main(argv: list[str] | None = None) -> None:
-    """CLI entry point: parse args and dispatch the ``run`` / ``analyze`` / ``decontamination`` subcommands."""
-    parser = argparse.ArgumentParser(description="srbf: Symbolic Regression Benchmark Framework")
+def build_parser() -> argparse.ArgumentParser:
+    """The command line as data: every subcommand and flag (the documentation is checked against it)."""
+    parser = argparse.ArgumentParser(prog="srbf", description="srbf: Symbolic Regression Benchmark Framework")
     subparsers = parser.add_subparsers(dest="command_name", required=True)
 
     run_parser = subparsers.add_parser("run", help="Run an evaluation from a unified config")
@@ -56,12 +56,23 @@ def main(argv: list[str] | None = None) -> None:
     check_parser.add_argument('--sweep-filter', type=str, default=None, help='As for run (default: the first sweep rung)')
     check_parser.add_argument('-n', '--problems', type=int, default=2, help='Problems to fit per experiment (default: 2)')
 
+    status_parser = subparsers.add_parser("status", help="Show how far every run of a config is, without loading a model")
+    status_parser.add_argument('-c', '--config', type=str, required=True, help='The evaluation config')
+    status_parser.add_argument('--experiment', type=str, default=None, help='Report one experiment')
+    status_parser.add_argument('--sweep-filter', type=str, default=None, metavar='AXIS=VALUE[,AXIS=VALUE]', help='As for run')
+    status_parser.add_argument('--shard', type=str, default=None, metavar='K/N', help='Report the shard files of a sharded run')
+
     decon_parser = subparsers.add_parser("decontamination", help="Verify the training-time holdout covers the benchmark set (fail-closed)")
     decon_parser.add_argument('-t', '--training-catalog', type=str, required=True, help='Path to the training catalog yaml (the generative config a run trains on)')
     decon_parser.add_argument('-b', '--benchmarks', type=str, nargs='+', default=None, help="Benchmark catalog refs to verify (default: the training config's holdout_pools)")
     decon_parser.add_argument('-o', '--output-file', type=str, default=None, help='Write the JSON coverage report to this path')
     decon_parser.add_argument('-v', '--verbose', action='store_true', help='Print per-catalog coverage as it is computed')
+    return parser
 
+
+def main(argv: list[str] | None = None) -> None:
+    """CLI entry point: parse the arguments and dispatch the subcommand."""
+    parser = build_parser()
     args = parser.parse_args(argv)
 
     match args.command_name:
@@ -114,9 +125,26 @@ def main(argv: list[str] | None = None) -> None:
                     meta={**base_prov, **benchmark.label},
                 )
                 if args.verbose and not benchmark.completed:
-                    destination = benchmark.output_path or 'memory'
+                    destination = substitute_root_path(str(benchmark.output_path)) if benchmark.output_path else 'memory'
                     print(f"{label}Evaluation finished with {benchmark.result_store.size} samples "
                           f"(saved to {destination}).")
+        case 'status':
+            from srbf.benchmark import Benchmark
+            from srbf.shards import parse_shard
+            from flash_ansr.utils.paths import substitute_root_path
+
+            sweep_filter = dict(pair.split('=', 1) for pair in args.sweep_filter.split(',') if '=' in pair) if args.sweep_filter else None
+            runs = Benchmark.runs_from_config(substitute_root_path(args.config), experiment=args.experiment, sweep_filter=sweep_filter,
+                                              shard=parse_shard(args.shard) if args.shard else None, build_adapter=False)
+            done = 0
+            for run in runs:
+                tag = ", ".join(f"{k}={v}" for k, v in run.label.items()) or "run"
+                total = "?" if run.total_limit is None else str(run.total_limit)
+                state = "done" if run.completed else ("started" if run.existing_results else "not started")
+                done += bool(run.completed)
+                print(f"{state:11}  {run.existing_results:>6} / {total:<6}  {tag}")
+            print(f"{done} of {len(runs)} run(s) done")
+            sys.exit(0 if done == len(runs) else 1)
         case 'merge':
             from srbf.shards import merge_shards
 

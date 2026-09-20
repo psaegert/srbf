@@ -8,7 +8,7 @@ from srbf.config import load_run_config, select_experiment
 from srbf.suites import SRBF_CATALOGS, expand_suite, suite_catalogs
 from srbf.sweep import Sweep, resolve_sweeps
 
-REFERENCE = Path(__file__).resolve().parents[2] / "configs" / "evaluation" / "scaling" / "flash-ansr-v25.0-T7-3M_srbf.yaml"
+REFERENCE = Path(__file__).resolve().parents[2] / "configs" / "evaluation" / "scaling" / "flash-ansr-v25.0-T8-3M_srbf.yaml"
 
 
 def _template() -> dict:

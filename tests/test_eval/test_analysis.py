@@ -130,3 +130,14 @@ def test_load_runs_from_manifest(tmp_path):
     pytest.importorskip("matplotlib")
     out = build_report(runs, str(tmp_path / "out"), operator_arity=ARITY, n_bootstrap=200)
     assert os.path.isfile(out)
+
+
+def test_a_metric_is_named_by_its_column():
+    """Every table and figure takes a derived column's name as well as a Metric object."""
+    from srbf.analysis import per_benchmark_table, scaling_table
+    runs = _runs()
+    by_name = per_benchmark_table(runs, "numeric_recovery_val", operator_arity=ARITY, n_bootstrap=100)
+    by_object = per_benchmark_table(runs, DEFAULT_METRICS[0], operator_arity=ARITY, n_bootstrap=100)
+    assert by_name.equals(by_object) and list(by_name.columns) == ["fastsrb", "feynman"]
+    assert len(scaling_table(runs, "symbolic_recovery", operator_arity=ARITY, n_bootstrap=100)) == 4
+    assert "Symbolic recovery median" in leaderboard(runs, metrics=["symbolic_recovery"], operator_arity=ARITY, n_bootstrap=100).columns

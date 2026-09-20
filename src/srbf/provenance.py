@@ -34,11 +34,9 @@ META_KEY = "__meta__"
 def repo_root(start: str | Path) -> Path | None:
     """The git checkout containing ``start`` (a module file or directory), or None for a wheel install.
 
-    Walks UP until a ``.git`` entry appears rather than counting a fixed number of parents: the
-    fixed count silently pointed one level above the srbf checkout (``parents[3]`` of
-    ``src/srbf/provenance.py`` is the directory holding the checkout), fell back to ``Path.cwd()``
-    -- an eval directory with no repository -- and every ``__meta__['git']`` written before
-    2026-09-04 came out empty."""
+    Walks UP until a ``.git`` entry appears rather than counting a fixed number of parents, so the
+    checkout is found wherever the module sits inside it; a fixed count can point outside the
+    checkout and leave ``__meta__['git']`` empty."""
     p = Path(start).resolve()
     if p.is_file():
         p = p.parent

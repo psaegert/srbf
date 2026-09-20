@@ -58,6 +58,17 @@ class Metric:
     higher_is_better: bool
 
 
+def as_metric(metric: "Metric | str") -> "Metric":
+    """A `Metric`, or the name of a derived column: a known column takes its label and polarity from
+    `DEFAULT_METRICS`, any other is labelled by its name and read as higher-is-better."""
+    if isinstance(metric, Metric):
+        return metric
+    for known in DEFAULT_METRICS:
+        if known.key == metric:
+            return known
+    return Metric(str(metric), str(metric), True)
+
+
 #: The headline metrics the results page reports by default.
 DEFAULT_METRICS: tuple[Metric, ...] = (
     Metric("numeric_recovery_val", "Numeric recovery (val)", True),
@@ -155,7 +166,7 @@ def _benchmarks(runs: Sequence[RunResult]) -> list[str]:
 def leaderboard(
     runs: Sequence[RunResult],
     *,
-    metrics: Sequence[Metric] = DEFAULT_METRICS,
+    metrics: Sequence[Metric | str] = DEFAULT_METRICS,
     engine: Any = None,
     operator_arity: Mapping[str, int] | None = None,
     scaling: float | str | None = "max",
@@ -167,13 +178,14 @@ def leaderboard(
     ``scaling`` picks the scaling coordinate per model (``'max'`` by default); pass a value to fix it.
     Returns a tidy DataFrame with ``model``, ``n_expressions``, and ``<metric> median/lower/upper``.
     """
+    resolved: list[Metric] = [as_metric(m) for m in metrics]
     rows = []
     for model in _models(runs):
         s = _select_scaling(runs, model, scaling)
         scored = [_score(r, engine=engine, operator_arity=operator_arity) for r in _runs_at(runs, model, s)]
         row: dict[str, Any] = {"model": model, "scaling": s}
         n_expr = 0
-        for m in metrics:
+        for m in resolved:
             ci = _ci(scored, m.key, n_bootstrap=n_bootstrap, interval=interval)
             row[f"{m.label} median"] = ci["median"]
             row[f"{m.label} lo"] = ci["ci_lower"]
@@ -183,15 +195,15 @@ def leaderboard(
         rows.append(row)
     df = pd.DataFrame(rows)
     # rank by the first metric (respecting its polarity)
-    if metrics and not df.empty:
-        first = metrics[0]
+    if resolved and not df.empty:
+        first = resolved[0]
         df = df.sort_values(f"{first.label} median", ascending=not first.higher_is_better).reset_index(drop=True)
     return df
 
 
 def scaling_table(
     runs: Sequence[RunResult],
-    metric: Metric,
+    metric: Metric | str,
     *,
     engine: Any = None,
     operator_arity: Mapping[str, int] | None = None,
@@ -200,6 +212,7 @@ def scaling_table(
 ) -> pd.DataFrame:
     """A metric vs the scaling coordinate: one row per (model, scaling) with a bootstrap median + CI
     pooled over benchmarks. Returns empty if the runs carry no scaling axis."""
+    metric = as_metric(metric)
     rows = []
     for model in _models(runs):
         scalings = sorted({r.scaling for r in runs if r.model == model and r.scaling is not None})
@@ -212,7 +225,7 @@ def scaling_table(
 
 def per_benchmark_table(
     runs: Sequence[RunResult],
-    metric: Metric,
+    metric: Metric | str,
     *,
     engine: Any = None,
     operator_arity: Mapping[str, int] | None = None,
@@ -221,6 +234,7 @@ def per_benchmark_table(
     interval: float = 0.95,
 ) -> pd.DataFrame:
     """A metric split by benchmark: rows = models, columns = benchmarks (bootstrap median)."""
+    metric = as_metric(metric)
     rows = []
     for model in _models(runs):
         s = _select_scaling(runs, model, scaling)
@@ -250,8 +264,9 @@ def _per_expression_values(scored_snapshots: Iterable[Mapping[str, Sequence[Any]
 
 # --- figures ----------------------------------------------------------------------------------
 
-def scaling_figure(runs: Sequence[RunResult], metric: Metric, *, engine: Any = None, operator_arity: Mapping[str, int] | None = None, ax: Any = None, **kwargs: Any) -> Any:
+def scaling_figure(runs: Sequence[RunResult], metric: Metric | str, *, engine: Any = None, operator_arity: Mapping[str, int] | None = None, ax: Any = None, **kwargs: Any) -> Any:
     """Plot ``metric`` vs the scaling coordinate, one line + CI band per model. Returns the Figure."""
+    metric = as_metric(metric)
     plt = _plt()
 
     table = scaling_table(runs, metric, engine=engine, operator_arity=operator_arity, **kwargs)
@@ -271,8 +286,9 @@ def scaling_figure(runs: Sequence[RunResult], metric: Metric, *, engine: Any = N
     return fig
 
 
-def per_benchmark_figure(runs: Sequence[RunResult], metric: Metric, *, engine: Any = None, operator_arity: Mapping[str, int] | None = None, ax: Any = None, **kwargs: Any) -> Any:
+def per_benchmark_figure(runs: Sequence[RunResult], metric: Metric | str, *, engine: Any = None, operator_arity: Mapping[str, int] | None = None, ax: Any = None, **kwargs: Any) -> Any:
     """Grouped bar chart of ``metric`` per (model, benchmark). Returns the Figure."""
+    metric = as_metric(metric)
     plt = _plt()
 
     table = per_benchmark_table(runs, metric, engine=engine, operator_arity=operator_arity, **kwargs)
@@ -293,8 +309,9 @@ def per_benchmark_figure(runs: Sequence[RunResult], metric: Metric, *, engine: A
     return fig
 
 
-def distribution_figure(runs: Sequence[RunResult], metric: Metric, *, engine: Any = None, operator_arity: Mapping[str, int] | None = None, scaling: float | str | None = "max", ax: Any = None) -> Any:
+def distribution_figure(runs: Sequence[RunResult], metric: Metric | str, *, engine: Any = None, operator_arity: Mapping[str, int] | None = None, scaling: float | str | None = "max", ax: Any = None) -> Any:
     """Per-expression distribution of ``metric`` per model (violin). Returns the Figure."""
+    metric = as_metric(metric)
     plt = _plt()
 
     fig, ax = (ax.figure, ax) if ax is not None else plt.subplots(figsize=(6.4, 4.2))
@@ -334,7 +351,7 @@ def build_report(
     *,
     engine: Any = None,
     operator_arity: Mapping[str, int] | None = None,
-    metrics: Sequence[Metric] = DEFAULT_METRICS,
+    metrics: Sequence[Metric | str] = DEFAULT_METRICS,
     figures_subdir: str = "figures",
     title: str = "Results",
     n_bootstrap: int = 10_000,
@@ -346,30 +363,34 @@ def build_report(
     distribution, not a point). Pass an ``engine`` (its ``operator_arity`` + ``simplify`` are used) or
     an explicit ``operator_arity``.
     """
+    resolved: list[Metric] = [as_metric(m) for m in metrics]
     plt = _plt()
 
     fig_dir = os.path.join(out_dir, figures_subdir)
     os.makedirs(fig_dir, exist_ok=True)
 
-    lb = leaderboard(runs, metrics=metrics, engine=engine, operator_arity=operator_arity, n_bootstrap=n_bootstrap)
+    lb = leaderboard(runs, metrics=resolved, engine=engine, operator_arity=operator_arity, n_bootstrap=n_bootstrap)
     lines: list[str] = [f"# {title}", ""]
-    lines += ["Each cell is a bootstrap median with a 95% confidence interval over expressions "
-              "(sources are unseeded; we report the distribution, not a single seeded point).", ""]
+    lines += ["Each cell is a bootstrap median with a 95% confidence interval over the laws. Problems are "
+              "sampled afresh in every run, so a cell describes a distribution, not one seeded draw.", ""]
 
-    # 1. Leaderboard
+    has_scaling = any(r.scaling is not None for r in runs)
+
+    # 1. Leaderboard (the Scaling column only when a run has a ladder)
     lines += ["## Leaderboard", ""]
-    header = ["Model", "N expr", "Scaling"] + [m.label for m in metrics]
+    header = ["Model", "N expr"] + (["Scaling"] if has_scaling else []) + [m.label for m in resolved]
     lines.append("| " + " | ".join(header) + " |")
     lines.append("|" + "|".join(["---"] * len(header)) + "|")
     for _, r in lb.iterrows():
-        cells = [str(r["model"]), str(int(r["n_expressions"])), ("" if r["scaling"] is None else f"{r['scaling']:g}")]
-        for m in metrics:
+        cells = [str(r["model"]), str(int(r["n_expressions"]))]
+        if has_scaling:
+            cells.append("" if r["scaling"] is None or pd.isna(r["scaling"]) else f"{r['scaling']:g}")
+        for m in resolved:
             cells.append(_fmt_ci(r[f"{m.label} median"], r[f"{m.label} lo"], r[f"{m.label} hi"]))
         lines.append("| " + " | ".join(cells) + " |")
     lines.append("")
 
-    has_scaling = any(r.scaling is not None for r in runs)
-    headline = metrics[0]
+    headline = resolved[0]
 
     # 2. Scaling curves
     if has_scaling:
@@ -500,7 +521,7 @@ def export_data(
     runs: Sequence[RunResult],
     path: str,
     *,
-    metrics: Sequence[Metric] = DEFAULT_METRICS,
+    metrics: Sequence[Metric | str] = DEFAULT_METRICS,
     engine: Any = None,
     operator_arity: Mapping[str, int] | None = None,
     n_bootstrap: int = 2000,
@@ -517,19 +538,20 @@ def export_data(
          "records": [{"series", "version", "benchmark", "axis", "x",
                       "<metric.key>": {"median", "lo", "hi", "n"}, ...}, ...]}
     """
+    resolved: list[Metric] = [as_metric(m) for m in metrics]
     records: list[dict[str, Any]] = []
     for run in runs:
         scored = _score(run, engine=engine, operator_arity=operator_arity)
         rec: dict[str, Any] = {"series": run.model, "version": run.version,
                                "benchmark": run.benchmark, "axis": run.axis, "x": _json_num(run.scaling)}
-        for m in metrics:
+        for m in resolved:
             ci = _ci([scored], m.key, n_bootstrap=n_bootstrap, interval=interval)
             rec[m.key] = {"median": _json_num(ci["median"]), "lo": _json_num(ci["ci_lower"]),
                           "hi": _json_num(ci["ci_upper"]), "n": int(ci["n_groups"])}
         records.append(rec)
 
     payload = {
-        "metrics": [{"key": m.key, "label": m.label, "higher_is_better": m.higher_is_better} for m in metrics],
+        "metrics": [{"key": m.key, "label": m.label, "higher_is_better": m.higher_is_better} for m in resolved],
         "axes": sorted({r["axis"] for r in records}),
         "records": records,
     }

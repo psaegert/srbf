@@ -1,9 +1,9 @@
 """The float64 FVU is certified against exact rational arithmetic.
 
-Motivating defect (2026-08-26): a benchmark harness divided by a float32 `np.var(y)`. On FastSRB
-targets reaching |y| ~ 5e36 the float32 variance overflowed to +inf, so `fvu = finite/inf = 0.0`
-sailed through the float32-eps bar as a free "perfect symbolic recovery" on 12 of 110 problems.
-These tests pin the magnitudes where that happens and prove the shipped float64 path is right there.
+Why: dividing by a float32 `np.var(y)` fails on FastSRB targets reaching |y| ~ 5e36. The float32
+variance overflows to +inf, so `fvu = finite/inf = 0.0` passes the float32-eps bar as a free
+"perfect recovery". These tests pin the magnitudes where that happens and prove the float64 path
+is right there.
 """
 import numpy as np
 import pytest

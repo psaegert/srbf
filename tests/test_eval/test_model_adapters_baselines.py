@@ -139,12 +139,12 @@ def test_brute_force_adapter_identity(simplipy_engine: SimpliPyEngine) -> None:
     assert values["predicted_skeleton_prefix"] is not None
 
 # ---- a failed fit is NOT a timed fit -----------------------------------------------------------------------------
-# Owner 2026-09-18: "Failures do not count towards the time." The compute axis is the cost of the problems a method
+# Failures do not count towards the time. The compute axis is the cost of the problems a method
 # actually answers; a row that raised carries no fit_time, so the read-out drops it and the published seconds are the
 # mean over answered problems. This is a deliberate choice, not an oversight -- these tests pin it, so that "a failed
 # fit still spent the time" is not silently reintroduced as a bug fix. (Method failures are already counted where
 # they belong: on the y axis, where every error is a miss.) The upstream defects that produce those failures stay
-# unpatched by the same ruling: baselines are benchmarked as they ship.
+# unpatched for the same reason: baselines are benchmarked as they ship.
 
 
 def _toy_sample() -> EvaluationSample:
@@ -167,7 +167,7 @@ class _RaisingModel:
 
 def _failed(values) -> None:
     assert values["prediction_success"] is False and "upstream blew up" in values["error"]
-    assert values.get("fit_time") is None, "a failed fit must carry no time (owner 2026-09-18)"
+    assert values.get("fit_time") is None, "a failed fit must carry no time"
 
 
 def test_flash_ansr_adapter_does_not_time_a_failed_fit() -> None:

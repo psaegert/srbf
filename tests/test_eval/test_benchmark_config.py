@@ -590,7 +590,7 @@ def test_runs_from_config_expands_experiments(monkeypatch):
 
 
 def test_build_flash_ansr_adapter_defaults_follow_the_doctrine(monkeypatch):
-    # Owner ruling 2026-09-02: fittable emission + fittable refine scope unless a config says otherwise.
+    # The default: fittable emission + fittable refine scope unless a config says otherwise.
     captured = {}
     _patch_flash_ansr(monkeypatch, captured)
     run_config.build_model_adapter(

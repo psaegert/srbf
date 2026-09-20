@@ -113,10 +113,9 @@ def fvu_exact(y_true: np.ndarray | None, y_pred: np.ndarray | None) -> float:
     float64 squares do not) is arithmetically indistinguishable from unit-scale data here. Use it to
     settle a verdict, never in a hot loop -- it is ~1e3x slower than the float64 path.
 
-    The motivating defect (measured 2026-08-26): a benchmark harness that divided by a float32
-    ``np.var(y)`` scored ``fvu = finite/inf = 0.0`` on 12 of 110 problems and awarded each a free
-    "perfect symbolic recovery". Rows whose float64 FVU lands within a decade of a decision
-    threshold should be re-settled here before the verdict is quoted.
+    Why it matters: dividing by a float32 ``np.var(y)`` scores ``fvu = finite/inf = 0.0`` on targets
+    of that span, a free "perfect recovery". Rows whose float64 FVU lands within a decade of a
+    decision threshold should be re-settled here before the verdict is quoted.
 
     Parameters
     ----------

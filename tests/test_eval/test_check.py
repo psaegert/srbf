@@ -104,3 +104,19 @@ def test_checks_the_chosen_experiment_of_a_suite(tmp_path, toy_catalog):
     assert report.ok, "\n".join(lines)
     assert "[feynman]" in lines and _names(report).count("fit") == 1
     assert any(f"{tmp_path}/feynman.pkl" in line for line in lines)
+
+
+def test_a_run_records_what_the_worker_reports_about_itself(tmp_path, toy_catalog):
+    """The worker's info() (interpreter, versions) is part of what ran: it is stored with the result file."""
+    import pickle
+
+    from srbf import Benchmark
+    (benchmark,) = Benchmark.runs_from_config(_write(tmp_path))
+    benchmark.run(verbose=False, progress=False)
+    with open(tmp_path / "out" / "toy.pkl", "rb") as handle:
+        meta = pickle.load(handle)["__meta__"]
+    assert meta["worker"]["python"] == sys.executable
+    assert "python_version" in meta["worker"]
+    # a run driven from Python documents itself like `srbf run`: the config, its hash, the code and the machine
+    assert meta["config"].endswith(".yaml") and meta["config_sha"]
+    assert {"git", "system", "env", "inputs", "timestamp"} <= set(meta)
