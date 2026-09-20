@@ -5,8 +5,8 @@
 The [adapter contribution guide](docs/adapters.md) is the full reference. The short version:
 
 ```bash
-pip install srbf
 git clone https://github.com/psaegert/srbf && cd srbf
+pip install -e .                    # from the checkout, so that the worker you add is found by its name
 srbf new mymethod --repo            # the worker, its suite config, an environment recipe and a test, where the PR wants them
 ```
 
@@ -15,13 +15,13 @@ environment in `envs/mymethod/requirements.txt`, and run
 
 ```bash
 export FLASH_ANSR_ROOT=$PWD                                     # models, results and environments live under here
-python -m venv envs/mymethod-venv && envs/mymethod-venv/bin/pip install -r envs/mymethod/requirements.txt
+python -m venv envs/mymethod && envs/mymethod/bin/pip install -r envs/mymethod/requirements.txt
 srbf check -c configs/evaluation/mymethod_srbf.yaml             # a few real problems end to end
 srbf run -c configs/evaluation/mymethod_srbf.yaml -v            # the whole suite, or --experiment fastsrb
 srbf analyze -c configs/evaluation/mymethod_srbf.yaml -o report # the standardized report
 ```
 
-(with `python:` in the config pointing at that interpreter). The worker runs in its own environment,
+The config's `python:` already points at that interpreter. The worker runs in its own environment,
 so any torch, simplipy or Julia version is fine; srbf never imports your code.
 
 A pull request carries:
@@ -35,10 +35,10 @@ A pull request carries:
 5. the smoke test (`tests/test_workers/test_<name>_worker.py`; it skips where the environment is
    not provisioned).
 
-We merge, provision the environment from your recipe on the calibrated reference machine, run the
-full suite, and publish the numbers on the results site. Your own runs use the identical config,
-so the recovery metrics you measure are the ones we publish; only the timings depend on the
-machine.
+After the merge we aim to provision the environment from your recipe on the reference machine,
+run the full suite and publish the numbers on the results site, as compute allows. Your own runs
+use the identical config, so up to sampling noise the recovery metrics you measure are the ones
+that get published; only the timings depend on the machine.
 
 ## Working on srbf itself
 
@@ -49,4 +49,5 @@ pytest tests
 ```
 
 Tests that need provisioned assets or a method's environment skip when those are absent. Keep
-`pre-commit run --all-files` green (flake8, mypy); production code carries no experiment switches.
+`pre-commit run --all-files` green (flake8, mypy). An experiment belongs on a branch or in a
+config, not behind a switch in the package.

@@ -1,89 +1,149 @@
-# Results & analysis
+# Results
 
-The **interactive results explorer** lives on the project's results site, separate from these docs:
+A run stores what the method answered; everything else is derived from that afterwards. This page
+covers the result file, the metric step, summaries with intervals, and the standard report. The
+published results of the methods entered so far are on the
+[results explorer](https://psaegert.github.io/srbf/); its Table view exports every number as TSV or
+CSV, for a comparison with your own.
 
-<p style="margin:1rem 0;">
-  <a href="https://psaegert.github.io/srbf/" style="display:inline-block;padding:.6rem 1.1rem;border-radius:8px;background:#4f46e5;color:#fff;font-weight:600;text-decoration:none;">
-    Open the results explorer &nbsp;&rarr;
-  </a>
-</p>
-
-The explorer is a 2×2 view grid selected by two toggles: **Display** — *Curves* (a metric over the
-whole compute sweep) or *Table* (a snapshot at one selected compute budget) — × **Values** —
-*Absolute* (each series' own value, with a marginal bootstrap CI) or *Paired* (per-expression
-head-to-head differences with four-state verdicts). The four quadrants:
-
-- **Curves × Absolute** — the sweep chart: per-series bootstrap medians with 95% confidence bands.
-- **Curves × Paired** — Δ(t) curves: one series minus a chosen baseline, paired per expression.
-- **Table × Absolute** — the Table view: per benchmark, each series' best measured configuration
-  within the selected budget, with its marginal value + 95% CI (numerically identical to that
-  configuration's point on the curves).
-- **Table × Paired** — the verdict matrix: four-state verdicts for every pair at the selected budget.
-
-Curves × Absolute is where you pick the x-axis (inference compute as wall-clock time, measurement
-noise, or number of samples), a metric, and a benchmark, and toggle series on and off; the other
-three quadrants live on the compute axis at standardized budgets (≤1, 10, 100, 1000 s per
-expression — budgets cap a configuration's *median* cost, not each expression's). Everything is
-strictly per benchmark; there is deliberately no combined cross-benchmark number. And the Table
-view's numbers are marginal: never difference two rows and never subtract two CIs — head-to-head
-questions belong to the Paired views. The statistics behind all of this are documented in
-[Paired comparisons](paired.md). This page documents **how those numbers are produced** and **how
-to reproduce them**.
-
-## How the numbers are computed
-
-`srbf` separates *running* a benchmark from *analysing* it. A `Benchmark.run()` emits **raw results
-only** (per-problem predictions + targets); metrics are a **separate, standardized stage**:
-
-```
-Benchmark.run()  ->  raw snapshot     (predictions + targets, per problem)
-derive_metrics   ->  + derived metrics (FVU, numeric recovery, F1, ...)
-srbf.analysis    ->  aggregate + CI    (bootstrap median over expressions)
-export_data      ->  the JSON the results explorer reads
+```text
+srbf run        ->  result file      the data and the prediction, one row per problem
+derive_metrics  ->  + metric columns FVU, recovery, lengths, ...
+bootstrap_report, srbf analyze  ->  summaries with 95 % intervals, tables, figures
 ```
 
-`srbf.analysis` (leaderboard / scaling / per-benchmark / distribution helpers) turns a set of runs --
-each a raw snapshot tagged with `(model, benchmark, axis, x)` -- into bootstrap-CI'd aggregates.
-(The Python `leaderboard` helper is a static report table, unrelated to the explorer's Table view.)
-`export_data(runs, "results_data.json")` writes the tidy records the explorer loads client-side.
-The Paired and Table quadrants read a second payload, `paired_data.json`, built by the
-flash-ansr-side exporter (`experimental/eval/build_paired_data.py`) on top of `srbf.reporting`, with
-every statistic (paired deltas, CIs, verdicts, the Table block) precomputed in Python -- the site
-only renders.
-Metrics are the strict `is_perfect_fit` numeric recovery, token-level skeleton F1, and the median
-`log10` FVU; sources are unseeded, so we report the distribution (bootstrap CI), not a single point.
+## The result file
 
-**How failed predictions are scored.** A model can fail to produce any prediction for a problem
-(generation or fitting error). Metrics handle this in two regimes: **rate metrics** (numeric/symbolic
-recovery, prediction success rate) count a failed prediction as **0.0 — a miss, not a missing value** —
-so a model is never rewarded for failing on hard problems (conditioning rates on success would inflate
-them, and they would vanish entirely where no prediction succeeds); **diagnostic metrics** that are only
-defined when a prediction exists (FVU, token F1/precision/recall, edit/tree distance, lengths, log-prob,
-fit time) drop failed rows instead. Recovery and FVU always score against the *clean* targets, so noise
-sweeps measure recovery of the true function.
-
-For a static (matplotlib) rendering instead of the interactive explorer, `build_report(runs, out_dir)`
-writes a Markdown page + PNG figures (needs the `srbf[analysis]` extra).
-
-## Reproduce
-
-The **canonical results** come from the sweep configs under `configs/evaluation/` (the model x
-inference-compute / noise / support ladders over the shared benchmarks). Run them, then aggregate:
+`runner.output` is a pickled dict of columns: every key maps to a list with one entry per problem,
+and the key `__meta__` holds the provenance.
 
 ```python
-from srbf import Benchmark
-from srbf.analysis import RunResult, export_data
+import pandas as pd
 
-runs = []
-for (model, benchmark, axis, x, config) in canonical_grid:      # your model x benchmark x sweep grid
-    (bench,) = Benchmark.runs_from_config(config)
-    runs.append(RunResult(model=model, benchmark=benchmark, axis=axis, scaling=x,
-                          version="v24", snapshot=bench.run()))
-
-export_data(runs, "results_data.json",
-            engine=bench.model_adapter.get_simplipy_engine())   # -> the results explorer's data
+snapshot = pd.read_pickle("results/evaluation/scaling/flash-ansr-v25.0-T8-3M/nguyen/choices_000032.pkl")
+meta = snapshot["__meta__"]                     # what ran; leave it in, comparisons check it
+frame = pd.DataFrame({key: snapshot[key] for key in ("benchmark_eq_id", "predicted_expression", "fit_time")})
 ```
 
-The run is a compute job (real models over the benchmarks); the analysis + export stage is cheap and
-deterministic given the raw pickles, so the explorer's data regenerates whenever the raw results
-change.
+| columns | meaning |
+|---|---|
+| `benchmark_eq_id`, `eval_row_index` | the law's id in its catalog and the problem's position in the run |
+| `skeleton`, `expression`, `ground_truth_prefix`, `ground_truth_infix` | the law: its skeleton with constants masked, and the expression with its constants, in prefix and infix notation |
+| `variables` | the names of the columns as the catalog writes them, for example `v1, v2`; skeletons and answers name the same columns `x1, x2, ...` by position |
+| `x`, `y`, `x_val`, `y_val` | the support and validation points, without noise |
+| `y_noisy`, `y_noisy_val` | the targets with the run's noise. A method is given `y_noisy` when the run adds noise, and never any validation target |
+| `n_support`, `noise_level` | the sampling parameters of the problem |
+| `complexity` | the number of tokens of the law's skeleton |
+| `predicted_expression` | the answer as an infix string, in the names `x1, x2, ...` |
+| `predicted_expression_prefix`, `predicted_skeleton_prefix` | the answer in prefix notation, with its constants and with constants masked |
+| `y_pred`, `y_pred_val` | the answer's values on the support and validation points |
+| `prediction_success`, `error` | whether an answer could be parsed and evaluated, and why not |
+| `fit_time` | seconds for the problem |
+| `predicted_constants`, `predicted_score`, `predicted_log_prob` | what the method reports about its answer, where it does |
+| `placeholder`, `placeholder_reason` | see below |
+
+An adapter may add columns of its own; the Flash-ANSR adapter records `generation_time` and
+`refinement_time`, and a worker's `extra` dict is merged into the row.
+
+### Failures and placeholders
+
+A problem the method could not answer is a normal row with `prediction_success: False` and the
+reason in `error`. It counts as a miss in every rate ([Metrics](metrics.md#rates-and-diagnostics)).
+
+A **placeholder** row marks a problem that produced no evaluation at all: the catalog could not
+draw valid points for the law within `max_trials`, or an in-process adapter raised an exception it
+did not handle. Placeholders keep the rows of different runs aligned and are left out of every
+summary. An adapter should therefore catch its own failures and report them as unsuccessful
+predictions; the worker protocol does this for you.
+
+### What a result file records
+
+`__meta__` answers what ran:
+
+| key | content |
+|---|---|
+| `config`, `config_sha` | the config's path and SHA-256 |
+| `experiment`, and one key per sweep axis | which run of the config this is, for example `ladder: 32` |
+| `config_provenance` | who chose the configuration ([Fairness](fairness.md#configuration-provenance-labels)) |
+| `env` | versions of Python, torch, numpy, scipy, srbf, flash-ansr, simplipy and symbolic-data |
+| `git`, `git_flash_ansr` | commit, branch and dirty state, when installed from a checkout |
+| `inputs` | size and SHA-256 of the model weights, the tokenizer and a local catalog file |
+| `system` | hostname, platform, CPU count and GPU |
+| `worker` | what a worker's `info()` returned: its interpreter and versions |
+| `ranking` | the resolved ranking of a Flash-ANSR run |
+| `shard`, `shards` | for a shard file, its index and count; for a merged file, what was merged |
+| `timestamp` | when the run was started |
+
+## Deriving metrics
+
+```python
+from simplipy import SimpliPyEngine
+from srbf import derive_metrics
+
+engine = SimpliPyEngine.load("acj-5-4-llm", install=True)
+scored = derive_metrics(snapshot, engine=engine)      # a new dict: the raw columns plus the metrics
+
+print(scored["fvu_val"][:3], scored["numeric_recovery_val"][:3], scored["symbolic_recovery"][:3])
+```
+
+`derive_metrics` does not change its input. The engine is the judge: it simplifies both skeletons,
+supplies the operator arities the tree distance needs and prices description lengths. Pass the
+engine the run was configured with (`simplipy_engine`). Without an engine, give
+`operator_arity={...}` instead; the skeletons are then compared as they were written and the
+description-length columns are not added. Every column is defined in [Metrics](metrics.md).
+
+## Summaries with intervals
+
+Sampling is not seeded, so a number is reported with its uncertainty. The unit of resampling is the
+law: the problems drawn for one law are averaged first, and the laws are bootstrapped.
+
+```python
+from srbf import bootstrap_report, draw_distribution
+
+report = bootstrap_report(scored, "numeric_recovery_val")
+# {'metric': 'numeric_recovery_val', 'n_groups': 12, 'n_rows': 12,
+#  'median': 0.083, 'ci_lower': 0.0, 'ci_upper': 0.25, 'interval': 0.95}
+
+per_law = draw_distribution(scored, "log10_fvu_val")    # {law id: mean over its problems}
+```
+
+`bootstrap_report` resamples the per-law values 10,000 times and returns the median of the
+resampled means with the percentile interval. It is seeded (`rng=0`), so a report is reproducible;
+pass `rng=None` for fresh randomness, and `n`, `interval`, `aggregate` or `reduce` to change the
+resampling. Placeholder rows are dropped, and so are values that are `None`; a law whose value is
+not finite is left out, which for `log10_fvu_val` means the laws that were fitted exactly
+(\(-\infty\)) and the failed predictions (\(+\infty\)). Read it next to the recovery rate.
+
+## The standard report
+
+```bash
+srbf analyze -c mymethod.yaml -o report
+srbf analyze -c mymethod.yaml --model mymethod \
+             -c configs/evaluation/scaling/flash-ansr-v25.0-T8-3M_srbf.yaml --model flash-ansr-T8-3M \
+             -o report
+```
+
+Every experiment and rung of a config whose result file exists becomes a run; the rest is skipped
+with a note, so the report can be built while an evaluation is still going. The experiment's name
+is the benchmark, a numeric sweep label is the budget, and the method's name comes from `--model`
+or from the adapter block. `report/results.md` holds one row per method at its largest budget,
+pooled over the benchmarks, each cell a bootstrap median with its 95 % interval, for numeric
+recovery, symbolic recovery, skeleton F1, the MDL ratio, log10 FVU and R². `report/figures/` holds the
+metric along the budget, per benchmark, and as a distribution over laws.
+
+### From Python
+
+```python
+from srbf.analysis import runs_from_config, leaderboard, scaling_table, per_benchmark_table, build_report
+
+runs = runs_from_config("mymethod.yaml", model="mymethod")
+table = leaderboard(runs, engine=engine)                       # one row per method
+along = scaling_table(runs, "numeric_recovery_val", engine=engine)
+by_catalog = per_benchmark_table(runs, "numeric_recovery_val", engine=engine)
+build_report(runs, "report", engine=engine)                    # results.md and figures/
+```
+
+A metric is named by its column. A run is a `RunResult(model, benchmark, snapshot, scaling=None)`,
+so results from anywhere can be put into the same tables. `scaling_figure`, `per_benchmark_figure` and `distribution_figure` return
+matplotlib figures, and `export_data(runs, "data.json", engine=engine)` writes the summaries as
+JSON. Figures need `pip install "srbf[analysis]"`.

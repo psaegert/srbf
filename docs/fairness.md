@@ -1,63 +1,67 @@
-# Fairness and config provenance
+# Fairness and provenance
 
-srbf compares methods that its own authors compete in: the benchmark and Flash-ANSR share authors.
-This page is the structural answer to that asymmetry. Instead of asking readers to trust that every
-method was treated equally, srbf runs every method through **one protocol**, labels **who chose
-every configuration**, and states those labels wherever results are compared.
-
-See also: [docs/models.md](./models.md) (per-model configuration and install),
-[docs/adapters.md](./adapters.md) (contributing a method), [docs/paired.md](./paired.md) (the
-statistical protocol).
+The authors of srbf also enter a method of their own: the benchmark and Flash-ANSR share authors.
+srbf answers that in its structure. Every method goes through one protocol, every configuration
+carries a label for who chose it, and the labels are shown wherever methods are compared.
 
 ## One protocol for every method
 
-The equal-treatment machinery is implemented, not aspirational:
+- **The same laws, sampled the same way.** Every method is evaluated on the same laws from the same
+  catalogs, with points drawn from the same distributions, and comparisons pair the methods law by
+  law ([Paired comparisons](paired.md)). The points themselves are drawn afresh in every run
+  ([Concepts](concepts.md)). Holdout rules belong to the data source, so they apply to the data and
+  never to one method.
+- **The same scoring.** Metrics are derived from stored predictions by one code path. A method
+  that returns no answer has missed on every rate metric, for every method alike
+  ([Metrics](metrics.md#rates-and-diagnostics)).
+- **The same timing conditions.** The driver fits one problem at a time, so a fit never competes
+  with another. One-time costs, such as loading weights or compiling a Julia backend, are paid
+  before the first problem and are not part of any fit time.
+- **The same comparison rules.** Methods are compared at equal budgets or at equal time, law by
+  law, with exact tests on the laws they disagree on; several methods at once are compared by
+  their ranks, with a critical difference that accounts for how many methods there are
+  ([Paired comparisons](paired.md)).
 
-- **Same problems.** Every method is evaluated on the same ground-truth expressions from the same
-  catalogs, and comparisons pair per expression by `benchmark_eq_id`, collapsing each method's
-  independently sampled draws within an expression to one per-expression value
-  ([paired → the pairing contract](./paired.md#the-pairing-contract)). When a config declares
-  decontamination holdouts, they live on the data source and apply to the data, never per method
-  ([benchmarks](./benchmarks.md)).
-- **Same timing conditions.** The serial driver evaluates one problem at a time, so per-problem
-  wall-clock is uncontended; one-time costs (model loads, Julia precompile) are paid in `prepare()`
-  outside the timed path, for every adapter alike.
-- **Same scoring.** Metrics are derived offline from stored predictions by one code path, and
-  failed predictions are scored by the same two-regime rule for everyone
-  ([results](./results.md)).
-- **Same comparison rules.** Cross-method comparisons happen at equal wall-clock budgets, with
-  measurement-noise margins derived from each method's own repeated draws and pre-declared,
-  multiplicity-corrected comparison families ([paired](./paired.md)).
+## How time is measured
 
-## Decontamination is verified, not assumed
+Seconds depend on the machine, its GPU and whatever shares it. Published times therefore come from
+one reference machine that runs one problem at a time with nothing else on it, on a fixed subset of
+the suite: 262 problems, stratified by catalog, the same instances for every method and every
+budget. The subset estimates the pooled mean of the whole suite, because each catalog's problems
+are weighted by the catalog's full size. A fit that returns no answer does not enter the mean
+time; how often that happens is a metric of its own, the success rate.
 
-`python -m srbf decontamination -t <training catalog yaml>` probes every benchmark problem against
-the training catalog's registered holdout — the same `is_held_out` family quotient the training-time
-sampler rejects candidate draws with — and reports per-catalog coverage
-(`srbf.decontamination.verify_decontamination`). The check is fail-closed: a problem whose tokens
-cannot be probed is reported as UNVERIFIED, never as covered, and the exit code is 0 only when every
-probe-able benchmark problem is verified held out.
+Three scripts in the repository implement the protocol. They expect a config with one experiment
+per catalog and a sweep named `ladder`, like the configs under `configs/evaluation/scaling/`:
+
+```bash
+python scripts/freeze_timing_subset.py -c <config> --out-dir <root>/timing_data   # draw the subset once
+python scripts/run_timing_ladder.py    -c <config> --data-dir <root>/timing_data --model-name mymethod
+python scripts/timing_readout.py --root <root> --manifest <root>/timing_data/timing_subset.json --models mymethod
+```
+
+Recovery metrics do not depend on the machine: a config gives the same numbers, up to sampling
+noise, wherever it runs.
 
 ## Baselines run at their upstream defaults
 
-> **Benchmark policy: baselines run at their upstream defaults.** A method's default
-> hyperparameters are part of the method. srbf does not tune baselines up, and it does not tune
-> them down; where a default is consequential on these benchmarks, srbf measures the consequence
-> and documents it next to the method's results.
+> A method's default hyperparameters are part of the method. srbf does not tune a baseline up and
+> does not tune it down. Where a default is consequential on these benchmarks, srbf measures the
+> consequence and documents it next to the method's results.
 
-The worked example is PySR's complexity budget: at PySR's default `maxsize=20`, a substantial share
-of the shipped benchmarks' ground truths is not representable at all (counts and details in
-[models → PySR](./models.md#pysr-pip); measure it yourself with
-`python scripts/audit_pysr_maxsize.py`). That is a documented property of running PySR at its
-defaults on these benchmarks. Override knobs (like the optional `maxsize`) exist for side
-experiments only; headline results use the default.
+PySR's complexity budget is the worked example. At its default `maxsize` of 30, seven of the 120
+FastSRB laws (5.8 %) cannot be represented at all; the largest needs 40 nodes. That is a property of
+running PySR as it ships, and `python scripts/audit_pysr_maxsize.py` measures it for any catalog
+against the PySR you have installed. The adapter's optional `maxsize` key exists for side
+experiments; published results use the default.
 
-The operator vocabulary is shared, not per-method: the PySR adapter's operator set is a superset of
-PySR's defaults, matched to the benchmark's hypothesis space.
+Two things are set by the benchmark and not by a method's defaults, for every method alike: the
+operator vocabulary, which is the one the laws are written in (the PySR adapter searches over these
+operators, not over PySR's own default set), and the budget, which is swept and never tuned.
 
-## Config provenance labels
+## Configuration provenance labels
 
-Every run config declares who chose the model's configuration, in the `model_adapter` block:
+Every config states who chose the method's configuration:
 
 ```yaml
 run:
@@ -66,53 +70,50 @@ run:
     config_provenance: upstream_default
 ```
 
-| Label | Meaning |
+| label | meaning |
 |---|---|
-| `upstream_default` | the method's own released defaults; nobody tuned anything |
-| `author_blessed` | the method's authors supplied or approved this configuration |
-| `harness_tuned` | the benchmark maintainers chose this configuration |
+| `upstream_default` | the method's own released defaults, apart from the operator vocabulary and the swept budget; nothing was tuned in either direction |
+| `author_blessed` | the method's authors supplied or approved the configuration |
+| `harness_tuned` | the benchmark maintainers chose the configuration |
 
-The label is validated at config load (`srbf.config.coerce_config_provenance`) and embedded in
-every result pickle's `__meta__` ([running → outputs](./running.md#outputs)), next to the measured
-run provenance (git state, environment, input hashes). The two answer different questions: run
-provenance records *what ran*, the config label declares *who chose it*. A config that omits the
-key resolves to `harness_tuned`: an unlabeled configuration was chosen by whoever assembled it, and
-that is the conservative reading. The shipped configs declare their labels explicitly, and a test
-(`tests/test_eval/test_scaling_configs.py`) gates them to the policy assignment:
+The label is validated when the config is loaded and stored in every result file, next to the
+record of what ran ([Results](results.md#what-a-result-file-records)). A config without the key is
+read as `harness_tuned`: an unlabeled configuration was chosen by whoever assembled it.
 
-- **PySR, NeSymReS, E2E: `upstream_default`** (the policy above).
-- **Flash-ANSR (all sizes, ablations, and inference variants): `author_blessed`.** The benchmark
-  and Flash-ANSR share authors, so for these entries "method author" and "benchmark maintainer" are
-  the same people; the label states exactly that, and any method's authors get the same slot on the
-  same terms (below).
-- **Benchmark-native references: `harness_tuned`.** The training-prior sampler (the
-  `lample_charton` adapter drawing skeletons from the training prior; shown as *Prior* in the
-  results explorer) and the brute-force reference have no third-party upstream whose defaults could
-  apply; the benchmark maintainers assembled them.
+The configs in the repository are labeled as follows, and a test keeps them that way:
 
-## Blessed configs: how a method author submits one
+- **PySR, NeSymReS, E2E:** `upstream_default`.
+- **Flash-ANSR, every size:** `author_blessed`. For these entries the method's authors and the
+  benchmark's maintainers are the same people, which is exactly what the label discloses. Any
+  method's authors get the same slot on the same terms.
+- **The prior reference:** `author_blessed`, like the Flash-ANSR entries whose configuration it
+  shares. It samples expressions from Flash-ANSR's training prior without a model and passes them
+  through the same refinement and ranking.
 
-srbf runs one blessed configuration per method on the headline roster (per model size for
-multi-size methods; the compute-scaling axis is swept, not tuned). Research entries outside that
-roster, such as Flash-ANSR's ablations and inference variants, are disclosed with the same labels.
-If you author or maintain a method and believe a different configuration represents it better than
-its upstream defaults:
+## Submitting a configuration for your method
 
-1. Open a PR changing (or adding) the method's config under `configs/evaluation/` with
-   `config_provenance: author_blessed`, following the
-   [adapter contribution flow](./adapters.md).
-2. State in the PR that you author or maintain the method (or link an endorsement from someone who
-   does), and say briefly what the configuration changes and why.
-3. After the merge, the method is re-run under the standard protocol and its entries carry the new
-   label.
+srbf runs one configuration per method (one per model size for a method that comes in sizes); the
+budget is swept, not tuned. If you author or maintain a method and another configuration
+represents it better than its defaults:
 
-One configuration per method keeps compute per entrant equal. (A standardized multi-config set per
-method, as proposed for SRBench 2.0, is tracked as a possible extension for the canonical-run
-planning.)
+1. Open a pull request that changes or adds the method's config under `configs/evaluation/` with
+   `config_provenance: author_blessed`, following [Adding your method](adapters.md).
+2. Say in the pull request that you author or maintain the method, or link an endorsement from
+   someone who does, and describe what the configuration changes and why.
+3. After the merge we aim to run the method again under the standard protocol, as compute allows,
+   and its entries then carry the new label.
 
-## Headline comparisons state provenance
+## Verifying decontamination
 
-Every headline comparison lists each entrant's label. Comparisons across differently-labeled
-entrants are legitimate and expected — an `author_blessed` model versus an `upstream_default`
-baseline describes most published SR comparisons; the difference here is that the reader sees the
-labels, not a footnote-free table.
+A model trained on generated expressions should not have seen the benchmark laws.
+`srbf decontamination -t <training catalog>` probes every benchmark problem against the training
+catalog's holdout and reports the coverage per catalog. The check fails closed: a problem that
+cannot be probed is reported as unverified, not as covered, and the exit code is 0 only when every
+problem is verified as held out; a miss and an unverified problem both give exit code 1. See the
+[command reference](cli.md#srbf-decontamination).
+
+## Comparisons state their labels
+
+A comparison between an `author_blessed` method and an `upstream_default` baseline is legitimate
+as long as the reader can see which is which. On the results explorer the label stands next to
+every method's name.

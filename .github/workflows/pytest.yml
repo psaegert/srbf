@@ -32,6 +32,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e '.[analysis]'
           pip install pytest pytest-cov
+          pip install -r docs/requirements.txt   # tests/test_docs.py builds the documentation strictly
 
       - name: Fetch FastSRB benchmark
         run: |

@@ -11,90 +11,94 @@
   <a href="https://psaegert.github.io/srbf/">Interactive results</a>
 </p>
 
-# srbf: Symbolic Regression Benchmark Framework
-
-## Publications
-
-- Saegert & Köthe 2026, _Breaking the Simplification Bottleneck in Amortized Neural Symbolic Regression_ (ICML 2026) [https://arxiv.org/abs/2602.08885](https://arxiv.org/abs/2602.08885)
-
 <p align="center">
   <a href="https://psaegert.github.io/srbf/">
-    <img alt="srbf visual abstract: benchmarks and methods go through one fair protocol (same expressions, wall-clock budgets, paired statistics, pre-declared corrected comparisons) into the interactive explorer with four-state verdicts."
+    <img alt="srbf visual abstract: any datasets and any methods go through one framework (a unified dataset formalism, built-in decontamination, paired and pre-declared statistics) into the results explorer with curves, tables and ranks."
          src="https://raw.githubusercontent.com/psaegert/srbf/main/assets/brand/visual-abstract.svg" width="100%">
   </a>
 </p>
 
-`srbf` evaluates symbolic-regression models on shared benchmarks with shared metrics. It is the
-Symbolic Regression Benchmark Framework carved out of
-[flash-ansr](https://github.com/psaegert/flash-ansr): the `Benchmark` driver, model adapters, and
-metrics, over `symbolic-data` catalogs. It depends one-way on `flash-ansr` (`srbf` imports
-`flash-ansr`; `flash-ansr` never imports `srbf`).
+`srbf` runs symbolic regression methods on the same laws, sampled the same way, and reads every
+answer with one judge. A method is plugged in with a small adapter, a YAML config describes the
+evaluation, and four commands take it from a first smoke test to a report:
 
-**Built for contributions.** Developers of SR methods add their model with an **adapter** that runs
-in the method's own environment (any torch, simplipy or Julia version): `srbf new mymethod` writes the
-worker, its suite config, an environment recipe and a test; `srbf check` runs it on real problems;
-`srbf run` and `srbf analyze` give the numbers. The pull request carries those files. Methods
-compatible with srbf's pins can instead register an in-process adapter class. The built-in adapters
-(`flash_ansr`, `pysr`, `nesymres`, `e2e`, `lample_charton`, `brute_force`) are reference examples, not
-a closed set. See the [adapter contribution guide](docs/adapters.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
+```bash
+srbf new mymethod                    # scaffold an adapter for your method
+srbf check   -c config.yaml          # a few real problems, step by step
+srbf run     -c config.yaml -v       # the evaluation
+srbf analyze -c config.yaml -o report
+```
 
-The benchmark seam (`srbf.core` Protocols + the `Benchmark` driver) is model-agnostic, the data
-source is always a `symbolic-data` catalog, and adapters are a thin mapper over each model
-(flash-ansr via `FlashANSR.infer()`). Inline `!sweep` config cross-products and multi-draw
-bootstrap reporting (`bootstrap_report` / `draw_distribution`) are built in.
+- **29 catalogs, 6,660 laws**: Feynman, FastSRB, Nguyen and the other classical suites, physics
+  collections and synthetic corpora, served by [`symbolic-data`](https://github.com/psaegert/symbolic-data).
+- **Any method, in its own environment**: a worker is one Python file with a `fit()` function, run
+  in the interpreter you name, with whatever torch, Julia or NumPy version your method needs.
+- **One judge**: every answer is parsed, evaluated on held-out points and compared with the law in
+  one canonical form.
+- **Evaluations that scale**: inline `!sweep` ladders, whole-suite configs, resumable runs, and
+  sharding across GPUs with a checked merge.
+- **Statistics that fit the design**: paired comparisons on the same laws, rank analysis with
+  critical differences, bootstrap intervals.
+- **Stated provenance**: every configuration carries a label for who chose it, and every result file
+  records what ran.
+
+The published results are on the [results explorer](https://psaegert.github.io/srbf/).
 
 ## Install
 
 ```bash
-pip install srbf                 # benchmark driver + metrics + the flash-ansr adapter (usable out of the box)
-pip install "srbf[baselines]"    # + PySR and other pip baseline deps (sympy, pysr, omegaconf)
+pip install srbf                 # the framework, the metrics and the Flash-ANSR adapter
+pip install "srbf[baselines]"    # plus what the PySR, NeSymReS and E2E adapters import
+pip install "srbf[analysis]"     # plus matplotlib, for the figures of `srbf analyze`
 ```
 
-`srbf` pulls in `flash-ansr`, `symbolic-data`, and `simplipy` automatically, and requires
-**Python >= 3.12**. The PySR adapter ships in the base wheel but the `pysr` package (plus a
-Julia precompile) comes with the `[baselines]` extra, so a bare install does not include a
-runnable PySR baseline. The unpackaged research baselines (NeSymReS, E2E) are provisioned
-out-of-band; see [docs/models.md](docs/models.md).
+srbf needs Python 3.12 or newer and installs `flash-ansr`, `symbolic-data` and `simplipy` with it.
 
 ## Quickstart
 
+No GPU and no model are needed for a first run: `srbf new` writes an adapter whose placeholder fits
+a linear model.
+
 ```bash
-# 1. point srbf at a tree holding configs/, data/, and models/ (your srbf checkout works)
-export FLASH_ANSR_ROOT=$(pwd)
-
-# 2. get a model to evaluate (flash-ansr's CLI ships with srbf)
-flash_ansr install psaegert/flash-ansr-v25.0-T7-3M
-
-# 3. run an evaluation. The config names a symbolic-data catalog (`fastsrb`); it is fetched from
-#    Hugging Face on first use and cached, so there is no local data-build step. The config is a
-#    sweep over candidate counts; --sweep-filter picks one rung for a smoke test.
-srbf run -c configs/evaluation/scaling/flash-ansr-v25.0-T7-3M_fastsrb.yaml --sweep-filter ladder=32 --limit 50 -v
+export FLASH_ANSR_ROOT=$PWD/bench                                   # models, results and adapters live here
+srbf new mymethod --python "$(which python)"
+srbf check   -c bench/adapters/mymethod/config.yaml                  # two real problems, every step named
+srbf run     -c bench/adapters/mymethod/config.yaml --experiment nguyen -v
+srbf analyze -c bench/adapters/mymethod/config.yaml -o report        # report/results.md and figures/
 ```
 
-Outputs land under `results/evaluation/.../*.pkl`, one row per evaluated problem with the raw
-prediction columns (derive FVU / recovery / F1 in a separate step; see
-[docs/running.md](docs/running.md#deriving-metrics)). Run programmatically instead:
+To evaluate a released Flash-ANSR model on one catalog at one budget:
 
-```python
-from srbf import Benchmark
-
-# A config with inline !sweep / experiments expands to several runs; expand and run each one.
-for benchmark in Benchmark.runs_from_config("configs/evaluation/scaling/flash-ansr-v25.0-T7-3M_fastsrb.yaml"):
-    benchmark.run()  # resume-aware; a no-op if that run's configured target is already reached
-
-# For a single, fully-resolved run (no !sweep / experiments), use from_config directly:
-# Benchmark.from_config(config_dict).run()
+```bash
+git clone https://github.com/psaegert/srbf && cd srbf && export FLASH_ANSR_ROOT=$PWD
+flash_ansr install psaegert/flash-ansr-v25.0-T8-3M
+srbf run -c configs/evaluation/scaling/flash-ansr-v25.0-T8-3M_srbf.yaml --experiment nguyen --sweep-filter ladder=32 -v
 ```
 
 ## Documentation
 
+[srbf.readthedocs.io](https://srbf.readthedocs.io/)
+
 | Guide | What it covers |
 |---|---|
-| [Running evaluations](docs/running.md) | the `srbf run` CLI, config anatomy (data_source / model_adapter / runner / experiments / `!sweep`), outputs, resume, reporting |
-| [Benchmarks & datasets](docs/benchmarks.md) | the `data_source` catalog block, the shipped catalog (`fastsrb`), custom catalogs |
-| [Models & provisioning](docs/models.md) | installing/patching the built-in models; the `model_adapter` block per type |
-| [Fairness & provenance](docs/fairness.md) | one protocol for every method, the upstream-defaults policy, config-provenance labels, blessed configs |
-| [**Adding your model**](docs/adapters.md) | the adapter protocol + registry, and the PR flow to contribute a new SR method |
+| [Quickstart](https://srbf.readthedocs.io/en/latest/quickstart/) | both tours above, with their output |
+| [Concepts](https://srbf.readthedocs.io/en/latest/concepts/) | law, catalog, budget, judge: the vocabulary |
+| [**Adding your method**](https://srbf.readthedocs.io/en/latest/adapters/) | the worker contract and the pull request |
+| [Running evaluations](https://srbf.readthedocs.io/en/latest/running/) | the config, ladders, suites, resuming, sharding, clusters |
+| [Results](https://srbf.readthedocs.io/en/latest/results/) | result files, deriving metrics, intervals, the report |
+| [Metrics](https://srbf.readthedocs.io/en/latest/metrics/) | the definition of every metric |
+| [Paired comparisons](https://srbf.readthedocs.io/en/latest/paired/) | comparing two methods, ranking many |
+| [Benchmarks](https://srbf.readthedocs.io/en/latest/benchmarks/) | the 29 catalogs and their sources, custom catalogs |
+| [Models](https://srbf.readthedocs.io/en/latest/models/) | installing and configuring the built-in methods |
+| [Command line](https://srbf.readthedocs.io/en/latest/cli/) | every command and flag |
+| [Fairness](https://srbf.readthedocs.io/en/latest/fairness/) | one protocol, upstream defaults, provenance labels, timing |
+
+## Citing
+
+srbf accompanies Saegert & Köthe 2026, _Breaking the Simplification Bottleneck in Amortized Neural
+Symbolic Regression_ (ICML 2026), [arXiv:2602.08885](https://arxiv.org/abs/2602.08885). If you
+publish numbers on a catalog, cite its source as well
+([Benchmarks](https://srbf.readthedocs.io/en/latest/benchmarks/)).
 
 ## Development
 

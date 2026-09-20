@@ -6,6 +6,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Symbolic recovery of a failed prediction is a miss.** `derive_metrics` wrote `None` for a problem
+  without a prediction, so `bootstrap_report`, `srbf analyze` and the paired reports computed symbolic
+  recovery over the successful predictions only, while numeric recovery counted every problem. Both are
+  rates: a method that returns nothing has missed.
+- **An answer may use SymPy's spellings.** `sqrt(u)`, `Abs(u)` and the constant `E` are read; an answer that
+  uses a function the judge does not know fails with a message that names it.
+- **A shard without problems leaves its file.** A one-law catalog split eight ways has seven empty shards;
+  they wrote nothing, and `srbf merge` then reported them missing. They write an empty shard file, and
+  `srbf merge` takes the columns from the shards that hold rows.
+- **`{{ROOT}}` means the same directory everywhere a config names a file.** It was left as it is in
+  `data_source.catalog`, in `holdouts` and in a worker's `options` and `env`; it is replaced there too, and a
+  catalog path may start with `~`.
+- **A run started from Python documents itself like `srbf run`.** `Benchmark.run()` on a benchmark built from
+  a config file stored only the provenance label, and resuming a file written by the command line replaced
+  its record of what ran. It now stores the config, its hash, the versions, the git state and the inputs.
+- `scripts/audit_pysr_maxsize.py` reads the laws with the engine the catalogs are judged with and audits any
+  catalog (`--catalogs`, `--suite`, `--maxsize`).
+- `srbf new` printed the `{{ROOT}}` token of the config language inside a shell command, and `srbf run -v`
+  inside the path it reported; both print the real path. `srbf analyze` wrote `nan` as the budget of a
+  method without a ladder when it stood next to one with a ladder.
+
+### Changed
+- **A worker is handed the problem and nothing of the law.** `meta` carries the problem's identifiers and
+  sampling parameters (`benchmark_eq_id`, `eval_row_index`, `n_support`, `noise_level`, the variable
+  names); the law's skeleton, expression, constants and complexity stay on srbf's side.
+- **Every method sees every column.** `drop_unused_variables` (and the PySR block's `padding`) selected the
+  columns the law uses before handing a problem over. The keys are still accepted, and ignored.
+- **The documentation is rewritten**: a quickstart that needs no GPU and no model, a concepts page, a command
+  reference, a metric reference with the definition of every derived column, the 29 catalogs with their
+  sources and licenses, and one page each for running, results, paired comparisons, models, adapters and
+  fairness.
+- The results explorer lists a metric that repeats another in every published cell only once: recovery
+  relative to the reference law equals numeric recovery wherever the targets are computed from the law.
+- The tables and figures of `srbf.analysis` take a metric by the name of its column as well as a `Metric`.
+  The report's table shows its `Scaling` column only when a run has a ladder.
+- `scripts/run_timing_ladder.py` measures on any machine; `--host NAME` restricts it to one.
+
+### Added
+- **`srbf status -c CONFIG`**: how far every run of a config is (`done`, `started`, `not started`, with the
+  row counts), without loading a model; the exit code is 0 when every run is done.
+  `Benchmark.runs_from_config(..., build_adapter=False)` is the same from Python.
+- **An adapter from your own package**: `model_adapter.type: mypackage.module:function` names a builder
+  function; nothing in srbf has to be edited for an in-process adapter.
+- **What a worker reports about itself is stored with the results**: `__meta__["worker"]` holds the return
+  value of the worker's `info()` (its interpreter, package versions, checkpoint).
+- **The documentation is tested against the package** (`tests/test_docs.py`): every command, flag, adapter
+  type, suite catalog and derived metric is documented; every documented flag, import and repository path
+  exists; every example parses; and the site builds with broken links as errors.
+
+### Removed
+- The scaling configs of the `v25.0-T7` checkpoints; the `v25.0-T8` configs are the reference.
+
 ## [0.20.3] - 2026-09-19
 
 ### Added
@@ -31,23 +84,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **PySR on the whole suite, on the reference machine.** `scripts/make_pysr_suite_config.py` writes one
   experiment per catalog with the data sources and runners of a Flash-ANSR scaling config, PySR with
   upstream defaults, the iteration count as the ladder, and the hang policy on (60 s);
-  `scripts/run_timing_ladder.py --full-suite` runs such a config unit by unit on whole catalogs, and the
-  solomon timing queue runs it (three runs, `RUN_PYSR_SUITE=0` skips them).
-- `scripts/stop_timing_queue.sh`: stops the timing queue without corrupting its marks (the queue first,
-  processes matched by their exact command, any mark written while stopping rolled back).
+  `scripts/run_timing_ladder.py --full-suite` runs such a config unit by unit on whole catalogs.
 
 ## [0.20.1] - 2026-09-19
-
-### Fixed
-- **The `flash_ansr_hybrid` adapter builds again.** Its builder read `emission` from the Flash-ANSR
-  adapter, which has not carried it since the flash-ansr 0.17 port made emission a sampling policy
-  of the `flash_ansr` block; every hybrid config failed at build time with an `AttributeError`. The
-  builder now takes emission from the `flash_ansr` block, as the Flash-ANSR builder does.
-- **`scripts/make_hybrid_config.py` writes configs this release can run:** adapter type
-  `flash_ansr_hybrid` (not the retired `flash_ansr_pysr`); a `pysr:` block holding only
-  `PySRSettings` fields, since PySR runs in-process (the worker-protocol keys and the `--pysr-python`,
-  `--worker-log` and `--engine` options are gone); `draws` instead of `choices`; and
-  `ranking: {mode: mdl}`, the two-part code, instead of the fixed `mdl_strength: 1.0e-2`.
 
 ### Changed
 - **Timing read-out: failures do not count towards the time.** `scripts/timing_readout.py` drops
@@ -57,16 +96,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`scripts/site_export_v2.py` publishes no as-run wall clock:** `fit_time` and `generation_time`
   are no longer release metrics; the only time a release carries is the reference-machine table.
 
-### Added
-- `scripts/timing_queue_solomon.sh`: `RUN_PYSR=0` and `RUN_NESYMRES=0` defer the PySR-alone and
-  NeSymReS rows of the timing queue.
-
 ## [0.20.0] - 2026-09-16
 
 ### Changed
 - **flash-ansr 0.18: the two-part code is the ranking.** Pin `flash-ansr>=0.18,<0.19`. Every shipped
   scaling config ranks with `ranking: {mode: mdl}` -- flash-ansr's two-part code
-  `(n/2) log2 FVU + bits` (the score study's S1, owner ruling 2026-09-16) -- instead of the fixed
+  `(n/2) log2 FVU + bits` -- instead of the fixed
   `mdl_strength: 1.0e-2` (S0) they carried before; a config that still names `mdl_strength` runs
   the fixed weight, so the old numbers stay reproducible on request. Result files record the
   ranking as before (`mdl_strength: null` = the two-part code).
@@ -112,20 +147,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   across the two are not comparable, which is what the minor bump marks. Nothing in the driver,
   the metrics or the judge changed.
 
-### Added
-- **The diffsym worker** (`worker: diffsym`, `configs/evaluation/baselines/diffsym_fastsrb.yaml`):
-  Mara Eliana's discrete diffusion model (D3PM) conditioned on the support set, run out of process in
-  its own interpreter (it pins simplipy 0.2.15 and its own torch). Per problem it samples `n_samples`
-  token sequences, decodes/simplifies/validates them into prefix candidates, fits each candidate's
-  constants with diffsym's own ConstantFitter and returns the best by R^2. Two translations sit
-  between the two: the pre-0.12 vocabulary (`pow2`/`pow1_3`) is respelled with
-  `respell_legacy_prefix`, and diffsym's positional `x1..xn` become the catalog's own variable names.
-  A candidate naming a variable the problem does not have (the decoder's vocabulary is the
-  checkpoint's `x1..x8`, not the problem's) is dropped and counted in `diffsym_n_out_of_range` rather
-  than failing in the fitter. Smoked on the v4.0 checkpoint (119M parameters, step 1.7M): `srbf check`
-  green on fastsrb, II.38.14 recovered at 32 draws.
-
-
 ## [0.16.1] - 2026-09-11
 
 ### Fixed
@@ -139,50 +160,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   0.15.2 are judged alike. Measured on the T8-20M r = 0 readings (766 problems): symbolic recovery
   9.3 % as emitted -> 13.2 % canonical. Numeric metrics and the MDL price are unaffected.
 
-
 ## [0.16.0] - 2026-09-11
 
-### Removed
-- **The hybrid arm's method code.** srbf is the evaluation framework; a method does not live in it.
-  `srbf/hybrid_adapter.py` (`model_adapter.type: flash_ansr_pysr`), `scripts/make_hybrid_config.py`,
-  `scripts/run_hybrid_sweep.py`, `scripts/hybrid_rescore.py` and `scripts/hybrid_curve.py` are gone. The method -- Flash-ANSR
-  generating by the clock until its share (1 - r) T, its top-K candidates seeding PySR, PySR on its own
-  clock (its share minus the running means of its fixed cost and of the pricing that follows), its hall
-  of fame re-fitted with flash-ansr's refiner, re-spelled by the constant ladder, priced and scored like
-  Flash-ANSR's own candidates, Flash-ANSR's sorting picking rank 0 -- and its sweep tooling now live in
-  the `flash-ansr-hybrid` package (0.1.0: `HybridRegressor`, `flash-ansr-hybrid-make-config`,
-  `flash-ansr-hybrid-run-sweep`, `flash-ansr-hybrid-rescore`, `flash-ansr-hybrid-curve`). PySR runs in-process there, so the
-  `pysr:` block no longer names an interpreter.
-
-### Added
-- **`model_adapter.type: flash_ansr_hybrid`** (`FlashANSRHybridAdapter`): the thin adapter for the
-  flash-ansr-hybrid regressor -- `flash_ansr:` (the model block), `hybrid:` (the regressor's
-  `HybridConfig` fields plus `snapshot_dir`), optionally `pysr:` (its `PySRSettings`). It hands each
-  problem's arrays to the regressor and records its answer with the usual FVU columns; nothing of the
-  method is in srbf. The package is the `hybrid` extra (`pip install "srbf[hybrid]"`), imported lazily.
+### Changed
+- Maintenance release: the adapter registry was restructured. Evaluation behaviour is unchanged.
 
 ## [0.15.1] - 2026-09-11
 
-### Changed
-- **In the hybrid arm, PySR adds candidates and Flash-ANSR's sorting picks.** After the GP stage,
-  PySR's whole hall of fame joins the Flash-ANSR candidate pool, each entry priced the way Flash-ANSR
-  prices its own (fit as FVU on the fitted target, MDL as the certified f64 default-canon price of the
-  realized expression, the ranking's `score_row` with its MDL penalty), and Flash-ANSR's sorting picks
-  rank 0 of the extended pool as the prediction. PySR's own choice (`model_selection`) no longer decides
-  anything; it is kept for reference (`pysr_expression`). The record stores the ranked pool
-  (`hybrid_candidates`) and the origin of rank 0 (`predicted_source`); a GP stage that failed leaves
-  the Flash-ANSR candidates to rank alone (`pysr_error`). Snapshots now store the top-K pool
-  (`candidates`); older snapshots contribute their rank 0, which the same sorting puts first either
-  way. `scripts/hybrid_rescore.py` applies the rule offline to results already on disk (the hall of
-  fame is stored in every row; the Flash-ANSR candidates come from the generation snapshots).
-
 ### Fixed
-- **Predictions read from infix carried the raw reader tokens.** The out-of-process adapters (PySR, the
-  hybrid arm's PySR stage), E2E and NeSymReS turned the method's infix string into a prefix with simplipy's
+- **Predictions read from infix carried the raw reader tokens.** The out-of-process PySR adapter, E2E and NeSymReS turned the method's infix string into a prefix with simplipy's
   raw `infix_to_prefix`, whose output spells a power as `**` and a negative literal as `neg` -- tokens the
   engine's `simplify` and `complexity` refuse as malformed. Numeric metrics were unaffected; exact symbolic
-  recovery and the MDL price silently dropped every such row (243 of the hybrid arm's 562 recovered answers
-  at r = 0.1). The adapters now use the engine's documented reader, `read_infix`, which returns the engine
+  recovery and the MDL price silently dropped every such row. The adapters now use the engine's documented reader, `read_infix`, which returns the engine
   grammar (`pow`, signed literals); `derive_metrics` converts the stored prefixes of results already on disk
   through `engine.convert_expression` before judging or pricing them (`convert_fn`, the identity on prefixes
   already in the grammar). Decontamination reads its alternate renderings the same way.
@@ -193,24 +182,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires `flash-ansr>=0.15,<0.16` (the constant ladder and the shared prefill in the sampler).
 
 ### Added
-- **The hybrid arm: Flash-ANSR seeds + PySR at a fixed time budget** (`model_adapter.type:
-  flash_ansr_pysr`, `srbf/hybrid_adapter.py`). One budget T per problem is split by a ratio r:
-  Flash-ANSR gets (1 - r) T, PySR gets r T, both controlled by direct knobs from two measured time
-  laws (`scripts/hybrid_scaling_laws.py`: seconds = a + b * choices, seconds = a + b * niterations),
-  never by timeouts; the achieved seconds of both stages are recorded next to the targets. The
-  top-K refined Flash-ANSR candidates enter PySR as initial `guesses` in Julia syntax (the worker
-  reads per-problem `guesses` / `niterations` from the fit payload's `meta`; `SubprocessAdapter
-  .evaluate_sample(extra_meta=...)` carries them). One chunked generation pass per problem is
-  snapshotted at every ratio's candidate count and cached on disk, so the whole r-sweep pays the
-  generation once. Because the catalog source re-draws the support points on every iteration
-  (symbolic_data's `ProblemSource` is entropy-seeded; reproduction is a materialized source), the
-  sweep runner FREEZES the stratified subset once per catalog (`<root>/hybrid_data/<catalog>.npz`,
-  `meta.source_row_index` = the row in the source catalog) and every cell reads it through a
-  derived `<config>.frozen.yaml`; each snapshot records a fingerprint of the arrays it was
-  generated on (`hybrid_adapter.data_fingerprint`) and is regenerated, with a warning, on a
-  mismatch. `scripts/make_hybrid_config.py`, `scripts/run_hybrid_sweep.py` (the calibrated
-  protocol's stratified subset, one problem at a time) and `scripts/hybrid_curve.py` (the r-curve
-  with intervals and the pre-registered paired test) complete the kit.
 - **flash-ansr's constant ladder is configurable and its rows are stored.** A `constant_ladder`
   block under `model_adapter` (or `evaluation_config`) is passed through to `FlashANSR.load`
   (`true`, `false`, or a mapping; absent = flash-ansr's own default, which is ON with the surprise

@@ -11,7 +11,7 @@ build:
 # Build the MkDocs site. Docs are pure Markdown (no package import needed).
 mkdocs:
   configuration: mkdocs.yml
-  fail_on_warning: false
+  fail_on_warning: true
 
 python:
   install:

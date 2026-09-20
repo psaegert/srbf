@@ -1,6 +1,7 @@
 # Project information
 site_name: srbf
-site_description: Symbolic Regression Benchmark Framework
+site_description: "srbf, the Symbolic Regression Benchmark Framework: one protocol, one judge and 29 catalogs for symbolic regression methods"
+site_url: https://srbf.readthedocs.io/
 site_author: Paul Saegert
 repo_url: https://github.com/psaegert/srbf
 repo_name: psaegert/srbf
@@ -44,16 +45,37 @@ markdown_extensions:
   - pymdownx.inlinehilite
   - pymdownx.snippets
   - pymdownx.superfences
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
 
 nav:
   - Home: index.md
-  - Running evaluations: running.md
-  - Results & analysis: results.md
-  - Paired comparisons: paired.md
-  - Benchmarks & datasets: benchmarks.md
-  - Models & provisioning: models.md
-  - Fairness & provenance: fairness.md
-  - Adding your model: adapters.md
+  - Quickstart: quickstart.md
+  - Concepts: concepts.md
+  - Adding your method: adapters.md
+  - Using srbf:
+      - Running evaluations: running.md
+      - Results: results.md
+      - Paired comparisons: paired.md
+  - Reference:
+      - Command line: cli.md
+      - Metrics: metrics.md
+      - Benchmarks: benchmarks.md
+      - Models: models.md
+  - Fairness: fairness.md
+
+# A broken internal link or anchor is a warning, and the docs are built with --strict.
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 
 plugins:
   - search

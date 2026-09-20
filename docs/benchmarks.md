@@ -1,96 +1,201 @@
-# Benchmarks and datasets
+# Benchmarks
 
-This guide covers the data `srbf` evaluates on: how the `data_source` block in a config picks what
-to evaluate, the catalogs that ship with the framework, how catalog references are resolved, and how
-to point at your own benchmark. For the CLI that *runs* an evaluation see
-[docs/running.md](running.md); for the model side see [docs/models.md](models.md) and
-[docs/adapters.md](adapters.md); for the project overview see
-[../README.md](https://github.com/psaegert/srbf/blob/main/README.md).
+srbf evaluates on catalogs of the [`symbolic-data`](https://symbolic-data.readthedocs.io/) package.
+A catalog is a list of laws, each with the ranges its variables are sampled from; srbf draws the
+support and validation points from those ranges when a run starts. Nothing is built or downloaded
+by hand: a catalog is fetched from the
+[asset repository](https://huggingface.co/datasets/psaegert/symbolic-data-assets) on Hugging Face
+on first use, checked against its SHA-256 and cached.
 
-`srbf` resolves `{{ROOT}}` in every config path against the `FLASH_ANSR_ROOT` environment variable.
-Point it at a checkout that holds `configs/`, `models/`, and `results/`:
+## The srbf suite
 
-```bash
-export FLASH_ANSR_ROOT=$(pwd)
+`suite: srbf` names 29 catalogs with 6,660 laws. In every one of them the targets are computed
+from the law, so a perfect answer exists for every problem.
+
+### Physics
+
+| catalog | laws | variables | what it is | source and license |
+|---|---|---|---|---|
+| `fastsrb` | 120 | 1 to 8 | the FastSRB benchmark: the Feynman equations with realistic, mostly log-uniform ranges | Martinek 2025, [arXiv:2508.14481](https://arxiv.org/abs/2508.14481); MIT |
+| `feynman` | 100 | 1 to 9 | the Feynman Symbolic Regression Database, uniform ranges | Udrescu & Tegmark 2020, Science Advances 6(16); formulas and ranges as cited facts |
+| `feynman-bonus` | 20 | 3 to 7 | the AI Feynman bonus set of named physics results | Udrescu & Tegmark 2020 |
+| `srsd-dummy` | 120 | 2 to 11 | the FastSRB problems with one to three irrelevant variables inserted: a feature-selection test | Matsubara et al. 2024, *Rethinking Symbolic Regression Datasets and Benchmarks for Scientific Discovery*; MIT |
+| `erbench-densities` | 33 | 1 | probability densities from the Equation Recovery Benchmark | Kahlmeyer et al., [arXiv:2606.09276](https://arxiv.org/abs/2606.09276); BSD-3-Clause |
+| `erbench-phybench` | 90 | 1 to 9 | the PHYBench family of the Equation Recovery Benchmark | Kahlmeyer et al.; MIT |
+| `physo-astro` | 2 | 1 | the two astrophysical laws of the PhySO paper | Tenachi et al. 2023, [arXiv:2303.03192](https://arxiv.org/abs/2303.03192) |
+| `physo-class` | 8 | 1 to 2 | the Class-SR benchmark laws, one realization each | Tenachi et al. 2024, [arXiv:2312.01816](https://arxiv.org/abs/2312.01816); MIT |
+
+### Classical
+
+Seventeen suites from the genetic programming and deep symbolic regression literature. Formulas and
+ranges follow the benchmark table of
+[deep-symbolic-optimization](https://github.com/dso-org/deep-symbolic-optimization) (Petersen et al.
+2021, Mundhenk et al. 2021; BSD-3-Clause); grids that are evenly spaced upstream are sampled
+uniformly here.
+
+| catalog | laws | variables | origin |
+|---|---|---|---|
+| `nguyen` | 12 | 1 to 2 | Uy et al. 2011 |
+| `keijzer` | 15 | 1 to 3 | Keijzer 2003 |
+| `korns` | 12 | 5 | Korns 2011 |
+| `koza` | 2 | 1 | Koza 1992, 1994 |
+| `livermore` | 25 | 1 to 2 | Petersen et al. 2021, Mundhenk et al. 2021 |
+| `livermore2` | 150 | 2 to 7 | Mundhenk et al. 2021 |
+| `vladislavleva` | 8 | 1 to 5 | Vladislavleva et al. 2009 |
+| `jin` | 6 | 2 | Jin et al. 2019 |
+| `neat` | 8 | 1 to 2 | Trujillo et al. 2016 |
+| `pagie` | 1 | 2 | Pagie & Hogeweg 1997 |
+| `poly` | 6 | 1 to 10 | Poli 2003 |
+| `nonic` | 1 | 1 | McDermott et al. 2012 |
+| `sine` | 1 | 1 | McDermott et al. 2012 |
+| `meier` | 2 | 2 | Meier et al. |
+| `r-rationals` | 6 | 1 | Krawiec & Pawlak 2013 |
+| `constant` | 10 | 1 to 2 | Petersen et al. 2021 |
+| `grammarvae` | 1 | 1 | Kusner et al. 2017 |
+
+### Synthetic
+
+| catalog | laws | variables | what it is | source and license |
+|---|---|---|---|---|
+| `erbench-syneq` | 5,301 | 1 to 3 | the synthetic family of the Equation Recovery Benchmark | Kahlmeyer et al.; MIT |
+| `soose-nc` | 200 | 1 to 3 | the NeSymReS out-of-sample test skeletons without constants | Biggio et al. 2021, [arXiv:2106.06427](https://arxiv.org/abs/2106.06427); MIT |
+| `soose-wc` | 200 | 1 to 3 | the same skeletons with up to three constants | Biggio et al. 2021; MIT |
+| `soose-fc` | 200 | 1 to 3 | the same skeletons with every constant slot filled | Biggio et al. 2021; MIT |
+
+`erbench-syneq` holds four fifths of all laws. A number pooled over the whole suite is therefore
+close to a number on that one catalog, which is why the [results explorer](https://psaegert.github.io/srbf/)
+lets you choose the catalogs a number is pooled over, and why per-catalog tables matter.
+
+The catalog specifications reproduce formulas, sampling ranges and variable names from the cited
+sources. Full attributions are in
+[THIRD_PARTY_LICENSES](https://github.com/psaegert/srbf/blob/main/THIRD_PARTY_LICENSES) and in the
+[notices of the asset repository](https://huggingface.co/datasets/psaegert/symbolic-data-assets).
+If you publish numbers on a catalog, cite its source.
+
+## Choosing what to evaluate on
+
+```yaml
+suite: srbf                  # all 29 catalogs, one experiment each
 ```
+
+```yaml
+suite: [feynman, nguyen]     # a list of catalogs
+```
+
+```yaml
+run:
+  data_source:
+    catalog: fastsrb         # a single catalog
+```
+
+`suite:` is expanded into one experiment per catalog; `{catalog}` in any string of the `run:`
+template is replaced by the catalog's name. See [Running evaluations](running.md#whole-suites).
 
 ## The `data_source` block
 
-Every evaluation config carries a `data_source` block. The data source is always a `symbolic-data`
-catalog: `catalog` names the set of ground-truth expressions to evaluate on, and `sampling` is this
-run's usage policy over that catalog. The catalog itself owns all generation, fixed-set iteration,
-noise injection, and decontamination; `srbf` just streams the resulting problems into the benchmark
-driver.
+```yaml
+data_source:
+  catalog: fastsrb
+  sampling:
+    n_support: 512
+    n_validation: 512
+    noise: 0.0
+    problems_per_expression: 1
+  holdouts:
+    - exclude: "{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M/catalog_train.yaml"
+  target_size: 1000
+```
+
+### `catalog`
+
+| form | example | resolves to |
+|---|---|---|
+| a name | `fastsrb`, `fastsrb@2` | the asset repository `psaegert/symbolic-data-assets`; without `@version`, the catalog's default version |
+| a third-party reference | `user/repo:name@1` | the manifest of another Hugging Face dataset repository |
+| a path | `./my_catalog.yaml`, `{{ROOT}}/data/nguyen.npz` | a local file, used as it is, without network access |
+| a mapping | `{type: lample_charton, ...}` | a generative catalog defined in place |
+
+A string is read as a path when it contains a path separator, starts with `.` or `~`, or ends in
+`.yaml`, `.yml`, `.json` or `.npz`. `{{ROOT}}` and `~` are expanded. A relative path that starts
+with `.` and ends in `.yaml` or `.json` is taken relative to the config file, any other relative
+path relative to the working directory. A fresh install needs network access the first time a named
+catalog is used; after that the cache is enough (`HF_HUB_OFFLINE=1` works). A cached file that fails
+its checksum is an error, not a silent re-download.
+
+Versions only move forward, and a bare name follows the default. `fastsrb` currently resolves to
+version 2, which has all 120 laws realizable; pin `fastsrb@1` to reproduce numbers made on version
+1, and do not pool rates across the two.
+
+### `sampling`
+
+| key | default | meaning |
+|---|---|---|
+| `n_support` | the catalog's own default, else 100 (32 for a generative catalog) | points the method fits on. `prior` draws the size per problem from a generative catalog's prior and requires `n_validation: 0` |
+| `n_validation` | `n_support` | held-out points. Support and validation are drawn together; the first `n_support` rows are the support |
+| `noise` | `0.0` | Gaussian noise on the targets, as a fraction of their standard deviation. The method is given the noisy support targets; metrics are always computed against the clean targets |
+| `problems_per_expression` | `1` | how many problems are drawn per law |
+| `method` | `iterate` for a fixed catalog | the order laws are visited in: `iterate`, `random_without_replacement`, `random_with_replacement`; `procedural` streams from a generative catalog |
+| `layout` | `random` | `random` draws points independently, `grid` spaces them evenly and shuffles |
+| `max_trials` | `100` | attempts to draw valid points for a law before a placeholder row is written |
+| `size` | unbounded | number of expressions drawn from a generative catalog |
+
+Points are drawn from each variable's declared range (uniform, log-uniform or integer, with a
+declared sign) and rejected one by one where the law is not finite, so the accepted points follow
+the declared distribution on the law's valid domain.
+
+Sampling is not seeded: two runs of the same config see the same laws at different points. A
+number therefore comes with an interval ([Results](results.md#summaries-with-intervals)), and
+running a config again under another root is a genuine repeat.
+
+### The same points for several methods
+
+To give several methods identical points, draw the problems once, save them, and point every
+config at the file:
+
+```python
+from types import SimpleNamespace
+
+from simplipy import SimpliPyEngine
+from symbolic_data import ProblemCatalog
+from srbf.config import build_catalog_source
+
+engine = SimpliPyEngine.load("acj-5-4-llm", install=True)
+source = build_catalog_source(
+    {"catalog": "nguyen", "sampling": {"n_support": 512, "n_validation": 512}}, target_size=None, skip=0)
+source.prepare(adapter=SimpleNamespace(get_simplipy_engine=lambda: engine))
+ProblemCatalog.from_problems(list(source.problem_source), name="nguyen-frozen").save("nguyen_frozen.npz")
+```
 
 ```yaml
 data_source:
-  catalog: fastsrb              # a catalog name/ref, an HF 'user/repo:name' ref, a local path, or an inline config
-  sampling:                     # the symbolic-data usage policy (all fields optional)
-    n_support: 512              # points the model fits on
-    n_validation: 1024          # held-out points (omit for catalogs that carry their own validation)
-    noise: 0.0                  # Gaussian noise as a fraction of the target std (0 = clean)
-    problems_per_expression: 10 # distinct sampled problems per ground-truth expression
-    method: iterate             # frozen catalog -> 'iterate'; open generative catalog -> 'procedural'
-  holdouts:                     # optional decontamination / filters (see below)
-    - exclude: my-training-catalog
-    - filter: {finite: true}
-  target_size: 1000             # cap the number of rows (also the run total when runner.limit is null)
+  catalog: "{{ROOT}}/data/nguyen_frozen.npz"
 ```
 
-### `sampling` fields
-
-| field | meaning |
-|---|---|
-| `n_support` | number of points the model fits on. `prior` (generative catalogs only) draws the support size per problem from the catalog's own prior; it **requires** `n_validation: 0` and a generative catalog, and raises a `ValueError` otherwise. |
-| `n_validation` | number of held-out validation points; the first `n_support` of each sampled problem are the fit split, the rest the validation split. |
-| `noise` | additive Gaussian noise as a fraction of the target std (`0.0` = clean). |
-| `problems_per_expression` | how many distinct problems to draw per ground-truth expression; multiplies the row count. |
-| `method` | draw mode: `iterate` over a fixed catalog, `procedural` for an open generative one. Defaults follow the catalog kind. |
-| `layout` | X-point layout passed to the catalog's distribution (default `random`). |
-| `max_trials` | resample attempts before a placeholder row is written. |
-| `size` | number of expressions to draw from an open generative catalog (a generative usage policy). |
+Every run on that file sees the same points, its SHA-256 is stored with each result, and a paired
+comparison verifies that both sides used the same file
+([Paired comparisons](paired.md#pairing-is-checked)).
 
 ### `holdouts`
 
-`holdouts` is an optional list of rules applied to every problem the catalog yields:
+A list of rules applied to every problem the catalog yields.
 
-- `{exclude: <catalog-ref>}` — **decontamination**: drop any problem whose normalized skeleton appears in the referenced catalog (e.g. exclude the training recipe from a generated test set). The reference resolves the same way as `catalog` (a name, HF ref, local path, or inline config).
-- `{filter: {...}}` — keep only problems matching a filter predicate (e.g. `{finite: true}`).
+- `{exclude: <catalog>}` drops a problem whose skeleton appears in another catalog, for example
+  the training prior of the model under test. Skeletons are compared as prefix token sequences
+  after variables are renamed canonically and constants are masked.
+- `{filter: {finite: true}}` keeps problems whose values are all finite. Other filters:
+  `max_complexity`, `n_variables`, `max_variables`.
 
-## The shipped catalogs
+To verify that a model's training data held out the benchmark laws, see
+[`srbf decontamination`](cli.md#srbf-decontamination).
 
-`srbf` configs reference these `symbolic-data` catalogs by name:
+### `target_size`
 
-| name | what it is | kind |
-|---|---|---|
-| `fastsrb` | the FastSRB benchmark equations | fixed set (samples `(X, y)` per equation) |
+Caps the number of rows of a run. With `runner.limit: null` it is also the run's total.
 
-Every shipped evaluation config (`*_fastsrb.yaml` under `configs/evaluation/`) evaluates on
-`catalog: fastsrb`.
+## Sweeping data conditions
 
-FastSRB is [Martinek 2025](https://arxiv.org/abs/2508.14481) (MIT-licensed; attribution in
-`THIRD_PARTY_LICENSES`).
-
-## How a catalog reference resolves
-
-The `catalog` field (and any `holdouts.exclude` reference) accepts four forms:
-
-1. **A name**, e.g. `fastsrb`, optionally version-pinned as `name@version`. It is looked up in the `symbolic-data` asset manifest on Hugging Face (`psaegert/symbolic-data-assets` by default), fetched with `hf_hub_download`, integrity-checked against the manifest's `sha256`, and cached. A fresh install needs network on first use; subsequent runs hit the cache.
-2. **A third-party HF ref**, `user/repo:name` or `user/repo:name@version`, against another repo's manifest, so anyone can publish and load their own catalogs.
-3. **A local path**, e.g. `{{ROOT}}/configs/my_catalog.yaml` — used as-is, no download, for fully offline operation.
-4. **An inline config** — a mapping written directly in the YAML (e.g. a generative `{type: lample_charton, ...}` spec), so the catalog is defined in place rather than referenced.
-
-There is no local "build a dataset" step: a named catalog is fetched and cached on demand. Use a
-local path or inline config when you want full control or offline operation.
-
-## Sweeps over the same data
-
-The same expressions can be re-evaluated under varied conditions by sweeping `data_source` /
-`sampling` fields with inline `!sweep` (see [docs/running.md](running.md) for the full `!sweep`
-semantics):
-
-- **noise** (`configs/evaluation/noise_sweep/*.yaml`): sweep `sampling.noise`, e.g. `0.0`, `0.001`, `0.01`, `0.1`.
-- **support size** (`configs/evaluation/support_sweep/*.yaml`): sweep `sampling.n_support` / `sampling.n_validation`.
+Any `sampling` field can carry a `!sweep`, which turns one config into a series of runs over noise
+levels or support sizes:
 
 ```yaml
 data_source:
@@ -99,29 +204,11 @@ data_source:
     n_support: 512
     n_validation: 512
     noise: !sweep {name: noise, values: [0.0, 0.001, 0.01, 0.1]}
-    problems_per_expression: 10
 ```
 
-## Pointing at a custom benchmark set
+## Bringing your own catalog
 
-You have three routes, depending on the data you have.
-
-1. **Publish a catalog (recommended for a shareable benchmark).** Build a `symbolic-data` catalog and publish it to a Hugging Face dataset repo with a manifest, then reference it as `your-user/your-repo:name@version` in `data_source.catalog`. Anyone can then resolve it by ref.
-2. **A local catalog config.** Write a `symbolic-data` catalog config (expressions plus their per-variable sampling spec) and point `data_source.catalog` at the local file path. The catalog samples `(X, y)` itself, so the support/validation split and noise come from `sampling`.
-3. **An inline catalog.** For a one-off, write the catalog spec directly under `data_source.catalog` as a mapping.
-
-Copy a shipped config (e.g. `configs/evaluation/scaling/pysr_fastsrb.yaml`), swap the `catalog`
-reference, and run it as in [docs/running.md](running.md). The complete catalog
-authoring reference lives in the [`symbolic-data`](https://github.com/psaegert/symbolic-data) docs.
-
-## Outputs
-
-Each run writes a pickle under `results/evaluation/.../*.pkl` (the `runner.output` path), with one
-row per evaluated problem and the raw prediction columns (`y_pred`, `y_pred_val`, `predicted_*`,
-`fit_time`, ...). The derived metrics (`fvu_fit` / `fvu_val`, `log10_fvu_*`, `numeric_recovery_*`,
-`symbolic_recovery`, `f1_score`, and more) are computed by a separate `srbf.compute_derived_metrics`
-step, not by the run itself. When a problem cannot be produced within `max_trials`, a `placeholder`
-row is written instead to keep row counts aligned across runs; filter on the `placeholder` column
-before any fit-based analysis. `runner.resume` continues a partial pickle. See
-[docs/running.md](running.md) for the output columns, metric derivation, resume, and reporting
-details.
+Write a `symbolic-data` catalog file, with one entry per law and the range of each variable, and
+point `data_source.catalog` at its path. To share it, publish it to a Hugging Face dataset
+repository with a manifest and refer to it as `user/repo:name@version`. The catalog format is
+documented in the [`symbolic-data` documentation](https://symbolic-data.readthedocs.io/).
