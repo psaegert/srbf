@@ -50,13 +50,23 @@ def keys_in_wrapped(text: str, pattern: str) -> set[str] | None:
     return set(json.loads(m.group(1))) if m else None
 
 
-def rank_methods(text: str) -> set[str] | None:
-    """Every method key a ranks.js names: the methods with a time-budget rung, and both sides of every pair."""
-    at = re.search(r"\.at,(\{.*?\})\);Object\.assign", text, re.S)
-    pairs = re.search(r"\.pairs,(\{.*\})\);\}\)\(\);\s*$", text, re.S)
-    if not at or not pairs:
+def _object_after(text: str, marker: str) -> dict | None:
+    """The JSON object that follows `marker` (a ranks.js is a chain of Object.assign(target, {...}) calls)."""
+    i = text.find(marker)
+    if i < 0:
         return None
-    return set(json.loads(at.group(1))) | {k for pair in json.loads(pairs.group(1)) for k in pair.split("|")}
+    obj, _ = json.JSONDecoder().raw_decode(text, i + len(marker))
+    return obj if isinstance(obj, dict) else None
+
+
+def rank_methods(text: str) -> set[str] | None:
+    """Every method key a ranks.js names: the methods with a time-budget rung, both sides of every pair, and both
+    sides of every record of which rungs a time-limit outcome compared."""
+    at, pairs = _object_after(text, ".at,"), _object_after(text, ".pairs,")
+    if at is None or pairs is None:
+        return None
+    rungs = _object_after(text, ".rungs,") or {}
+    return set(at) | {k for pair in list(pairs) + list(rungs) for k in pair.split("|")}
 
 
 SEALED_FIELDS = {"v", "kdf", "iter", "salt", "iv", "ct"}
@@ -130,6 +140,9 @@ def selftest() -> list[str]:
              'Object.assign(R["t"].at,{"e2e":{"t1":4}});Object.assign(R["t"].pairs,{"hidden-method|e2e":{"nguyen":{"4":[12,3,4]}}});})();\n')
     if "hidden-method" not in (rank_methods(ranks) or set()):
         bad.append("selftest: rank_methods missed a method named only in a pair")
+    compared = ranks.replace("})();", 'Object.assign(R["t"].rungs,{"other-hidden|e2e":{"t1":[4,4]}});})();')
+    if not {"hidden-method", "other-hidden"} <= (rank_methods(compared) or set()):
+        bad.append("selftest: rank_methods missed a method named only in the compared-rungs record")
     return bad
 
 
