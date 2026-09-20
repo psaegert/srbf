@@ -56,3 +56,20 @@ def test_a_time_budget_buys_the_largest_rung_timed_within_it() -> None:
     assert sx.rung_within(timing, "m", 1.0, {1, 2}) == 2                     # a rung without results cannot be read
     assert sx.rung_within(timing, "m", 0.1, {1, 2, 4, 8}) is None            # cannot finish within the budget: sits out
     assert sx.rung_within(timing, "untimed", 10.0, {1}) is None
+
+
+def test_a_metric_that_copies_another_in_every_cell_is_not_listed() -> None:
+    """Recovery relative to the reference law IS numeric recovery wherever the targets are computed from the law;
+    the menu lists it only once some cell tells the two apart (a catalog of measured data)."""
+    sx = _exporter()
+    same = {"m": {"numeric_recovery_val": [4, 10], "numeric_recovery_relative_val": [4, 10],
+                  "numeric_recovery_fit": [5, 10], "numeric_recovery_relative_fit": [5, 10]}}
+    apart = {"m": {"numeric_recovery_val": [0, 10], "numeric_recovery_relative_val": [7, 10],
+                   "numeric_recovery_fit": [5, 10], "numeric_recovery_relative_fit": [5, 10]}}
+    keys = lambda cells: {m["key"] for m in sx.listed_metrics(cells)}   # noqa: E731
+    everything = {m["key"] for m in sx.registry_json()}
+    assert keys({"a": {"nguyen": {"1": same, "2": same}}}) == everything - set(sx.COPY_OF)
+    # one cell that tells validation apart brings that metric back, and only that one
+    assert keys({"a": {"nguyen": {"1": same}, "measured": {"1": apart}}}) == everything - {"numeric_recovery_relative_fit"}
+    # nothing published yet: nothing is known to be a copy, so nothing is dropped
+    assert keys({}) == everything

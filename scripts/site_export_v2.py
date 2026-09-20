@@ -77,10 +77,10 @@ METRICS = [
      "The float32-precision indicator on the support points the method was fitted on. fNRR above vNRR means fitting without generalizing."),
     ("skeleton_match_raw", "Exact skeleton match (raw)", "raw match", "Recovery", "rate", True, "more", "pct", None,
      "Share of laws whose predicted skeleton equals the law's skeleton token for token, without simplification: the 2026-07 site's symbolic recovery. Sensitive to spelling, kept for comparability."),
-    ("numeric_recovery_relative_val", "Relative numeric recovery (val)", "rel. vNRR", "Recovery", "rate", True, "more", "pct", None,
-     "Validation FVU at or below the catalog's own reference tolerance instead of the fixed float32 bar."),
-    ("numeric_recovery_relative_fit", "Relative numeric recovery (support)", "rel. fNRR", "Recovery", "rate", True, "more", "pct", None,
-     "Support FVU at or below the catalog's own reference tolerance."),
+    ("numeric_recovery_relative_val", "Recovery relative to the reference law (val)", "ref. vNRR", "Recovery", "rate", True, "more", "pct", None,
+     "Share of laws whose prediction fits the validation targets at least as well as the reference law itself does: FVU at or below the reference law's own FVU on the same targets, and never below the float32 bar. It differs from numeric recovery only where the targets are measurements that the accepted law does not reproduce exactly."),
+    ("numeric_recovery_relative_fit", "Recovery relative to the reference law (support)", "ref. fNRR", "Recovery", "rate", True, "more", "pct", None,
+     "The same criterion on the support points: FVU at or below the reference law's own FVU there, and never below the float32 bar."),
     ("success", "Prediction success rate", "success", "Recovery", "rate", True, "more", "pct", None,
      "Share of laws for which the method returned any evaluable expression at all: decoding, parsing, compiling and constant fitting completed."),
     ("log10_fvu_val", "log10 FVU (validation)", "log10 FVU val", "Fit quality", "cont", False, "main", "num2", (-17.0, 3.0, None),
@@ -145,6 +145,28 @@ METRICS = [
      "Excess depth of directly nested unary operators in the law."),
     ("n_variables", "Law variable count", "law variables", "Ground truth", "cont", None, "more", "num1", (0.0, 16.0, None),
      "Number of input variables the law uses.")]
+# A metric that repeats another in EVERY published cell says nothing of its own, so the menu does not list it (its
+# numbers stay in the cells). Recovery relative to the reference law is numeric recovery wherever the targets are
+# computed from the law (reference FVU = 0); it is a metric of its own only once a catalog of measured data is in.
+COPY_OF = {"numeric_recovery_relative_val": "numeric_recovery_val", "numeric_recovery_relative_fit": "numeric_recovery_fit"}
+
+
+def listed_metrics(cells: dict[str, Any]) -> list[dict[str, Any]]:
+    """The metric registry without the entries that copy another metric in every cell of `cells`."""
+    def copies(key: str, of: str) -> bool:
+        seen = False
+        for per_catalog in cells.values():
+            for per_rung in per_catalog.values():
+                for cell in per_rung.values():
+                    m = cell.get("m") or {}
+                    if key in m or of in m:
+                        seen = True
+                        if m.get(key) != m.get(of):
+                            return False
+        return seen
+    return [m for m in registry_json() if not (m["key"] in COPY_OF and copies(m["key"], COPY_OF[m["key"]]))]
+
+
 RATE_KEYS = [m[0] for m in METRICS if m[4] == "rate"]
 CONT_KEYS = [m[0] for m in METRICS if m[4] == "cont"]
 HIST_SPECS = {m[0]: m[8] for m in METRICS if m[8]}
@@ -464,7 +486,7 @@ def main() -> None:
                    "release": {"id": a.release, "title": a.title or a.release, "notes": a.notes, "generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
                                "scoring": "Every method submits one answer per problem and chooses it by its own rule; the rule is named next to the method, along with who chose its configuration.",
                                "judge": "One judge for every answer: the predicted expression and the law are compared in one certified canonical form (SimpliPy acj-5-4-llm, f64), and numeric recovery is float32 precision on 512 held-out points."},
-                   "catalogs": cats, "rungs": RUNGS, "nb": NB, "metrics": registry_json(), "paired_keys": PAIRED_KEYS, "rank_keys": RANK_KEYS,
+                   "catalogs": cats, "rungs": RUNGS, "nb": NB, "metrics": listed_metrics(cells), "paired_keys": PAIRED_KEYS, "rank_keys": RANK_KEYS,
                    # budget: what one rung of the ladder buys. "candidates" is a count a generative method draws;
                    # PySR's rungs are search iterations, which have no place on the candidate axis of the site.
                    "methods": [{"key": k, "label": l, "param": p, "budget": p if p in ("iterations", "seconds") else "candidates",
