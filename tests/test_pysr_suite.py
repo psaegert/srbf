@@ -1,4 +1,4 @@
-"""PySR's full-suite evaluation on the reference machine (owner 2026-09-19): the config generator copies the
+"""PySR's full-suite evaluation on the reference machine: the config generator copies the
 Flash-ANSR data exactly, and the ladder runner's --full-suite mode leaves every catalog whole."""
 import importlib.util
 import subprocess
@@ -40,7 +40,7 @@ def test_pysr_runs_as_it_ships_with_iterations_as_the_ladder(tmp_path: Path) -> 
     assert adapter["type"] == "pysr" and adapter["config_provenance"] == "upstream_default"
     assert "maxsize" not in adapter and "parsimony" not in adapter          # upstream defaults: never set on a headline baseline
     assert _module("run_timing_ladder").ladder_of(cfg, cat) == [1, 2, 4]   # the runner reads the iterations, not the guard
-    # the owner's hang policy (2026-09-19): a minute idle is a hang, retried once, logged apart; crashes restart
+    # the hang policy: a minute idle is a hang, retried once, logged apart; crashes restart
     assert adapter["hang_after_idle_s"] == 60 and adapter["hang_log"].endswith("/suite/pysr/hangs.jsonl")
     assert adapter["max_restarts"] >= 100 and adapter["worker_log"].endswith(f"/worker_logs/{cat}.log")
 

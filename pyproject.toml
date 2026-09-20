@@ -1,6 +1,5 @@
-# srbf: Symbolic Regression Benchmark Framework, carved from flash-ansr.
-# Internal self-imports are srbf.* ; the §5 contract imports stay flash_ansr.* (one-way dependency;
-# flash-ansr must NEVER import srbf).
+# srbf: Symbolic Regression Benchmark Framework.
+# The dependency on flash-ansr is one-way: flash-ansr never imports srbf.
 [project]
 name = "srbf"
 description = "srbf: Symbolic Regression Benchmark Framework (Benchmark driver, model adapters, metrics) over symbolic-data catalogs and flash-ansr."
@@ -33,14 +32,12 @@ baselines = [
     "pysr",              # PySRAdapter (lazy; also needs Julia at runtime)
     "omegaconf",         # NeSymReS adapter glue (compat/nesymres.py)
 ]
-# the hybrid arm's method package (lazy: imported when a config asks for `type: flash_ansr_hybrid`).
-hybrid = ["flash-ansr>=0.17,<0.18"]
 # srbf.analysis figures (leaderboard/scaling/per-benchmark/distribution -> the results page).
 analysis = ["matplotlib>=3.5"]
 dev = ["pre-commit", "pytest", "pytest-cov", "mypy", "flake8", "srbf[baselines]", "srbf[analysis]"]
 
 [project.scripts]
-srbf = "srbf.__main__:main"   # carries ONLY the eval `run` command
+srbf = "srbf.__main__:main"
 
 [project.urls]
 Repository = "https://github.com/psaegert/srbf"
@@ -60,7 +57,7 @@ where = ["src"]   # src/srbf/ ; the out-of-band nesymres clone tree is not under
 srbf = ["py.typed"]
 
 [tool.mypy]
-# Mirror flash-ansr's mypy settings (this code was carved from flash_ansr.eval and type-checked clean there).
+# The same mypy settings as flash-ansr.
 no_implicit_optional = false
 disallow_untyped_defs = true
 disallow_incomplete_defs = true

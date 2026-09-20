@@ -22,7 +22,7 @@ def _unit(tmp_path: Path, rows: dict) -> dict:
 
 
 def test_failures_do_not_count_towards_the_time(tmp_path: Path) -> None:
-    # Owner 2026-09-18: "Failures do not count towards the time." Row 1 is the case that slipped through the
+    # Failures do not count towards the time. Row 1 is the case that slipped through the
     # published T8 rows: the fit returned, nothing survived, so it carries BOTH a fit_time and an error. Row 2 is
     # the worker protocol's case: a reported failure, timed. Row 3 raised and carries no time at all.
     cols = _unit(tmp_path, {
@@ -30,7 +30,7 @@ def test_failures_do_not_count_towards_the_time(tmp_path: Path) -> None:
         "fit_time": [1.0, 5.0, 7.0, None],
         "generation_time": [0.5, 2.5, 3.5, None],
         "refinement_time": [0.5, 2.5, 3.5, None],
-        "error": [None, "Model produced no results.", "diffsym: none of 1 candidates could be fitted", "boom"],
+        "error": [None, "Model produced no results.", "none of 1 candidates could be fitted", "boom"],
         "prediction_success": [True, False, False, False],
     })
     for key in ("fit_time", "generation_time", "refinement_time"):

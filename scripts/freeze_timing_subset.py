@@ -1,18 +1,15 @@
-"""Freeze the srbf TIMING subset: ~256 problems stratified by catalog -- shard 0 of N per catalog, N from the
-catalog's size (``--subset-rule 50:40,20:4,10:2``: 1 in 40 for catalogs of >= 50 problems, 1 in 4 for >= 20,
-1 in 2 for >= 10, every problem below) -- materialized ONCE, so every time measurement on the reference machine
-(the ladders of every model, the hybrid T-curves, the baselines) runs on the same instances and is paired by
-instance across models (owner protocol 2026-09-13: quality from the Helix draw ladders, time from this subset).
+"""Freeze a timing subset of the srbf suite: about 260 problems stratified by catalog. Per catalog it is shard 0
+of N, with N from the catalog's size (``--subset-rule 50:40,20:4,10:2``: 1 in 40 for catalogs of 50 problems or
+more, 1 in 4 from 20, 1 in 2 from 10, every problem below). The subset is materialized once, so every time
+measurement runs on the same instances and is paired by instance across methods and budgets.
 
-Built with ``--from-frozen`` the subset is NESTED in the hybrid r-sweep's frozen subset (rule 50:10,10:2): its rows
-are the r-sweep's rows with ``source_row_index % N == 0`` (N a multiple of the r-sweep's shard), the very same
-instances, so r* transfers. Without it the problems are drawn fresh from the catalog source (other instances of
-the same laws: the source re-draws support points; see docs on the frozen hybrid subset).
-
-  freeze_timing_subset.py -c configs/evaluation/scaling/flash-ansr-v25.0-T8-20M_srbf.yaml \\
-      --from-frozen <r-sweep root>/hybrid_data --out-dir <timing root>/hybrid_data
-  freeze_timing_subset.py -c ... --out-dir DIR [--engine acj-5-4-llm]     # fresh instances (no nesting)
+  freeze_timing_subset.py -c configs/evaluation/scaling/flash-ansr-v25.0-T8-20M_srbf.yaml --out-dir DIR
+  freeze_timing_subset.py -c ... --from-frozen OTHER_DIR --out-dir DIR     # nest it in an existing frozen subset
   freeze_timing_subset.py --check --out-dir DIR                            # verify the files against the manifest
+
+With ``--from-frozen`` the rows are taken from an existing frozen subset (``source_row_index % N == 0``, N a
+multiple of that subset's shard count): the very same instances. Without it the problems are drawn fresh from the
+catalog, which samples new support points for the same laws.
 
 The manifest ``<out-dir>/timing_subset.json`` records the rule, every catalog's full size (the stratum weight the
 read-out uses), shard, count and source rows. Existing files are never overwritten: they are verified instead.
@@ -44,7 +41,7 @@ def _rows(problems: Any) -> list[int]:
 
 
 def freeze_from_frozen(src: Path, experiment: str, n: int, out: Path, sampling: Any) -> list[int]:
-    """The r-sweep's frozen catalog filtered to ``source_row_index % n == 0`` (n a multiple of its shard)."""
+    """An existing frozen catalog filtered to ``source_row_index % n == 0`` (n a multiple of its shard)."""
     from symbolic_data.catalog import ProblemCatalog, load_catalog
 
     catalog = load_catalog(str(src))
@@ -65,7 +62,7 @@ def freeze_from_frozen(src: Path, experiment: str, n: int, out: Path, sampling: 
 
 
 def freeze_from_source(cfg: Any, experiment: str, n: int, out: Path, engine_ref: str) -> list[int]:
-    """Fresh instances: shard 0 of n of the experiment's catalog source (the hybrid driver's freeze)."""
+    """Fresh instances: shard 0 of n of the experiment's catalog source ."""
     from simplipy import SimpliPyEngine
     from srbf.config import build_catalog_source, select_experiment
     from symbolic_data.catalog import ProblemCatalog
@@ -122,7 +119,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("-c", "--config", help="a run config naming every catalog (sizes come from its data sources)")
     ap.add_argument("--out-dir", required=True, help="where <catalog>.npz and timing_subset.json go")
-    ap.add_argument("--from-frozen", help="the r-sweep's hybrid_data dir: nest the timing rows in its frozen files")
+    ap.add_argument("--from-frozen", help="an existing frozen subset: nest the timing rows in its files")
     ap.add_argument("--subset-rule", default=DEFAULT_RULE)
     ap.add_argument("--experiments", help="comma-separated subset of the config's experiments (default: all)")
     ap.add_argument("--engine", default="acj-5-4-llm", help="simplipy engine for a fresh (non-nested) freeze")

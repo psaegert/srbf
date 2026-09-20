@@ -8,7 +8,7 @@ The subset is deterministic, so it is the same problems for every model and rung
 unit leaves a marker under ``<root>/calibrated/<model>/``, and ``srbf run`` resumes a partial file itself.
 
     FLASH_ANSR_ROOT=/path/to/root CUDA_VISIBLE_DEVICES=0 python scripts/run_calibrated_ladder.py \
-        -c configs/evaluation/scaling/flash-ansr-v25.0-T7-3M_srbf.yaml --refiner-workers 16 [--dry-run]
+        -c configs/evaluation/scaling/flash-ansr-v25.0-T8-3M_srbf.yaml --refiner-workers 16 [--dry-run]
 """
 from __future__ import annotations
 

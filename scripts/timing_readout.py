@@ -4,7 +4,7 @@ whole suite's pooled mean, not the subset's -- with its 95 % bootstrap CI (resam
 weighted median, the macro (per-catalog) mean, the generation / refinement split, and paired ratios against a
 reference model on the same instances. Secondary: the pooled fit time as a power law a * draws^beta across the rungs.
 
-  timing_readout.py --root ROOT --manifest ROOT/hybrid_data/timing_subset.json --models t8-20m,t8-3m,t8-120m \\
+  timing_readout.py --root ROOT --manifest ROOT/timing_data/timing_subset.json --models t8-20m,t8-3m,t8-120m \\
       [--reference t8-20m] [--results-dir results/evaluation/timing] [--rungs 1,2,...] [--file-pattern choices_{rung:06d}.pkl]
       [--n-boot 4000] [--seed 0] [--out report.md] [--json report.json] [--strict]
 
@@ -36,7 +36,7 @@ def load_rung(root: Path, results_dir: str, model: str, catalogs: dict, rung: in
             snap = pickle.load(fh)
         n = int(m["count"])
         idx = snap.get("eval_row_index") or list(range(len(snap["fit_time"])))
-        # Failures do not count towards the time (owner 2026-09-18). A row fails when it carries an error or
+        # Failures do not count towards the time. A row fails when it carries an error or
         # prediction_success is False -- whether or not a fit_time was recorded: a fit that returned nothing still
         # has one, and the out-of-process worker protocol times every row. Decided here, once, for every adapter.
         errors, success = snap.get("error") or [], snap.get("prediction_success") or []

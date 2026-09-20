@@ -1,24 +1,22 @@
-"""The timing ladder on the frozen subset: one machine, one unit -- (catalog, rung) -- at a time, EVERY rung on
-the frozen timing subset (scripts/freeze_timing_subset.py), rung-major, so the recorded fit times are
-comparable across models and rungs and paired by instance across models. The quality axis is not measured
-here (the Helix draw ladders carry it); this is the protocol's time axis on the reference machine.
+"""The timing ladder on a frozen subset: one machine, one unit (a catalog at a rung) at a time, every rung on the
+subset written by scripts/freeze_timing_subset.py, rung by rung, so that the recorded fit times are comparable
+across methods and budgets and paired by instance. It measures time; recovery is measured by the full runs.
 
     FLASH_ANSR_ROOT=<root> CUDA_VISIBLE_DEVICES=0 python scripts/run_timing_ladder.py \\
-        -c configs/evaluation/scaling/flash-ansr-v25.0-T8-20M_srbf.yaml --data-dir <root>/hybrid_data \\
+        -c configs/evaluation/scaling/flash-ansr-v25.0-T8-20M_srbf.yaml --data-dir <root>/timing_data \\
         --model-name t8-20m [--model-path DIR] [--rungs 1,2,4,...] [--experiments a,b] [--refiner-workers 16]
-        [--budget-hours 100] [--up-to RUNG] [--dry-run]
+        [--budget-hours 100] [--up-to RUNG] [--host NAME] [--dry-run]
 
-Budget (owner 2026-09-16: 100 h per model row, no method gets more): rung-major, the wall time of every finished
-unit is recorded in its marker; before a rung starts, its cost is projected from the previous rung times the
-measured growth of the last two rungs (2x while only one rung is known); a rung whose projection does not fit
-in the remaining budget is skipped together with everything above it (marks/BUDGET_STOP records why). Every kept
-rung is measured on the whole subset.
+Budget: the wall time of every finished unit is recorded in its marker. Before a rung starts, its cost is
+projected from the previous rung times the measured growth of the last two rungs (2x while only one rung is
+known); a rung whose projection does not fit in the remaining ``--budget-hours`` is skipped together with
+everything above it (marks/BUDGET_STOP records why). Every kept rung is measured on the whole subset.
 
-Writes <root>/timing/<model-name>/<config stem>.timing.yaml -- every experiment's data source pointed at its frozen
-file, model_path overridden when given (an RL checkpoint directory, say), refiner_workers pinned, outputs under
-{{ROOT}}/results/evaluation/timing/<model-name>/<catalog>/<rung file> -- and runs `srbf run` per unit, with markers
-and logs under <root>/timing/<model-name>/marks/ (resumable; `srbf run` resumes a partial file itself).
-Refuses to measure on any host but the reference machine unless --host names it.
+Writes <root>/timing/<model-name>/<config stem>.timing.yaml (every experiment's data source pointed at its frozen
+file, model_path overridden when given, refiner_workers pinned, outputs under
+{{ROOT}}/results/evaluation/timing/<model-name>/<catalog>/<rung file>) and runs `srbf run` per unit, with markers
+and logs under <root>/timing/<model-name>/marks/. It is resumable; `srbf run` resumes a partial file itself.
+With --host, it refuses to measure on any other machine.
 """
 from __future__ import annotations
 
@@ -131,16 +129,16 @@ def main() -> int:
     ap.add_argument("--data-dir", help="the frozen timing subset (<catalog>.npz + timing_subset.json); required unless --full-suite")
     ap.add_argument("--full-suite", action="store_true",
                     help="run every catalog as the config draws it (the whole suite) instead of the frozen subset: a "
-                         "method evaluated on the reference machine itself, whose run is its measurement (owner 2026-09-19)")
+                         "method whose full run on the measuring machine is its time measurement")
     ap.add_argument("--model-name", required=True, help="output directory name under results/evaluation/timing/")
-    ap.add_argument("--model-path", help="override the config's model_path (an RL checkpoint directory, say)")
+    ap.add_argument("--model-path", help="override the config's model_path")
     ap.add_argument("--rungs", help="comma-separated rungs (default: the config's ladder)")
     ap.add_argument("--up-to", type=int, help="stop after this rung; the rungs above it stay for a later call (the queue "
                     "raises several model rows together, one rung at a time)")
     ap.add_argument("--experiments", help="comma-separated experiments (default: all in the config)")
     ap.add_argument("--refiner-workers", type=int, help="pin refiner_workers in every adapter block")
     ap.add_argument("--root", default=os.environ.get("FLASH_ANSR_ROOT"), help="FLASH_ANSR_ROOT (default: the environment)")
-    ap.add_argument("--host", default="solomon", help="the reference machine; measuring elsewhere is refused")
+    ap.add_argument("--host", default=None, help="the measuring machine's hostname; when given, measuring elsewhere is refused")
     ap.add_argument("--budget-hours", type=float, help="wall-time budget of this model row; rungs that do not fit are skipped")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
@@ -148,8 +146,8 @@ def main() -> int:
         sys.exit("set FLASH_ANSR_ROOT or pass --root")
     os.environ["FLASH_ANSR_ROOT"] = a.root
     host = socket.gethostname()
-    if host != a.host and not a.dry_run:
-        sys.exit(f"this is {host}, not the reference machine {a.host}; time is measured there only (pass --host to override)")
+    if a.host and host != a.host and not a.dry_run:
+        sys.exit(f"this is {host}, not {a.host}: this ladder is measured on {a.host} only")
     cfg = load_config(a.config)
     if "experiments" not in cfg:
         sys.exit("the config must define `experiments:` (one per catalog)")

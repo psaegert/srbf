@@ -1,7 +1,7 @@
 Third-party licenses
 ====================
 
-Flash-ANSR itself is distributed under the MIT License (see LICENSE).
+srbf itself is distributed under the MIT License (see LICENSE).
 Portions of this project are derived from or interoperate with third-party
 work, whose licenses and notices are reproduced below.
 
@@ -43,11 +43,9 @@ That project is distributed under the MIT License:
 Fast Symbolic Regression Benchmarking (FastSRB)
 -------------------------------------------------------------------------------
 
-The FastSRB benchmark sampling code now lives in the `symbolic_data` dependency
-(`symbolic_data.FastSRBBenchmark`), which srbf re-exports and adapts via the
-`FastSRBSource` evaluation data source in `src/srbf/eval/data_sources.py`. That
-sampler is translated and adapted from the Julia FastSRB benchmarking code by
-Viktor Martinek:
+srbf evaluates on the `fastsrb` catalog, which is served by the `symbolic-data`
+dependency. The sampler of that catalog is translated and adapted from the Julia
+FastSRB benchmarking code by Viktor Martinek:
 https://github.com/viktmar/FastSRB
 
     @misc{martinek2025fastsymbolicregressionbenchmarking,

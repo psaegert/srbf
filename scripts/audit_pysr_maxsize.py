@@ -1,120 +1,75 @@
-"""Audit: can PySR express every benchmark ground truth within its default ``maxsize``?
+"""How many benchmark laws fit into PySR's default complexity budget?
 
-PySR's complexity budget (``maxsize``, a node count where every operator/variable/constant
-node costs 1) caps the size of equations the search can represent at all. If a benchmark
-ground truth NEEDS more nodes than ``maxsize`` under the adapter's operator vocabulary,
-PySR is structurally unable to recover that expression.
+PySR's ``maxsize`` counts the nodes of an expression, one per operator, variable and constant, and bounds what
+the search can represent at all. A law that needs more nodes than ``maxsize`` in the operator vocabulary of the
+PySR adapter cannot be recovered symbolically, whatever the search does. Baselines run at their upstream
+defaults, so this script documents what the default implies on a catalog; it changes nothing.
 
-Benchmark policy: baselines run at their upstream defaults, so this audit DOCUMENTS what
-PySR's default budget implies on these benchmarks (the numbers belong next to PySR's
-results); it does not justify overriding the default.
+    python scripts/audit_pysr_maxsize.py                       # fastsrb
+    python scripts/audit_pysr_maxsize.py --catalogs feynman nguyen
+    python scripts/audit_pysr_maxsize.py --suite               # every srbf catalog
 
-Node counting mirrors ``srbf.model_adapters._create_pysr_model``'s vocabulary
-(flash-ansr v24.0's 23 operators; the legacy hyper-operator families are gone).
-Historic corpus tokens from the removed families count at their expanded
-spelling (two nodes, e.g. ``mult3 x -> * 3 x``); every other token (variables,
-``<constant>``, numeric literals) is one node.
-
-Ground truths audited:
-- ``fastsrb`` (declarative catalog, 120 expressions): prepared infix -> prefix via the
-  ``dev_7-3`` simplipy engine.
-- ``v23-val`` (frozen generative catalog): all pinned prefix skeletons.
-
-Run: ``python scripts/audit_pysr_maxsize.py`` (needs symbolic-data, simplipy + assets).
+A law is counted as its catalog writes it, read by the engine the catalogs are judged with. The default
+``maxsize`` is read from the installed ``pysr``; ``--maxsize`` sets it where ``pysr`` is not installed.
 """
 from __future__ import annotations
 
+import argparse
 import sys
-from collections import Counter
+from typing import Any
 
-# The single-node operator vocabulary of srbf.model_adapters._create_pysr_model.
-PYSR_UNARY = {
-    "neg", "abs", "inv",
-    "sin", "cos", "tan", "asin", "acos", "atan",
-    "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
-    "exp", "log",
-    "pow2", "pow3", "pow4", "pow5",
-    "pow1_2", "pow1_3", "pow1_4", "pow1_5",
-}
-PYSR_BINARY = {"+", "-", "*", "/", "^", "pow", "**"}
-COMPOUND_MULT_DIV = {"mult2", "mult3", "mult4", "mult5", "div2", "div3", "div4", "div5"}
-# The upstream default is VERSION-DEPENDENT (pysr <=0.x: 20; pysr 1.5.x: 30), so read it from
-# the installed library; the fallback only applies when pysr is not importable here.
+ENGINE = "acj-5-4-llm"
 
 
-def _installed_default_maxsize() -> tuple[int, str]:
+def installed_default_maxsize() -> int | None:
     try:
         import inspect
+
         import pysr
-        default = inspect.signature(pysr.PySRRegressor.__init__).parameters["maxsize"].default
-        return int(default), f"pysr {pysr.__version__} installed default"
+        return int(inspect.signature(pysr.PySRRegressor.__init__).parameters["maxsize"].default)
     except Exception:
-        return 20, "FALLBACK (pysr not importable here; pysr <=0.x default)"
+        return None
 
 
-PYSR_LIBRARY_DEFAULT_MAXSIZE, MAXSIZE_SOURCE = _installed_default_maxsize()
+def node_count(prefix: list[str]) -> int:
+    """One node per token: the engine's operators are the adapter's operators, and every leaf is one node."""
+    return len(prefix)
 
 
-def node_count(tokens: list[str] | tuple[str, ...], operator_arity: dict[str, int],
-               ) -> int:
-    """PySR node count of a prefix expression under the adapter vocabulary.
-
-    One node per token, except legacy compound mult/div tokens, which cost two
-    nodes (binary op + literal). Any OPERATOR token
-    (known to the engine) that the PySR vocabulary lacks raises, so unmapped
-    operators can never be silently under-counted.
-    """
-    total = 0
-    for token in tokens:
-        if token in COMPOUND_MULT_DIV:
-            total += 2  # hyper-operator spellings are gone; binary op + literal
-        elif token in PYSR_UNARY or token in PYSR_BINARY:
-            total += 1
-        elif token in operator_arity:
-            raise ValueError(f"operator {token!r} is not expressible in the PySR vocabulary")
-        else:
-            total += 1  # leaf: variable / <constant> / numeric literal / named constant
-    return total
+def audit(catalog_name: str, engine: Any, maxsize: int) -> tuple[list[tuple[str, int]], list[tuple[str, int]]]:
+    import symbolic_data as sd
+    catalog = sd.load_catalog(catalog_name)
+    rows = [(str(key), node_count(engine.read_infix(entry.prepared))) for key, entry in catalog.entries.items()]
+    return rows, sorted((row for row in rows if row[1] > maxsize), key=lambda row: -row[1])
 
 
 def main() -> int:
-    import symbolic_data as sd
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("--catalogs", nargs="+", default=["fastsrb"], help="catalog names (default: fastsrb)")
+    parser.add_argument("--suite", action="store_true", help="every catalog of the srbf suite")
+    parser.add_argument("--maxsize", type=int, help="the budget to audit against (default: the installed pysr's)")
+    args = parser.parse_args()
+
+    maxsize = args.maxsize if args.maxsize is not None else installed_default_maxsize()
+    if maxsize is None:
+        sys.exit("pysr is not installed here: pass --maxsize (30 in pysr 1.5)")
+
     from simplipy import SimpliPyEngine
+    engine = SimpliPyEngine.load(ENGINE, install=True)
+    if args.suite:
+        from srbf.suites import SRBF_CATALOGS
+        catalogs = list(SRBF_CATALOGS)
+    else:
+        catalogs = args.catalogs
 
-    engine = SimpliPyEngine.load("dev_7-3", install=True)
-    arity = dict(engine.operator_arity)
-
-    audits: dict[str, list[tuple[str, int]]] = {}
-
-    fastsrb = sd.load_catalog("fastsrb")
-    audits["fastsrb"] = [
-        (str(key), node_count(engine.infix_to_prefix(entry.prepared), arity))
-        for key, entry in fastsrb.entries.items()
-    ]
-
-    val = sd.build_catalog("v23-val")
-    audits["v23-val"] = [
-        (" ".join(skeleton)[:60], node_count(skeleton, arity))
-        for skeleton in sorted(val.skeletons)
-    ]
-
-    for name, rows in audits.items():
+    print(f"maxsize {maxsize}; engine {ENGINE}")
+    for name in catalogs:
+        rows, over = audit(name, engine, maxsize)
         sizes = sorted(size for _, size in rows)
-        n = len(sizes)
-        over = [(gt, size) for gt, size in rows if size > PYSR_LIBRARY_DEFAULT_MAXSIZE]
-        p95 = sizes[int(0.95 * (n - 1))]
-        print(f"== {name}: n={n}  min={sizes[0]}  median={sizes[n // 2]}  p95={p95}  max={sizes[-1]}")
-        hist = Counter(size for size in sizes)
-        print("   sizes:", dict(sorted(hist.items())))
-        print(f"   > PySR default maxsize ({PYSR_LIBRARY_DEFAULT_MAXSIZE}, {MAXSIZE_SOURCE}): "
-              f"{len(over)}/{n} ({100 * len(over) / n:.1f}%) not representable")
-        for gt, size in sorted(over, key=lambda t: -t[1])[:10]:
-            print(f"     {size:3d}  {gt}")
-
-    print()
-    print("NOTE: benchmark policy is to run baselines at their upstream defaults, so these numbers "
-          "are DOCUMENTATION of what PySR's default complexity budget implies on these benchmarks, "
-          "not a defect to patch. See docs/fairness.md (policy) and docs/models.md (PySR section).")
+        print(f"{name}: {len(over)} of {len(rows)} laws ({100 * len(over) / len(rows):.1f} %) need more than {maxsize} nodes; "
+              f"median {sizes[len(sizes) // 2]}, largest {sizes[-1]}")
+        for key, size in over[:10]:
+            print(f"    {size:3d}  {key}")
     return 0
 
 

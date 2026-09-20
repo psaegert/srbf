@@ -1,7 +1,8 @@
-srbf — Symbolic Regression Benchmark Framework, carved from flash-ansr.
+srbf: Symbolic Regression Benchmark Framework.
 
 Copyright (c) 2024 Paul Saegert. Distributed under the MIT License (see LICENSE).
 
-This product includes third-party work (the NeSymReS adapter glue and the FastSRB
-benchmark sampling code). Their licenses and attributions are reproduced in
-THIRD_PARTY_LICENSES.
+This product includes or interoperates with third-party work (the NeSymReS adapter glue, and
+the FastSRB benchmark served through symbolic-data). Their licenses and attributions are
+reproduced in THIRD_PARTY_LICENSES. The catalogs of the srbf suite keep the licenses of their
+sources, listed in the notices of https://huggingface.co/datasets/psaegert/symbolic-data-assets.

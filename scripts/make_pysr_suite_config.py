@@ -1,7 +1,7 @@
 """PySR on the whole srbf suite, as it ships: one experiment per catalog, the iteration count as the `ladder` sweep.
 
     python scripts/make_pysr_suite_config.py --from configs/evaluation/scaling/flash-ansr-v25.0-T8-20M_srbf.yaml \\
-        --python ~/venvs/pysr23/bin/python --out <root>/configs/pysr_suite.yaml [--ladder 1,2,4,...,1024]
+        --python <pysr env>/bin/python --out <root>/configs/pysr_suite.yaml [--ladder 1,2,4,...,1024]
 
 Every catalog's data source and runner are copied from a Flash-ANSR scaling config (--from), so PySR sees the
 same catalogs drawn the same way (support, validation, noise, problems per law); only the model block and the
@@ -9,8 +9,7 @@ ladder differ. PySR runs with upstream defaults -- no maxsize, no parsimony, its
 operator set the srbf worker fixes, one problem at a time with the whole machine (PySR's own threading). The
 budget is the iteration count; `timeout_in_seconds` is a guard against a runaway search, not the budget.
 
-Owner 2026-09-19: PySR runs on the full suite on the reference machine, so its main evaluation is also its
-measured time; there is no separate timing run for it.
+Run on the machine that measures time, the full-suite evaluation is also PySR's time measurement.
 """
 from __future__ import annotations
 
@@ -66,7 +65,7 @@ def main() -> int:
                 "timeout_in_seconds": a.guard_seconds,
                 "timeout": a.guard_seconds + 600,        # the hard backstop: a worker that hangs while still burning CPU
                 "startup_timeout": 1800,                 # the first import compiles SymbolicRegression.jl
-                # Owner 2026-09-19: a minute without CPU activity while a problem is in flight is a hang; the
+                # A minute without CPU activity while a problem is in flight is a hang; the
                 # problem is retried once in a fresh worker, a second hang fails it, every hang is logged apart.
                 "hang_after_idle_s": a.hang_after_idle_s,
                 # PySR's stalls are busy, not idle (one thread, after the search, turning a pathological result into

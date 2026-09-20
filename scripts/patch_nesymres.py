@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Apply the local Flash-ANSR NeSymReS patches automatically.
+"""Let a NeSymReS clone install and import on current Python.
 
-The upstream NeSymReS repository still targets Python 3.8–3.10.  This helper keeps
-our copy reproducible by rewriting the handful of places that need tweaks for
-Python 3.13 + modern Hydra/OmegaConf versions:
+The upstream NeSymReS repository targets Python 3.8 to 3.10. This helper rewrites the
+few places that need a change for Python 3.13 and current Hydra/OmegaConf versions:
 
 * Ensure ``field(default_factory=...)`` is used for the ``bfgs`` dataclass field.
 * Expand the ``install_requires`` section to depend on Hydra 1.3.x/OmegaConf 2.3.x.

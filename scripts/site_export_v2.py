@@ -12,13 +12,13 @@ srbf's derive_metrics plus the 2026-07 site's derived columns, one row per law x
                                  metrics (exact McNemar on the client), [n, sum d, sum d^2, wins, losses] for the
                                  continuous ones.
 
-PUBLIC / PRIVATE SPLIT. Only the methods named in --public go into the release files the site ships. Methods
-named in --private are written to --private-dir ONLY (a directory outside the deployed tree; results-site/README.md
-"Local-only methods"): the public payload, page and repository carry no trace of them; the private overlay has the
-same schema and is merged by the page when a LOCAL build loads it.
+LOCAL-ONLY METHODS. The methods named in --public go into the release files the site ships. A method named in
+--private is written to --private-dir only, a directory outside the deployed tree (results-site/README.md,
+"Local-only methods"), with the same schema; the page merges it when a local build loads it. Such a method is
+described in --methods-file, a JSON list of entries shaped like METHODS below, kept outside the repository.
 
 usage: site_export_v2.py <root> <release id> <out.js> [--title ...] [--notes ...] [--sizes suite_law_mu.json]
-       [--public e2e,nesymres-100M,...] [--private diffsym-v4.0 --private-dir results-site/private/2026-09]"""
+       [--public e2e,nesymres-100M,...] [--private KEY[,KEY] --private-dir DIR --methods-file FILE]"""
 import argparse
 import csv
 import datetime as dt
@@ -44,8 +44,6 @@ METHODS = [
      "Beam search, then BFGS on the constants; submits the beam candidate that fits the data best."),
     ("PySR", "PySR", "iterations", "#d62728", "baseline", "upstream_default", "pysr",
      "Evolutionary search; submits the pick of its own hall of fame, its own accuracy-versus-complexity rule."),
-    ("diffsym-v4.0", "diffsym v4.0", "samples", "#d6338f", "baseline", "author_blessed", "diffsym",
-     "Diffusion sampling; submits its own best-scoring sample after refinement."),
     ("T8-3M", "Flash-ANSR T8-3M", "draws", "#8fcf8a", "flash-ansr", "author_blessed", None, None),
     ("T8-20M", "Flash-ANSR T8-20M", "draws", "#3e9b4a", "flash-ansr", "author_blessed", None, None),
     ("T8-120M", "Flash-ANSR T8-120M", "draws", "#1b5e20", "flash-ansr", "author_blessed", None, None),
@@ -54,7 +52,7 @@ METHODS = [
 FLASH_ANSR_SELECTION = ("Fits the constants of every candidate it draws and submits the one with the best two-part code: "
                         "(n/2) log2 FVU plus the description length of the expression in bits.")
 RUNGS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
-E2E_DEFAULT_MAX_RUNG = 256   # E2E is reported at its default settings only (owner 2026-09-16)
+E2E_DEFAULT_MAX_RUNG = 256   # E2E is reported at its default settings only
 CATALOG_GROUPS = {
     "physics": ["fastsrb", "feynman", "feynman-bonus", "srsd-dummy", "erbench-phybench", "erbench-densities", "physo-astro", "physo-class"],
     "classical": ["nguyen", "keijzer", "korns", "koza", "livermore", "livermore2", "vladislavleva", "jin", "neat", "pagie", "poly", "nonic", "sine", "meier", "r-rationals", "constant", "grammarvae"],
@@ -66,8 +64,7 @@ NB = 128
 # only, except the ground-truth descriptors (every law).
 # NO WALL-CLOCK METRIC IS PUBLISHED. Seconds measured where a unit happened to run depend on the node, its GPU
 # and whatever shared it, so they are not comparable between methods. The only time this benchmark publishes is
-# the reference-machine ladder in timing.json, which the site uses for the time AXIS and nothing else
-# (owner 2026-09-17: "We will only publish times that are calibrated. Full stop.").
+# the reference-machine ladder in timing.json, which the site uses for the time AXIS and nothing else.
 METRICS = [
     ("numeric_recovery_val", "Numeric recovery (vNRR)", "vNRR", "Recovery", "rate", True, "main", "pct", None,
      "Share of laws whose prediction reproduces the validation targets to float32 precision: FVU on the validation split at or below 2^-23. A failed prediction is a miss."),
@@ -382,10 +379,14 @@ def main() -> None:
     ap.add_argument("--notes", default="")
     ap.add_argument("--sizes", default=None)
     ap.add_argument("--site-dir", default=None, help="results-site directory (default: two levels above out.js); base paths are relative to it")
-    ap.add_argument("--public", default=",".join(m[0] for m in METHODS if m[0] != "diffsym-v4.0"))
+    ap.add_argument("--public", default=",".join(m[0] for m in METHODS))
     ap.add_argument("--private", default="")
     ap.add_argument("--private-dir", default=None)
+    ap.add_argument("--methods-file", default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results-site", "private", "methods.json"),
+                    help="JSON list of local-only method entries, shaped like METHODS (default: results-site/private/methods.json, if it exists)")
     a = ap.parse_args()
+    if a.methods_file and os.path.exists(a.methods_file):
+        METHODS.extend(tuple(entry) for entry in json.load(open(a.methods_file)))
     public = [k for k in a.public.split(",") if k]
     private = [k for k in a.private.split(",") if k]
     known = {m[0] for m in METHODS}
