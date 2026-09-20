@@ -637,3 +637,49 @@ test('a pooled number appears only where a method has finished every selected ca
   await expect(page.locator(V2 + ' .v2view')).toContainText(/Fixture just begun ha(s|ve) not finished every selected catalog/);
 });
 
+
+test('a method without outcomes against another sits out of the ranking instead of emptying it', async ({ page }) => {
+  // the release rankings with every outcome between two ranked methods at budget 16 removed: what an overlay sealed
+  // before another method had results looks like
+  await page.route('**/data/2026-09/ranks.js', async (route) => {
+    const res = await route.fetch();
+    const cut = `;(function () { var R = window.RESULTS_V2_RANKS['2026-09'], D = window.RESULTS_V2;
+      var full = D.methods.map(function (m) { return m.key; }).filter(function (k) { return D.catalogs.every(function (c) { return D.cells[k] && D.cells[k][c.key] && D.cells[k][c.key]['16']; }); });
+      var key = Object.keys(R.pairs).filter(function (p) { var ab = p.split('|'); return full.indexOf(ab[0]) >= 0 && full.indexOf(ab[1]) >= 0; })[0];
+      Object.keys(R.pairs[key]).forEach(function (c) { delete R.pairs[key][c]['16']; });
+      window.FIXTURE_PAIR = key.split('|'); })();`;
+    await route.fulfill({ response: res, body: (await res.text()) + cut });
+  });
+  await page.goto('/?release=2026-09&v=ranks&x=rung&r=16&c=all');
+  const table = page.locator(V2 + ' .v2ranktable').first();
+  await expect(table).toBeVisible({ timeout: 15000 });
+  const pair = await page.evaluate(() => window.FIXTURE_PAIR.map((k) => window.RESULTS_V2.methods.filter((m) => m.key === k)[0].label));
+  const names = await table.locator('tbody tr td:first-child').allTextContents();
+  const ranked = pair.filter((label) => names.some((n) => n.trim() === label));
+  expect(ranked.length).toBe(1);                                   // one of the two is ranked with everybody else
+  expect(names.length).toBeGreaterThanOrEqual(2);
+  const out = pair.filter((label) => ranked.indexOf(label) < 0)[0];
+  await expect(page.locator(V2 + ' .v2view')).toContainText(out + ' carries no pairwise outcomes against all of the other selected methods at budget 16 and sits out.');
+  const vals = (await table.locator('tbody tr td:nth-child(3)').allTextContents()).map(Number);
+  expect(Math.abs(vals.reduce((a, b) => a + b, 0) - vals.length * (vals.length + 1) / 2)).toBeLessThan(0.02 * vals.length);
+});
+
+test('outcomes at a time limit that compared another rung than the method sits on now count as missing', async ({ page }) => {
+  await page.route('**/data/2026-09/ranks.js', async (route) => {
+    const res = await route.fetch();
+    const stale = `;(function () { var R = window.RESULTS_V2_RANKS['2026-09'];
+      var a = Object.keys(R.at).filter(function (k) { return Object.keys(R.at[k]).length > 3; })[0]; R.rungs = R.rungs || {};
+      Object.keys(R.pairs).forEach(function (p) { if (p.split('|').indexOf(a) < 0) { return; } R.rungs[p] = {}; R.budgets.forEach(function (b) { R.rungs[p][b] = [-1, -1]; }); });
+      window.FIXTURE_STALE = a; })();`;
+    await route.fulfill({ response: res, body: (await res.text()) + stale });
+  });
+  await page.goto('/?release=2026-09&v=ranks&x=time&c=all');
+  if (!(await hasRefTiming(page))) { test.skip(); }
+  const table = page.locator(V2 + ' .v2ranktable').first();
+  await expect(table).toBeVisible({ timeout: 15000 });
+  const label = await page.evaluate(() => window.RESULTS_V2.methods.filter((m) => m.key === window.FIXTURE_STALE)[0].label);
+  const names = (await table.locator('tbody tr td:first-child').allTextContents()).map((n) => n.trim());
+  expect(names).not.toContain(label);
+  expect(names.length).toBeGreaterThanOrEqual(2);
+  await expect(page.locator(V2 + ' .v2view')).toContainText(new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ' carries no pairwise outcomes against all of the other selected methods at [\\d.]+ s per problem and sits out'));
+});

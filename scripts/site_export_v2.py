@@ -415,9 +415,14 @@ def main() -> None:
                 if r is not None:
                     at[k][budget_key(t)] = r
         out: dict[str, Any] = {}
+        # which rungs a time-budget outcome compared: an overlay is sealed less often than the release is refreshed,
+        # and its outcomes against a public method are only valid while that method still sits on the same rung
+        compared: dict[str, dict[str, list[int]]] = {}
         for ka, kb in pairs:
             slots = [(str(r), r, r) for r in sorted(rungs_of[ka] & rungs_of[kb])]
-            slots += [(b, at[ka][b], at[kb][b]) for b in (budget_key(t) for t in TIME_BUDGETS) if b in at[ka] and b in at[kb]]
+            timed = [(b, at[ka][b], at[kb][b]) for b in (budget_key(t) for t in TIME_BUDGETS) if b in at[ka] and b in at[kb]]
+            compared[ka + "|" + kb] = {b: [ra, rb] for b, ra, rb in timed}
+            slots += timed
             for slot, ra, rb in slots:
                 for c in sizes:
                     rows_a, rows_b = data.get(ka, {}).get((c, ra)), data.get(kb, {}).get((c, rb))
@@ -427,7 +432,7 @@ def main() -> None:
                     if pc:
                         out.setdefault(ka + "|" + kb, {}).setdefault(c, {})[slot] = pc
         return {"keys": RANK_KEYS, "budgets": [budget_key(t) for t in TIME_BUDGETS], "seconds": TIME_BUDGETS,
-                "at": {k: at[k] for k in keys}, "pairs": out}
+                "at": {k: at[k] for k in keys}, "pairs": out, "rungs": {k: v for k, v in compared.items() if k in out and v}}
 
     def build(keys: list[str], base: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
         methods = [m for m in METHODS if m[0] in keys]
@@ -483,9 +488,9 @@ def main() -> None:
             fh.write("window.RESULTS_V2_PAIRED=window.RESULTS_V2_PAIRED||{};(function(){var R=window.RESULTS_V2_PAIRED;R[%s]=R[%s]||{};Object.assign(R[%s],%s);})();\n" % (
                 rel, rel, rel, json.dumps(paired, separators=(",", ":"))))
         with open(os.path.join(out_dir, "ranks.js"), "w") as fh:   # merged like paired.js: an overlay adds its pairs and its own budget rungs
-            fh.write("window.RESULTS_V2_RANKS=window.RESULTS_V2_RANKS||{};(function(){var R=window.RESULTS_V2_RANKS;R[%s]=R[%s]||{keys:%s,budgets:%s,seconds:%s,at:{},pairs:{}};Object.assign(R[%s].at,%s);Object.assign(R[%s].pairs,%s);})();\n" % (
-                rel, rel, json.dumps(ranks["keys"]), json.dumps(ranks["budgets"]), json.dumps(ranks["seconds"]), rel, json.dumps(ranks["at"], separators=(",", ":")),
-                rel, json.dumps(ranks["pairs"], separators=(",", ":"))))
+            fh.write("window.RESULTS_V2_RANKS=window.RESULTS_V2_RANKS||{};(function(){var R=window.RESULTS_V2_RANKS;R[%s]=R[%s]||{keys:%s,budgets:%s,seconds:%s,at:{},pairs:{}};R[%s].rungs=R[%s].rungs||{};Object.assign(R[%s].at,%s);Object.assign(R[%s].pairs,%s);Object.assign(R[%s].rungs,%s);})();\n" % (
+                rel, rel, json.dumps(ranks["keys"]), json.dumps(ranks["budgets"]), json.dumps(ranks["seconds"]), rel, rel, rel, json.dumps(ranks["at"], separators=(",", ":")),
+                rel, json.dumps(ranks["pairs"], separators=(",", ":")), rel, json.dumps(ranks.get("rungs", {}), separators=(",", ":"))))
         with_data = [k for k in payload["cells"] if payload["cells"][k]]
         print(f"{note}: {out_js} ({os.path.getsize(out_js) // 1024} kB), hist/ {len(hists)} files, paired {len(paired)} pairs; methods with data: {with_data}; status {payload['status']}")
 

@@ -31,7 +31,7 @@
     if (!P) { return []; }
     var added = [];
     (P.methods || []).forEach(function (m) {
-      if (!D.methods.some(function (x) { return x.key === m.key; })) { D.methods.push(Object.assign({}, m, { local: !!withBase })); added.push(m.key); }
+      if (!D.methods.some(function (x) { return x.key === m.key; })) { D.methods.push(Object.assign({}, m, { local: !!withBase, overlay: true })); added.push(m.key); }
     });
     Object.assign(D.cells, P.cells || {}); Object.assign(D.status, P.status || {}); Object.assign(D.timing, P.timing || {});
     if (withBase && P.base) { SOURCES.push({ base: P.base, local: true }); }
@@ -903,10 +903,26 @@
     shown.forEach(function (m) { var r = slotRung(R, m.key, slot);   // ranked: a method that has finished every selected catalog at its budget
       if (r !== null && poolCats(m.key, r).length) { cand.push({ m: m, r: r }); } else { out.out.push(m); } });
     cand = cand.filter(function (x) { var ok = cand.length < 2 || cand.some(function (z) { return z !== x && paired(x.m.key, z.m.key); }); if (!ok) { out.blind.push(x.m); } return ok; });   // an overlay sealed before rankings existed
-    out.roster = cand;
-    var ro = out.roster, k = ro.length; if (k < 2) { return out; }
+    // An outcome at a time limit compared two rungs. An overlay is sealed less often than the release is refreshed, so
+    // its outcomes against a method that has since moved to another rung are stale: they count as missing.
+    var fresh = function (a, b) { var g = R.rungs || {}, e = g[a.m.key + "|" + b.m.key], flip = false; if (!e) { e = g[b.m.key + "|" + a.m.key]; flip = true; }
+      var q = e && e[String(slot)]; return !isTimeSlot(slot) || !q || (q[flip ? 1 : 0] === a.r && q[flip ? 0 : 1] === b.r); };
     var pair = function (a, b, c) { var e = R.pairs[a + "|" + b], flip = false; if (!e) { e = R.pairs[b + "|" + a]; flip = true; } var t = e && e[c] && e[c][String(slot)]; if (!t) { return null; } var wa = t[1 + 2 * ki], wb = t[2 + 2 * ki]; return { n: t[0], wa: flip ? wb : wa, wb: flip ? wa : wb }; };
-    out.cats = state.cats.filter(function (c) { return ro.every(function (x) { return cell(x.m.key, c, x.r); }) && ro.every(function (x, i) { return ro.every(function (z, j) { return j <= i || pair(x.m.key, z.m.key, c); }); }); });
+    var meets = function (x, z, c) { return fresh(x, z) && pair(x.m.key, z.m.key, c); };
+    var shared = function (ro) { return state.cats.filter(function (c) { return ro.every(function (x) { return cell(x.m.key, c, x.r); }) && ro.every(function (x, i) { return ro.every(function (z, j) { return j <= i || meets(x, z, c); }); }); }); };
+    // Rank the methods that can all be compared with one another here. One without outcomes against another sits out
+    // instead of emptying the whole ranking: the one missing the most partners goes first, a release method before
+    // one the reader added with a key.
+    var ro = cand;
+    while (ro.length >= 2 && !shared(ro).length) {
+      var lone = ro.map(function (x) { return ro.filter(function (z) { return z !== x && !state.cats.some(function (c) { return meets(x, z, c); }); }).length; });
+      var worst = Math.max.apply(null, lone); if (!worst) { break; }
+      var drop = -1; ro.forEach(function (x, i) { if (lone[i] === worst && (drop < 0 || (ro[drop].m.overlay && !x.m.overlay) || (!!ro[drop].m.overlay === !!x.m.overlay))) { drop = i; } });
+      out.blind.push(ro[drop].m); ro = ro.filter(function (_x, i) { return i !== drop; });
+    }
+    out.roster = ro;
+    var k = ro.length; if (k < 2) { return out; }
+    out.cats = shared(ro);
     if (!out.cats.length) { return out; }
     var beat = ro.map(function () { return ro.map(function () { return { w: 0, t: 0, n: 0 }; }); });
     ro.forEach(function (x, i) { ro.forEach(function (z, j) { if (j <= i) { return; } out.cats.forEach(function (c) { var t = pair(x.m.key, z.m.key, c); beat[i][j].w += t.wa; beat[j][i].w += t.wb; beat[i][j].t += t.n - t.wa - t.wb; beat[j][i].t += t.n - t.wa - t.wb; beat[i][j].n += t.n; beat[j][i].n += t.n; }); }); });
@@ -943,7 +959,7 @@
     if (slot === null) { return head + '<p class="v2hint">The reference machine has not timed two of the selected methods yet.</p>'; }
     var lg = ranking(R, shown, slot, ki);
     var sitOut = (lg.out.length ? '<p class="v2hint">' + esc(lg.out.map(function (m) { return m.label; }).join(", ")) + (timed ? (lg.out.length > 1 ? " have" : " has") + " no finished budget timed within " + slotSeconds(R, slot) + " s on the reference machine and " + (lg.out.length > 1 ? "sit" : "sits") + " out." : (lg.out.length > 1 ? " have" : " has") + " not finished every selected catalog at budget " + slot + " and " + (lg.out.length > 1 ? "sit" : "sits") + " out.") + "</p>" : "") +
-      (lg.blind.length ? '<p class="v2hint">' + esc(lg.blind.map(function (m) { return m.label; }).join(", ")) + (lg.blind.length > 1 ? " carry" : " carries") + " no pairwise outcomes in this release and " + (lg.blind.length > 1 ? "sit" : "sits") + " out.</p>" : "");
+      (lg.blind.length ? '<p class="v2hint">' + esc(lg.blind.map(function (m) { return m.label; }).join(", ")) + (lg.blind.length > 1 ? " carry" : " carries") + " no pairwise outcomes against all of the other selected methods at " + esc(slotLabel(R, slot)) + " and " + (lg.blind.length > 1 ? "sit" : "sits") + " out.</p>" : "");
     if (lg.roster.length < 2 || !lg.cats.length) { return head + '<p class="v2hint">Fewer than two of the selected methods have ' + term("complete", "finished every selected catalog") + " at " + esc(slotLabel(R, slot)) + ": step to another one above, or narrow the catalogs.</p>" + sitOut; }
     return head + rankDiagram(R, lg, p, slot) + sitOut + rankTables(R, lg, p, slot, timed) + rankLadder(R, shown, p, ki, timed);
   }
