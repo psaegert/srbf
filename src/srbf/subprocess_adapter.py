@@ -15,6 +15,7 @@ import importlib
 import json
 import math
 import os
+import re
 import queue
 import socket
 import subprocess
@@ -28,10 +29,10 @@ import numpy as np
 import simplipy
 import simplipy.operators  # noqa: F401 - operator realizations reference it by dotted name
 from simplipy.utils import codify, safe_f
-from symbolic_data.token_ops import normalize_expression, normalize_skeleton
+from symbolic_data.token_ops import desugar_sqrt, normalize_expression, normalize_skeleton
 
 from srbf.core import EvaluationModelAdapter, EvaluationResult, EvaluationSample
-from srbf.model_adapters import _compute_fvu_from_predictions, _compute_variable_mask
+from srbf.model_adapters import _compute_fvu_from_predictions
 from srbf.variable_renaming import rename_named_variables, rename_named_variables_in_infix, skeleton_variable_names
 from srbf.worker import MODELS_DIR, RUNNER_PATH
 
@@ -130,15 +131,38 @@ def evaluate_prefix(engine: Any, prefix: list[str], variables: list[str], *array
     return tuple(outputs)
 
 
+# What a worker is told about a problem besides its data: which problem it is and how it was sampled. The law
+# itself (its skeleton, its expression, its constants, its complexity) stays on srbf's side of the socket.
+WORKER_META_KEYS = ("benchmark_eq_id", "eq_id", "catalog", "eval_row_index", "n_support", "noise_level", "variables", "variable_names")
+
+
 def _json_meta(record: Mapping[str, Any]) -> dict[str, Any]:
-    """The scalar and token-list metadata of a sample, the part a worker may want to see."""
+    """The identifiers and sampling parameters of a sample: what a worker may see of a problem's metadata."""
     meta: dict[str, Any] = {}
-    for key, value in record.items():
+    for key in WORKER_META_KEYS:
+        value = record.get(key)
         if value is None or isinstance(value, (str, int, float, bool)):
             meta[key] = value
         elif isinstance(value, (list, tuple)) and all(isinstance(item, str) for item in value):
             meta[key] = list(value)
     return meta
+
+
+# SymPy's printer, and with it most methods, spells two things differently from the engine's reader.
+_PRINTER_SPELLINGS = ((re.compile(r"\bAbs\("), "abs("), (re.compile(r"(?<![\w.])E(?![\w.(])"), "e"))
+
+
+def _unknown_symbols(prefix: list[str], operator_arity: Mapping[str, int]) -> list[str]:
+    """Tokens the judge cannot read: not an operator, a variable, a number or a named constant."""
+    def known(token: str) -> bool:
+        if token in operator_arity or token in ("sqrt", "np.pi", "np.e", "<constant>") or re.fullmatch(r"x\d+", token):
+            return True
+        try:
+            float(token)
+            return True
+        except ValueError:
+            return False
+    return sorted({token for token in prefix if not known(token)})
 
 
 class WorkerProcess:
@@ -313,7 +337,7 @@ class WorkerProcess:
                  overdue_s: float | None = None) -> dict[str, Any]:
         """The next ``expect`` message. With ``watch`` and an idle window set, the worker's process tree is
         sampled while it works: under ``hang_idle_cpu_s`` CPU seconds over ``hang_after_idle_s`` seconds of
-        wall is a hang (owner 2026-09-19: a minute of suspicious inactivity), whatever the hard timeout says.
+        wall is a hang, whatever the hard timeout says.
         ``overdue_s`` is the caller's second sign of a hang: a reply that has not come after that many seconds."""
         began = time.monotonic()
         deadline = None if timeout is None else began + timeout
@@ -390,8 +414,8 @@ class SubprocessAdapter(EvaluationModelAdapter):
         Seconds per problem; on expiry the worker is killed, the problem recorded as an error and
         the worker restarted (``max_restarts`` times over the run). None = unlimited.
     drop_unused_variables : bool
-        Hand the worker only the columns the ground-truth skeleton uses (the baselines'
-        ``padding: false``); the worker sees the kept names in ``variables``.
+        Accepted so that existing configs keep loading, and ignored: a method sees every column of a
+        problem, and choosing the relevant ones is part of what is evaluated.
     """
 
     def __init__(
@@ -405,7 +429,7 @@ class SubprocessAdapter(EvaluationModelAdapter):
         startup_timeout: float = 600.0,
         env: Mapping[str, str] | None = None,
         cwd: str | None = None,
-        drop_unused_variables: bool = True,
+        drop_unused_variables: bool = False,
         max_restarts: int = 1,
         worker_log: str | None = None,
         hang_after_idle_s: float | None = None,
@@ -422,9 +446,9 @@ class SubprocessAdapter(EvaluationModelAdapter):
         # row's `worker_hangs`; hang restarts do not spend max_restarts, which stays the budget for crashes.
         self.hang_after_idle_s = None if hang_after_idle_s is None else float(hang_after_idle_s)
         self.hang_idle_cpu_s = float(hang_idle_cpu_s)
-        # The second sign of a hang (2026-09-19): OVERDUE. PySR's stalls are not idle -- the search has ended and
-        # one thread is busy for minutes to hours turning a pathological hall-of-fame entry into sympy, which is
-        # exactly what a healthy one-iteration fit looks like to a CPU counter. What gives it away is time: the
+        # The second sign of a hang: OVERDUE. A stall need not be idle -- a search can have ended while one thread
+        # is busy for minutes to hours exporting a pathological result, which is exactly what a healthy short
+        # fit looks like to a CPU counter. What gives it away is time: the
         # problems before it took 2 s and this one has taken 60. So a problem is overdue after
         # max(hang_overdue_floor_s, hang_overdue_factor x the median successful request of THIS run), once
         # hang_overdue_min_history requests have answered; before that only the idle window and the hard timeout
@@ -441,7 +465,7 @@ class SubprocessAdapter(EvaluationModelAdapter):
         self.startup_timeout = float(startup_timeout)
         self.env = dict(env or {})
         self.cwd = cwd
-        self.drop_unused_variables = bool(drop_unused_variables)
+        self.drop_unused_variables = False   # see the parameter's note: accepted, ignored
         self.max_restarts = int(max_restarts)
         self.worker_log = worker_log
         self._process: WorkerProcess | None = None
@@ -549,13 +573,6 @@ class SubprocessAdapter(EvaluationModelAdapter):
         variables = list(record.get("variables") or record.get("variable_names") or [])
         if len(variables) != X_support.shape[1]:
             variables = [f"x{i + 1}" for i in range(X_support.shape[1])]
-        if self.drop_unused_variables:
-            mask, used = _compute_variable_mask(variables, record.get("skeleton"))
-            if mask is not None and used:
-                X_support = X_support[:, mask]
-                X_val = X_val[:, mask] if X_val.shape[0] else X_val.reshape(0, len(used))
-                variables = list(used)
-                record["variable_names"] = list(used)
 
         payload = {"x": X_support.tolist(), "y": y_support.tolist(), "x_val": X_val.tolist(),
                    "variables": variables, "meta": {**_json_meta(record), **dict(extra_meta or {})}}
@@ -623,6 +640,8 @@ class SubprocessAdapter(EvaluationModelAdapter):
         # both the stored expression and its prefix are mapped back before anything is judged.
         names = skeleton_variable_names(variables)
         expression = rename_named_variables_in_infix(str(expression), variables)
+        for pattern, spelling in _PRINTER_SPELLINGS:      # after the renaming: a variable named E stays a variable
+            expression = pattern.sub(spelling, expression)
         record["predicted_expression"] = expression
         try:
             # read_infix, not the raw infix_to_prefix: the reader's own tokens ('**', 'neg' on a
@@ -630,6 +649,14 @@ class SubprocessAdapter(EvaluationModelAdapter):
             # takes any identifier as a variable, so the map runs FIRST: everything downstream --
             # the canonical form, the price, the judge -- then sees one spelling.
             prefix = rename_named_variables(list(self.simplipy_engine.read_infix(expression)), variables) or []
+            # SymPy and most methods print the square root as sqrt(...); the engine's vocabulary spells it
+            # rootn(u, 2), and its lenient reader would pass the bare token on to a walk that rejects it.
+            prefix = [str(token) for token in prefix]
+            unknown = _unknown_symbols(prefix, self.simplipy_engine.operator_arity)
+            if unknown:
+                raise ValueError(f"the judge does not read {', '.join(unknown)}; it reads + - * / ** and the functions "
+                                 f"{' '.join(sorted(k for k, n in self.simplipy_engine.operator_arity.items() if k.isalpha()))} and sqrt")
+            prefix = desugar_sqrt(prefix, dict(self.simplipy_engine.operator_arity))
             record["predicted_expression_prefix"] = normalize_expression(prefix)
             record["predicted_skeleton_prefix"] = normalize_skeleton(prefix)
         except Exception as exc:  # noqa: BLE001 - parse errors vary by engine

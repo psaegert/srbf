@@ -218,11 +218,9 @@ def _canonical_skeleton(simplify_fn: Callable[[list[str]], list[str] | None], re
     skeleton gets (``skeleton_simplified``), so the two sides are compared through one function of the
     masked form.
 
-    Returning the stored skeleton unsimplified made the judge asymmetric wherever simplify moves a masked
-    spelling: the ground truth ``pow x1 / <c> <c>`` simplifies to ``pow x1 <c>`` while a prediction that
-    is byte-identical to it (``pow x1 / 2 3``, not shorter in canonical form) stayed ``pow x1 / <c> <c>``
-    and was judged not exact -- every law with a rational exponent (396 of 6,660; 7 % of erbench-syneq)
-    was unjudgeable as exact, whatever the answer (2026-09-12)."""
+    Both sides must pass through simplify, because simplify moves masked spellings: the ground truth
+    ``pow x1 / <c> <c>`` simplifies to ``pow x1 <c>``, and a prediction that is byte-identical to the law
+    (``pow x1 / 2 3``, not shorter in canonical form) has to arrive at the same form to be judged exact."""
     if realized is None or skeleton is None:
         return _simplified_skeleton(simplify_fn, skeleton)
     try:
@@ -400,8 +398,10 @@ def compute_derived_metrics(
                 ])
 
                 # ── Symbolic recovery ─────────────────────────────
+                # A RATE: defined for every problem. A problem without a prediction is a miss, as it is
+                # for numeric recovery; conditioning on success would reward failing on the hard laws.
                 r['symbolic_recovery'] = np.array([
-                    ps == sk if ps is not None else None
+                    ps is not None and ps == sk
                     for ps, sk in zip(pred_skel, skel_sim)
                 ])
 

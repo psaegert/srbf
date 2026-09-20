@@ -5,8 +5,7 @@ Runs in whichever interpreter has ``pysr`` (and its Julia backend); imports pysr
 
 * ``timeout_in_seconds`` (int, 60), ``niterations`` (int, 100): the search budget, the compute
   axis of the scaling sweeps.
-* ``maxsize``, ``parsimony`` (None = PySR's own defaults; setting them is a panel knob, see
-  docs/fairness.md), ``model_selection`` ('best' = PySR's default).
+* ``maxsize``, ``parsimony`` (None = PySR's own defaults; see docs/fairness.md), ``model_selection`` ('best' = PySR's default).
 * ``warmup`` (True): pay the one-off Julia precompile on a throwaway model in ``load`` so the
   first timed fit starts warm.
 
@@ -44,8 +43,8 @@ BINARY_OPERATORS = ["+", "-", "*", "/", "^", ROOTN_JULIA]
 
 def create_model(*, timeout_in_seconds, niterations, maxsize=None, model_selection="best", parsimony=None,
                  guesses=None):
-    """A PySRRegressor over flash-ansr v24.0's 23-operator vocabulary, exactly (owner ruling
-    2026-08-17): 17 unaries + {+, -, *, /, pow, rootn}. maxsize/parsimony are forwarded only when
+    """A PySRRegressor over the 23 operators the benchmark's laws are written in: 17 unaries +
+    {+, -, *, /, pow, rootn}. maxsize/parsimony are forwarded only when
     set; None = PySR's own (version-dependent) defaults, never hardcoded here."""
     PySRRegressor = _require_pysr()
     optional = {}
@@ -113,7 +112,7 @@ def info(state):
 
 def fit(x, y, *, x_val, variables, meta, options, state):
     model = state["model"]
-    # per-problem overrides ride in `meta` (the hybrid adapter sets them): seeds and the iteration
+    # per-problem overrides ride in `meta` (a caller of the adapter may set them): seeds and the iteration
     # budget of THIS fit. A fresh regressor is built for them; the warm Julia session is shared.
     meta = meta or {}
     overrides = {k: meta[k] for k in ("guesses", "niterations", "timeout_in_seconds") if meta.get(k) is not None}

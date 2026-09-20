@@ -122,18 +122,6 @@ class TestAdapterEndToEnd:
             adapter.close()
         assert adapter._process is None
 
-    def test_masking_hands_the_worker_only_the_used_columns(self, engine) -> None:
-        adapter = SubprocessAdapter(worker="example", simplipy_engine=engine)
-        adapter.prepare()
-        try:
-            record = adapter.evaluate_sample(_sample(skeleton=("*", "2", "x1"))).to_mapping()
-            assert record["prediction_success"] is True, record.get("error")
-            assert record["variable_names"] == ["x1"]
-            assert "x2" not in record["predicted_expression"]
-            assert len(record["predicted_constants"]) == 2      # slope and intercept only
-        finally:
-            adapter.close()
-
     def test_worker_powers_arrive_in_the_engine_grammar(self, engine, tmp_path) -> None:
         # A worker speaks infix ('^', '**', a negative literal); the record must carry the engine's own
         # grammar ('pow', signed literals), never the raw reader tokens, or simplify/complexity refuse it.
@@ -167,6 +155,24 @@ class TestAdapterEndToEnd:
             assert record["prediction_success"] is True, record.get("error")
             np.testing.assert_allclose(record["y_pred"], sample.y_support, atol=1e-9)
             np.testing.assert_allclose(record["y_pred_val"], sample.y_validation, atol=1e-9)
+        finally:
+            adapter.close()
+
+    def test_a_square_root_written_as_sqrt_is_read(self, engine, tmp_path) -> None:
+        """SymPy, and with it most methods, print the square root as sqrt(...). The engine's vocabulary spells it
+        rootn(u, 2); an answer must not fail because of the spelling."""
+        worker = _write_worker(tmp_path, '''
+            def fit(x, y, *, x_val, variables, meta, options, state):
+                return {"expression": "sqrt(%s**2) + sqrt(4)*%s" % (variables[0], variables[1])}
+        ''')
+        adapter = SubprocessAdapter(worker=worker, simplipy_engine=engine, drop_unused_variables=False)
+        adapter.prepare()
+        try:
+            sample = _sample()
+            record = adapter.evaluate_sample(sample).to_mapping()
+            assert record["prediction_success"] is True, record.get("error")
+            assert "sqrt" not in record["predicted_expression_prefix"] and record["predicted_expression_prefix"].count("rootn") == 2
+            np.testing.assert_allclose(record["y_pred"], np.abs(sample.x_support[:, :1]) + 2 * sample.x_support[:, 1:2], atol=1e-9)
         finally:
             adapter.close()
 
@@ -305,7 +311,7 @@ class TestConfig:
 
 
 class TestHangPolicy:
-    """Owner 2026-09-19: a worker that shows no CPU activity for a minute while a problem is in flight is hung;
+    """A worker that shows no CPU activity for a minute while a problem is in flight is hung;
     the problem is retried once in a fresh worker, a second hang fails it, and every hang is logged apart for
     statistics. The window is 2 s here instead of 60 s; everything else is the production path."""
 
@@ -362,8 +368,8 @@ class TestHangPolicy:
             adapter.close()
 
     def test_a_problem_that_runs_far_longer_than_the_ones_before_it_is_overdue(self, engine, tmp_path) -> None:
-        """2026-09-19: PySR's stalls are BUSY (one thread, after the search, turning a pathological result into
-        sympy), so no CPU measure tells them from a healthy fit. Time does: the limit is a multiple of the median
+        """A stall can be BUSY (one thread, after the search, exporting a pathological result), so no CPU
+        measure tells it from a healthy fit. Time does: the limit is a multiple of the median
         answered request of the run, with a floor, once there is a history."""
         worker = _write_worker(tmp_path, self.WORKER.format(mark=str(tmp_path / "hung-once")))
         adapter = SubprocessAdapter(worker=worker, simplipy_engine=engine, drop_unused_variables=False, timeout=600,
@@ -396,3 +402,56 @@ class TestHangPolicy:
             assert self._log(tmp_path) == []
         finally:
             adapter.close()
+
+
+class TestWhatAWorkerSees:
+    """A worker is handed the problem, never the answer, and every column of it."""
+
+    PROBE = '''
+        import json
+        def fit(x, y, *, x_val, variables, meta, options, state):
+            return {"expression": " + ".join(variables), "extra": {"seen_meta": sorted(meta), "n_columns": len(x[0])}}
+    '''
+
+    def test_the_law_never_crosses_the_socket(self, engine, tmp_path) -> None:
+        adapter = SubprocessAdapter(worker=_write_worker(tmp_path, self.PROBE), simplipy_engine=engine)
+        adapter.prepare()
+        try:
+            record = adapter.evaluate_sample(_sample()).to_mapping()
+        finally:
+            adapter.close()
+        seen = set(record["seen_meta"])
+        assert not seen & {"skeleton", "expression", "ground_truth_prefix", "ground_truth_infix", "skeleton_hash", "constants", "complexity"}
+        assert "benchmark_eq_id" in seen
+
+    def test_every_column_is_handed_over_whatever_the_law_uses(self, engine, tmp_path) -> None:
+        # the law uses x1 and x2 only; a third column is part of the problem, and finding that out is the method's job
+        sample = _sample(skeleton=("+", "*", "2", "x1", "x2"))
+        extra = np.hstack([sample.x_support, np.ones((sample.x_support.shape[0], 1))])
+        extra_val = np.hstack([sample.x_validation, np.ones((sample.x_validation.shape[0], 1))])
+        metadata = {**sample.metadata, "variables": ["x1", "x2", "x3"], "variable_names": ["x1", "x2", "x3"]}
+        wide = EvaluationSample(x_support=extra, y_support=sample.y_support, x_validation=extra_val,
+                                y_validation=sample.y_validation, metadata=metadata)
+        adapter = SubprocessAdapter(worker=_write_worker(tmp_path, self.PROBE), simplipy_engine=engine, drop_unused_variables=True)
+        adapter.prepare()
+        try:
+            record = adapter.evaluate_sample(wide).to_mapping()
+        finally:
+            adapter.close()
+        assert record["n_columns"] == 3
+
+    def test_sympy_spellings_are_read_and_an_unknown_function_is_named(self, engine, tmp_path) -> None:
+        worker = _write_worker(tmp_path, '''
+            def fit(x, y, *, x_val, variables, meta, options, state):
+                return {"expression": options["expression"].format(*variables)}
+        ''')
+        for expression, ok in (("Abs({0}) + E*{1}", True), ("Heaviside({0}) + {1}", False)):
+            adapter = SubprocessAdapter(worker=worker, simplipy_engine=engine, options={"expression": expression})
+            adapter.prepare()
+            try:
+                record = adapter.evaluate_sample(_sample()).to_mapping()
+            finally:
+                adapter.close()
+            assert record["prediction_success"] is ok, record.get("error")
+            if not ok:
+                assert "does not read Heaviside" in record["error"]

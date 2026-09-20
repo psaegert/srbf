@@ -174,9 +174,9 @@ def _fake_simplify(tokens):
 
 def test_symbolic_recovery_judges_both_sides_through_the_same_simplify():
     """A prediction byte-identical to the ground truth must be exact. The ground truth's skeleton is
-    simplified (``pow x1 / <c> <c>`` -> ``pow x1 <c>``); a prediction whose canonical form is not
-    shorter used to be judged by its stored skeleton UNsimplified (``pow x1 / <c> <c>``) and failed --
-    every law with a rational exponent was unjudgeable as exact (2026-09-12)."""
+    simplified (``pow x1 / <c> <c>`` -> ``pow x1 <c>``), so a prediction whose canonical form is not
+    shorter must have its stored skeleton simplified too, or no law with a rational exponent could be
+    judged exact."""
     snapshot = {
         'skeleton': [['pow', 'x1', '/', '<constant>', '<constant>']] * 2 + [['x1']],
         'predicted_expression_prefix': [['pow', 'x1', '/', '2', '3'], ['rootn', 'x1', '3'], ['*', '1.0', 'x1']],
@@ -188,3 +188,23 @@ def test_symbolic_recovery_judges_both_sides_through_the_same_simplify():
     # canon's business, not the judge's): not exact; the strictly-shorter canonical path is unchanged
     assert list(scored['symbolic_recovery']) == [True, False, True]
     assert scored['predicted_skeleton_prefix'][0] == ['pow', 'x1', '<constant>'] == scored['skeleton_simplified'][0]
+
+
+def test_a_failed_prediction_is_a_miss_on_every_recovery_rate() -> None:
+    """Rates are defined for every problem: a method that returns nothing has missed, on symbolic recovery as on
+    numeric recovery. A rate conditioned on success would rise when a method fails on the hard laws."""
+    import numpy as np
+    from srbf import bootstrap_report, derive_metrics
+    x = np.linspace(0.0, 1.0, 8).reshape(-1, 1)
+    law = {"skeleton": ["+", "x1", "<constant>"], "expression": ["+", "x1", "1.5"], "y": x + 1.5}
+    snapshot = {
+        "skeleton": [law["skeleton"], law["skeleton"]], "expression": [law["expression"], law["expression"]],
+        "x": [x, x], "y": [law["y"], law["y"]], "x_val": [x, x], "y_val": [law["y"], law["y"]],
+        "y_pred": [law["y"], None], "y_pred_val": [law["y"], None],
+        "predicted_skeleton_prefix": [["+", "x1", "<constant>"], None], "predicted_expression_prefix": [["+", "x1", "1.5"], None],
+        "prediction_success": [True, False], "placeholder": [False, False], "benchmark_eq_id": ["a", "b"],
+    }
+    scored = derive_metrics(snapshot, operator_arity={"+": 2})
+    assert list(scored["symbolic_recovery"]) == [True, False]
+    assert list(scored["numeric_recovery_val"]) == [True, False]
+    assert bootstrap_report(scored, "symbolic_recovery")["median"] == 0.5     # one of two laws, not one of one

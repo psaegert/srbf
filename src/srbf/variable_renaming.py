@@ -66,7 +66,7 @@ def rename_named_variables(tokens: Sequence[str] | None, columns: Sequence[str])
 
     Out-of-process workers are told the problem's variable names, so PySR answers in ``v1, v2`` on a
     catalog that calls its columns that, while the ground truth spells the same columns ``x1, x2``.
-    A worker that ignores the names it was given and answers in ``x1, x2`` already (diffsym) is left
+    A worker that ignores the names it was given and answers in ``x1, x2`` already is left
     alone: only a token that IS one of the handed names is renamed. srbf spells a catalog's columns
     ``v1..vn`` (measured across all 29 catalogs), so no handed name collides with an operator or a
     named constant; a catalog that called a column ``e`` would need more care than this.
