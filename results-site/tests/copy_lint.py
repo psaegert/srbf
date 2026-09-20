@@ -5,6 +5,7 @@ Three surfaces: the full prose of index.html, and the string literals of explore
 explorer_v2.js (comments are internal and exempt). Every entry here is a fixed bug that must not return —
 extend the list whenever a new wording bug is fixed.
 """
+import json
 import re
 import sys
 from pathlib import Path
@@ -28,6 +29,16 @@ BANNED = {
     r"never quote": "scolding tone: name the quotable alternative instead",
     r"curve read": "retired vocabulary: the split is declared-vs-free, say 'descriptive' (same interpolation)",
 }
+
+
+def _local_patterns() -> dict[str, str]:
+    """Patterns kept out of the repository (results-site/private/ is git-ignored): names that must not reach a
+    public page and must not be spelled out in a public lint either. Absent in CI, present on a maintainer's machine."""
+    path = Path(__file__).resolve().parents[1] / "private" / "banned_patterns.json"
+    return json.loads(path.read_text()) if path.is_file() else {}
+
+
+BANNED.update(_local_patterns())
 
 
 def js_strings(source: str) -> list[str]:

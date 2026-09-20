@@ -140,7 +140,5 @@ Deploys are automatic: pushing to `main` with changes under `results-site/` trig
 `.github/workflows/pages.yaml`, which uploads this directory as the Pages artifact and deploys
 it (Pages `build_type` is `workflow`). Manual redeploy: `gh workflow run pages.yaml`.
 
-The old flow (ghp-import to a `gh-pages` branch built by the legacy Pages builder) was retired
-2026-07-03 after the legacy builder repeatedly hung >20 minutes per deploy; the `gh-pages`
-branch is no longer consumed. Always verify the SERVED site after deploying, at desktop AND
-mobile widths.
+The `gh-pages` branch is not consumed. Always verify the SERVED site after deploying, at desktop
+AND mobile widths.

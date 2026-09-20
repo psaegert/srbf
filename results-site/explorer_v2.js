@@ -96,7 +96,7 @@
     mcnemar: "Exact McNemar test on the laws the two methods disagree on (one recovered, the other did not): two-sided binomial p-value, no asymptotics. The difference of paired rates carries a 95 % Wald interval.",
     signtest: "Paired mean difference with a t-interval over laws where both methods have a finite value, plus a two-sided exact sign test on the wins and losses.",
     draw1: "One draw per problem so far. These are paired contrasts on the same laws, not the repeated-draw noise margins of the 2026-07 release; those follow when draws 2 and up exist.",
-    time: "Seconds per problem on ONE reference machine (solomon: RTX 4090, 16 refiner workers, a frozen 262-problem subset), the only timing this benchmark publishes. Seconds measured where a unit happened to run depend on the node, its GPU and whatever shared it, so they are not comparable between methods and are never drawn: a method the reference machine has not timed has no position here, so it is left out of the chart and named underneath; a chart with no timed method at all has no time axis.",
+    time: "Seconds per problem on ONE reference machine (one RTX 4090, 16 refiner workers, a fixed subset of 262 problems), the only timing this benchmark publishes. Seconds measured where a unit happened to run depend on the node, its GPU and whatever shared it, so they are not comparable between methods and are never drawn: a method the reference machine has not timed has no position here, so it is left out of the chart and named underneath; a chart with no timed method at all has no time axis.",
     candidates: "Samples, beam width, candidates or draws per problem: the budget a generative method spends. PySR's budget is a number of search iterations rather than a candidate count, so it has no position on this axis and appears on the time axis only.",
     rungs: "A budget is one rung of a method's own ladder: samples, beam width, candidates or draws per problem, or search iterations for PySR. A snapshot at budget 64 reads every method at rung 64 of its ladder. The Ranks view can hold the methods equal on reference-machine time instead.",
     tbudget: "Every method is read at the largest rung of its ladder that it has finished and that the reference machine timed at or under this many seconds per problem. A method whose smallest rung already takes longer sits out; a method whose finished, timed ladder ends below the limit is read at its last rung, which is its worst case: more budget could only help it.",
@@ -264,8 +264,8 @@
   function cell(m, c, r) { var x = D.cells[m] && D.cells[m][c] && D.cells[m][c][String(r)]; return x && x.state === "complete" ? x : null; }
   function hasRung(m, r) { return CATS.some(function (c) { return cell(m, c, r); }); }
   function shownMethods() { return D.methods.filter(function (m) { return state.methods.indexOf(m.key) >= 0 && withData(m); }); }
-  // A pooled number stands for the selected catalogs only if it holds ALL of their laws (owner 2026-09-19: "hide it
-  // until it is entirely complete. No display of thin rungs whatsoever."). The catalogs differ far too much for a
+  // A pooled number stands for the selected catalogs only if it holds ALL of their laws: a budget is shown
+  // once it is entirely complete, never as a thin rung. The catalogs differ far too much for a
   // part to speak for the whole -- one synthetic corpus is four fifths of the laws, and recovery on it is a fraction
   // of recovery elsewhere -- and a rung that is still running would move as its catalogs land. So a method has a
   // pooled value at a rung when it has finished every selected catalog there, and none otherwise; every method that

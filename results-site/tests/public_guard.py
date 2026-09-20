@@ -11,7 +11,7 @@ Fatal checks, run before the Playwright suite in CI and locally:
      add would surface here before anything deploys);
   5. no published payload carries an as-run wall-clock metric. Seconds measured where a unit happened to run are
      not comparable between methods; the only timing this benchmark publishes is the reference-machine ladder in
-     timing.json (owner 2026-09-17: "We will only publish times that are calibrated. Full stop.");
+     timing.json: only times measured on the reference machine are published;
   6. a sealed payload, if one is present, is sealed: the envelope carries only its own fields, the KDF is strong
      enough to be worth having, and the ciphertext reads as ciphertext (high entropy, no plaintext left in it).
      The checker is run against a deliberately bad envelope on every invocation, so it cannot pass vacuously.

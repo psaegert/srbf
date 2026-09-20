@@ -1,8 +1,7 @@
 name: deploy-results-site
 
 # Test-gated Pages deploy: the functionality suite (Playwright, desktop + mobile) and the
-# copy lint must pass against the exact artifact before it ships. Replaces the legacy
-# gh-pages-branch builder (retired 2026-07-03 after repeated multi-hour hangs).
+# copy lint must pass against the exact artifact before it ships.
 on:
   push:
     branches: [main]
