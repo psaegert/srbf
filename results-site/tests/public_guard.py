@@ -34,7 +34,7 @@ REQUIRED_METRICS = {
     "skeleton_match_raw", "f1_score", "precision_score", "recall_score", "edit_distance_norm", "zss_edit_distance",
     "expr_length_ratio_abserr", "predicted_skeleton_prefix_length", "skeleton_length", "n_constants_ratio",
     "n_constants_delta", "total_nestedness_delta", "predicted_log_prob", "predicted_score",
-    "symbolic_recovery", "mdl_ratio", "r2_val"}
+    "symbolic_recovery", "symbolic_recovery_mask_fittable", "symbolic_recovery_mask_none", "mdl_ratio", "r2_val"}
 # Wall-clock measured wherever a unit ran. Never published: not in the registry, not in a cell, not in a
 # histogram, not in a paired contrast. The reference-machine ladder (timing.json) is the only timing that ships.
 UNCALIBRATED_TIME_KEYS = ("fit_time", "generation_time")

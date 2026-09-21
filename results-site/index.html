@@ -734,10 +734,18 @@
           $$
           <p>
             The prediction \(\hat{f}\) and the law \(f\) have the same certified canonical form
-            (SimpliPy, float64) once both are simplified: structurally the same law, with constants
-            matched up to the judge's tolerance. A re-ordered sum or an unsimplified sub-term still
-            counts, and a close numerical fit of another shape does not. Failed predictions count
-            as 0.
+            (SimpliPy, float64) once both are simplified and their numbers are masked: structurally
+            the same law. A re-ordered sum or an unsimplified sub-term still counts, and a close
+            numerical fit of another shape does not. Failed predictions count as 0.
+          </p>
+          <p>
+            The same question is asked at three levels of masking, each implying the one before it.
+            <em>Symbolic recovery</em> masks every number, so \(x^2\) and \(x^3\) are one structure.
+            <em>With exponents</em> masks only the fittable constants: the numbers of the structure,
+            exponents and root indices, have to be the law's, and an exponent left at 1.9999 is a
+            miss. <em>With all numbers</em> masks nothing: the fitted constants have to be right too,
+            which is measured as numeric recovery is, by reproducing the law to float32 precision on
+            the validation points.
           </p>
         </article>
 

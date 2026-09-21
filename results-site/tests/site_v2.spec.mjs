@@ -997,3 +997,30 @@ test('leaving failed predictions out is exact for the median, the distribution a
   await expect(page.locator(V2 + ' .v2view')).not.toHaveText(counted);
   expect(errors, errors.join('\n')).toEqual([]);
 });
+
+test('symbolic recovery is asked at three levels of masking, each implying the one before it', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/?release=2026-09&v=table&rows=rungs&x=rung&p=rung~symbolic_recovery,rung~symbolic_recovery_mask_fittable,rung~symbolic_recovery_mask_none');
+  const seen = await page.evaluate(() => {
+    const D = window.RESULTS_V2; let cells = 0, missing = 0, broken = 0, strict = 0;
+    Object.keys(D.cells).forEach((m) => Object.keys(D.cells[m]).forEach((c) => Object.keys(D.cells[m][c]).forEach((r) => {
+      const x = D.cells[m][c][r].m, all = x.symbolic_recovery, exp = x.symbolic_recovery_mask_fittable, num = x.symbolic_recovery_mask_none;
+      cells += 1;
+      if (!all || !exp || !num) { missing += 1; return; }
+      if (!(num[0] <= exp[0] && exp[0] <= all[0] && num[0] <= x.numeric_recovery_val[0] && exp[1] === all[1] && num[1] === all[1])) { broken += 1; }
+      if (exp[0] < all[0]) { strict += 1; }
+    })));
+    const labels = D.metrics.filter((m) => m.key.indexOf('symbolic_recovery') === 0).map((m) => m.label);
+    return { cells, missing, broken, strict, labels };
+  });
+  expect(seen.cells).toBeGreaterThan(100);
+  expect(seen.missing).toBe(0);
+  expect(seen.broken).toBe(0);
+  expect(seen.strict).toBeGreaterThan(0);   // the stricter level is a level of its own: somewhere an exponent is not the law's
+  expect(seen.labels).toEqual(['Symbolic recovery (SRR)', 'Symbolic recovery with exponents', 'Symbolic recovery with all numbers']);
+  // all three are rates over every law, so none of their numbers is marked as resting on too few
+  const row = page.locator(V2 + ' .v2table tbody tr').first();
+  await expect(row).toBeVisible({ timeout: 15000 });
+  await expect(page.locator(V2 + ' .v2table .v2hollow')).toHaveCount(0);
+  expect(errors, errors.join('\n')).toEqual([]);
+});

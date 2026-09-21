@@ -246,16 +246,17 @@ _JUDGE_CACHE_MAX = 200_000
 
 
 def _judged_form(simplify_fn: Callable[[list[str]], list[str] | None], mask_fn: MaskFn, tokens: Any, *,
-                 canonical: bool) -> list[str] | None:
+                 canonical: bool, level: str = 'all') -> list[str] | None:
     """One of the two forms an expression is judged in, the same function for the law and for the prediction.
 
     ``canonical=True``: the expression WITH its numbers is brought into canonical form first, because that is
     where it shows what it is (``x2 * x4 / (c * x4 ** 3)`` cancels to ``x2 / (c * x4 ** 2)`` only while the ``3``
     is a number, ``pow(u, 0.5)`` becomes ``rootn(u, 2)``); then its numbers are masked and the skeleton settles.
-    ``canonical=False``: the skeleton as it was written settles. ``None`` when the engine refuses the input."""
+    ``canonical=False``: the skeleton as it was written settles. ``None`` when the engine refuses the input.
+    ``level`` names what ``mask_fn`` masks (``'all'`` or ``'fittable'``), so the two levels do not share a cache."""
     if tokens is None:
         return None
-    key = (id(getattr(simplify_fn, "__self__", simplify_fn)), mask_fn is _mask_every_number, canonical, tuple(map(str, tokens)))
+    key = (id(getattr(simplify_fn, "__self__", simplify_fn)), mask_fn is _mask_every_number, level, canonical, tuple(map(str, tokens)))
     if key in _JUDGE_CACHE:
         cached = _JUDGE_CACHE[key]
         return list(cached) if cached is not None else None
@@ -273,14 +274,17 @@ def _judged_form(simplify_fn: Callable[[list[str]], list[str] | None], mask_fn: 
 
 
 def _judged_pair(simplify_fn: Callable[[list[str]], list[str] | None], mask_fn: MaskFn, law: Any, law_skeleton: Any,
-                 prediction: Any, prediction_skeleton: Any) -> tuple[list[str] | None, list[str] | None]:
+                 prediction: Any, prediction_skeleton: Any,
+                 fittable: tuple[list[str] | None, list[str] | None] = (None, None)) -> tuple[list[str] | None, list[str] | None]:
     """The judged skeletons of a law and of its prediction, ``(law, prediction)``.
 
     Two expressions are the same up to their constants when they arrive at one skeleton, and the judge looks
     for that in two places: in their canonical forms (:func:`_judged_form`, ``canonical=True``) and in their
     skeletons as written. Each is a sound witness, since simplification never changes the function and masking
     only forgets numbers; neither is complete, because no simplifier is. The canonical pair is returned unless
-    only the written pair agrees."""
+    only the written pair agrees. ``fittable`` holds the two forms at the stricter level, where only the fittable
+    constants are masked: forms that agree there agree here too once their remaining numbers are masked, which
+    keeps the levels nested whatever the simplifier finds."""
     law_canonical = _judged_form(simplify_fn, mask_fn, law, canonical=True)
     if law_canonical is None:
         law_canonical = _judged_form(simplify_fn, mask_fn, law_skeleton, canonical=False)
@@ -295,7 +299,18 @@ def _judged_pair(simplify_fn: Callable[[list[str]], list[str] | None], mask_fn: 
     prediction_written = _judged_form(simplify_fn, mask_fn, prediction_skeleton, canonical=False)
     if prediction_written is not None and prediction_written == law_written:
         return law_written, prediction_written
+    if fittable[0] is not None and fittable[0] == fittable[1]:
+        shared = _judged_form(simplify_fn, mask_fn, fittable[0], canonical=False)
+        return shared, (list(shared) if shared is not None else None)
     return law_canonical, prediction_canonical
+
+
+def _fittable_form(simplify_fn: Callable[[list[str]], list[str] | None], fittable_fn: MaskFn, tokens: Any) -> list[str] | None:
+    """The form an expression is judged in when the numbers of its STRUCTURE count: canonical with its numbers,
+    then only the fittable constants masked (coefficients, offsets), and settled like the skeleton. An exponent
+    or the index of a root stays a number, so ``x1 ** 2`` and ``x1 ** 3`` differ here, and ``x1 * x1`` is
+    ``pow x1 2`` like ``x1 ** 2``."""
+    return _judged_form(simplify_fn, fittable_fn, tokens, canonical=True, level='fittable')
 
 
 def _answered(row_columns: Mapping[str, Any], prediction_key: str) -> np.ndarray:
@@ -367,6 +382,7 @@ def compute_derived_metrics(
     convert_fn: Callable[[list[str]], list[str]] | None = None,
     mask_fn: MaskFn | None = None,
     impute_failed: bool = True,
+    fittable_mask_fn: MaskFn | None = None,
 ) -> None:
     """Compute derived evaluation metrics in-place on *results*.
 
@@ -380,6 +396,7 @@ def compute_derived_metrics(
       ``skeleton_length``, ``predicted_skeleton_prefix_length``
     - ``n_variables``, ``n_constants``, ``predicted_n_constants``, ``n_constants_delta``
     - ``symbolic_recovery``, ``skeleton_length_ratio``
+    - ``symbolic_recovery_mask_fittable``, ``symbolic_recovery_mask_none`` (when ``fittable_mask_fn`` is given)
     - ``predicted_mdl``, ``ground_truth_mdl``, ``mdl_ratio`` (when ``mdl_fn`` is given)
     - ``edit_distance``, ``edit_distance_norm``, ``zss_edit_distance``
     - ``unique_variables``, ``predicted_unique_variables``
@@ -416,6 +433,10 @@ def compute_derived_metrics(
     impute_failed : bool, optional
         Count a failed problem at the worst value of the metrics that have one (the default). ``False``
         leaves it without a value there too.
+    fittable_mask_fn : callable, optional
+        Masks only the fittable constants of a token list and keeps the numbers of the structure (exponents,
+        root indices). With it, symbolic recovery is also judged at the two stricter levels.
+        :func:`derive_metrics` passes the engine's ``fittable`` mask.
     """
     if mask_fn is None:
         mask_fn = _mask_every_number
@@ -441,13 +462,19 @@ def compute_derived_metrics(
                 # what it is, not as it was spelled; the law goes through the same function. The stored spelling of
                 # the prediction stays under `_as_emitted`.
                 n_rows = len(r['skeleton']) if 'skeleton' in r else 0
+                fittable_pairs: list[tuple[list[str] | None, list[str] | None]] = []
                 if simplify_fn is not None and 'skeleton' in r:
                     laws = r.get('ground_truth_prefix') or r.get('expression') or [None] * n_rows
                     predictions = r.get('predicted_expression_prefix') or [None] * n_rows
                     emitted = list(r['predicted_skeleton_prefix']) if 'predicted_skeleton_prefix' in r else [None] * n_rows
+                    fittable_pairs = [
+                        (_fittable_form(simplify_fn, fittable_mask_fn, law), _fittable_form(simplify_fn, fittable_mask_fn, pe))
+                        if fittable_mask_fn is not None and sk is not None else (None, None)
+                        for law, sk, pe in zip(laws, r['skeleton'], predictions)
+                    ]
                     pairs = [
-                        _judged_pair(simplify_fn, mask_fn, law, sk, pe, ps) if sk is not None else (None, None)
-                        for law, sk, pe, ps in zip(laws, r['skeleton'], predictions, emitted)
+                        _judged_pair(simplify_fn, mask_fn, law, sk, pe, ps, fittable=fp) if sk is not None else (None, None)
+                        for law, sk, pe, ps, fp in zip(laws, r['skeleton'], predictions, emitted, fittable_pairs)
                     ]
                     r['skeleton_simplified'] = [pair[0] for pair in pairs]
                     if 'predicted_skeleton_prefix' in r:
@@ -504,6 +531,10 @@ def compute_derived_metrics(
                     for column in (f'fvu_{split}', f'log10_fvu_{split}', f'r2_{split}',
                                    f'only_approx_fvu_{split}', f'only_approx_log10_fvu_{split}'):
                         r[column] = np.where(answered, np.asarray(r[column], dtype=float), np.nan)
+                    # ... and a failed prediction has recovered nothing, whatever values it left behind
+                    for column in (f'numeric_recovery_{split}', f'numeric_recovery_relative_{split}'):
+                        if column in r:
+                            r[column] = np.asarray(r[column], dtype=bool) & answered
 
                 if 'skeleton_simplified' not in r:
                     r['skeleton_simplified'] = list(r['skeleton'])
@@ -561,6 +592,24 @@ def compute_derived_metrics(
                     ps is not None and ps == sk
                     for ps, sk in zip(pred_skel, skel_sim)
                 ])
+
+                # ── The same question with fewer numbers masked ───
+                # `symbolic_recovery` masks every number: the structure is right. With only the fittable constants
+                # masked, the numbers of the structure (exponents, root indices) have to be right as well. With
+                # nothing masked, the constants have to be right too, and what is right for a fitted constant is what
+                # numeric recovery measures: the law is reproduced to float32 precision on the validation points.
+                # (A token-by-token comparison of numbers is not available: the canonical form spreads a rational
+                # through the tree, `1.5 * x2` is `(3 * x2) / 2`.) Each level implies the one before it.
+                if fittable_mask_fn is not None and fittable_pairs:
+                    r['symbolic_recovery_mask_fittable'] = np.array([
+                        bool(agrees) and not miss and fp[0] is not None and fp[0] == fp[1]
+                        for agrees, miss, fp in zip(r['symbolic_recovery'], failed, fittable_pairs)
+                    ])
+                    if 'numeric_recovery_val' in r:
+                        r['symbolic_recovery_mask_none'] = np.array([
+                            bool(typed) and bool(numeric)
+                            for typed, numeric in zip(r['symbolic_recovery_mask_fittable'], r['numeric_recovery_val'])
+                        ])
 
                 # ── Length ratio ──────────────────────────────────
                 r['skeleton_length_ratio'] = np.array([
@@ -728,7 +777,11 @@ def derive_metrics(
     def engine_mask(tokens: list[str], _engine: Any = engine) -> list[str] | None:
         return list(_engine.mask(list(tokens), 'all', collect=False))
 
+    def engine_mask_fittable(tokens: list[str], _engine: Any = engine) -> list[str] | None:
+        return list(_engine.mask(list(tokens), 'fittable', collect=False))
+
     mask_fn: MaskFn | None = engine_mask if engine is not None and hasattr(engine, "mask") else None
+    fittable_mask_fn: MaskFn | None = engine_mask_fittable if engine is not None and hasattr(engine, "mask") else None
 
     # Shallow-copy the snapshot as the nested leaf: compute_derived_metrics only ADDS derived keys to
     # the leaf (and rebinds the converted prefix columns), so the derived columns land in this copy
@@ -736,5 +789,6 @@ def derive_metrics(
     leaf = dict(snapshot)
     results = {"model": {"results": {"test": {0: leaf}}}}
     compute_derived_metrics(results, test_sets=["test"], operator_arity=operator_arity, simplify_fn=simplify_fn, mdl_fn=mdl_fn,
-                            convert_fn=convert_fn, mask_fn=mask_fn, impute_failed=impute_failed)
+                            convert_fn=convert_fn, mask_fn=mask_fn, impute_failed=impute_failed,
+                            fittable_mask_fn=fittable_mask_fn)
     return results["model"]["results"]["test"][0]

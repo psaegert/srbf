@@ -75,7 +75,11 @@ METRICS = [
     ("numeric_recovery_val", "Numeric recovery (vNRR)", "vNRR", "Recovery", "rate", True, "main", "pct", None,
      "Share of laws whose prediction reproduces the validation targets to float32 precision: FVU on the validation split at or below 2^-23. A failed prediction is a miss."),
     ("symbolic_recovery", "Symbolic recovery (SRR)", "SRR", "Recovery", "rate", True, "main", "pct", None,
-     "Share of laws whose predicted expression has the same certified canonical form (SimpliPy, f64) as the law after both are simplified: structurally the same law, constants matched up to the judge's tolerance."),
+     "Share of laws whose predicted expression has the same certified canonical form (SimpliPy, f64) as the law once every number is masked: structurally the same law, whatever its constants and exponents."),
+    ("symbolic_recovery_mask_fittable", "Symbolic recovery with exponents", "SRR + exp.", "Recovery", "rate", True, "more", "pct", None,
+     "Symbolic recovery with only the fittable constants masked: the numbers of the structure, exponents and root indices, have to be the law's as well. x^2 and x^3 differ here, and an exponent left at 1.9999 is a miss."),
+    ("symbolic_recovery_mask_none", "Symbolic recovery with all numbers", "SRR + numbers", "Recovery", "rate", True, "more", "pct", None,
+     "Symbolic recovery with nothing masked: the structure and its exponents are the law's, and its fitted constants reproduce the law to float32 precision on the validation points. The law itself was found."),
     ("numeric_recovery_fit", "Numeric recovery on support (fNRR)", "fNRR", "Recovery", "rate", True, "more", "pct", None,
      "The float32-precision indicator on the support points the method was fitted on. fNRR above vNRR means fitting without generalizing."),
     ("skeleton_match_raw", "Exact skeleton match (raw)", "raw match", "Recovery", "rate", True, "more", "pct", None,
@@ -237,7 +241,7 @@ def load_rows(root: str) -> dict[str, dict[tuple[str, int], dict[int, dict[str, 
                 vals: dict[str, float | None] = {}
                 for k in RATE_KEYS:
                     v = fnum(r.get(k))
-                    vals[k] = 0.0 if v is None else v
+                    vals[k] = (0.0 if v is None else v) if k in r else None   # a column these rows do not have is no rate of 0
                 for k in CONT_KEYS:
                     vals[k] = fnum(r.get(k))
                 data[r["model"]][(r["catalog"], int(r["rung"]))][int(r["row"])] = vals
@@ -274,7 +278,8 @@ def summarize_cell(rows: dict[int, dict[str, Any]], expected: int | None) -> dic
         "state": "complete" if expected is None or len(rows) >= expected else "partial",
         "n": len(vals), "ok": int(sum(1 for x in vals if x["success"])), "m": {}}
     for k in RATE_KEYS:
-        cell["m"][k] = [int(sum(1 for x in vals if x[k])), len(vals)]
+        if any(x[k] is not None for x in vals):
+            cell["m"][k] = [int(sum(1 for x in vals if x[k])), len(vals)]
     for k in CONT_KEYS:
         xs = [x[k] for x in vals if x[k] is not None and not math.isnan(x[k])]
         if not xs:

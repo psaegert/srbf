@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`srbf.result_processing.WORST_VALUE`). No other analysis metric is filled in: most can be arbitrarily
   bad, and a failed problem has no value there (`None`, NaN in the fit columns). A problem is failed when `prediction_success` is false, whatever text the method left behind.
   `derive_metrics(..., impute_failed=False)` leaves the failed problems out of every analysis metric.
+- **A failed prediction has recovered nothing.** `numeric_recovery_*` and `numeric_recovery_relative_*` are
+  false for a problem whose `prediction_success` is false, whatever values the method left behind.
 - **R² has no floor.** `r2_*` is `1 - FVU`: negative for an answer worse than the mean predictor, `-inf` for a
   non-finite one. It was clipped to `[0, 1]`. One diverging answer decides a mean of it, so `srbf analyze`
   reports its median (`Metric(..., statistic="median")`).
@@ -76,6 +78,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   function; nothing in srbf has to be edited for an in-process adapter.
 - **What a worker reports about itself is stored with the results**: `__meta__["worker"]` holds the return
   value of the worker's `info()` (its interpreter, package versions, checkpoint).
+- **Symbolic recovery at three levels of masking.** `symbolic_recovery` masks every number (the structure is
+  the law's); `symbolic_recovery_mask_fittable` masks only the fittable constants, so exponents and root
+  indices have to be the law's as well; `symbolic_recovery_mask_none` also asks for the constants, measured as
+  numeric recovery is. Each level implies the one before it, and agreement at a stricter level is a witness
+  at the looser one. The two new columns need an engine.
 - **`precision_score`, `recall_score` and `edit_distance_norm`** among the derived metrics: the two parts of
   the token F1, and the edit distance over the length of the longer sequence.
 - **The documentation is tested against the package** (`tests/test_docs.py`): every command, flag, adapter

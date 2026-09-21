@@ -135,7 +135,8 @@ as a difference, whichever side wrote it.
 No simplifier is complete, so the judge looks in a second place as well: the two skeletons as they
 were written, settled the same way. Agreement in either place is a sound witness that the two
 expressions are one family, because simplification never changes the function and masking only
-forgets numbers. `skeleton_simplified` holds \(\bar\tau\) in the judged form. When simplification changed the prediction, the skeleton as the method wrote it
+forgets numbers. Agreement at a [stricter level of masking](#symbolic_recovery_mask_fittable-symbolic_recovery_mask_none)
+is a witness too. `skeleton_simplified` holds \(\bar\tau\) in the judged form. When simplification changed the prediction, the skeleton as the method wrote it
 is kept in `predicted_skeleton_prefix_as_emitted`.
 
 ### `symbolic_recovery`
@@ -143,6 +144,27 @@ is kept in `predicted_skeleton_prefix_as_emitted`.
 \(\mathbb{1}[\hat\tau = \bar\tau]\): the two skeletons are the same token sequence. Constants are
 masked on both sides, so the structure has to match and the values of the constants do not enter;
 whether the constants are right is what numeric recovery measures.
+
+### `symbolic_recovery_mask_fittable`, `symbolic_recovery_mask_none`
+
+The same question with fewer numbers masked. Each level implies the one before it, and a failed
+problem is a miss at all three.
+
+| column | masked | has to be the law's |
+|---|---|---|
+| `symbolic_recovery` | every number | the structure |
+| `symbolic_recovery_mask_fittable` | the fittable constants: coefficients and offsets | the structure and its numbers: exponents, root indices |
+| `symbolic_recovery_mask_none` | nothing | the structure, its numbers and the constants |
+
+For the law `x1 ** 2 + 1.5 * x2`, the answer `x1 * x1 + 1.4 * x2` is recovered at the first two
+levels, `x1 ** 3 + 1.5 * x2` at the first only, and `x1 ** 2.0000001 + 1.5 * x2`, an exponent the
+method left unsnapped, at the first only, although it fits to float32 precision. Which numbers are
+fittable is decided by the engine (`engine.mask(expression, 'fittable')`).
+
+A fitted constant is right when the answer reproduces the law: `symbolic_recovery_mask_none` is
+`symbolic_recovery_mask_fittable` together with `numeric_recovery_val`. Numbers are not compared
+token by token, because the canonical form spreads a rational through the expression (`1.5 * x2`
+is `(3 * x2) / 2`). Both columns need an engine.
 
 ### `f1_score`
 
@@ -213,6 +235,7 @@ These are raw columns, written by the adapter and not recomputed:
 The [results explorer](https://psaegert.github.io/srbf/) calls the success metrics *rates* and
 follows the same rules: a failure counts 0 in a rate and the worst value where a metric has one,
 and every other metric describes the answers that were made. It shows the same quantities under reader names: *Numeric recovery (vNRR)* is `numeric_recovery_val`, *fNRR* is `numeric_recovery_fit`,
-*Expression length ratio* is `skeleton_length_ratio`, *Prediction success rate* is the mean of
+*Symbolic recovery with exponents* and *with all numbers* are `symbolic_recovery_mask_fittable` and
+`symbolic_recovery_mask_none`, *Expression length ratio* is `skeleton_length_ratio`, *Prediction success rate* is the mean of
 `prediction_success`, and *Exact skeleton match (raw)* is the equality of the skeletons as written,
 without simplification.

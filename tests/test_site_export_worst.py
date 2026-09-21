@@ -62,3 +62,23 @@ def test_a_paired_contrast_ships_in_both_readings():
     n, total = paired["f1_score" + export.ANSWERED][:2]
     assert n == 1 and math.isclose(total, 0.3)                             # the one law both answered
     assert "log10_fvu_val" + export.ANSWERED not in paired                 # a metric without a worst value has one reading
+
+
+def test_a_rate_the_rows_do_not_carry_is_absent_and_not_zero():
+    """Rows judged before a metric existed have no column for it: the cell then has no such rate, where a rate
+    of 0 would say that the method recovered nothing."""
+    rows = {0: _row(success=1.0, symbolic_recovery=1.0), 1: _row(success=1.0)}
+    for row in rows.values():
+        row["symbolic_recovery_mask_fittable"] = None
+        row["symbolic_recovery_mask_none"] = None
+    cell = export.summarize_cell(rows, None)
+    assert cell["m"]["symbolic_recovery"] == [1, 2]
+    assert "symbolic_recovery_mask_fittable" not in cell["m"] and "symbolic_recovery_mask_none" not in cell["m"]
+    rows[0]["symbolic_recovery_mask_fittable"], rows[1]["symbolic_recovery_mask_fittable"] = 1.0, 0.0
+    assert export.summarize_cell(rows, None)["m"]["symbolic_recovery_mask_fittable"] == [1, 2]
+
+
+def test_the_three_levels_of_symbolic_recovery_are_in_the_registry():
+    keys = [m["key"] for m in export.registry_json()]
+    at = keys.index("symbolic_recovery")
+    assert keys[at:at + 3] == ["symbolic_recovery", "symbolic_recovery_mask_fittable", "symbolic_recovery_mask_none"]

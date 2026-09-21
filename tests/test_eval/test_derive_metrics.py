@@ -429,3 +429,64 @@ def test_an_exception_stored_as_a_placeholder_is_read_as_the_failed_prediction_i
     assert scored["f1_score"][3] is None
     report = bootstrap_report(scored, "numeric_recovery_val")
     assert report["n_groups"] == 3 and report["n_rows"] == 3             # the exception counts, the undrawn problem does not
+
+
+def _levels_snapshot():
+    """One law, x1 ** 2 + 1.5 * x2, and five answers on its own points."""
+    from symbolic_data.token_ops import normalize_skeleton
+    rng = np.random.default_rng(0)
+    x = rng.uniform(0.5, 2.0, size=(64, 2))
+
+    def values(power, factor):
+        return (x[:, 0] ** power + factor * x[:, 1]).reshape(-1, 1)
+
+    law = ['+', 'pow', 'x1', '2', '*', '1.5', 'x2']
+    answers = [
+        (['+', '*', 'x1', 'x1', '*', '1.5', 'x2'], values(2, 1.5), True),              # the law, spelled with a product
+        (['+', 'pow', 'x1', '2', '*', '1.4', 'x2'], values(2, 1.4), True),             # its family, a constant off
+        (['+', 'pow', 'x1', '3', '*', '1.5', 'x2'], values(3, 1.5), True),             # another exponent
+        (['+', 'pow', 'x1', '2.0000001', '*', '1.5', 'x2'], values(2.0000001, 1.5), True),   # an exponent left unsnapped
+        (['+', 'pow', 'x1', '2', '*', '1.5', 'x2'], values(2, 1.5), False),            # the law itself from a method that failed
+    ]
+    n = len(answers)
+    y = values(2, 1.5)
+    return {
+        'skeleton': [normalize_skeleton(law)] * n, 'ground_truth_prefix': [law] * n,
+        'x': [x] * n, 'y': [y] * n, 'x_val': [x] * n, 'y_val': [y] * n,
+        'y_pred': [a[1] for a in answers], 'y_pred_val': [a[1] for a in answers],
+        'predicted_expression_prefix': [a[0] for a in answers],
+        'predicted_skeleton_prefix': [normalize_skeleton(a[0]) for a in answers],
+        'prediction_success': [a[2] for a in answers],
+        'benchmark_eq_id': list('ABCDE'), 'placeholder': [False] * n,
+    }
+
+
+def test_symbolic_recovery_is_asked_at_three_levels_of_masking():
+    """Every number masked: the structure is right. Only the fittable constants masked: the exponents are right
+    as well. Nothing masked: the constants are right too, to the precision numeric recovery asks for. Each level
+    implies the one before it, and a failed prediction is a miss at all three."""
+    from simplipy import SimpliPyEngine
+    scored = derive_metrics(_levels_snapshot(), engine=SimpliPyEngine.load('acj-5-4-llm', install=True))
+    assert list(scored['symbolic_recovery']) == [True, True, True, True, False]
+    assert list(scored['symbolic_recovery_mask_fittable']) == [True, True, False, False, False]
+    assert list(scored['symbolic_recovery_mask_none']) == [True, False, False, False, False]
+    assert list(scored['numeric_recovery_val']) == [True, False, False, True, False]    # the unsnapped exponent fits, and is not the law's
+
+
+def test_agreement_at_the_stricter_level_is_a_witness_at_the_looser_one():
+    """The levels are nested by construction, whatever the simplifier finds at either of them."""
+    from srbf.result_processing import _judged_pair
+
+    def refuses(tokens):
+        raise ValueError("no canonical form")
+
+    same = ['+', 'pow', 'x1', '2', '<constant>']
+    law, prediction = _judged_pair(refuses, lambda t: None, None, ['sin', 'x1'], None, ['cos', 'x1'], fittable=(same, list(same)))
+    assert law == prediction and law is not None
+    law, prediction = _judged_pair(refuses, lambda t: None, None, ['sin', 'x1'], None, ['cos', 'x1'])
+    assert law != prediction
+
+
+def test_the_stricter_levels_need_an_engine():
+    scored = derive_metrics(_levels_snapshot(), operator_arity={'+': 2, '*': 2, 'pow': 2})
+    assert 'symbolic_recovery' in scored and 'symbolic_recovery_mask_fittable' not in scored and 'symbolic_recovery_mask_none' not in scored
