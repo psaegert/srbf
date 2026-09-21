@@ -5,12 +5,15 @@ srbf's derive_metrics plus the 2026-07 site's derived columns, one row per law x
 
   <out.js>                       window.RESULTS_V2: release, catalogs, rungs, methods, the METRIC REGISTRY, and per
                                  method x catalog x rung cell: n laws, n successful, and for every metric
-                                 [n defined, n finite, sum, sum of squares] (rates: [hits, n]); status; timing.
+                                 [n defined, n finite, sum, sum of squares] (rates: [hits, n]); "e": the laws a
+                                 metric can be defined for, where that is not every law; "w": how many values of a
+                                 worst-value metric were filled in for failed predictions; status; timing.
   <out dir>/hist/<metric>.js     per-metric histograms of the same cells (pooled medians and the distribution view),
                                  loaded by the page on demand.
   <out dir>/paired.js            draw-1 paired contrasts per method pair x catalog x rung: 2x2 tables for the rate
                                  metrics (exact McNemar on the client), [n, sum d, sum d^2, wins, losses] for the
-                                 continuous ones.
+                                 continuous ones; a worst-value metric also as "<key>@answered", over the laws both
+                                 methods answered.
 
 LOCAL-ONLY METHODS. The methods named in --public go into the release files the site ships. A method named in
 --private is written to --private-dir only, a directory outside the deployed tree (results-site/README.md,
