@@ -911,7 +911,7 @@ test('R² has no floor and is read by its median', async ({ page }) => {
   expect(reg.lo).toBeLessThan(0);
   expect(reg.ranks).not.toContain('r2_val');   // it orders the answers exactly as the FVU does
   expect(reg.paired).not.toContain('r2_val');
-  expect(reg.worst).toEqual(['edit_distance_norm=1', 'f1_score=0', 'f1_score_unique_variables=0', 'precision_score=0',
+  expect(reg.worst).toEqual(['f1_score=0', 'f1_score_unique_variables=0', 'precision_score=0',
     'precision_unique_variables=0', 'recall_score=0', 'recall_unique_variables=0']);
   // the mean is chosen, the median is drawn, and the axis says so
   const chart = page.locator(V2 + ' .v2plot svg').first();

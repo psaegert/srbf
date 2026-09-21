@@ -17,11 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **What a failed problem counts in an analysis metric follows from the metric's range.** `derive_metrics`
   wrote the worst fit into a problem without an answer (FVU infinite, R² 0) and left the structural columns
   empty, so a mean R² mixed how often a method answers into how well it fits, and a mean token overlap rose
-  when a method failed on the hard laws. Where the range has a worst value, a failed problem takes it: 0 for
-  `f1_score`, `precision_score`, `recall_score` and the three variable-set columns, 1 for
-  `edit_distance_norm` (`srbf.result_processing.WORST_VALUE`). Every other analysis metric has no worst
-  value, since an answer can be arbitrarily bad, and has no value for a failed problem (`None`, NaN in the fit
-  columns). A problem is failed when `prediction_success` is false, whatever text the method left behind.
+  when a method failed on the hard laws. A failed problem counts 0 in the overlaps, whose range ends there:
+  `f1_score`, `precision_score`, `recall_score` and the three variable-set columns
+  (`srbf.result_processing.WORST_VALUE`). No other analysis metric is filled in: most can be arbitrarily
+  bad, and a failed problem has no value there (`None`, NaN in the fit columns). A problem is failed when `prediction_success` is false, whatever text the method left behind.
   `derive_metrics(..., impute_failed=False)` leaves the failed problems out of every analysis metric.
 - **R² has no floor.** `r2_*` is `1 - FVU`: negative for an answer worse than the mean predictor, `-inf` for a
   non-finite one. It was clipped to `[0, 1]`. One diverging answer decides a mean of it, so `srbf analyze`

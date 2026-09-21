@@ -30,23 +30,21 @@ to the law (token overlap, edit distances). What a failed problem counts there d
 range of the metric.
 
 Where the range has a worst value, a failed problem takes it, so that a method cannot raise its
-mean by failing on the hard laws. These are the overlaps, which are shares in \([0, 1]\), and the
-normalized edit distance:
+mean by failing on the hard laws. These are the overlaps, which are shares in \([0, 1]\):
 
 | column | a failed problem counts |
 |---|---|
 | `f1_score`, `precision_score`, `recall_score` | 0 |
 | `f1_score_unique_variables`, `precision_unique_variables`, `recall_unique_variables` | 0 |
-| `edit_distance_norm` | 1 |
 
 The table is `srbf.result_processing.WORST_VALUE`. The value is the end of the metric's range,
 not the score of some stand-in answer. To read these columns over the answers that were made
 instead, call `derive_metrics(..., impute_failed=False)`: a failed problem then has no value in
 them either. The results explorer offers the same choice.
 
-Every other analysis metric has no worst value, because an answer can be arbitrarily bad:
-\(R^2\) has no lower bound, a predicted expression no largest length, a ratio of lengths lies in
-\([0, \infty)\) with its ideal at 1. A failed problem has no value there (`None`, or NaN in the
+No other analysis metric is filled in. Most have no worst value, because an answer can be
+arbitrarily bad: \(R^2\) has no lower bound, a predicted expression no largest length, a ratio of
+lengths lies in \([0, \infty)\) with its ideal at 1. A failed problem has no value there (`None`, or NaN in the
 numeric columns), and none is filled in. Summaries of these columns describe the answers a method
 gave, so read them next to the share of problems it answered: the
 [results explorer](https://psaegert.github.io/srbf/) draws a point hollow when that share is below
@@ -160,8 +158,8 @@ uses. The precision of an empty answer is 0 by definition.
 
 The Levenshtein distance between the two prefix token sequences: the number of token insertions,
 deletions and substitutions that turn one into the other. `edit_distance_norm` divides it by the
-length of the longer sequence, which puts it in \([0, 1]\): 0 for the same sequence, and 1 is
-what a wrong answer tends to as it grows without bound.
+length of the longer sequence, which puts it in \([0, 1]\). Both describe the answers that were
+made: a failed problem has no value in either.
 
 ### `zss_edit_distance`
 

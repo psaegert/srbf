@@ -247,10 +247,9 @@
             budget once the method has finished every selected catalog there, so every point, row
             and rank is over the same laws. A rate counts every law, and a failed prediction is a
             miss. A metric whose range has a worst value counts every law too: a failed prediction
-            takes that value, 0 for the token and variable overlaps and 1 for the normalized edit
-            distance; the explorer can leave the failed predictions out of these metrics instead.
-            Every other metric has no worst value, since an answer can be arbitrarily
-            bad, and describes the answers that were made; a point that rests on fewer than 90 % of
+            takes that value: the token and variable overlaps, where it counts 0. The explorer can
+            leave the failed predictions out of these metrics instead. Every other metric describes
+            the answers that were made, since most can be arbitrarily bad; a point that rests on fewer than 90 % of
             the laws is drawn hollow, and the threshold can be moved. Intervals are 95 %: a
             t-interval for a mean, an order-statistic interval for a median, and for a rate
             \(\hat{p}\) over \(K\) laws the Wilson score interval
@@ -801,11 +800,6 @@
             token insertions, deletions, and substitutions to turn one into the other), normalized
             by the longer length. Unlike the set-based F1, this is order- and count-sensitive: it
             measures how much of the sequence structure is wrong, not just the vocabulary.
-          </p>
-          <p data-for="2026-09">
-            A failed prediction counts 1, the end of the range: the value a wrong answer tends to
-            as it grows without bound. The distance that is not normalized has no such end, and
-            describes the answers that were made.
           </p>
         </article>
 

@@ -311,18 +311,17 @@ def _answered(row_columns: Mapping[str, Any], prediction_key: str) -> np.ndarray
 
 #: Analysis metrics whose range has a worst value, and that value. A problem the method failed takes it, so a method
 #: cannot raise its mean similarity by failing on the hard laws. The value is the end of the metric's RANGE, not the
-#: score of some stand-in answer: an overlap is a share in [0, 1] and nothing is below 0; a normalized edit distance is
-#: a share of the longer sequence, and an answer that grows without bound tends to 1. Every other analysis metric is
-#: unbounded on the bad side (R^2, FVU, a length, a ratio of lengths, a raw distance) and has no worst value to take.
+#: score of some stand-in answer: an overlap is a share in [0, 1] and nothing is below 0. These are the overlaps and
+#: nothing else. R^2, FVU, a length, a ratio of lengths and a raw distance have no bound on the bad side, and the
+#: edit distances, normalized or not, describe the answers that were made.
 WORST_VALUE: dict[str, float] = {
-    'f1_score': 0.0, 'precision_score': 0.0, 'recall_score': 0.0, 'edit_distance_norm': 1.0,
+    'f1_score': 0.0, 'precision_score': 0.0, 'recall_score': 0.0,
     'f1_score_unique_variables': 0.0, 'precision_unique_variables': 0.0, 'recall_unique_variables': 0.0,
 }
 
 
 def _normalized_edit_distance(a: Sequence[str] | None, b: Sequence[str] | None) -> float | None:
-    """The edit distance over the length of the longer sequence, so in [0, 1]: 0 for the same sequence, and what a
-    wrong answer tends to as it grows without bound is 1."""
+    """The edit distance over the length of the longer sequence, so in [0, 1]: 0 for the same sequence."""
     if a is None or b is None:
         return None
     longest = max(len(a), len(b))

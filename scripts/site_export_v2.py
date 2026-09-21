@@ -64,8 +64,8 @@ NB = 128
 
 # key, label, short, group, kind, higher_is_better (None = 1 is ideal / descriptive), tier, format, histogram (lo, hi, transform), description
 # Rate metrics are defined for EVERY law (a failed prediction is a miss). So are the continuous metrics whose range
-# has a worst value (WORST below): a failed prediction takes it. Every other continuous metric has no worst value --
-# R^2, a length, a ratio of lengths can be arbitrarily bad -- and describes the answers that were made; the page
+# has a worst value (WORST below, the overlaps): a failed prediction takes it. Every other continuous metric
+# describes the answers that were made -- R^2, a length, a ratio of lengths can be arbitrarily bad --; the page
 # marks a point as hollow when fewer laws than the reader's threshold have a value. Ground-truth descriptors cover
 # every law.
 # NO WALL-CLOCK METRIC IS PUBLISHED. Seconds measured where a unit happened to run depend on the node, its GPU
@@ -121,7 +121,7 @@ METRICS = [
     ("recall_score", "Skeleton token recall", "token recall", "Skeleton similarity", "cont", True, "more", "num3", (0.0, 1.0, None),
      "Share of the law's distinct tokens that occur in the prediction. A failed prediction counts 0."),
     ("edit_distance_norm", "Skeleton edit distance (normalized)", "edit dist. norm", "Skeleton similarity", "cont", False, "more", "num3", (0.0, 1.0, None),
-     "Levenshtein distance between the prefix token sequences over the longer length, in [0, 1]. A failed prediction counts 1, the end of the range: the value an answer tends to as it grows without bound."),
+     "Levenshtein distance between the prefix token sequences over the longer length, in [0, 1]."),
     ("edit_distance", "Skeleton edit distance", "edit dist.", "Skeleton similarity", "cont", False, "more", "num1", (0.0, 64.0, None),
      "Levenshtein distance between the prefix token sequences."),
     ("zss_edit_distance", "Tree edit distance (ZSS)", "tree edit dist.", "Skeleton similarity", "cont", False, "more", "num1", (0.0, 128.0, None),
@@ -156,7 +156,7 @@ METRICS = [
 # The reader may leave the failed predictions out instead. Nothing is exported twice for that: a cell names how many
 # of its values were filled in ("w"), and the page takes that many off the sums and out of the histogram bin of the
 # worst value. Only a paired contrast cannot be undone that way, so it ships in both readings (key + ANSWERED).
-WORST = {"f1_score": 0.0, "precision_score": 0.0, "recall_score": 0.0, "edit_distance_norm": 1.0,
+WORST = {"f1_score": 0.0, "precision_score": 0.0, "recall_score": 0.0,
          "f1_score_unique_variables": 0.0, "precision_unique_variables": 0.0, "recall_unique_variables": 0.0}
 # Metrics without a bound on the bad side AND with a heavy tail there: one answer decides a mean, so the page reads
 # the median whatever the reader chose. R^2 = 1 - FVU is a monotone map of the FVU, so near 1, where its own linear

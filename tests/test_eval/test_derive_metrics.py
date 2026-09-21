@@ -352,13 +352,13 @@ def _three_problems_one_failed(failed_skeleton):
 
 @pytest.mark.parametrize("failed_skeleton", [None, ["+", "x1", "<constant>"]], ids=["nothing returned", "text left behind"])
 def test_a_failed_problem_takes_the_worst_value_where_the_range_has_one(failed_skeleton) -> None:
-    """An overlap is a share in [0, 1] and a normalized edit distance is a share of the longer sequence: both
-    ranges end, and a problem the method failed sits at the bad end. Leaving it out would let a method raise its
-    mean similarity by failing on the hard laws. A failure is a failure whatever text it left behind."""
+    """An overlap is a share in [0, 1]: the range ends, and a problem the method failed sits at the bad end.
+    Leaving it out would let a method raise its mean overlap by failing on the hard laws. A failure is a failure
+    whatever text it left behind."""
     from srbf.result_processing import WORST_VALUE
     scored = derive_metrics(_three_problems_one_failed(failed_skeleton), operator_arity={"+": 2, "sin": 1})
     assert WORST_VALUE == {
-        "f1_score": 0.0, "precision_score": 0.0, "recall_score": 0.0, "edit_distance_norm": 1.0,
+        "f1_score": 0.0, "precision_score": 0.0, "recall_score": 0.0,
         "f1_score_unique_variables": 0.0, "precision_unique_variables": 0.0, "recall_unique_variables": 0.0}
     for column, worst in WORST_VALUE.items():
         values = [float(v) for v in scored[column]]
@@ -373,8 +373,8 @@ def test_a_failed_problem_has_no_value_where_the_range_has_no_end(failed_skeleto
     """A length, a ratio of lengths, a raw distance, R^2: each can be arbitrarily bad, so none has a worst value
     to take, and the column describes the answers that were made."""
     scored = derive_metrics(_three_problems_one_failed(failed_skeleton), operator_arity={"+": 2, "sin": 1})
-    for column in ("predicted_skeleton_prefix_length", "skeleton_length_ratio", "predicted_n_constants",
-                   "n_constants_delta", "edit_distance", "zss_edit_distance", "predicted_total_nestedness"):
+    for column in ("predicted_skeleton_prefix_length", "skeleton_length_ratio", "predicted_n_constants", "n_constants_delta",
+                   "edit_distance", "edit_distance_norm", "zss_edit_distance", "predicted_total_nestedness"):
         assert scored[column][1] is not None and scored[column][2] is None, column
     assert np.isnan(float(scored["r2_val"][2])) and np.isnan(float(scored["log10_fvu_val"][2]))
 
@@ -383,7 +383,7 @@ def test_a_placeholder_row_is_not_a_failed_problem() -> None:
     snapshot = _three_problems_one_failed(None)
     snapshot["placeholder"] = [False, False, True]
     scored = derive_metrics(snapshot, operator_arity={"+": 2, "sin": 1})
-    assert scored["f1_score"][2] is None and scored["edit_distance_norm"][2] is None
+    assert scored["f1_score"][2] is None and scored["recall_score"][2] is None
 
 
 def test_the_normalized_edit_distance_is_a_share_of_the_longer_sequence() -> None:
@@ -425,7 +425,7 @@ def test_an_exception_stored_as_a_placeholder_is_read_as_the_failed_prediction_i
     before = list(snapshot["placeholder"])
     scored = derive_metrics(snapshot, operator_arity={"+": 2, "sin": 1})
     assert list(scored["placeholder"]) == [False, False, False, True] and snapshot["placeholder"] == before
-    assert float(scored["f1_score"][2]) == 0.0 and float(scored["edit_distance_norm"][2]) == 1.0
+    assert float(scored["f1_score"][2]) == 0.0 and float(scored["recall_score"][2]) == 0.0
     assert scored["f1_score"][3] is None
     report = bootstrap_report(scored, "numeric_recovery_val")
     assert report["n_groups"] == 3 and report["n_rows"] == 3             # the exception counts, the undrawn problem does not
