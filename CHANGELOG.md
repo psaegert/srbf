@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Symbolic recovery judges law and prediction by one function.** Both are brought into canonical form with
+  their numbers, then every number is masked (`pi` and `e` included) and the skeleton is simplified and masked
+  until it stands still. Before, the law was judged in the form its catalog wrote and a number that
+  simplification wrote itself stayed unmasked, so `x1 * x1` and `x1 ** 2`, `pow(u, 0.5)` and `rootn(u, 2)`, or
+  `x2 * x4 / (c * x4 ** 3)` and `c * x2 / x4 ** 2` were different skeletons: an answer in the other spelling
+  could not be recovered symbolically. A match of the skeletons as written counts as well, since no simplifier
+  is complete. `skeleton_simplified` holds the law's judged form.
+- **A method that raises has failed the problem.** An exception escaping an in-process adapter was recorded as a
+  placeholder row, which every summary leaves out; it is a failed prediction, a miss on every rate, like a
+  failure the adapter reports itself. A placeholder marks only a problem the catalog could not pose.
 - **Symbolic recovery of a failed prediction is a miss.** `derive_metrics` wrote `None` for a problem
   without a prediction, so `bootstrap_report`, `srbf analyze` and the paired reports computed symbolic
   recovery over the successful predictions only, while numeric recovery counted every problem. Both are
@@ -32,8 +42,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A worker is handed the problem and nothing of the law.** `meta` carries the problem's identifiers and
   sampling parameters (`benchmark_eq_id`, `eval_row_index`, `n_support`, `noise_level`, the variable
   names); the law's skeleton, expression, constants and complexity stay on srbf's side.
-- **Every method sees every column.** `drop_unused_variables` (and the PySR block's `padding`) selected the
-  columns the law uses before handing a problem over. The keys are still accepted, and ignored.
+- **Every method sees every column.** `drop_unused_variables` (and the PySR block's `padding`, and
+  `remove_padding` of the NeSymReS and E2E adapters) selected the columns the law uses before handing a problem
+  over. The keys are still accepted, and ignored.
 - **The documentation is rewritten**: a quickstart that needs no GPU and no model, a concepts page, a command
   reference, a metric reference with the definition of every derived column, the 29 catalogs with their
   sources and licenses, and one page each for running, results, paired comparisons, models, adapters and

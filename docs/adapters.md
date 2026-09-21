@@ -254,8 +254,9 @@ model_adapter:
   hyperparameters: {beam: 8}
 ```
 
-Catch your method's failures as above: a prediction that failed counts as a miss, whereas an
-exception that escapes the adapter turns the problem into a placeholder that no summary sees
-([Results](results.md#failures-and-placeholders)). The `e2e` and `nesymres` adapters in
+A prediction that failed counts as a miss. An exception that escapes the adapter is recorded the
+same way, with the exception as the row's `error`
+([Results](results.md#failures-and-placeholders)); catching your method's failures as above lets
+you say more about them. The `e2e` and `nesymres` adapters in
 `src/srbf/model_adapters.py` are worked examples. The driver fits one problem at a time, so nothing
 competes with your method for the machine while it is timed.

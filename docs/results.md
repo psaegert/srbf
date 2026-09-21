@@ -47,14 +47,14 @@ An adapter may add columns of its own; the Flash-ANSR adapter records `generatio
 
 ### Failures and placeholders
 
-A problem the method could not answer is a normal row with `prediction_success: False` and the
-reason in `error`. It counts as a miss in every rate ([Metrics](metrics.md#rates-and-diagnostics)).
+Whenever a method errors or returns no result, it has failed the problem. The row is a normal row
+with `prediction_success: False` and the reason in `error`, whether the method reported the failure
+itself, returned something that cannot be read, ran into its time limit, or raised an exception.
+It counts as a miss in every rate ([Metrics](metrics.md#rates-and-diagnostics)).
 
-A **placeholder** row marks a problem that produced no evaluation at all: the catalog could not
-draw valid points for the law within `max_trials`, or an in-process adapter raised an exception it
-did not handle. Placeholders keep the rows of different runs aligned and are left out of every
-summary. An adapter should therefore catch its own failures and report them as unsuccessful
-predictions; the worker protocol does this for you.
+A **placeholder** row marks a problem that was never posed: the catalog could not draw valid
+points for the law within `max_trials`. Placeholders keep the rows of different runs aligned and
+are left out of every summary, for every method alike.
 
 ### What a result file records
 

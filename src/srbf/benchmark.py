@@ -412,14 +412,17 @@ class Benchmark:
         return record
 
     def _handle_exception(self, problem: Any, exc: Exception) -> dict[str, Any]:
+        """A method that raises has failed the problem: the row is a failed prediction, a miss on every rate, like
+        a failure the adapter reports itself. It is NOT a placeholder: a placeholder marks a problem that was
+        never posed (the catalog could not draw valid points), and summaries leave those out."""
         warnings.warn(
-            f"Problem evaluation failed with an unexpected error: {exc}. Recording placeholder result.",
+            f"The method raised on this problem ({type(exc).__name__}: {exc}); recorded as a failed prediction.",
             RuntimeWarning,
         )
         record = problem.clone_metadata()
-        record["placeholder"] = True
-        record.setdefault("placeholder_reason", "adapter_exception")
-        record["error"] = str(exc)
+        record["placeholder"] = False
+        record["placeholder_reason"] = None
+        record["error"] = f"{type(exc).__name__}: {exc}"
         record["prediction_success"] = False
         return record
 

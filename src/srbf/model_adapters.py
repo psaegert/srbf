@@ -485,13 +485,6 @@ class E2EAdapter(EvaluationModelAdapter):
         X_val = sample.x_validation.copy()
         y_support = (sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support).copy()
 
-        mask, used_variables = _compute_variable_mask(record.get("variables"), record.get("skeleton"))
-        if mask is not None:
-            X_support = X_support[:, mask]
-            X_val = X_val[:, mask] if X_val.size else X_val
-            if used_variables:
-                record["variable_names"] = used_variables
-
         fit_time_start = time.time()
         try:
             self._estimator.fit(X_support, y_support, verbose=False)
@@ -550,7 +543,7 @@ class E2EAdapter(EvaluationModelAdapter):
 
             # E2E spells the columns it was handed x_0, x_1, ...; the ground truth spells the same
             # columns x1, x2, ... , so both the stored expression and its prefix are mapped back.
-            names = skeleton_variable_names(used_variables or record.get("variables") or record.get("variable_names"))
+            names = skeleton_variable_names(record.get("variables") or record.get("variable_names"))
             predicted_expression = rename_variables_in_infix(predicted_expression, names, first_index=E2E_FIRST_INDEX)
             record["predicted_expression"] = predicted_expression
             predicted_prefix = self.simplipy_engine.read_infix(predicted_expression)  # engine grammar, not the raw reader tokens
@@ -580,7 +573,7 @@ class NeSymReSAdapter(EvaluationModelAdapter):
         *,
         device: str = "cpu",
         beam_width: int | None = None,
-        remove_padding: bool = True,
+        remove_padding: bool = False,
         debug: bool = False,
     ) -> None:
         if not _HAVE_NESYMRES:  # pragma: no cover - defensive guard
@@ -590,7 +583,8 @@ class NeSymReSAdapter(EvaluationModelAdapter):
         self.simplipy_engine = simplipy_engine
         self.device = device
         self.beam_width = beam_width
-        self.remove_padding = remove_padding
+        # accepted, ignored: which columns a law uses is the answer, so the method is handed every column
+        self.remove_padding = False
         self.debug = debug
         self._fit_cfg_params: Any | None = None
         self._max_variables: int | None = None
@@ -621,16 +615,6 @@ class NeSymReSAdapter(EvaluationModelAdapter):
         X_support = sample.x_support.copy()
         X_validation = sample.x_validation.copy()
 
-        used_variables: list[str] | None = None
-        if self.remove_padding:
-            variables = record.get("variables") or record.get("variable_names")
-            mask, used_variables = _compute_variable_mask(variables, record.get("skeleton"))
-            if mask is not None:
-                X_support = X_support[:, mask]
-                X_validation = X_validation[:, mask]
-                if used_variables:
-                    record["variable_names"] = used_variables
-
         X_support = self._prepare_inputs(X_support)
         X_validation = self._prepare_inputs(X_validation)
         y_fit = (sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support).reshape(-1)
@@ -658,7 +642,7 @@ class NeSymReSAdapter(EvaluationModelAdapter):
         try:
             # NeSymReS spells the columns it was handed x_1, x_2, ...; the ground truth spells the
             # same columns x1, x2, ... , so both the stored expression and its prefix are mapped back.
-            names = skeleton_variable_names(used_variables or record.get("variables") or record.get("variable_names"))
+            names = skeleton_variable_names(record.get("variables") or record.get("variable_names"))
             predicted_expression = rename_variables_in_infix(str(predicted_expr), names, first_index=NESYMRES_FIRST_INDEX)
             record["predicted_expression"] = predicted_expression
             predicted_prefix = self.simplipy_engine.read_infix(predicted_expression)  # engine grammar, not the raw reader tokens
@@ -732,25 +716,6 @@ class NeSymReSAdapter(EvaluationModelAdapter):
 
 # ---------------------------------------------------------------------------
 # Helper utilities
-
-def _compute_variable_mask(
-    variables: Iterable[str] | None,
-    skeleton_tokens: Iterable[str] | None,
-) -> tuple[np.ndarray | None, list[str] | None]:
-    if not variables or not skeleton_tokens:
-        return None, None
-    skeleton_set = set(skeleton_tokens)
-    mask = []
-    kept = []
-    for var in variables:
-        keep = var in skeleton_set
-        mask.append(keep)
-        if keep:
-            kept.append(var)
-    if not any(mask):
-        return None, None
-    return np.array(mask, dtype=bool), kept
-
 
 def _extract_cfg_params(fitfunc: Any) -> Any:
     if hasattr(fitfunc, "cfg_params"):

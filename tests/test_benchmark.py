@@ -6,6 +6,7 @@ had to match); the overlap engine is removed in 0.5.0, so this is the single dri
 import pickle
 
 import numpy as np
+import pytest
 
 from srbf.benchmark import Benchmark
 from srbf.core import EvaluationSample, EvaluationResult
@@ -50,19 +51,20 @@ def _dummy(idx: int) -> EvaluationSample:
                             metadata={"sample_id": idx})
 
 
-def test_benchmark_records_placeholder_on_adapter_exception(capsys):
+def test_a_method_that_raises_has_failed_the_problem(capsys):
+    """An exception that escapes the adapter is a failure of the method, not a problem that was never posed: the
+    row is a failed prediction that every rate counts as a miss, not a placeholder that summaries leave out."""
     source = _ListSource([_dummy(0), _dummy(1)])
     bench = Benchmark(source=source, model_adapter=_FlakyAdapter(), result_store=ResultStore())
-    snapshot = bench.run(progress=False, verbose=False, summary_interval=1)
+    with pytest.warns(RuntimeWarning, match="recorded as a failed prediction"):
+        snapshot = bench.run(progress=False, verbose=False, summary_interval=1)
     output = capsys.readouterr().out
 
-    assert len(snapshot["placeholder"]) == 2
-    assert snapshot["placeholder"][0] is True
-    assert snapshot["prediction_success"][0] is False
-    assert snapshot["placeholder_reason"][0] == "adapter_exception"
+    assert snapshot["placeholder"] == [False, False]
+    assert snapshot["prediction_success"] == [False, True]
+    assert snapshot["placeholder_reason"][0] is None
+    assert snapshot["error"][0] == "RuntimeError: boom"
     assert snapshot["sample_id"] == [0, 1]
-    assert snapshot["prediction_success"][1] is True
-    assert "Placeholder #1 recorded" in output
     assert "Final summary" in output
 
 
@@ -77,8 +79,8 @@ def test_benchmark_can_resume_from_saved_results(tmp_path):
 
     assert output_path.exists()
     assert snapshot["sample_id"] == [0, 1]
-    assert snapshot["placeholder"] == [True, False]
-    assert snapshot["placeholder_reason"][0] == "adapter_exception"
+    assert snapshot["placeholder"] == [False, False]
+    assert snapshot["prediction_success"] == [False, True]
 
     with output_path.open("rb") as handle:
         payload = pickle.load(handle)
@@ -92,9 +94,8 @@ def test_benchmark_can_resume_from_saved_results(tmp_path):
     final_snapshot = resumed.run(progress=False, verbose=False, summary_interval=1)
 
     assert final_snapshot["sample_id"] == [0, 1, 2]
-    assert final_snapshot["placeholder"] == [True, False, False]
+    assert final_snapshot["placeholder"] == [False, False, False]
     assert final_snapshot["prediction_success"] == [False, True, True]
-    assert final_snapshot["placeholder_reason"][0] == "adapter_exception"
 
 
 def test_progress_tracker_reports_remaining_on_resume(capsys):
