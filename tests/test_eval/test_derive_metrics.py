@@ -190,6 +190,106 @@ def test_symbolic_recovery_judges_both_sides_through_the_same_simplify():
     assert scored['predicted_skeleton_prefix'][0] == ['pow', 'x1', '<constant>'] == scored['skeleton_simplified'][0]
 
 
+def _minting_simplify(tokens):
+    """The move the judge has to survive on top of `_fake_simplify`'s: simplifying a masked skeleton MINTS a
+    number. ``* u u`` becomes ``pow u 2`` and ``/ + u v u`` becomes ``+ / v u 1``, as the engine rewrites them."""
+    out = list(tokens)
+    if len(out) == 3 and out[0] == '*' and out[1] == out[2]:
+        return ['pow', out[1], '2']
+    if out == ['/', '+', 'x3', 'sin', 'x1', 'x3']:
+        return ['+', '/', 'sin', 'x1', 'x3', '1']
+    return out
+
+
+def test_a_number_minted_by_simplification_is_a_constant_on_both_sides():
+    """``x1 * x1`` and ``x1 ** 2`` are one skeleton. Simplify rewrites the product into ``pow x1 2``; left as it
+    is, that ``2`` never equals the ``<constant>`` on the other side, in either direction: a law written as a
+    product could not be recovered by a power, nor a law written as a power by a product."""
+    snapshot = {
+        'skeleton': [['pow', 'x1', '<constant>'], ['*', 'x1', 'x1'], ['/', '+', 'x3', 'sin', 'x1', 'x3'], ['pow', 'x1', '<constant>']],
+        'predicted_expression_prefix': [['*', 'x1', 'x1'], ['pow', 'x1', '2.0'], ['+', '/', 'sin', 'x1', 'x3', '1.0'], ['sin', 'x1']],
+        'predicted_skeleton_prefix': [['*', 'x1', 'x1'], ['pow', 'x1', '<constant>'], ['+', '/', 'sin', 'x1', 'x3', '<constant>'], ['sin', 'x1']],
+        'benchmark_eq_id': ['A', 'B', 'C', 'D'], 'placeholder': [False] * 4,
+    }
+    scored = derive_metrics(snapshot, operator_arity={'pow': 2, '*': 2, '/': 2, '+': 2, 'sin': 1}, simplify_fn=_minting_simplify)
+    assert list(scored['symbolic_recovery']) == [True, True, True, False]
+    assert scored['skeleton_simplified'][1] == ['pow', 'x1', '<constant>'] == scored['predicted_skeleton_prefix'][0]
+    assert scored['skeleton_simplified'][2] == ['+', '/', 'sin', 'x1', 'x3', '<constant>']
+    assert scored['n_constants'][1] == 1          # the minted exponent is a constant of the judged skeleton
+
+
+def test_the_engine_judges_a_product_and_a_power_alike():
+    """The same with the engine the srbf catalogs are judged with."""
+    from simplipy import SimpliPyEngine
+    engine = SimpliPyEngine.load('acj-5-4-llm', install=True)
+    snapshot = {
+        'skeleton': [['pow', 'x1', '<constant>'], ['*', 'x1', 'x1'], ['+', 'x1', 'x1']],
+        'predicted_expression_prefix': [['*', 'x1', 'x1'], ['pow', 'x1', '2'], ['*', '2.0', 'x1']],
+        'predicted_skeleton_prefix': [['*', 'x1', 'x1'], ['pow', 'x1', '<constant>'], ['*', '<constant>', 'x1']],
+        'benchmark_eq_id': ['A', 'B', 'C'], 'placeholder': [False] * 3,
+    }
+    scored = derive_metrics(snapshot, engine=engine)
+    assert list(scored['symbolic_recovery']) == [True, True, True]
+
+
+def test_law_and_prediction_are_judged_by_one_function_of_their_canonical_forms():
+    """An expression shows what it is while its numbers are numbers: ``x2 * x4 / (c * x4 ** 3)`` cancels to
+    ``x2 / (c * x4 ** 2)``, ``pow(u, 0.5)`` is ``rootn(u, 2)``, and ``pi`` is a number. Law and prediction are
+    canonicalized WITH their values, then masked, so the side that wrote the longer spelling does not lose."""
+    from simplipy import SimpliPyEngine
+    engine = SimpliPyEngine.load('acj-5-4-llm', install=True)
+    coulomb = ['/', '*', 'x1', 'x2', '*', '*', '*', '4', '3.1415926535897', '8.854e-12', 'pow', 'x2', '3']
+    laws = [coulomb, ['rootn', '/', '*', 'x1', 'x2', 'x3', '2'], ['*', '*', '4', '3.141592653589793', 'x1'], coulomb]
+    predictions = [['/', '/', '8.987742e9', 'x2', '/', 'x2', 'x1'], ['pow', '/', '*', 'x2', 'x1', 'x3', '0.5'],
+                   ['*', '4', '*', 'np.pi', 'x1'], ['/', '8.987742e9', 'pow', 'x2', '3']]
+    from symbolic_data.token_ops import normalize_skeleton
+    snapshot = {
+        'skeleton': [normalize_skeleton(law) for law in laws], 'ground_truth_prefix': laws,
+        'predicted_expression_prefix': predictions, 'predicted_skeleton_prefix': [normalize_skeleton(p) for p in predictions],
+        'benchmark_eq_id': ['A', 'B', 'C', 'D'], 'placeholder': [False] * 4,
+    }
+    scored = derive_metrics(snapshot, engine=engine)
+    # the last answer dropped a variable the law keeps: a different function, whatever the masking
+    assert list(scored['symbolic_recovery']) == [True, True, True, False]
+    assert scored['skeleton_simplified'][0] == scored['predicted_skeleton_prefix'][0]
+
+
+def test_a_match_in_either_form_is_a_match():
+    """No simplifier is complete. ``x1 ** 1.5 * (x1 ** 1.5 + x1)`` and ``x1 * x1 * (x1 ** 0.5 + x1)`` are one
+    function whose canonical forms differ, while their skeletons as written agree; a product and a power
+    agree in canonical form only. Either agreement is a sound witness, and the judge takes both."""
+    from simplipy import SimpliPyEngine
+    from symbolic_data.token_ops import normalize_skeleton
+    engine = SimpliPyEngine.load('acj-5-4-llm', install=True)
+    laws = [['*', 'pow', 'x1', '/', '3', '2', '+', 'pow', 'x1', '/', '3', '2', 'x1'], ['pow', 'x1', '2']]
+    predictions = [['*', '*', 'x1', 'x1', '+', 'pow', 'x1', '0.5', 'x1'], ['*', 'x1', 'x1']]
+    snapshot = {
+        'skeleton': [['*', 'pow', 'x1', '<constant>', '+', 'pow', 'x1', '<constant>', 'x1'], ['pow', 'x1', '<constant>']],
+        'ground_truth_prefix': laws, 'predicted_expression_prefix': predictions,
+        'predicted_skeleton_prefix': [normalize_skeleton(p) for p in predictions],
+        'benchmark_eq_id': ['A', 'B'], 'placeholder': [False] * 2,
+    }
+    scored = derive_metrics(snapshot, engine=engine)
+    assert list(scored['symbolic_recovery']) == [True, True]
+    assert scored['skeleton_simplified'][0] == scored['predicted_skeleton_prefix'][0]      # the pair that agreed
+    assert list(scored['edit_distance']) == [0, 0]
+
+
+def test_a_malformed_answer_is_judged_as_stored_and_costs_no_other_row():
+    """A stored prefix the engine cannot parse (trailing tokens) is masked token by token and compared as it
+    stands. It must not raise: one bad row would take the whole result file with it."""
+    from simplipy import SimpliPyEngine
+    engine = SimpliPyEngine.load('acj-5-4-llm', install=True)
+    snapshot = {
+        'skeleton': [['pow', 'x1', '<constant>'], ['sin', 'x1']], 'ground_truth_prefix': [['pow', 'x1', '2'], ['sin', 'x1']],
+        'predicted_expression_prefix': [['*', 'x1', 'x1'], ['sin', 'x1', 'x2', '3.0']],
+        'predicted_skeleton_prefix': [['*', 'x1', 'x1'], ['sin', 'x1', 'x2', '<constant>']],
+        'benchmark_eq_id': ['A', 'B'], 'placeholder': [False] * 2,
+    }
+    scored = derive_metrics(snapshot, engine=engine)
+    assert list(scored['symbolic_recovery']) == [True, False]
+
+
 def test_a_failed_prediction_is_a_miss_on_every_recovery_rate() -> None:
     """Rates are defined for every problem: a method that returns nothing has missed, on symbolic recovery as on
     numeric recovery. A rate conditioned on success would rise when a method fails on the hard laws."""

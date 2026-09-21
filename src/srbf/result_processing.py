@@ -201,39 +201,101 @@ def _convert_prefix(convert_fn: Callable[[list[str]], list[str]], tokens: Any) -
         return list(tokens)
 
 
-def _simplified_skeleton(simplify_fn: Callable[[list[str]], list[str] | None], skeleton: Any) -> Any:
-    """The stored (masked) skeleton through the same simplify the ground truth's skeleton goes through."""
-    if skeleton is None:
-        return skeleton
-    try:
-        simplified = simplify_fn(list(skeleton))
-        return list(simplified) if simplified is not None else list(skeleton)
-    except Exception:  # noqa: BLE001 - a skeleton the engine refuses is judged as stored
-        return list(skeleton)
+#: Rounds of mask -> simplify before the judged skeleton is taken as it stands. Two settle every law of the
+#: srbf suite; the bound only keeps a pathological input from looping.
+_JUDGE_ROUNDS = 4
+
+MaskFn = Callable[[list[str]], list[str] | None]
 
 
-def _canonical_skeleton(simplify_fn: Callable[[list[str]], list[str] | None], realized: Any, skeleton: Any) -> Any:
-    """The judged skeleton of a prediction: the skeleton of its strictly shorter canonical form (masked,
-    then simplified), otherwise the stored skeleton SIMPLIFIED -- the same treatment the ground truth's
-    skeleton gets (``skeleton_simplified``), so the two sides are compared through one function of the
-    masked form.
+def _mask_every_number(tokens: list[str]) -> list[str] | None:
+    """Every numeric token becomes ``<constant>``: the mask of a judge without an engine."""
+    return normalize_skeleton(list(tokens))
 
-    Both sides must pass through simplify, because simplify moves masked spellings: the ground truth
-    ``pow x1 / <c> <c>`` simplifies to ``pow x1 <c>``, and a prediction that is byte-identical to the law
-    (``pow x1 / 2 3``, not shorter in canonical form) has to arrive at the same form to be judged exact."""
-    if realized is None or skeleton is None:
-        return _simplified_skeleton(simplify_fn, skeleton)
-    try:
-        canonical = simplify_fn(list(realized))
-        if canonical is None or len(canonical) >= len(realized):
-            return _simplified_skeleton(simplify_fn, skeleton)
-        masked = normalize_skeleton(list(canonical))
-        if masked is None:
-            return _simplified_skeleton(simplify_fn, skeleton)
-        simplified = simplify_fn(list(masked))
-        return list(simplified) if simplified is not None else list(masked)
-    except Exception:  # noqa: BLE001 - a prefix the engine refuses is judged as stored
-        return _simplified_skeleton(simplify_fn, skeleton)
+
+def _settled(simplify_fn: Callable[[list[str]], list[str] | None], mask_fn: MaskFn, tokens: list[str]) -> list[str]:
+    """Mask, simplify, mask again, until the skeleton stands still.
+
+    Simplifying a masked skeleton can WRITE a number: ``x1 * x1`` becomes ``pow x1 2`` and ``(x3 + sin(x1)) / x3``
+    becomes ``sin(x1) / x3 + 1``. That number is a constant like any other at this level of comparison, so it is
+    masked too (``pow x1 <constant>``), and the masked form is simplified again, because masking can open a
+    further rewrite. Without the second mask ``x1 * x1`` and ``x1 ** 2`` are different skeletons."""
+    def mask(sequence: list[str]) -> list[str] | None:
+        try:
+            return mask_fn(list(sequence))
+        except Exception:  # noqa: BLE001 - a token list the engine cannot parse is masked token by token
+            return _mask_every_number(list(sequence))
+
+    current = mask(list(tokens)) or list(tokens)
+    for _ in range(_JUDGE_ROUNDS):
+        try:
+            simplified = simplify_fn(list(current))
+        except Exception:  # noqa: BLE001 - a skeleton the engine refuses is judged as it stands
+            break
+        masked = mask(list(simplified)) if simplified is not None else None
+        if masked is None or masked == current:
+            break
+        current = masked
+    return list(current)
+
+
+#: Judged forms by (engine, mask, kind, tokens). One law is judged once per process, not once per result file, and a
+#: method that answers a law the same way at several budgets is judged once. Bounded; cleared when full.
+_JUDGE_CACHE: dict[tuple[Any, ...], list[str] | None] = {}
+_JUDGE_CACHE_MAX = 200_000
+
+
+def _judged_form(simplify_fn: Callable[[list[str]], list[str] | None], mask_fn: MaskFn, tokens: Any, *,
+                 canonical: bool) -> list[str] | None:
+    """One of the two forms an expression is judged in, the same function for the law and for the prediction.
+
+    ``canonical=True``: the expression WITH its numbers is brought into canonical form first, because that is
+    where it shows what it is (``x2 * x4 / (c * x4 ** 3)`` cancels to ``x2 / (c * x4 ** 2)`` only while the ``3``
+    is a number, ``pow(u, 0.5)`` becomes ``rootn(u, 2)``); then its numbers are masked and the skeleton settles.
+    ``canonical=False``: the skeleton as it was written settles. ``None`` when the engine refuses the input."""
+    if tokens is None:
+        return None
+    key = (id(getattr(simplify_fn, "__self__", simplify_fn)), mask_fn is _mask_every_number, canonical, tuple(map(str, tokens)))
+    if key in _JUDGE_CACHE:
+        cached = _JUDGE_CACHE[key]
+        return list(cached) if cached is not None else None
+    base: list[str] | None = list(tokens)
+    if canonical:
+        try:
+            base = simplify_fn(list(tokens))
+        except Exception:  # noqa: BLE001 - a prefix the engine refuses has no canonical form
+            base = None
+    form = _settled(simplify_fn, mask_fn, list(base)) if base is not None else None
+    if len(_JUDGE_CACHE) >= _JUDGE_CACHE_MAX:
+        _JUDGE_CACHE.clear()
+    _JUDGE_CACHE[key] = form
+    return list(form) if form is not None else None
+
+
+def _judged_pair(simplify_fn: Callable[[list[str]], list[str] | None], mask_fn: MaskFn, law: Any, law_skeleton: Any,
+                 prediction: Any, prediction_skeleton: Any) -> tuple[list[str] | None, list[str] | None]:
+    """The judged skeletons of a law and of its prediction, ``(law, prediction)``.
+
+    Two expressions are the same up to their constants when they arrive at one skeleton, and the judge looks
+    for that in two places: in their canonical forms (:func:`_judged_form`, ``canonical=True``) and in their
+    skeletons as written. Each is a sound witness, since simplification never changes the function and masking
+    only forgets numbers; neither is complete, because no simplifier is. The canonical pair is returned unless
+    only the written pair agrees."""
+    law_canonical = _judged_form(simplify_fn, mask_fn, law, canonical=True)
+    if law_canonical is None:
+        law_canonical = _judged_form(simplify_fn, mask_fn, law_skeleton, canonical=False)
+    if prediction_skeleton is None and prediction is None:
+        return law_canonical, None
+    prediction_canonical = _judged_form(simplify_fn, mask_fn, prediction, canonical=True)
+    if prediction_canonical is None:
+        prediction_canonical = _judged_form(simplify_fn, mask_fn, prediction_skeleton, canonical=False)
+    if prediction_canonical is not None and prediction_canonical == law_canonical:
+        return law_canonical, prediction_canonical
+    law_written = _judged_form(simplify_fn, mask_fn, law_skeleton, canonical=False)
+    prediction_written = _judged_form(simplify_fn, mask_fn, prediction_skeleton, canonical=False)
+    if prediction_written is not None and prediction_written == law_written:
+        return law_written, prediction_written
+    return law_canonical, prediction_canonical
 
 
 def compute_derived_metrics(
@@ -243,6 +305,7 @@ def compute_derived_metrics(
     simplify_fn: Callable[[list[str]], list[str] | None] | None = None,
     mdl_fn: Callable[[list[str]], float] | None = None,
     convert_fn: Callable[[list[str]], list[str]] | None = None,
+    mask_fn: MaskFn | None = None,
 ) -> None:
     """Compute derived evaluation metrics in-place on *results*.
 
@@ -279,10 +342,15 @@ def compute_derived_metrics(
     convert_fn : callable, optional
         Converts a stored predicted prefix into the engine grammar before anything judges
         or prices it (``engine.convert_expression``). Predictions that came back through an
-        infix string (the out-of-process adapters, E2E, NeSymReS) were stored, until srbf
-        0.15.1, as the raw reader output -- ``**`` for a power, ``neg`` on a literal -- which
-        the engine's simplify and complexity refuse.
+        infix string (the out-of-process adapters, E2E, NeSymReS) may hold the raw reader output
+        -- ``**`` for a power, ``neg`` on a literal -- which the engine's simplify and complexity
+        refuse.
+    mask_fn : callable, optional
+        Masks the numbers of a token list; defaults to masking every numeric token.
+        :func:`derive_metrics` passes the engine's own mask, which covers ``pi`` and ``e`` as well.
     """
+    if mask_fn is None:
+        mask_fn = _mask_every_number
     for model in results:
         for test_set in test_sets:
             if test_set not in results[model].get('results', {}):
@@ -296,21 +364,24 @@ def compute_derived_metrics(
                         if key in r:
                             r[key] = [_convert_prefix(convert_fn, p) for p in r[key]]
 
-                # ── The judged skeleton is the canonical form the prediction was priced as ──
-                # flash-ansr < 0.15.2 emitted a fitted candidate as its skeleton with the numbers filled
-                # in, so a factor the fit made cancel (`tanh(x)^2 / tanh(x)^2`) or a constant the fit
-                # made fold stayed in the spelling while the certified price had collapsed it. When the
-                # canonical form of the realized prediction is strictly shorter, its masked, simplified
-                # skeleton is what gets judged -- what flash-ansr 0.15.2 emits -- so files from before
-                # and after the fix are judged alike; the stored spelling stays under `_as_emitted`.
-                if simplify_fn is not None and 'predicted_expression_prefix' in r and 'predicted_skeleton_prefix' in r:
-                    emitted = list(r['predicted_skeleton_prefix'])
-                    r['predicted_skeleton_prefix'] = [
-                        _canonical_skeleton(simplify_fn, pe, ps)
-                        for pe, ps in zip(r['predicted_expression_prefix'], emitted)
+                # ── The judged skeletons of law and prediction (`_judged_pair`) ──
+                # A factor the fit made cancel (`tanh(x)^2 / tanh(x)^2`) or a constant it made fold is judged as
+                # what it is, not as it was spelled; the law goes through the same function. The stored spelling of
+                # the prediction stays under `_as_emitted`.
+                n_rows = len(r['skeleton']) if 'skeleton' in r else 0
+                if simplify_fn is not None and 'skeleton' in r:
+                    laws = r.get('ground_truth_prefix') or r.get('expression') or [None] * n_rows
+                    predictions = r.get('predicted_expression_prefix') or [None] * n_rows
+                    emitted = list(r['predicted_skeleton_prefix']) if 'predicted_skeleton_prefix' in r else [None] * n_rows
+                    pairs = [
+                        _judged_pair(simplify_fn, mask_fn, law, sk, pe, ps) if sk is not None else (None, None)
+                        for law, sk, pe, ps in zip(laws, r['skeleton'], predictions, emitted)
                     ]
-                    if any(a != b for a, b in zip(r['predicted_skeleton_prefix'], emitted)):
-                        r['predicted_skeleton_prefix_as_emitted'] = emitted
+                    r['skeleton_simplified'] = [pair[0] for pair in pairs]
+                    if 'predicted_skeleton_prefix' in r:
+                        r['predicted_skeleton_prefix'] = [pair[1] if ps is not None else None for pair, ps in zip(pairs, emitted)]
+                        if any(a != b for a, b in zip(r['predicted_skeleton_prefix'], emitted)):
+                            r['predicted_skeleton_prefix_as_emitted'] = emitted
 
                 # ── FVU / NRR for fit and val splits ──────────────
                 for split, saved_split_name in [('fit', ''), ('val', '_val')]:
@@ -337,7 +408,7 @@ def compute_derived_metrics(
                         r[f'numeric_recovery_{split}'], -np.inf, r[f'log10_fvu_{split}'],
                     )
 
-                    # ── Reference-relative recovery (WP7, real-data catalogs) ──
+                    # ── Reference-relative recovery (real-data catalogs) ──
                     # reference_fvu = the accepted law's own FVU on the same target; recovery
                     # relative to it: candidate at least as good as the reference (with the
                     # float32-eps floor). On clean synthetic data reference_fvu == 0, the
@@ -353,13 +424,7 @@ def compute_derived_metrics(
                         thr = np.where(np.isfinite(ref), np.maximum(ref, eps), eps)
                         r[f'numeric_recovery_relative_{split}'] = r[f'fvu_{split}'] <= thr
 
-                # ── Simplified skeletons ──────────────────────────
-                if simplify_fn is not None:
-                    r['skeleton_simplified'] = [
-                        simplify_fn(sk) if sk is not None else None
-                        for sk in r['skeleton']
-                    ]
-                else:
+                if 'skeleton_simplified' not in r:
                     r['skeleton_simplified'] = list(r['skeleton'])
 
                 skel_sim = r['skeleton_simplified']
@@ -551,11 +616,17 @@ def derive_metrics(
     if convert_fn is None and engine is not None:
         convert_fn = engine.convert_expression
 
+    # The engine's own mask: every number, the named constants pi and e included, becomes <constant>.
+    def engine_mask(tokens: list[str], _engine: Any = engine) -> list[str] | None:
+        return list(_engine.mask(list(tokens), 'all', collect=False))
+
+    mask_fn: MaskFn | None = engine_mask if engine is not None and hasattr(engine, "mask") else None
+
     # Shallow-copy the snapshot as the nested leaf: compute_derived_metrics only ADDS derived keys to
     # the leaf (and rebinds the converted prefix columns), so the derived columns land in this copy
     # and the caller's snapshot stays untouched.
     leaf = dict(snapshot)
     results = {"model": {"results": {"test": {0: leaf}}}}
     compute_derived_metrics(results, test_sets=["test"], operator_arity=operator_arity, simplify_fn=simplify_fn, mdl_fn=mdl_fn,
-                            convert_fn=convert_fn)
+                            convert_fn=convert_fn, mask_fn=mask_fn)
     return results["model"]["results"]["test"][0]

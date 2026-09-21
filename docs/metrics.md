@@ -91,11 +91,20 @@ srbf suite, so there the two columns agree on every problem.
 
 ## Symbolic agreement
 
-All columns of this group compare the **judged skeleton** of the prediction with \(\bar\tau\). The
-prediction is brought into the engine's canonical form, its constants are masked, and the masked
-form is simplified once more, which is the treatment \(\bar\tau\) gets. A re-ordered sum or an
-unsimplified sub-term therefore does not count as a difference. `skeleton_simplified`
-holds \(\bar\tau\). When simplification changed the prediction, the skeleton as the method wrote it
+All columns of this group compare the **judged skeleton** of the prediction with \(\bar\tau\),
+and both come from one function. An expression is first brought into the engine's canonical form
+*with its numbers*, because that is where it shows what it is: `x2 * x4 / (c * x4 ** 3)` cancels to
+`x2 / (c * x4 ** 2)` only while the `3` is a number, and `pow(u, 0.5)` becomes `rootn(u, 2)`. Then
+every number is masked, `pi` and `e` included, and the masked form is simplified and masked again
+until nothing changes, so that a number simplification writes itself is a constant too:
+`x1 * x1` becomes `pow x1 2` and then `pow x1 <constant>`, the skeleton of `x1 ** 2`. A re-ordered
+sum, an unsimplified sub-term or a longer spelling of the same function therefore does not count
+as a difference, whichever side wrote it.
+
+No simplifier is complete, so the judge looks in a second place as well: the two skeletons as they
+were written, settled the same way. Agreement in either place is a sound witness that the two
+expressions are one family, because simplification never changes the function and masking only
+forgets numbers. `skeleton_simplified` holds \(\bar\tau\) in the judged form. When simplification changed the prediction, the skeleton as the method wrote it
 is kept in `predicted_skeleton_prefix_as_emitted`.
 
 ### `symbolic_recovery`
