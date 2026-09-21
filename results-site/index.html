@@ -632,7 +632,7 @@
         </p>
 
         <article class="metric">
-          <h4>Numeric recovery (vNRR) <span class="dir up">higher is better</span></h4>
+          <h4><span data-for="2026-09">Numeric Recovery, Validation (vNRR)</span><span data-for="2026-07">Numeric recovery (vNRR)</span> <span class="dir up">higher is better</span></h4>
           $$
             \mathrm{vNRR} \;=\; \frac{1}{K} \sum_{k=1}^{K}
             \mathbb{1}\!\left[ \operatorname{FVU}\!\big(y_{\mathrm{val}}^{(k)},
@@ -650,7 +650,7 @@
         </article>
 
         <article class="metric">
-          <h4>Numeric recovery on support (fNRR) <span class="dir up">higher is better</span></h4>
+          <h4><span data-for="2026-09">Numeric Recovery, Support (fNRR)</span><span data-for="2026-07">Numeric recovery on support (fNRR)</span> <span class="dir up">higher is better</span></h4>
           <p>
             The same machine-precision indicator evaluated on the support points the method was
             fitted on, \(\mathbb{1}[\operatorname{FVU}(y, \hat{y}) \le \varepsilon_{32}]\).
@@ -661,7 +661,7 @@
         </article>
 
         <article class="metric">
-          <h4><span>log<sub>10</sub> FVU (validation / support)</span> <span class="dir down">lower is better</span></h4>
+          <h4><span data-for="2026-09">log<sub>10</sub> FVU, Validation / Support</span><span data-for="2026-07">log<sub>10</sub> FVU (validation / support)</span> <span class="dir down">lower is better</span></h4>
           $$
             \log_{10} \operatorname{FVU}\big(y_{\mathrm{val}}, \hat{y}_{\mathrm{val}}\big)
             \quad\text{and}\quad
@@ -683,7 +683,7 @@
         </article>
 
         <article class="metric" data-for="2026-09">
-          <h4>R² (validation / support) <span class="dir up">higher is better</span></h4>
+          <h4>R², Validation / Support <span class="dir up">higher is better</span></h4>
           <p>
             \(1 - \operatorname{FVU}\) on either set of points: 1 is a perfect fit, 0 is as good as
             predicting the mean, and there is no lower bound. One answer that diverges would decide
@@ -699,7 +699,7 @@
         <div>
 
         <article class="metric">
-          <h4>Prediction success rate <span class="dir up">higher is better</span></h4>
+          <h4><span data-for="2026-09">Successful Prediction Rate</span><span data-for="2026-07">Prediction success rate</span> <span class="dir up">higher is better</span></h4>
           <p>
             The fraction of problems for which the method produced any usable prediction at all:
             decoding, parsing, compiling, and constant fitting all completed and returned an
@@ -727,7 +727,7 @@
         </p>
 
         <article class="metric" data-for="2026-09">
-          <h4>Symbolic recovery (SRR) <span class="dir up">higher is better</span></h4>
+          <h4>Symbolic Recovery (SRR, SRRe, SRRa) <span class="dir up">higher is better</span></h4>
           $$
             \mathrm{SRR} \;=\; \frac{1}{K} \sum_{k=1}^{K}
             \mathbb{1}\!\left[ \operatorname{canon}\big(\hat{f}^{(k)}\big) = \operatorname{canon}\big(f^{(k)}\big) \right]
@@ -740,17 +740,17 @@
           </p>
           <p>
             The same question is asked at three levels of masking, each implying the one before it.
-            <em>Symbolic recovery</em> masks every number, so \(x^2\) and \(x^3\) are one structure.
-            <em>With exponents</em> masks only the fittable constants: the numbers of the structure,
+            <em>Structure</em> (SRR) masks every number, so \(x^2\) and \(x^3\) are one structure.
+            <em>Structure + Exponents</em> (SRRe) masks only the fittable constants: the numbers of the structure,
             exponents and root indices, have to be the law's, and an exponent left at 1.9999 is a
-            miss. <em>With all numbers</em> masks nothing: the fitted constants have to be right too,
+            miss. <em>Structure + All Numbers</em> (SRRa) masks nothing: the fitted constants have to be right too,
             which is measured as numeric recovery is, by reproducing the law to float32 precision on
             the validation points.
           </p>
         </article>
 
         <article class="metric">
-          <h4>Exact skeleton match (raw) <span class="dir up">higher is better</span></h4>
+          <h4><span data-for="2026-09">Raw Symbolic Recovery (SRRr)</span><span data-for="2026-07">Exact skeleton match (raw)</span> <span class="dir up">higher is better</span></h4>
           $$
             \mathrm{SRR}_{\mathrm{raw}} \;=\; \frac{1}{K} \sum_{k=1}^{K}
             \mathbb{1}\!\left[ \hat{\tau}^{(k)} = \bar{\tau}^{(k)} \right]
@@ -765,7 +765,7 @@
         </article>
 
         <article class="metric">
-          <h4>Skeleton token F1 / precision / recall <span class="dir up">higher is better</span></h4>
+          <h4><span data-for="2026-09">Token Overlap: F1 / Precision / Recall</span><span data-for="2026-07">Skeleton token F1 / precision / recall</span> <span class="dir up">higher is better</span></h4>
           $$
             P = \frac{|\mathcal{T}(\hat{\tau}) \cap \mathcal{T}(\bar{\tau})|}{|\mathcal{T}(\hat{\tau})|},
             \qquad
@@ -788,7 +788,7 @@
         </article>
 
         <article class="metric" data-for="2026-09">
-          <h4>Variable-set F1 / precision / recall <span class="dir up">higher is better</span></h4>
+          <h4>Variable Overlap: F1 / Precision / Recall <span class="dir up">higher is better</span></h4>
           <p>
             The same three quantities over the sets of input variables that the prediction and the
             law use: precision falls when a prediction leans on a variable the law ignores, recall
@@ -797,7 +797,7 @@
         </article>
 
         <article class="metric">
-          <h4>Skeleton edit distance (normalized) <span class="dir down">lower is better</span></h4>
+          <h4><span data-for="2026-09">Levenshtein Edit Distance (Tokens), Normalized</span><span data-for="2026-07">Skeleton edit distance (normalized)</span> <span class="dir down">lower is better</span></h4>
           $$
             d_{\mathrm{edit}}(\hat{\tau}, \bar{\tau}) \;=\;
             \frac{\operatorname{Levenshtein}(\hat{\tau}, \bar{\tau})}{\max(|\hat{\tau}|, |\bar{\tau}|)}
@@ -812,7 +812,7 @@
         </article>
 
         <article class="metric">
-          <h4>Tree edit distance (ZSS) <span class="dir down">lower is better</span></h4>
+          <h4><span data-for="2026-09">Tree Edit Distance (Zhang-Shasha)</span><span data-for="2026-07">Tree edit distance (ZSS)</span> <span class="dir down">lower is better</span></h4>
           <p>
             The Zhang–Shasha tree edit distance between the expression <em>trees</em> obtained by
             parsing the two prefix skeletons: the minimum total cost of node insertions, deletions,
@@ -835,7 +835,7 @@
         <div>
 
         <article class="metric" data-for="2026-09">
-          <h4>MDL ratio (pred / law) <span class="dir one">1 is ideal</span></h4>
+          <h4>MDL Ratio (Prediction / Ground Truth) <span class="dir one">1 is ideal</span></h4>
           $$ \frac{L(\hat{f})}{L(f)} $$
           <p>
             The description length \(L\) of the prediction over the law's, in bits, both priced in
@@ -846,7 +846,7 @@
         </article>
 
         <article class="metric">
-          <h4>Expression length ratio (pred/GT) <span class="dir one">1 is ideal</span></h4>
+          <h4><span data-for="2026-09">Token Count Ratio (Prediction / Ground Truth)</span><span data-for="2026-07">Expression length ratio (pred/GT)</span> <span class="dir one">1 is ideal</span></h4>
           $$
             \rho \;=\; \frac{|\hat{\tau}|}{|\bar{\tau}|}
           $$
@@ -862,7 +862,7 @@
         </article>
 
         <article class="metric">
-          <h4><span>Length ratio |log<sub>2</sub>| error</span> <span class="dir down">lower is better</span></h4>
+          <h4><span data-for="2026-09">Token Count Mismatch (|log<sub>2</sub> Ratio|)</span><span data-for="2026-07">Length ratio |log<sub>2</sub>| error</span> <span class="dir down">lower is better</span></h4>
           $$
             \left| \log_2 \rho \right| \;=\; \left| \log_2 \tfrac{|\hat{\tau}|}{|\bar{\tau}|} \right|
           $$
@@ -874,7 +874,7 @@
         </article>
 
         <article class="metric">
-          <h4>Predicted / GT skeleton length <span class="dir down">lower is more concise</span></h4>
+          <h4><span data-for="2026-09">Token Count of the Prediction / of the Ground Truth</span><span data-for="2026-07">Predicted / GT skeleton length</span> <span class="dir down">lower is more concise</span></h4>
           <p>
             The raw prefix-token lengths \(|\hat{\tau}|\) and \(|\bar{\tau}|\) behind the ratio.
             The ground-truth length is a property of the benchmark (constant per expression, useful
@@ -884,7 +884,7 @@
         </article>
 
         <article class="metric">
-          <h4>Constant-count ratio / delta (pred vs GT) <span class="dir one">1 / 0 is ideal</span></h4>
+          <h4><span data-for="2026-09">Constant Count Ratio / Difference (Prediction vs Ground Truth)</span><span data-for="2026-07">Constant-count ratio / delta (pred vs GT)</span> <span class="dir one">1 / 0 is ideal</span></h4>
           $$
             \frac{c(\hat{\tau})}{c(\bar{\tau})}
             \qquad\text{and}\qquad
@@ -900,7 +900,7 @@
         </article>
 
         <article class="metric">
-          <h4>Unary-nestedness delta (pred − GT) <span class="dir down">lower is better</span></h4>
+          <h4><span data-for="2026-09">Function Nesting Difference (Prediction − Ground Truth)</span><span data-for="2026-07">Unary-nestedness delta (pred − GT)</span> <span class="dir down">lower is better</span></h4>
           <p>
             Total nestedness counts, over each maximal chain of \(m\) directly nested unary
             operators, the excess \(m - 1\), summed over the expression:
@@ -921,7 +921,7 @@
         <div>
 
         <article class="metric">
-          <h4>Predicted log-probability <span class="dir up">higher is better</span></h4>
+          <h4><span data-for="2026-09">Log-Probability of the Prediction</span><span data-for="2026-07">Predicted log-probability</span> <span class="dir up">higher is better</span></h4>
           <p>
             The log-probability \(\log p(\hat{\tau} \mid X, y)\) of the selected candidate's token
             sequence under the model's decoder, summed over the tokens of the sequence: how likely
@@ -932,7 +932,7 @@
         </article>
 
         <article class="metric" data-for="2026-09">
-          <h4>Selection score and Pareto rank <span class="dir down">lower is better</span></h4>
+          <h4>Selection Score and Pareto Rank <span class="dir down">lower is better</span></h4>
           $$ S(\hat{f}) \;=\; \tfrac{N}{2} \log_2 \operatorname{FVU}(y, \hat{y}) \;+\; L(\hat{f}) $$
           <p>
             The score by which the method chose its answer, as the method computed it. For
@@ -967,7 +967,7 @@
         <div>
 
         <article class="metric" data-for="2026-09">
-          <h4>Fit time on the reference machine (s) <span class="dir down">lower is better</span></h4>
+          <h4>Fit Time on the Reference Machine (s) <span class="dir down">lower is better</span></h4>
           <p>
             Wall-clock seconds to solve one problem, from the data to the submitted answer, measured
             for every budget of every method on one machine over a fixed, stratified subset of 262

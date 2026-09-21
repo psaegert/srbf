@@ -125,7 +125,7 @@ test('terms and metric help open a floating explanation', async ({ page }) => {
   await page.goto('/?release=2026-09&v=table');
   await page.locator(V2 + ' .v2metrics .v2help').first().click();
   await expect(page.locator('.v2pop')).toBeVisible();
-  await expect(page.locator('.v2pop')).toContainText('Share of laws');
+  await expect(page.locator('.v2pop')).toContainText('Share of problems');
   await page.keyboard.press('Escape');
   await expect(page.locator('.v2pop')).toHaveCount(0);
   await page.locator(V2 + ' .v2view .v2term[data-term="complete"]').first().click();
@@ -210,7 +210,7 @@ test('the headline stands above the explorer with its two fixed charts', async (
   else { await expect(head.locator('svg.v2chart').first()).toContainText('candidates'); }
   // the second headline chart is the trade-off: description length on x, fit error on y
   await expect(head.locator('svg.v2chart').nth(1)).toContainText('Fit vs length');
-  await expect(head.locator('svg.v2chart').nth(1)).toContainText('MDL ratio');   // the metric's own name, as everywhere else
+  await expect(head.locator('svg.v2chart').nth(1)).toContainText('MDL Ratio');   // the metric's own name, as everywhere else
   await expect(head.locator('svg.v2chart').nth(1)).toContainText('FVU');
   // fixed: the explorer's own controls do not move it
   await page.locator(V2 + ' button[data-act="none"]').click();
@@ -297,7 +297,7 @@ test('every plot carries its own two axes, and plots are added and removed', asy
   await expect(cards.first().locator('.v2ysel')).toHaveAttribute('data-k', 'numeric_recovery_val');
   // a metric on x makes the plot a trade-off: the budget is gone from both axes
   await pick(page, cards.first().locator('.v2xsel'), 'mdl_ratio');
-  await expect(cards.first().locator('svg.v2chart')).toContainText('MDL ratio');
+  await expect(cards.first().locator('svg.v2chart')).toContainText('MDL Ratio');
   expect(decodeURIComponent(page.url())).toContain('mdl_ratio~numeric_recovery_val');
   // the dashed tile adds a plot, the x removes one
   await page.locator(V2 + ' .v2addplot').click();
@@ -339,8 +339,8 @@ test('every chart names both of its axes', async ({ page }) => {
   expect(n).toBeGreaterThanOrEqual(4);   // two headline panels and two plots
   for (let i = 0; i < n; i++) {
     const t = await labels(charts.nth(i));
-    expect(t, `chart ${i} x label`).toMatch(/fit time per problem|MDL ratio|candidates per problem/);   // a budget or a metric, never an uncalibrated time
-    expect(t, `chart ${i} y label`).toMatch(/Numeric recovery|log10 FVU/);
+    expect(t, `chart ${i} x label`).toMatch(/fit time per problem|MDL Ratio|candidates per problem/);   // a budget or a metric, never an uncalibrated time
+    expect(t, `chart ${i} y label`).toMatch(/Numeric Recovery|log10 FVU/);
   }
 });
 
@@ -586,7 +586,7 @@ test('ranks follow the selection: another metric, fewer methods, fewer catalogs'
   const offered = await page.locator('.v2picker .v2pickitem').count();
   expect(offered).toBe(await page.evaluate(() => window.RESULTS_V2_RANKS['2026-09'].keys.length));
   await page.locator('.v2picker .v2pickitem[data-k="mdl_ratio"]').click();
-  await expect(page.locator(V2 + ' .v2view svg.v2rankchart')).toHaveAttribute('aria-label', /MDL ratio/);
+  await expect(page.locator(V2 + ' .v2view svg.v2rankchart')).toHaveAttribute('aria-label', /MDL Ratio/);
   await expect(page.locator(V2 + ' .v2viewbar .v2tag-primary')).toHaveCount(0);
   expect(page.url()).toContain('rm=mdl_ratio');
 });
@@ -906,7 +906,7 @@ test('R² has no floor and is read by its median', async ({ page }) => {
   const reg = await page.evaluate(() => { const D = window.RESULTS_V2; const m = D.metrics.filter((x) => x.key === 'r2_val')[0];
     return { label: m.label, via: m.median_via, lo: m.hist.lo, ranks: D.rank_keys, paired: D.paired_keys,
       worst: D.metrics.filter((x) => x.worst !== undefined).map((x) => x.key + '=' + x.worst).sort() }; });
-  expect(reg.label).toBe('R² (validation)');
+  expect(reg.label).toBe('R², Validation');
   expect(reg.via).toBe('log10_fvu_val');
   expect(reg.lo).toBeLessThan(0);
   expect(reg.ranks).not.toContain('r2_val');   // it orders the answers exactly as the FVU does
@@ -916,7 +916,7 @@ test('R² has no floor and is read by its median', async ({ page }) => {
   // the mean is chosen, the median is drawn, and the axis says so
   const chart = page.locator(V2 + ' .v2plot svg').first();
   await expect(chart.locator('circle').first()).toBeVisible({ timeout: 15000 });
-  await expect(chart).toContainText(/R² (\(validation\)|val), median/);
+  await expect(chart).toContainText(/R²(, Validation| Val), median/);
   // near 1 the linear bins of R² are too coarse, so the FVU's log bins are read there
   expect(asked).toContain('log10_fvu_val.js');
   expect(asked).toContain('r2_val.js');
@@ -1017,10 +1017,34 @@ test('symbolic recovery is asked at three levels of masking, each implying the o
   expect(seen.missing).toBe(0);
   expect(seen.broken).toBe(0);
   expect(seen.strict).toBeGreaterThan(0);   // the stricter level is a level of its own: somewhere an exponent is not the law's
-  expect(seen.labels).toEqual(['Symbolic recovery (SRR)', 'Symbolic recovery with exponents', 'Symbolic recovery with all numbers']);
+  expect(seen.labels).toEqual(['Symbolic Recovery: Structure (SRR)', 'Symbolic Recovery: Structure + Exponents (SRRe)', 'Symbolic Recovery: Structure + All Numbers (SRRa)']);
   // all three are rates over every law, so none of their numbers is marked as resting on too few
   const row = page.locator(V2 + ' .v2table tbody tr').first();
   await expect(row).toBeVisible({ timeout: 15000 });
   await expect(page.locator(V2 + ' .v2table .v2hollow')).toHaveCount(0);
   expect(errors, errors.join('\n')).toEqual([]);
+});
+
+test('metric names say Prediction and Ground Truth, in title caps, and single-expression properties sit apart', async ({ page }) => {
+  await page.goto('/?release=2026-09');
+  const reg = await page.evaluate(() => window.RESULTS_V2.metrics.map((m) => ({ key: m.key, label: m.label, short: m.short, group: m.group })));
+  const small = ['of', 'the', 'to', 'as', 'a', 'and', 'log10', 'log2', 'vNRR', 'fNRR'];
+  for (const m of reg) {
+    for (const text of [m.label, m.group, m.short.replace('GT', 'Ground Truth')]) {
+      const lowered = text.split(/[^A-Za-z0-9²]+/).filter((w) => w && /^[a-z]/.test(w) && small.indexOf(w) < 0);
+      expect(lowered, text).toEqual([]);
+      expect(text, text).not.toMatch(/\b(law|answer|pred|GT)\b/i);
+    }
+  }
+  const by = (k) => reg.filter((m) => m.key === k)[0];
+  expect(by('success').label).toBe('Successful Prediction Rate');
+  expect(by('mdl_ratio').label).toBe('MDL Ratio (Prediction / Ground Truth)');
+  expect(by('edit_distance').label).toContain('Levenshtein');
+  expect(by('edit_distance_norm').label).toContain('Levenshtein');
+  expect(['symbolic_recovery', 'symbolic_recovery_mask_fittable', 'symbolic_recovery_mask_none', 'skeleton_match_raw'].map((k) => by(k).short)).toEqual(['SRR', 'SRRe', 'SRRa', 'SRRr']);
+  // a property of one expression is not a comparison: those have a group of their own
+  const alone = reg.filter((m) => m.group === 'Expression Properties').map((m) => m.key).sort();
+  expect(alone).toEqual(['ground_truth_mdl', 'n_constants', 'n_variables', 'predicted_mdl', 'predicted_n_constants', 'predicted_skeleton_prefix_length',
+    'predicted_total_nestedness', 'skeleton_length', 'total_nestedness']);
+  expect(reg.filter((m) => /Ground Truth$/.test(m.group)).every((m) => alone.indexOf(m.key) < 0)).toBe(true);
 });

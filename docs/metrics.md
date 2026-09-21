@@ -234,8 +234,17 @@ These are raw columns, written by the adapter and not recomputed:
 
 The [results explorer](https://psaegert.github.io/srbf/) calls the success metrics *rates* and
 follows the same rules: a failure counts 0 in a rate and the worst value where a metric has one,
-and every other metric describes the answers that were made. It shows the same quantities under reader names: *Numeric recovery (vNRR)* is `numeric_recovery_val`, *fNRR* is `numeric_recovery_fit`,
-*Symbolic recovery with exponents* and *with all numbers* are `symbolic_recovery_mask_fittable` and
-`symbolic_recovery_mask_none`, *Expression length ratio* is `skeleton_length_ratio`, *Prediction success rate* is the mean of
-`prediction_success`, and *Exact skeleton match (raw)* is the equality of the skeletons as written,
-without simplification.
+and every other metric describes the predictions that were made. It shows the same quantities
+under reader names, which say *Prediction* and *Ground Truth* for the two expressions:
+
+| on the explorer | column |
+|---|---|
+| Numeric Recovery, Validation (vNRR) / Support (fNRR) | `numeric_recovery_val`, `numeric_recovery_fit` |
+| Fits as Well as the Ground Truth | `numeric_recovery_relative_*` |
+| Successful Prediction Rate | the mean of `prediction_success` |
+| Symbolic Recovery: Structure (SRR), + Exponents (SRRe), + All Numbers (SRRa) | `symbolic_recovery`, `symbolic_recovery_mask_fittable`, `symbolic_recovery_mask_none` |
+| Raw Symbolic Recovery (SRRr) | the equality of the two skeletons as written, every number masked, without simplification |
+| MDL Ratio, Token Count Ratio (Prediction / Ground Truth) | `mdl_ratio`, `skeleton_length_ratio` |
+| Token Overlap, Variable Overlap | `f1_score`, `precision_score`, `recall_score` and the `*_unique_variables` columns |
+| Levenshtein Edit Distance (Tokens), Tree Edit Distance (Zhang-Shasha) | `edit_distance`, `edit_distance_norm`, `zss_edit_distance` |
+| Function Nesting | `total_nestedness`, `predicted_total_nestedness` |

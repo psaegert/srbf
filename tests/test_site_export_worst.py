@@ -79,6 +79,29 @@ def test_a_rate_the_rows_do_not_carry_is_absent_and_not_zero():
 
 
 def test_the_three_levels_of_symbolic_recovery_are_in_the_registry():
-    keys = [m["key"] for m in export.registry_json()]
+    registry = export.registry_json()
+    keys = [m["key"] for m in registry]
     at = keys.index("symbolic_recovery")
-    assert keys[at:at + 3] == ["symbolic_recovery", "symbolic_recovery_mask_fittable", "symbolic_recovery_mask_none"]
+    assert keys[at:at + 4] == ["symbolic_recovery", "symbolic_recovery_mask_fittable", "symbolic_recovery_mask_none", "skeleton_match_raw"]
+    assert [m["short"] for m in registry[at:at + 4]] == ["SRR", "SRRe", "SRRa", "SRRr"]
+
+
+def test_metric_names_are_written_in_title_caps_with_one_word_for_each_side():
+    """A name says Prediction and Ground Truth, never a second word for either, and every word of it is capitalized
+    except the small ones and the mathematics."""
+    import re
+    small = {"of", "the", "to", "as", "a", "and", "log10", "log2"}
+    for metric in export.registry_json():
+        for text in (metric["label"], metric["group"], metric["short"].replace("GT", "Ground Truth")):
+            words = [w for w in re.split(r"[^A-Za-z0-9²]+", text) if w and not w.isdigit()]
+            lowered = [w for w in words if w[0].islower() and w not in small and w not in ("vNRR", "fNRR")]
+            assert not lowered, (text, lowered)
+            assert not re.search(r"\b(law|answer|pred|GT|skeleton)\b", text, re.I) or metric["key"] == "skeleton_match_raw", text
+
+
+def test_a_property_of_one_expression_is_not_grouped_with_the_comparisons():
+    registry = {m["key"]: m for m in export.registry_json()}
+    alone = {k for k, m in registry.items() if m["group"] == "Expression Properties"}
+    assert alone == {"predicted_mdl", "ground_truth_mdl", "predicted_skeleton_prefix_length", "skeleton_length", "predicted_n_constants",
+                     "n_constants", "predicted_total_nestedness", "total_nestedness", "n_variables"}
+    assert {k for k, m in registry.items() if m.get("every")} == export.EVERY_PROBLEM

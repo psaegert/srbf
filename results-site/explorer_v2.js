@@ -75,7 +75,7 @@
   function mdef(m) {
     if (!m) { return ""; }
     if (AXIS[m.key]) { return m.desc; }
-    return m.desc + (m.kind === "rate" ? " Defined for every law." : " Successful predictions only.") +
+    return m.desc + (m.kind === "rate" || m.every ? " Defined for every law." : m.worst !== undefined ? " Counted over every law unless failed predictions are left out." : " Successful predictions only.") +
       (m.higher === true ? " Higher is better." : m.higher === false ? " Lower is better." : "");
   }
   function mhelp(m) { return help(mdef(m), "What is " + mname(m) + "?"); }
