@@ -14,7 +14,12 @@ Fatal checks, run before the Playwright suite in CI and locally:
      timing.json: only times measured on the reference machine are published;
   6. a sealed payload, if one is present, is sealed: the envelope carries only its own fields, the KDF is strong
      enough to be worth having, and the ciphertext reads as ciphertext (high entropy, no plaintext left in it).
-     The checker is run against a deliberately bad envelope on every invocation, so it cannot pass vacuously.
+     The checker is run against a deliberately bad envelope on every invocation, so it cannot pass vacuously;
+  7. no text a reader can see in a release payload (the protocol texts, the timing note, the labels and
+     descriptions of metrics, methods and catalogs) matches a banned pattern. The page lint reads index.html and the
+     explorers' strings; a payload is written by the exporter from files outside this repository, so it is read here,
+     where a release is checked before it is published. The patterns are copy_lint's, the maintainer's local ones
+     included (results-site/private/banned_patterns.json, git-ignored and absent in CI).
 """
 import base64
 import json
@@ -122,6 +127,33 @@ def check_no_as_run_time(path: Path) -> list[str]:
     return [f"{path}: publishes {k!r}" for k in UNCALIBRATED_TIME_KEYS if k in text]
 
 
+def payload_texts(node: Any, path: str = "") -> list[tuple[str, str]]:
+    """Every string value of a payload with its path, the numeric bulk aside (cells, status, timing hold no prose)."""
+    if isinstance(node, str):
+        return [(path, node)]
+    if isinstance(node, dict):
+        return [t for k, v in node.items() if not (path == "" and k in ("cells", "data", "status", "timing")) for t in payload_texts(v, f"{path}/{k}")]
+    if isinstance(node, list):
+        return [t for i, v in enumerate(node) for t in payload_texts(v, f"{path}[{i}]")]
+    return []
+
+
+def check_payload_texts(payload: Any, name: str, banned: dict[str, str]) -> list[str]:
+    out = []
+    for path, text in payload_texts(payload):
+        for pattern, why in banned.items():
+            m = re.search(pattern, text)
+            if m:
+                out.append(f"{name}: {path} reads {m.group(0)!r} ({why})")
+    return out
+
+
+def banned_patterns() -> dict[str, str]:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import copy_lint   # the one list of what a public page must not say, local patterns merged in
+    return dict(copy_lint.BANNED)
+
+
 def selftest() -> list[str]:
     """The guard checks itself: a blob that is plainly not sealed must be rejected by check_sealed."""
     plain = json.dumps({"methods": [{"key": "x", "label": "X"}], "cells": {}}).encode() * 64
@@ -143,11 +175,16 @@ def selftest() -> list[str]:
     compared = ranks.replace("})();", 'Object.assign(R["t"].rungs,{"other-hidden|e2e":{"t1":[4,4]}});})();')
     if not {"hidden-method", "other-hidden"} <= (rank_methods(compared) or set()):
         bad.append("selftest: rank_methods missed a method named only in the compared-rungs record")
+    probe_payload = {"release": {"scoring": "fine"}, "timing_note": "measured on the forbidden-host", "cells": {"m": "the forbidden-host is numeric bulk"}}
+    hits = check_payload_texts(probe_payload, "selftest", {r"forbidden-host": "selftest"})
+    if len(hits) != 1 or "/timing_note" not in hits[0]:
+        bad.append("selftest: check_payload_texts did not flag a banned word in a reader-facing text (or read the numeric bulk)")
     return bad
 
 
 def main() -> int:
     failures = selftest()
+    banned = banned_patterns()
     index = (SITE / "index.html").read_text(encoding="utf-8")
     for needle in ("private/", "index.local"):
         if needle in index:
@@ -161,6 +198,7 @@ def main() -> int:
         extra = sorted(keys - PUBLIC_METHODS)
         if extra:
             failures.append(f"{js}: non-public method keys {extra}")
+        failures.extend(check_payload_texts(payload, str(js.relative_to(SITE)), banned))
         have = {m["key"] for m in payload.get("metrics", [])}
         missing = sorted(REQUIRED_METRICS - have)
         if missing:
