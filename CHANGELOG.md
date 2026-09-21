@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `x2 * x4 / (c * x4 ** 3)` and `c * x2 / x4 ** 2` were different skeletons: an answer in the other spelling
   could not be recovered symbolically. A match of the skeletons as written counts as well, since no simplifier
   is complete. `skeleton_simplified` holds the law's judged form.
+- **Analysis metrics describe the answers that were made.** `derive_metrics` wrote the worst value into the fit
+  columns of a problem without an answer (FVU infinite, R² 0), so a mean R² mixed how often a method answers
+  into how well it fits. `fvu_*`, `log10_fvu_*` and `r2_*` have no value there (NaN), like the structural
+  columns; whether a problem was solved is what the recovery rates and `prediction_success` say, and there a
+  failure counts 0. R² is documented as what it is, floored at 0.
 - **A method that raises has failed the problem.** An exception escaping an in-process adapter was recorded as a
   placeholder row, which every summary leaves out; it is a failed prediction, a miss on every rate, like a
   failure the adapter reports itself. A placeholder marks only a problem the catalog could not pose.

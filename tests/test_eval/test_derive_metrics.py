@@ -63,7 +63,7 @@ def test_r2_is_one_minus_fvu_clipped():
     r2 = np.asarray(derived['r2_val'], dtype=float)
     fvu = np.asarray(derived['fvu_val'], dtype=float)
     assert r2.shape == fvu.shape
-    assert np.allclose(r2, np.clip(1.0 - fvu, 0.0, 1.0))
+    assert np.allclose(r2, np.clip(1.0 - fvu, 0.0, 1.0), equal_nan=True)
     assert r2[0] == 1.0 and r2[2] == 1.0      # the perfect fits
     assert 0.0 <= r2[1] < 1.0                  # the offset fit explains some variance, not all
 
@@ -308,3 +308,27 @@ def test_a_failed_prediction_is_a_miss_on_every_recovery_rate() -> None:
     assert list(scored["symbolic_recovery"]) == [True, False]
     assert list(scored["numeric_recovery_val"]) == [True, False]
     assert bootstrap_report(scored, "symbolic_recovery")["median"] == 0.5     # one of two laws, not one of one
+
+
+def test_a_failed_prediction_has_no_fit_quality() -> None:
+    """How good an answer is can only be said of an answer. A problem without one has no FVU and no R^2, not the
+    worst one (none would be the worst: R^2 has no lower bound), and summaries of these columns describe the answers
+    that were made. Whether the problem was solved is the rates' business."""
+    import numpy as np
+    from srbf import bootstrap_report, derive_metrics
+    x = np.linspace(0.0, 1.0, 8).reshape(-1, 1)
+    y = x + 1.5
+    snapshot = {
+        "skeleton": [["+", "x1", "<constant>"]] * 3, "expression": [["+", "x1", "1.5"]] * 3,
+        "x": [x] * 3, "y": [y] * 3, "x_val": [x] * 3, "y_val": [y] * 3,
+        "y_pred": [y, y + 0.1, None], "y_pred_val": [y, y + 0.1, None],
+        "predicted_skeleton_prefix": [["+", "x1", "<constant>"]] * 2 + [None],
+        "predicted_expression_prefix": [["+", "x1", "1.5"], ["+", "x1", "1.6"], None],
+        "prediction_success": [True, True, False], "placeholder": [False] * 3, "benchmark_eq_id": ["a", "b", "c"],
+    }
+    scored = derive_metrics(snapshot, operator_arity={"+": 2})
+    for column in ("fvu_val", "log10_fvu_val", "r2_val", "fvu_fit", "r2_fit"):
+        values = np.asarray(scored[column], dtype=float)
+        assert np.isfinite(values[1]) and np.isnan(values[2]), column
+    assert list(scored["numeric_recovery_val"]) == [True, False, False]            # the rate still counts the miss
+    assert bootstrap_report(scored, "r2_val")["n_groups"] == 2                      # the two answers, not three problems

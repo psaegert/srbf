@@ -298,6 +298,17 @@ def _judged_pair(simplify_fn: Callable[[list[str]], list[str] | None], mask_fn: 
     return law_canonical, prediction_canonical
 
 
+def _answered(row_columns: Mapping[str, Any], prediction_key: str) -> np.ndarray:
+    """Which problems have an answer: the method reported success (where it reports at all) and predicted values
+    exist."""
+    predictions = row_columns[prediction_key]
+    has_values = np.array([yp is not None for yp in predictions], dtype=bool)
+    success = row_columns.get('prediction_success')
+    if success is None:
+        return has_values
+    return has_values & np.array([bool(ok) if ok is not None else True for ok in success], dtype=bool)
+
+
 def compute_derived_metrics(
     results: dict[str, Any],
     test_sets: Sequence[str],
@@ -423,6 +434,15 @@ def compute_derived_metrics(
                         ref = r[f'reference_fvu_{split}']
                         thr = np.where(np.isfinite(ref), np.maximum(ref, eps), eps)
                         r[f'numeric_recovery_relative_{split}'] = r[f'fvu_{split}'] <= thr
+
+                    # ── Analysis metrics describe the answers that were made ──
+                    # Whether a problem was solved is what the recovery rates say, and a problem without an answer
+                    # is a miss there. How good an answer is can only be said of an answer: a problem without one
+                    # has no fit quality, not the worst one (no value would be the worst: R^2 has no lower bound).
+                    answered = _answered(r, yp_key)
+                    for column in (f'fvu_{split}', f'log10_fvu_{split}', f'r2_{split}',
+                                   f'only_approx_fvu_{split}', f'only_approx_log10_fvu_{split}'):
+                        r[column] = np.where(answered, np.asarray(r[column], dtype=float), np.nan)
 
                 if 'skeleton_simplified' not in r:
                     r['skeleton_simplified'] = list(r['skeleton'])

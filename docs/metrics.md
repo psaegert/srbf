@@ -15,13 +15,22 @@ answer has values \(\hat y\) and \(\hat y_{\mathrm{val}}\) on the two sets and t
 when the method was given noisy ones: the question is whether the law was found, not whether the
 noise was reproduced.
 
-## Rates and diagnostics
+## Success metrics and analysis metrics
 
-A **rate** is defined for every problem, and a problem without a usable prediction is a miss:
-`numeric_recovery_*`, `numeric_recovery_relative_*`, `symbolic_recovery`, and `r2_*` (which is 0 for
-a failed prediction). A **diagnostic** exists only where a prediction exists and is `None`
-otherwise, so summaries of it describe the successful predictions: lengths, edit distances, token
-overlap, description lengths. `fvu_*` of a failed prediction is infinite.
+The columns fall into two kinds, and a failed prediction means something different in each.
+
+A **success metric** says whether a problem was solved, and it is defined for every problem:
+`numeric_recovery_*`, `numeric_recovery_relative_*`, `symbolic_recovery`, and the share of
+problems that got an answer at all (`prediction_success`). Whenever a method errors or returns no
+result it has failed the problem, and the metric is 0.
+
+An **analysis metric** describes the answers that were made: how well they fit (`fvu_*`,
+`log10_fvu_*`, `r2_*`), what they look like (lengths, constants, nestedness, description
+lengths) and how close they come to the law (token overlap, edit distances). A problem without an
+answer has no value there (`None`, or NaN in the numeric columns), and no value is filled in for
+it: no value would be the worst one, since \(R^2\) has no lower bound and an expression can be
+arbitrarily far from the law. Summaries of these columns describe the answers a method gave, so
+read them next to the share of problems it answered.
 
 The numeric columns read the predicted values, the symbolic columns read the stored skeleton. An
 answer that could be read as an expression and then failed to evaluate, because it divides by zero
@@ -42,7 +51,7 @@ $$
 
 0 is a perfect fit, 1 is as good as predicting the mean, and the measure does not depend on the
 scale of the targets. Both sums are rescaled before they are squared, so very large and very small
-targets neither overflow nor underflow. A prediction with a non-finite value has FVU \(\infty\). A
+targets neither overflow nor underflow. An answer with a non-finite value has FVU \(\infty\). A
 constant target has FVU 0 when it is matched exactly and \(\infty\) otherwise. FVU is never NaN.
 
 ### `log10_fvu_fit`, `log10_fvu_val`
@@ -55,9 +64,9 @@ it next to the recovery rate, which counts the exact fits.
 
 \(\max(0,\, 1 - \operatorname{FVU})\): \(R^2\) floored at 0. \(R^2\) itself has no lower bound, and
 one diverging answer would decide the mean of a whole catalog. The floor is the mean predictor, an
-answer every method can always return: an answer worse than that counts 0, and so does a failed
-prediction. That is what gives the column a mean; `1 - fvu_val` is the unfloored quantity, and it
-is summarized like the FVU, by its median.
+answer every method can always return: an answer worse than that counts 0. That is what gives the
+column a mean; `1 - fvu_val` is the unfloored quantity, and it is summarized like the FVU, by its
+median. Like every analysis metric it exists only for the problems that were answered.
 
 ### `numeric_recovery_fit`, `numeric_recovery_val`
 
@@ -177,8 +186,9 @@ These are raw columns, written by the adapter and not recomputed:
 
 ## Names on the results explorer
 
-The [results explorer](https://psaegert.github.io/srbf/) shows the same quantities under reader
-names: *Numeric recovery (vNRR)* is `numeric_recovery_val`, *fNRR* is `numeric_recovery_fit`,
+The [results explorer](https://psaegert.github.io/srbf/) calls the success metrics *rates* and
+follows the same rule: a failure counts 0 in a rate, and every other metric describes the answers
+that were made. It shows the same quantities under reader names: *Numeric recovery (vNRR)* is `numeric_recovery_val`, *fNRR* is `numeric_recovery_fit`,
 *Expression length ratio* is `skeleton_length_ratio`, *Prediction success rate* is the mean of
 `prediction_success`, and *Exact skeleton match (raw)* is the equality of the skeletons as written,
 without simplification.

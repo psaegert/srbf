@@ -12,8 +12,8 @@ carries a label for who chose it, and the labels are shown wherever methods are 
   ([Concepts](concepts.md)). Holdout rules belong to the data source, so they apply to the data and
   never to one method.
 - **The same scoring.** Metrics are derived from stored predictions by one code path. A method
-  that returns no answer has missed on every rate metric, for every method alike
-  ([Metrics](metrics.md#rates-and-diagnostics)).
+  that returns no answer has failed the problem on every success metric, for every method alike
+  ([Metrics](metrics.md#success-metrics-and-analysis-metrics)).
 - **The same timing conditions.** The driver fits one problem at a time, so a fit never competes
   with another. One-time costs, such as loading weights or compiling a Julia backend, are paid
   before the first problem and are not part of any fit time.

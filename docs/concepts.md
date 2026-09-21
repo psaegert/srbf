@@ -62,12 +62,14 @@ catalogs of the srbf suite are judged with `acj-5-4-llm`. The engine also measur
 answer is, as a **description length** in bits (MDL) that charges for operators, variables and the
 digits of constants. See [Metrics](metrics.md).
 
-## Rates and diagnostics
+## Success metrics and analysis metrics
 
-A **rate** metric, such as numeric recovery, is defined for every problem: a method that returns
-nothing has missed. A **diagnostic** metric, such as the length of the predicted expression, exists
-only where there is a prediction, and is summarized over the successful ones. The two regimes are
-applied the same way to every method.
+A **success metric**, such as numeric recovery, says whether a problem was solved and is defined
+for every problem: a method that errors or returns nothing has failed it, and the metric is 0. An
+**analysis metric**, such as the FVU or the length of the predicted expression, describes the
+answers that were made. A problem without an answer has no value there, and none is filled in:
+summaries of analysis metrics are read next to the share of problems a method answered. The two
+kinds are applied the same way to every method.
 
 ## Provenance
 

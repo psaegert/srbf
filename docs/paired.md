@@ -45,10 +45,12 @@ column read `delta_median` and the ranks, or compare `r2_val`.
 
 ### What is paired
 
-A rate is defined for every law, so a rate is paired over all of them and a method that fails on a
-law has missed it. A diagnostic exists only where there is a prediction, so it is paired over the
-laws where both methods have one, and `n_only_a` and `n_only_b` say how many were left out.
-`worst_rank=True` adds rank statistics over all laws, with a missing value ranked worst.
+A success metric is defined for every law, so it is paired over all of them and a method that
+fails on a law has missed it. An analysis metric exists only where there is an answer, so it is
+paired over the laws where both methods have one, and `n_only_a` and `n_only_b` say how many were
+left out. `worst_rank=True` adds rank statistics over all laws in which a missing value is placed
+last; it is off by default, because a rank over all laws mixes how often a method answers into how
+well it answers.
 
 ### Pairing is checked
 
