@@ -820,3 +820,114 @@ test('prose follows the release on screen', async ({ page }) => {
   await expect(page.locator('#about h3', { hasText: 'Pooling and intervals' })).toBeHidden();
   await expect(page.locator('#paired h3', { hasText: 'The noise margin' })).toBeVisible();
 });
+
+// ---- how much of a point is there ---------------------------------------------------------------------------------
+// A method that has answered half of the laws at budget 16 and 95 % of them at budget 32, in every catalog. Its
+// constant-count ratio exists for 40 laws, of the 42 that have a constant at all.
+async function withHalfAnswered(page) {
+  await page.route('**/data/2026-09/results.js', async (route) => {
+    const res = await route.fetch();
+    const add = `;(function () { var D = window.RESULTS_V2;
+      var mk = function (k) { return { state: 'complete', n: 100, ok: k, e: { n_constants_ratio: 42 }, m: {
+        numeric_recovery_val: [10, 100], success: [k, 100], mdl_ratio: [k, k, 1.5 * k, 2.5 * k], log10_fvu_val: [k, k, -2 * k, 5 * k],
+        f1_score: [100, 100, 40, 20], n_constants_ratio: [40, 40, 44, 50] } }; };
+      D.methods.push({ key: 'fixture-half', label: 'Fixture half answered', param: 'draws', budget: 'candidates', color: '#555555', group: 'baseline', provenance: 'upstream_default', selection: '' });
+      D.cells['fixture-half'] = {}; D.catalogs.forEach(function (c) { D.cells['fixture-half'][c.key] = { '16': mk(50), '32': mk(95) }; });
+      D.status['fixture-half'] = [2, 2]; })();`;
+    await route.fulfill({ response: res, body: (await res.text()) + add });
+  });
+}
+const HOLLOW = 'circle[fill="var(--surface)"]';
+const HALF = '/?release=2026-09&m=fixture-half&x=rung&s=mean&p=rung~mdl_ratio,rung~f1_score,rung~n_constants_ratio,rung~numeric_recovery_val';
+async function setThreshold(page, value) {
+  await page.locator(V2 + ' .v2valid').fill(String(value));
+  await expect(page.locator(V2 + ' .v2validout')).toHaveText(value + ' % of the laws');
+}
+
+test('a point that rests on too few laws is drawn hollow, and the reader sets how few', async ({ page }) => {
+  const errors = collectErrors(page);
+  await withHalfAnswered(page);
+  await page.goto(HALF + '&v=curves');
+  const plot = (i) => page.locator(V2 + ' .v2plot').nth(i);
+  await expect(plot(0).locator('svg circle')).toHaveCount(2);
+  // the default threshold is 90 %: half of the laws is too few, 95 % is enough
+  await expect(page.locator(V2 + ' .v2valid')).toHaveValue('90');
+  await expect(plot(0).locator(HOLLOW)).toHaveCount(1);
+  await expect(plot(0).locator(HOLLOW + ' title')).toHaveText(/@ 16.*50 % of the laws have a value/);
+  await expect(page.locator(V2 + ' .v2hollownote')).toContainText('fewer than 90 % of the laws');
+  // a metric with a worst value counts every law, and so does a rate: never hollow
+  await expect(plot(1).locator('svg circle')).toHaveCount(2);
+  await expect(plot(1).locator(HOLLOW)).toHaveCount(0);
+  await expect(plot(3).locator(HOLLOW)).toHaveCount(0);
+  // 40 of the 42 laws that HAVE a constant: the base is the laws the metric can be defined for
+  await expect(plot(2).locator(HOLLOW)).toHaveCount(0);
+  await setThreshold(page, 100);
+  await expect(plot(0).locator(HOLLOW)).toHaveCount(2);
+  await expect(plot(2).locator(HOLLOW)).toHaveCount(2);
+  await expect(plot(1).locator(HOLLOW)).toHaveCount(0);
+  await expect(plot(3).locator(HOLLOW)).toHaveCount(0);
+  expect(page.url()).toContain('ok=100');
+  await setThreshold(page, 0);   // off
+  await expect(page.locator(V2 + ' .v2view ' + HOLLOW)).toHaveCount(0);
+  await expect(page.locator(V2 + ' .v2hollownote')).toHaveCount(0);
+  // the two fixed charts above do not follow the control: they keep the default
+  await expect(page.locator('#results-headline-v2 ' + HOLLOW).first()).toBeVisible();
+  await expect(page.locator('#results-headline-v2')).toContainText('fewer than 90 % of the laws');
+  // a link carries the threshold
+  await page.goto(HALF + '&v=curves&ok=40');
+  await expect(page.locator(V2 + ' .v2valid')).toHaveValue('40');
+  await expect(plot(0).locator('svg circle')).toHaveCount(2);
+  await expect(plot(0).locator(HOLLOW)).toHaveCount(0);
+  expect(errors, errors.join('\n')).toEqual([]);
+});
+
+test('a table marks the same numbers, and a display without such numbers has no threshold', async ({ page }) => {
+  await withHalfAnswered(page);
+  await page.goto(HALF + '&v=table&rows=rungs');
+  const row = (r) => page.locator(V2 + ' .v2table tbody tr').filter({ has: page.locator('td:first-child', { hasText: new RegExp('^' + r + '$') }) });
+  await expect(row(16)).toBeVisible();
+  await expect(row(16).locator('.v2hollow')).toHaveCount(1);   // the description-length ratio, not the overlap, the ratio of constants or the rate
+  await expect(row(32).locator('.v2hollow')).toHaveCount(0);
+  await expect(page.locator(V2 + ' .v2view')).toContainText('fewer than 90 % of the laws');
+  for (const v of ['dist', 'ranks', 'paired']) {
+    await page.locator(V2 + ` .v2tab[data-view="${v}"]`).click();
+    await expect(page.locator(V2 + ' .v2valid')).toBeHidden();
+  }
+  await page.locator(V2 + ' .v2tab[data-view="matrix"]').click();
+  await expect(page.locator(V2 + ' .v2valid')).toBeVisible();
+});
+
+test('R² has no floor and is read by its median', async ({ page }) => {
+  const errors = collectErrors(page);
+  const asked = [];
+  page.on('request', (r) => { if (r.url().includes('/hist/')) { asked.push(r.url().split('/hist/')[1]); } });
+  await page.goto('/?release=2026-09&v=curves&x=rung&s=mean&p=rung~r2_val');
+  const reg = await page.evaluate(() => { const D = window.RESULTS_V2; const m = D.metrics.filter((x) => x.key === 'r2_val')[0];
+    return { label: m.label, via: m.median_via, lo: m.hist.lo, ranks: D.rank_keys, paired: D.paired_keys,
+      worst: D.metrics.filter((x) => x.worst !== undefined).map((x) => x.key + '=' + x.worst).sort() }; });
+  expect(reg.label).toBe('R² (validation)');
+  expect(reg.via).toBe('log10_fvu_val');
+  expect(reg.lo).toBeLessThan(0);
+  expect(reg.ranks).not.toContain('r2_val');   // it orders the answers exactly as the FVU does
+  expect(reg.paired).not.toContain('r2_val');
+  expect(reg.worst).toEqual(['edit_distance_norm=1', 'f1_score=0', 'f1_score_unique_variables=0', 'precision_score=0',
+    'precision_unique_variables=0', 'recall_score=0', 'recall_unique_variables=0']);
+  // the mean is chosen, the median is drawn, and the axis says so
+  const chart = page.locator(V2 + ' .v2plot svg').first();
+  await expect(chart.locator('circle').first()).toBeVisible({ timeout: 15000 });
+  await expect(chart).toContainText(/R² (\(validation\)|val), median/);
+  // near 1 the linear bins of R² are too coarse, so the FVU's log bins are read there
+  expect(asked).toContain('log10_fvu_val.js');
+  expect(asked).toContain('r2_val.js');
+  const titles = await chart.locator('circle title').allTextContents();
+  const values = titles.map((t) => parseFloat(t.split(': ')[1].replace(/^[≤≥] /, '')));
+  expect(values.length).toBeGreaterThan(3);
+  for (const v of values) { expect(v).toBeLessThanOrEqual(1); }
+  expect(values.some((v) => v > 0.99 && v < 1)).toBe(true);        // resolved next to 1 ...
+  expect(new Set(values.filter((v) => v < 0.9)).size).toBeGreaterThan(3);   // ... and not in a handful of coarse steps below it
+  // switching the statistic changes nothing for this metric, except that the axis no longer has to say it
+  await page.locator(V2 + ' input[name="v2stat"][value="median"]').check();
+  await expect(chart).not.toContainText(/, median/);
+  expect(await chart.locator('circle title').allTextContents()).toEqual(titles);
+  expect(errors, errors.join('\n')).toEqual([]);
+});

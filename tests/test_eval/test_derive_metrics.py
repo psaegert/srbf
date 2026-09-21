@@ -57,15 +57,17 @@ def test_requires_engine_or_operator_arity():
         derive_metrics(_raw_snapshot())
 
 
-def test_r2_is_one_minus_fvu_clipped():
+def test_r2_is_one_minus_fvu():
     snapshot = _raw_snapshot()
+    snapshot['y_pred_val'][3] = snapshot['y_val'][3] * -40.0       # far worse than predicting the mean
     derived = derive_metrics(snapshot, operator_arity=ARITY)
     r2 = np.asarray(derived['r2_val'], dtype=float)
     fvu = np.asarray(derived['fvu_val'], dtype=float)
     assert r2.shape == fvu.shape
-    assert np.allclose(r2, np.clip(1.0 - fvu, 0.0, 1.0), equal_nan=True)
+    assert np.allclose(r2, 1.0 - fvu, equal_nan=True)
     assert r2[0] == 1.0 and r2[2] == 1.0      # the perfect fits
     assert 0.0 <= r2[1] < 1.0                  # the offset fit explains some variance, not all
+    assert r2[3] < -1000.0                     # no floor
 
 
 def _mdl_snapshot():
@@ -332,3 +334,60 @@ def test_a_failed_prediction_has_no_fit_quality() -> None:
         assert np.isfinite(values[1]) and np.isnan(values[2]), column
     assert list(scored["numeric_recovery_val"]) == [True, False, False]            # the rate still counts the miss
     assert bootstrap_report(scored, "r2_val")["n_groups"] == 2                      # the two answers, not three problems
+
+
+def _three_problems_one_failed(failed_skeleton):
+    import numpy as np
+    x = np.linspace(0.0, 1.0, 8).reshape(-1, 1)
+    y = x + 1.5
+    return {
+        "skeleton": [["+", "x1", "<constant>"]] * 3, "expression": [["+", "x1", "1.5"]] * 3,
+        "x": [x] * 3, "y": [y] * 3, "x_val": [x] * 3, "y_val": [y] * 3,
+        "y_pred": [y, y + 0.1, None], "y_pred_val": [y, y + 0.1, None],
+        "predicted_skeleton_prefix": [["+", "x1", "<constant>"], ["sin", "x2"], failed_skeleton],
+        "predicted_expression_prefix": [["+", "x1", "1.5"], ["sin", "x2"], None],
+        "prediction_success": [True, True, False], "placeholder": [False] * 3, "benchmark_eq_id": ["a", "b", "c"],
+    }
+
+
+@pytest.mark.parametrize("failed_skeleton", [None, ["+", "x1", "<constant>"]], ids=["nothing returned", "text left behind"])
+def test_a_failed_problem_takes_the_worst_value_where_the_range_has_one(failed_skeleton) -> None:
+    """An overlap is a share in [0, 1] and a normalized edit distance is a share of the longer sequence: both
+    ranges end, and a problem the method failed sits at the bad end. Leaving it out would let a method raise its
+    mean similarity by failing on the hard laws. A failure is a failure whatever text it left behind."""
+    from srbf.result_processing import WORST_VALUE
+    scored = derive_metrics(_three_problems_one_failed(failed_skeleton), operator_arity={"+": 2, "sin": 1})
+    assert WORST_VALUE == {
+        "f1_score": 0.0, "precision_score": 0.0, "recall_score": 0.0, "edit_distance_norm": 1.0,
+        "f1_score_unique_variables": 0.0, "precision_unique_variables": 0.0, "recall_unique_variables": 0.0}
+    for column, worst in WORST_VALUE.items():
+        values = [float(v) for v in scored[column]]
+        assert values[2] == worst, column
+        assert values[0] == 1.0 - worst, column                  # the exact answer sits at the other end
+    assert bootstrap_report(scored, "f1_score")["n_groups"] == 3  # three problems, not two answers
+    assert list(scored["symbolic_recovery"]) == [True, False, False]
+
+
+@pytest.mark.parametrize("failed_skeleton", [None, ["+", "x1", "<constant>"]], ids=["nothing returned", "text left behind"])
+def test_a_failed_problem_has_no_value_where_the_range_has_no_end(failed_skeleton) -> None:
+    """A length, a ratio of lengths, a raw distance, R^2: each can be arbitrarily bad, so none has a worst value
+    to take, and the column describes the answers that were made."""
+    scored = derive_metrics(_three_problems_one_failed(failed_skeleton), operator_arity={"+": 2, "sin": 1})
+    for column in ("predicted_skeleton_prefix_length", "skeleton_length_ratio", "predicted_n_constants",
+                   "n_constants_delta", "edit_distance", "zss_edit_distance", "predicted_total_nestedness"):
+        assert scored[column][1] is not None and scored[column][2] is None, column
+    assert np.isnan(float(scored["r2_val"][2])) and np.isnan(float(scored["log10_fvu_val"][2]))
+
+
+def test_a_placeholder_row_is_not_a_failed_problem() -> None:
+    snapshot = _three_problems_one_failed(None)
+    snapshot["placeholder"] = [False, False, True]
+    scored = derive_metrics(snapshot, operator_arity={"+": 2, "sin": 1})
+    assert scored["f1_score"][2] is None and scored["edit_distance_norm"][2] is None
+
+
+def test_the_normalized_edit_distance_is_a_share_of_the_longer_sequence() -> None:
+    scored = derive_metrics(_three_problems_one_failed(None), operator_arity={"+": 2, "sin": 1})
+    assert float(scored["edit_distance_norm"][0]) == 0.0
+    assert float(scored["edit_distance_norm"][1]) == 1.0          # sin x2 against + x1 <constant>: all three differ
+    assert float(scored["precision_score"][1]) == 0.0 and float(scored["recall_score"][1]) == 0.0

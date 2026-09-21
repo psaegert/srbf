@@ -92,7 +92,8 @@
     wilson: "95 % Wilson score interval for a rate; t-interval for a mean; order-statistic interval for a median (from the pooled histogram). A band is the region the ladder could occupy: the interval box of every point and the hull between consecutive ones, in both axes where both are measured. Crosses draw the same intervals as bars through each point. Either, both or neither.",
     median: "The median is read from a 128-bin histogram per cell, so it is exact to a bin. Ratios and times are binned on a log scale.",
     mean: "The default. A mean is taken over the finite values of the pooled laws, so an exactly recovered law (log10 FVU = -inf) is counted by the recovery rates and by the median, but not by the mean; every point reports how many finite values it averaged and how many it had. Switch to the median where that matters.",
-    regime: "Rate metrics are defined for every law: a failed prediction is a miss. Continuous metrics describe successful predictions only.",
+    regime: "Rates are defined for every law: a failed prediction is a miss. So is a metric whose range has a worst value: a failed prediction takes it (0 for the token and variable overlaps, 1 for the normalized edit distance). Every other metric has no worst value, because an answer can be arbitrarily bad, and describes the answers that were made.",
+    valid: "A metric without a worst value describes only the laws a method answered, so a method that fails on the hard laws looks better on it than it is. A point is drawn hollow when fewer than this share of the laws have a value. Rates and metrics with a worst value count every law and are always solid; 0 % turns the marking off.",
     mcnemar: "Exact McNemar test on the laws the two methods disagree on (one recovered, the other did not): two-sided binomial p-value, no asymptotics. The difference of paired rates carries a 95 % Wald interval.",
     signtest: "Paired mean difference with a t-interval over laws where both methods have a finite value, plus a two-sided exact sign test on the wins and losses.",
     draw1: "One draw per problem so far. These are paired contrasts on the same laws, not the repeated-draw noise margins of the 2026-07 release; those follow when draws 2 and up exist.",
@@ -117,16 +118,19 @@
 
   // ---- state: URL > localStorage > defaults --------------------------------------------------------------------
   var withData = function (m) { return D.cells[m.key] && Object.keys(D.cells[m.key]).length; };
+  var VALID_DEFAULT = 90;
   var DEFAULTS = function () {
     return { view: "curves", cats: CATS.slice(), methods: D.methods.filter(withData).map(function (m) { return m.key; }),
       plots: D.metrics.filter(function (m) { return m.tier === "main"; }).map(function (m) { return { x: defaultAxis(), y: m.key }; }),
       focus: "numeric_recovery_val", stat: "mean", band: true, cross: false, xaxis: anyTime() ? "time" : "rung", rung: 64, base: null, tier: "main", q: "", rows: "rungs",
       // the Distribution view reads a continuous metric by default (a rate has no distribution over laws), the Ranks
       // view the primary ranking metric; each display remembers its own
-      dmetric: "log10_fvu_val", dmode: "hist", dnorm: "ok", rmetric: (D.rank_keys || ["log10_fvu_val"])[0], tbudget: null };
+      dmetric: "log10_fvu_val", dmode: "hist", dnorm: "ok", rmetric: (D.rank_keys || ["log10_fvu_val"])[0], tbudget: null,
+      // a point that rests on fewer than this share of the laws is drawn hollow
+      valid: VALID_DEFAULT };
   };
   var state = DEFAULTS();
-  var LS = "srbf-v2-" + REL + ".6";   // bumped whenever a default changes (.2 time axis, .3 mean, .4 bands, .5 per-view metrics, .6 complete pools only), so a saved state cannot pin the old one
+  var LS = "srbf-v2-" + REL + ".7";   // bumped whenever a default changes (.2 time axis, .3 mean, .4 bands, .5 per-view metrics, .6 complete pools only, .7 hollow markers), so a saved state cannot pin the old one
   var rungChosen = false;   // a budget from a link or from storage is kept; otherwise the first render picks one that has data
   function loadState() {
     try { var s = JSON.parse(localStorage.getItem(LS) || "null"); if (s) { rungChosen = s.rung !== undefined; Object.keys(state).forEach(function (k) { if (s[k] !== undefined) { state[k] = s[k]; } }); } } catch (e) { /* no storage */ }
@@ -150,6 +154,7 @@
     if (q.has("t")) { state.tbudget = q.get("t"); any = true; }
     if (q.has("b")) { state.base = q.get("b"); any = true; }
     if (q.has("rows")) { state.rows = q.get("rows") === "cats" ? "cats" : "rungs"; any = true; }
+    if (q.has("ok")) { state.valid = parseInt(q.get("ok"), 10); any = true; }
     if (q.has("tier")) { state.tier = q.get("tier") === "all" ? "all" : "main"; }
     if (["curves", "table", "matrix", "dist", "ranks", "paired"].indexOf(state.view) < 0) { state.view = "curves"; }
     if (["hist", "ecdf", "cats", "rungs"].indexOf(state.dmode) < 0) { state.dmode = "hist"; }
@@ -164,6 +169,7 @@
     if (!METRIC[state.focus]) { state.focus = "numeric_recovery_val"; }
     if (!state.base || state.methods.indexOf(state.base) < 0) { state.base = state.methods[0] || null; }
     if (D.rungs.indexOf(state.rung) < 0) { state.rung = 64; }
+    state.valid = isFinite(state.valid) ? Math.min(100, Math.max(0, Math.round(state.valid))) : VALID_DEFAULT;
     return any;
   }
   var fromUrl = loadState();
@@ -184,7 +190,7 @@
     ["view", "bench", "baseline", "metric", "budget"].forEach(function (k) { q.delete(k); });   // never carry 2026-07 keys
     q.set("release", REL); q.set("v", state.view); q.set("c", catsParam()); q.set("m", sharedMethods().join(",")); q.set("p", state.plots.map(plotKey).join(","));
     q.set("f", state.focus); q.set("s", state.stat); q.delete("pool"); q.delete("thin"); q.set("band", state.band ? "1" : "0"); q.set("cross", state.cross ? "1" : "0");
-    q.set("x", state.xaxis); q.set("r", String(state.rung)); if (state.base) { q.set("b", state.base); } q.set("rows", state.rows);
+    q.set("x", state.xaxis); q.set("r", String(state.rung)); if (state.base) { q.set("b", state.base); } q.set("rows", state.rows); q.set("ok", String(state.valid));
     ["dm", "dv", "dn", "rm", "t"].forEach(function (k) { q.delete(k); });   // a link carries only what its display reads
     if (state.view === "dist") { q.set("dm", state.dmetric); q.set("dv", state.dmode); q.set("dn", state.dnorm); }
     if (state.view === "ranks") { q.set("rm", state.rmetric); if (state.tbudget) { q.set("t", state.tbudget); } }
@@ -283,19 +289,53 @@
   function fwd(metric, x) { var tf = tfOf(metric); return tf === "log2" ? Math.log2(Math.max(1e-300, x)) : tf === "log10" ? Math.log10(Math.max(1e-300, x)) : x; }
   function back(metric, x) { var tf = tfOf(metric); return tf === "log2" ? Math.pow(2, x) : tf === "log10" ? Math.pow(10, x) : x; }
   // every statistic is returned in the metric's TRANSFORMED space (log2 for ratios, log10 for seconds), where the charts live
+  // A rate is read over every law, and so is a metric whose range has a worst value: a failed prediction takes it.
+  // Every other metric has no worst value and describes the answers that were made, so a method that fails on the
+  // hard laws looks better there than it is. `share` is the part of the laws behind a point (of the laws the metric
+  // can be defined for); below the reader's threshold the point is drawn hollow.
+  function validShare(metric, cells) {
+    if (metric.kind === "rate") { return 1; }
+    var d = 0, e = 0; cells.forEach(function (c) { var t = c.m[metric.key]; d += t ? t[0] : 0; e += c.e && c.e[metric.key] !== undefined ? c.e[metric.key] : c.n; });
+    return e ? d / e : null;
+  }
+  function thin(st) { return !!st && !st.pending && typeof st.share === "number" && st.share < state.valid / 100; }
+  function shareText(st) { return Math.floor(100 * st.share) + " % of the laws have a value"; }
+  var THIN_MARK = '<span class="v2hollow" aria-hidden="true">\u25cb</span> ';
+  // An unbounded metric with a heavy tail has no usable mean (one diverging answer decides it): it is read by its
+  // median whatever the reader chose. R^2 = 1 - FVU is read from two histograms, each where it is the finer one:
+  // its own linear bins (0.016 wide) up to 0.96, and the log10 FVU bins (0.16 decades) above that, where the linear
+  // ones cannot tell 0.99 from 0.9999, and below -1, where they end.
+  function statOf(metric) { return metric.median_via ? "median" : state.stat; }
+  function histKeys(metric) { return metric.median_via ? [metric.key, metric.median_via] : [metric.key]; }
+  function needsHist(metric) { return metric.kind === "cont" && statOf(metric) === "median"; }
+  function ensureHists(metric) { histKeys(metric).forEach(function (k) { ensure("hist/" + k + ".js", scheduleRender); }); }
+  var R2_FINE = 0.96;
+  function r2Quantile(own, fvu, kth) {   // the kth smallest R^2 is the kth largest FVU
+    var i = quantileBin(own, kth), v = binVal(own, i);
+    if (i > 0 && v <= R2_FINE) { return { v: v, edge: 0 }; }
+    var j = quantileBin(fvu, Math.min(fvu.n, Math.max(1, fvu.n + 1 - kth)));
+    return { v: j === 0 ? 1 : 1 - Math.pow(10, binVal(fvu, j)), edge: j === fvu.nb - 1 ? -1 : 0 };
+  }
   function stat(metric, m, r, cs) {
     var cells = cs.map(function (c) { return cell(m, c, r); }).filter(Boolean); if (!cells.length) { return null; }
-    if (metric.kind === "rate") { var a = 0, b = 0; cells.forEach(function (c) { var t = c.m[metric.key]; if (t) { a += t[0]; b += t[1]; } }); return wilson(a, b); }
-    if (state.stat === "mean") {
+    if (metric.kind === "rate") { var a = 0, b = 0; cells.forEach(function (c) { var t = c.m[metric.key]; if (t) { a += t[0]; b += t[1]; } }); var w = wilson(a, b); if (w) { w.share = 1; } return w; }
+    var share = validShare(metric, cells);
+    if (statOf(metric) === "mean") {
       var nd = 0, n = 0, s = 0, ss = 0; cells.forEach(function (c) { var t = c.m[metric.key]; if (t) { nd += t[0]; n += t[1]; s += t[2]; ss += t[3]; } });
       if (!n) { return null; } var mean = s / n, varr = Math.max(0, (ss - n * mean * mean) / Math.max(1, n - 1)), se = Math.sqrt(varr / n);
-      return { v: fwd(metric, mean), lo: fwd(metric, mean - Z * se), hi: fwd(metric, mean + Z * se), n: n, ndef: nd };
+      return { v: fwd(metric, mean), lo: fwd(metric, mean - Z * se), hi: fwd(metric, mean + Z * se), n: n, ndef: nd, share: share };
     }
-    if (!ready("hist/" + metric.key + ".js")) { return { pending: true }; }
+    if (!histKeys(metric).every(function (k) { return ready("hist/" + k + ".js"); })) { return { pending: true }; }
     var ph = pooledHist(metric.key, m, r, cs); if (!ph) { return null; }
-    var half = Z * Math.sqrt(ph.n) / 2, mid = quantileBin(ph, ph.n / 2);
+    var half = Z * Math.sqrt(ph.n) / 2;
+    if (metric.median_via) {
+      var pf = pooledHist(metric.median_via, m, r, cs); if (!pf) { return null; }
+      var q = function (kth) { return r2Quantile(ph, pf, kth); }, qm = q(Math.max(1, Math.ceil(ph.n / 2)));
+      return { v: qm.v, lo: q(Math.max(1, Math.floor(ph.n / 2 - half))).v, hi: q(Math.min(ph.n, Math.ceil(ph.n / 2 + half))).v, n: ph.n, edge: qm.edge, share: share };
+    }
+    var mid = quantileBin(ph, ph.n / 2);
     var lo = quantileBin(ph, Math.max(1, Math.floor(ph.n / 2 - half))), hi = quantileBin(ph, Math.min(ph.n, Math.ceil(ph.n / 2 + half)));
-    return { v: binVal(ph, mid), lo: binVal(ph, lo), hi: binVal(ph, hi), n: ph.n, edge: mid === 0 ? -1 : (mid === ph.nb - 1 ? 1 : 0) };
+    return { v: binVal(ph, mid), lo: binVal(ph, lo), hi: binVal(ph, hi), n: ph.n, edge: mid === 0 ? -1 : (mid === ph.nb - 1 ? 1 : 0), share: share };
   }
   function fmt(metric, x, edge) {
     if (x === null || x === undefined || !isFinite(x)) { return "–"; }
@@ -482,8 +522,10 @@
         var sx = stat(xm, m.key, r, use), sy = stat(ym, m.key, r, use); if (!sx || !sy) { return; }
         if (sx.pending || sy.pending) { pending = true; return; }
         if (!isFinite(sx.v) || !isFinite(sy.v)) { return; }
-        pts.push({ x: sx.v, xlo: sx.lo, xhi: sx.hi, v: sy.v, lo: sy.lo, hi: sy.hi,
-          title: m.label + " @ " + r + ": " + fmt(xm, sx.v, sx.edge) + " " + xm.short + ", " + fmt(ym, sy.v, sy.edge) + " " + ym.short + ", n = " + sy.n });
+        var least = thin(sx) && (!thin(sy) || sx.share < sy.share) ? sx : sy;
+        if (thin(sx) || thin(sy)) { thinDrawn = true; }
+        pts.push({ x: sx.v, xlo: sx.lo, xhi: sx.hi, v: sy.v, lo: sy.lo, hi: sy.hi, hollow: thin(sx) || thin(sy),
+          title: m.label + " @ " + r + ": " + fmt(xm, sx.v, sx.edge) + " " + xm.short + ", " + fmt(ym, sy.v, sy.edge) + " " + ym.short + ", n = " + sy.n + (least.share < 1 ? ", " + shareText(least) : "") });
         [sx.v, anyCI() ? sx.lo : sx.v, anyCI() ? sx.hi : sx.v].forEach(function (v) { if (isFinite(v)) { xmin = Math.min(xmin, v); xmax = Math.max(xmax, v); } });
         [sy.v, anyCI() ? sy.lo : sy.v, anyCI() ? sy.hi : sy.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
       });
@@ -512,25 +554,29 @@
   }
 
   // ---- Curves ----------------------------------------------------------------------------------------------------
+  var thinDrawn = false;   // set by a chart that drew a hollow point, so the block around it can say what that means
+  function thinNote() { return "A hollow point rests on fewer than " + state.valid + " % of the laws"; }
   function curveChart(metric, shown, title, aria) {
     var keys = shown.map(function (x) { return x.key; }), series = [], ymin = Infinity, ymax = -Infinity, pending = false, tmin = Infinity, tmax = -Infinity;
     var src = timeSource(keys);
     shown.forEach(function (m) { var pts = [];
       D.rungs.forEach(function (r) { var use = poolCats(m.key, r, keys); if (!use.length) { return; } var x = xOf(m.key, r, use, src); if (x === null) { return; }
         var st = stat(metric, m.key, r, use); if (!st) { return; } if (st.pending) { pending = true; return; } if (!isFinite(st.v)) { return; }
-        var title = m.label + " @ " + r + (state.xaxis === "time" ? " (" + x.toFixed(2) + " s)" : "") + ": " + fmt(metric, st.v, st.edge) + " [" + fmt(metric, st.lo) + ", " + fmt(metric, st.hi) + "], n = " + st.n + (st.ndef ? " finite of " + st.ndef : "") + ", " + laws(use).toLocaleString() + " laws";
-        pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, title: title });   // a budget has no interval: the candidate count is exact, and the measured time is within a pixel of its mean (0.4-1.1 px, measured)
+        var title = m.label + " @ " + r + (state.xaxis === "time" ? " (" + x.toFixed(2) + " s)" : "") + ": " + fmt(metric, st.v, st.edge) + " [" + fmt(metric, st.lo) + ", " + fmt(metric, st.hi) + "], n = " + st.n + (st.ndef ? " finite of " + st.ndef : "") + ", " + laws(use).toLocaleString() + " laws" + (st.share < 1 ? ", " + shareText(st) : "");
+        if (thin(st)) { thinDrawn = true; }
+        pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, hollow: thin(st), title: title });   // a budget has no interval: the candidate count is exact, and the measured time is within a pixel of its mean (0.4-1.1 px, measured)
         [st.v, anyCI() ? st.lo : st.v, anyCI() ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
         if (state.xaxis === "time") { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); } });
       if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: pts }); } });
     if (title == null) { title = metric.label; }   // the statistic is named once per block, not on every chart
+    var ylabel = axisName(metric) + (metric.median_via && state.stat === "mean" ? ", median" : "");
     if (pending && !series.length) { return chartSVG({ title: title, aria: aria, series: [], empty: "loading the distribution…" }); }
     if (!series.length) { return chartSVG({ title: title, aria: aria, series: [], empty: state.cats.length ? (shown.length ? (state.xaxis === "time" ? "the reference machine has not timed any method shown yet" : "no finished units for this selection yet") : "no method selected") : "no catalog selected" }); }
     var pad = (ymax - ymin) * 0.06 || 0.05;
     if (metric.kind === "rate") { var floor0 = nearRange(ymin, ymax, 0, 0.6); ymin = floor0 ? 0 : Math.max(0, ymin - pad); ymax = Math.min(1, Math.max(ymin + 0.02, ymax + pad)); }
     else { if (tfOf(metric) === "log2" && nearRange(ymin, ymax, 0, 0.35)) { ymin = Math.min(ymin, 0); ymax = Math.max(ymax, 0); } ymin -= pad; ymax += pad; }
     var tr = state.xaxis === "time" ? timeRange(tmin, tmax) : [0, 0];
-    return chartSVG({ title: title, aria: aria, series: series, ymin: ymin, ymax: ymax, ticks: ticksFor(metric, ymin, ymax), tick: function (g) { return tickLabel(metric, g); }, ylabel: axisName(metric), timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: tfOf(metric) === "log2" ? 0 : undefined });
+    return chartSVG({ title: title, aria: aria, series: series, ymin: ymin, ymax: ymax, ticks: ticksFor(metric, ymin, ymax), tick: function (g) { return tickLabel(metric, g); }, ylabel: ylabel, timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: tfOf(metric) === "log2" ? 0 : undefined });
   }
   // ---- Curves: one card per plot, each carrying its own two axes -------------------------------------------------
   // A picker, not a select: forty metrics in one column is a scroll, in grouped columns it is a menu. One control
@@ -589,9 +635,11 @@
         : (many ? " have" : " has") + " no " + term("time", "reference-machine time") + " yet") +
         ": on that axis " + (many ? "they are" : "it is") + " not drawn.</p>";
     }).join("");
+    thinDrawn = false;
     var cards = inBlock(main, state.plots.length + 1, function () {
       return state.plots.map(function (p, i) { return plotCard(p, i, shown); }).join("");
     });
+    if (thinDrawn) { note += '<p class="v2hint v2hollownote">' + term("valid", thinNote()) + ": the method failed on the others, and this metric has no worst value to count for them.</p>"; }
     return note + '<div class="v2charts">' + cards + add + "</div>";
   }
 
@@ -609,16 +657,17 @@
     if (!headRoot) { return; }
     headRoot.innerHTML = inBlock(headRoot, HEADLINE.length, function () { return withState(
       { cats: CATS.slice(), methods: D.methods.filter(withData).map(function (m) { return m.key; }),
-        stat: "mean", band: true, cross: false, xaxis: anyTime() ? "time" : "rung" },
+        stat: "mean", band: true, cross: false, xaxis: anyTime() ? "time" : "rung", valid: VALID_DEFAULT },
       function () {
         var shown = shownMethods();
         if (!shown.length) { return '<p class="v2hint">No method has finished units in this release yet.</p>'; }
         var drawn = axisMethods(shown), off = offAxis(shown);
         var keys = drawn.map(function (m) { return m.key; }), src = timeSource(keys);
+        thinDrawn = false;
         var charts = HEADLINE.map(function (h) {
           var ms = (h.key ? [h.key] : [h.x, h.y]).map(function (k) { return METRIC[k]; });
           if (ms.some(function (m) { return !m; })) { return ""; }
-          if (state.stat === "median") { ms.forEach(function (m) { if (m.kind === "cont") { ensure("hist/" + m.key + ".js", scheduleRender); } }); }
+          ms.forEach(function (m) { if (needsHist(m)) { ensureHists(m); } });
           var svg = h.key ? curveChart(ms[0], drawn, hlText(h.title)) : frontChart(ms[0], ms[1], shown, hlText(h.title));
           return '<figure class="v2hlfig">' + svg + "<figcaption>" + esc(hlText(h.caption)) + "</figcaption></figure>";
         }).join("");
@@ -629,19 +678,20 @@
               (off.length ? "; " + esc(off.map(function (m) { return m.label; }).join(", ")) + " not timed there yet, so " +
                 (off.length > 1 ? "they are" : "it is") + " left out of the first chart" : "")
             : "Budget per problem. " + term("time", "A time axis appears once the reference machine has timed a method shown") +
-              ": seconds measured wherever a unit happened to run are not comparable between methods, so this release does not publish them") + ".</p>";
+              ": seconds measured wherever a unit happened to run are not comparable between methods, so this release does not publish them") + "." +
+            (thinDrawn ? " " + term("valid", thinNote()) + "." : "") + "</p>";
       }); });
   }
 
   // ---- Table -----------------------------------------------------------------------------------------------------
   var lastTable = null;
-  function cellText(st, p) { if (!st) { return ""; } if (st.pending) { return "…"; } return fmt(p, st.v, st.edge) + (anyCI() ? ' <span class="v2ci-txt">[' + fmt(p, st.lo) + ", " + fmt(p, st.hi) + "]</span>" : ""); }
+  function cellText(st, p) { if (!st) { return ""; } if (st.pending) { return "…"; } if (thin(st)) { thinDrawn = true; } return (thin(st) ? '<span title="' + esc(shareText(st)) + '">' + THIN_MARK + "</span>" : "") + fmt(p, st.v, st.edge) + (anyCI() ? ' <span class="v2ci-txt">[' + fmt(p, st.lo) + ", " + fmt(p, st.hi) + "]</span>" : ""); }
   function renderTable(shown) {
     var plots = plotMetrics().map(function (k) { return METRIC[k]; }); var keys = shown.map(function (m) { return m.key; });
     if (!plots.length || !shown.length) { return '<p class="v2hint">Select at least one method and one metric.</p>'; }
     var head = '<tr><th>' + (state.rows === "cats" ? "catalog" : "rung") + '</th><th>laws</th>' + shown.map(function (m) { return '<th colspan="' + plots.length + '"><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + '</th>'; }).join("") + '</tr>' +
       '<tr><th></th><th></th>' + shown.map(function () { return plots.map(function (p) { return '<th>' + esc(mname(p)) + " " + mhelp(p) + '</th>'; }).join(""); }).join("") + '</tr>';
-    var body = "", rowsOut = [];
+    var body = "", rowsOut = []; thinDrawn = false;
     var emit = function (label, nl, tds) { body += '<tr><td>' + esc(label) + '</td><td>' + esc(nl) + '</td>' + tds.map(function (x) { return '<td>' + x.t + '</td>'; }).join("") + '</tr>'; rowsOut.push([label, nl].concat(tds.map(function (x) { return x.raw; }))); };
     if (state.rows === "rungs") {
       D.rungs.forEach(function (r) { var cells = shown.map(function (m) { return { m: m, use: poolCats(m.key, r, keys) }; }); if (!cells.some(function (c) { return c.use.length; })) { return; }
@@ -660,7 +710,7 @@
     lastTable = { header: [state.rows === "cats" ? "catalog" : "rung", "laws"].concat(shown.reduce(function (a, m) { return a.concat(plots.map(function (p) { return m.label + " · " + mname(p); })); }, [])), rows: rowsOut };
     var ctl = '<div class="v2row v2tablectl"><span class="v2lab">rows</span><label><input type="radio" name="v2rows" value="rungs"' + (state.rows === "rungs" ? " checked" : "") + '> every rung</label><label><input type="radio" name="v2rows" value="cats"' + (state.rows === "cats" ? " checked" : "") + '> catalogs at one budget</label>' + (state.rows === "cats" ? rungStepper(shown) : "") +
       '<span class="v2spacer"></span><button type="button" class="v2btn" data-act="copy-tsv">copy as TSV</button><button type="button" class="v2btn" data-act="csv">download CSV</button></div>';
-    return ctl + '<div class="v2table-wrap"><table class="v2table"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div><p class="v2hint">' + (anyCI() ? "Brackets: 95 % interval (" + term("wilson", "Wilson / t / order statistic") + "). " : "") + term("regime", "Rates count every law; continuous metrics describe successful predictions") + ". " + term("complete", "A pooled number appears once a method has finished every selected catalog at that budget") + ".</p>";
+    return ctl + '<div class="v2table-wrap"><table class="v2table"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div><p class="v2hint">' + (anyCI() ? "Brackets: 95 % interval (" + term("wilson", "Wilson / t / order statistic") + "). " : "") + term("regime", "Rates count every law; a metric without a worst value describes the answers that were made") + ". " + (thinDrawn ? term("valid", "\u25cb marks a number that rests on fewer than " + state.valid + " % of the laws") + ". " : "") + term("complete", "A pooled number appears once a method has finished every selected catalog at that budget") + ".</p>";
   }
 
   // ---- Catalog matrix --------------------------------------------------------------------------------------------
@@ -672,16 +722,17 @@
     var asked = shown; shown = withAt(shown, r);
     var cats = state.cats.slice().sort(function (a, b) { return CAT[b].laws - CAT[a].laws; }).filter(function (c) { return shown.some(function (m) { return cell(m.key, c, r); }); });
     if (!cats.length) { return bar + '<p class="v2hint">Nothing finished at budget ' + r + " for this selection: step to another budget above.</p>"; }
-    var vals = {}, all = [], pending = false;
+    var vals = {}, all = [], pending = false; thinDrawn = false;
     cats.forEach(function (c) { vals[c] = {}; shown.forEach(function (m) { if (!cell(m.key, c, r)) { return; } var st = stat(p, m.key, r, [c]); if (st && st.pending) { pending = true; return; } if (st && isFinite(st.v)) { vals[c][m.key] = st; all.push(st.v); } }); });
     if (pending && !all.length) { return bar + '<p class="v2hint">Loading the distribution…</p>'; }
     var lo = Math.min.apply(null, all), hi = Math.max.apply(null, all), ideal = tfOf(p) === "log2" ? 0 : 1;
     var score = function (v) { if (!(hi > lo)) { return 0.5; } if (p.higher === null) { var dm = Math.max(Math.abs(lo - ideal), Math.abs(hi - ideal)); return dm ? 1 - Math.abs(v - ideal) / dm : 1; } var t = (v - lo) / (hi - lo); return p.higher ? t : 1 - t; };
     var h = '<div class="v2table-wrap"><table class="v2table v2matrix"><thead><tr><th>catalog</th><th>laws</th>' + shown.map(function (m) { return '<th><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + '</th>'; }).join("") + '</tr></thead><tbody>';
-    cats.forEach(function (c) { h += '<tr><td>' + esc(c) + ' <span class="v2hint">' + GROUPS[CAT[c].group] + '</span></td><td>' + CAT[c].laws + '</td>' + shown.map(function (m) { var st = vals[c][m.key]; if (!st) { return '<td class="v2na">' + (cell(m.key, c, r) ? "…" : "") + '</td>'; } var a = 0.06 + 0.5 * score(st.v); return '<td style="background:rgba(' + rgb.join(",") + "," + a.toFixed(2) + ')" title="' + esc(fmt(p, st.lo) + " to " + fmt(p, st.hi) + ", n = " + st.n) + '">' + fmt(p, st.v, st.edge) + '</td>'; }).join("") + '</tr>'; });
+    cats.forEach(function (c) { h += '<tr><td>' + esc(c) + ' <span class="v2hint">' + GROUPS[CAT[c].group] + '</span></td><td>' + CAT[c].laws + '</td>' + shown.map(function (m) { var st = vals[c][m.key]; if (!st) { return '<td class="v2na">' + (cell(m.key, c, r) ? "…" : "") + '</td>'; } var a = 0.06 + 0.5 * score(st.v); return '<td style="background:rgba(' + rgb.join(",") + "," + a.toFixed(2) + ')" title="' + esc(fmt(p, st.lo) + " to " + fmt(p, st.hi) + ", n = " + st.n + (st.share < 1 ? ", " + shareText(st) : "")) + '">' + (thin(st) ? (thinDrawn = true, THIN_MARK) : "") + fmt(p, st.v, st.edge) + '</td>'; }).join("") + '</tr>'; });
     var pooled = shown.map(function (m) { var use = poolCats(m.key, r); var st = use.length ? stat(p, m.key, r, use) : null; return '<td>' + (st && !st.pending ? cellText(st, p) : "") + '</td>'; }).join("");
     h += '<tr class="v2total"><td>all selected ' + help(TERMS.complete, "When is a pooled number shown?") + '</td><td>' + laws(state.cats).toLocaleString() + '</td>' + pooled + '</tr></tbody></table></div>';
-    return bar + missingNote(asked, shown, "any selected catalog at budget " + r) + '<p class="v2hint">' + esc(p.label) + " at budget " + r + ", one cell per catalog; darker = better" + (p.higher === null ? " (closer to 1)" : "") + ". " + (p.kind === "cont" ? (state.stat === "mean" ? term("mean", "Means") : term("median", "Medians")) + " over successful predictions." : term("regime", "Rates over every law") + ".") + "</p>" + h;
+    var thinHint = thinDrawn ? '<p class="v2hint v2hollownote">' + term("valid", "\u25cb marks a number that rests on fewer than " + state.valid + " % of the laws") + ".</p>" : "";
+    return bar + missingNote(asked, shown, "any selected catalog at budget " + r) + thinHint + '<p class="v2hint">' + esc(p.label) + " at budget " + r + ", one cell per catalog; darker = better" + (p.higher === null ? " (closer to 1)" : "") + ". " + (p.kind === "cont" ? (statOf(p) === "mean" ? term("mean", "Means") : term("median", "Medians")) + (p.worst !== undefined ? " over every law, a failed prediction counting " + p.worst + "." : " over the answers that were made.") : term("regime", "Rates over every law") + ".") + "</p>" + h;
   }
 
   // ---- controls that live on the display itself -----------------------------------------------------------------
@@ -1055,9 +1106,9 @@
   // control has one place: the metric, the budget and the row layout of a snapshot are chosen on the display itself
   // (its bar), so the side panel never repeats them.
   var USES = {
-    curves: { stat: 1, ci: 1 },
-    table: { plots: 1, stat: 1, ci: 1 },
-    matrix: { stat: 1 },
+    curves: { stat: 1, ci: 1, valid: 1 },
+    table: { plots: 1, stat: 1, ci: 1, valid: 1 },
+    matrix: { stat: 1, valid: 1 },
     dist: {},
     ranks: {},
     paired: { plots: 1, base: 1, ci: 1, xaxis: 1 }
@@ -1103,7 +1154,8 @@
       '<div class="v2row" data-uses="stat"><span class="v2lab">statistic ' + help("Mean: " + TERMS.mean + " Median: " + TERMS.median, "How are the mean and the median taken?") + '</span><label><input type="radio" name="v2stat" value="mean"> mean</label><label><input type="radio" name="v2stat" value="median"> median</label></div>' +
       '<div class="v2row" data-uses="xaxis"><span class="v2lab">x axis ' + help("Time: " + TERMS.time + " Candidates: " + TERMS.candidates, "What do the two x axes measure?") + '</span><label><input type="radio" name="v2xaxis" value="time" class="v2xtime"> time</label><label><input type="radio" name="v2xaxis" value="rung"> candidates</label><span class="v2hint v2xtimehint"></span></div>' +
       '<div class="v2row v2checks" data-uses="ci"><span class="v2lab" data-uses="ci">95 % intervals ' + help(TERMS.wilson) + '</span>' +
-      '<label data-uses="ci"><input type="checkbox" class="v2band"> bands</label><label data-uses="ci"><input type="checkbox" class="v2cross"> crosses</label></div></div>' +
+      '<label data-uses="ci"><input type="checkbox" class="v2band"> bands</label><label data-uses="ci"><input type="checkbox" class="v2cross"> crosses</label></div>' +
+      '<div class="v2row" data-uses="valid"><span class="v2lab">hollow below ' + help(TERMS.valid, "When is a point drawn hollow?") + '</span><input type="range" class="v2valid" min="0" max="100" step="5" aria-label="share of the laws a point must rest on to be drawn solid, in percent"><output class="v2validout"></output></div></div>' +
       '</aside><section class="v2main"><p class="v2err" role="alert"></p><div class="v2view"></div></section></div>';
     var hasTiming = anyTime();
     root.querySelector(".v2xtime").disabled = !hasTiming; root.querySelector(".v2xtimehint").textContent = hasTiming ? "" : "(no measurements yet)";
@@ -1120,6 +1172,7 @@
     root.querySelectorAll("input[name=v2stat]").forEach(function (i) { i.checked = i.value === state.stat; });
     root.querySelectorAll("input[name=v2xaxis]").forEach(function (i) { i.checked = i.value === state.xaxis; });
     root.querySelector(".v2band").checked = state.band; root.querySelector(".v2cross").checked = state.cross;
+    var vs = root.querySelector(".v2valid"); if (document.activeElement !== vs) { vs.value = String(state.valid); } root.querySelector(".v2validout").textContent = state.valid + " % of the laws";
     setPick(root.querySelector(".v2focus"), state[focusKey()]); root.querySelector(".v2rung").value = String(state.rung);
     root.querySelectorAll("input[name=v2rows]").forEach(function (i) { i.checked = i.value === state.rows; });
     if (state.base) { root.querySelector(".v2base").value = state.base; }
@@ -1144,8 +1197,8 @@
       syncControls();
       var shown = shownMethods(), view = root.querySelector(".v2view");
       if (!rungChosen) { rungChosen = true; var br = bestRung(shown); if (br) { state.rung = br; } syncControls(); }
-      if (state.stat === "median" && state.view !== "dist" && state.view !== "paired") {   // histograms the current view needs
-        (state.view === "matrix" ? [METRIC[state.focus]] : D.metrics.filter(function (m) { return plotAxes().indexOf(m.key) >= 0; })).forEach(function (m) { if (m.kind === "cont") { ensure("hist/" + m.key + ".js", scheduleRender); } });
+      if (state.view !== "dist" && state.view !== "paired") {   // histograms the current view needs
+        (state.view === "matrix" ? [METRIC[state.focus]] : D.metrics.filter(function (m) { return plotAxes().indexOf(m.key) >= 0; })).forEach(function (m) { if (needsHist(m)) { ensureHists(m); } });
       }
       renderHeadline();
       view.innerHTML = state.view === "table" ? renderTable(shown) : state.view === "matrix" ? renderMatrix(shown) : state.view === "dist" ? renderDist(shown) : state.view === "ranks" ? renderRanks(shown) : state.view === "paired" ? renderPaired(shown) : renderCurves(shown);
@@ -1176,7 +1229,7 @@
     else { return; }
     render();
   });
-  root.addEventListener("input", function (e) { var t = e.target; if (t.classList.contains("v2q")) { state.q = t.value; syncControls(); } else if (t.classList.contains("v2swatch")) { userColors[t.dataset.m] = t.value; render(); } });
+  root.addEventListener("input", function (e) { var t = e.target; if (t.classList.contains("v2valid")) { state.valid = Math.min(100, Math.max(0, parseInt(t.value, 10) || 0)); syncControls(); scheduleRender(); } else if (t.classList.contains("v2q")) { state.q = t.value; syncControls(); } else if (t.classList.contains("v2swatch")) { userColors[t.dataset.m] = t.value; render(); } });
   root.addEventListener("click", function (e) {
     var b = e.target.closest ? e.target.closest("button") : null; if (!b || !root.contains(b) || b.classList.contains("v2help")) { return; }
     if (b.dataset.view) { state.view = b.dataset.view; render(); return; }

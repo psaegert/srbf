@@ -40,8 +40,8 @@ bootstraps the laws. It contains:
 | `n_pairs`, `n_only_a`, `n_only_b` | the laws both methods have a value for, and those only one has |
 | `variance_decomposition` | how much of the variance of \(\Delta\) is between laws and how much comes from the problems drawn within a law |
 
-An exact fit has `log10_fvu_val` \(-\infty\), which makes a mean of differences infinite. For that
-column read `delta_median` and the ranks, or compare `r2_val`.
+An exact fit has `log10_fvu_val` \(-\infty\), which makes a mean of differences infinite, and one
+diverging answer decides a mean of `r2_val`. For these columns read `delta_median` and the ranks.
 
 ### What is paired
 

@@ -578,6 +578,10 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 .explorer-v2 .v2table .v2sig { font-weight: 700; }
 .explorer-v2 .v2table .v2na { color: var(--ink-faint); }
 .explorer-v2 .v2ci-txt { color: var(--ink-faint); font-size: 12px; }
+/* a number or a point that rests on too few laws: the hollow marker of the charts, and its twin in a table */
+.explorer-v2 .v2hollow { color: var(--ink-faint); }
+.explorer-v2 .v2valid { flex: 1 1 90px; min-width: 80px; max-width: 150px; accent-color: var(--accent); }
+.explorer-v2 .v2validout { color: var(--ink-faint); font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .explorer-v2 .v2matrix td { transition: background .15s; }
 .explorer-v2 .v2tablectl { margin-bottom: 8px; }
 /* A plot is a card: its two axes are chosen on it, and it can be removed from it. The last cell of the

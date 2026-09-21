@@ -156,6 +156,16 @@ class TestMetricInputFlexibility(unittest.TestCase):
         self.assertTrue(torch.allclose(recall_value, torch.tensor(0.5)))
         self.assertTrue(torch.allclose(f1_value, torch.tensor(0.5)))
 
+    def test_the_precision_of_an_empty_prediction_is_zero(self):
+        preds = [["PAD", "PAD"], ["dog"]]
+        labels = [["dog", "mouse"], ["dog"]]
+
+        precision_values = precision(preds, labels, ignore_index="PAD", reduction='none')
+        f1_values = f1_score(preds, labels, ignore_index="PAD", reduction='none')
+
+        self.assertTrue(torch.equal(precision_values, torch.tensor([0.0, 1.0])))
+        self.assertTrue(torch.equal(f1_values, torch.tensor([0.0, 1.0])))
+
     def test_string_tokens_with_ignore(self):
         preds = [["cat", "dog", "PAD"], ["apple", "banana", "banana"]]
         labels = [["dog", "mouse", "PAD"], ["banana", "pear"]]

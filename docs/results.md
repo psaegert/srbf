@@ -50,7 +50,8 @@ An adapter may add columns of its own; the Flash-ANSR adapter records `generatio
 Whenever a method errors or returns no result, it has failed the problem. The row is a normal row
 with `prediction_success: False` and the reason in `error`, whether the method reported the failure
 itself, returned something that cannot be read, ran into its time limit, or raised an exception.
-It counts as a miss in every success metric and has no value in the analysis metrics
+It counts as a miss in every success metric, takes the worst value of the analysis metrics that
+have one, and has no value in the others
 ([Metrics](metrics.md#success-metrics-and-analysis-metrics)).
 
 A **placeholder** row marks a problem that was never posed: the catalog could not draw valid

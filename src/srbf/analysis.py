@@ -56,6 +56,9 @@ class Metric:
     key: str
     label: str
     higher_is_better: bool
+    #: The statistic a report takes over the laws: ``"mean"``, or ``"median"`` for a column without a lower or
+    #: upper bound, where one diverging answer would decide the mean.
+    statistic: str = "mean"
 
 
 def as_metric(metric: "Metric | str") -> "Metric":
@@ -76,7 +79,7 @@ DEFAULT_METRICS: tuple[Metric, ...] = (
     Metric("f1_score", "Skeleton F1", True),
     Metric("mdl_ratio", "MDL ratio", False),
     Metric("log10_fvu_val", "log10 FVU (val)", False),
-    Metric("r2_val", "R² (val)", True),
+    Metric("r2_val", "Median R² (val)", True, statistic="median"),
 )
 
 
@@ -129,10 +132,11 @@ def _pool(scored_snapshots: Iterable[Mapping[str, Sequence[Any]]], metric_key: s
     return {metric_key: values, "benchmark_eq_id": groups, "placeholder": placeholders}
 
 
-def _ci(scored_snapshots: Iterable[Mapping[str, Sequence[Any]]], metric_key: str, *, n_bootstrap: int, interval: float) -> dict[str, float]:
-    """Bootstrap ``(median, ci_lower, ci_upper, n_groups)`` for a metric over pooled snapshots."""
-    pooled = _pool(scored_snapshots, metric_key)
-    report = bootstrap_report(pooled, metric_key, n=n_bootstrap, interval=interval)
+def _ci(scored_snapshots: Iterable[Mapping[str, Sequence[Any]]], metric: Metric, *, n_bootstrap: int, interval: float) -> dict[str, float]:
+    """Bootstrap ``(median, ci_lower, ci_upper, n_groups)`` of the metric's statistic over pooled snapshots."""
+    pooled = _pool(scored_snapshots, metric.key)
+    statistic = np.nanmedian if metric.statistic == "median" else np.nanmean
+    report = bootstrap_report(pooled, metric.key, aggregate=statistic, reduce=statistic, n=n_bootstrap, interval=interval)
     return {"median": report["median"], "ci_lower": report["ci_lower"], "ci_upper": report["ci_upper"], "n_groups": report["n_groups"]}
 
 
@@ -186,7 +190,7 @@ def leaderboard(
         row: dict[str, Any] = {"model": model, "scaling": s}
         n_expr = 0
         for m in resolved:
-            ci = _ci(scored, m.key, n_bootstrap=n_bootstrap, interval=interval)
+            ci = _ci(scored, m, n_bootstrap=n_bootstrap, interval=interval)
             row[f"{m.label} median"] = ci["median"]
             row[f"{m.label} lo"] = ci["ci_lower"]
             row[f"{m.label} hi"] = ci["ci_upper"]
@@ -218,7 +222,7 @@ def scaling_table(
         scalings = sorted({r.scaling for r in runs if r.model == model and r.scaling is not None})
         for s in scalings:
             scored = [_score(r, engine=engine, operator_arity=operator_arity) for r in _runs_at(runs, model, s)]
-            ci = _ci(scored, metric.key, n_bootstrap=n_bootstrap, interval=interval)
+            ci = _ci(scored, metric, n_bootstrap=n_bootstrap, interval=interval)
             rows.append({"model": model, "scaling": s, "median": ci["median"], "lo": ci["ci_lower"], "hi": ci["ci_upper"]})
     return pd.DataFrame(rows)
 
@@ -242,7 +246,7 @@ def per_benchmark_table(
         for bench in _benchmarks(runs):
             scored = [_score(r, engine=engine, operator_arity=operator_arity)
                       for r in _runs_at(runs, model, s) if r.benchmark == bench]
-            row[bench] = _ci(scored, metric.key, n_bootstrap=n_bootstrap, interval=interval)["median"] if scored else float("nan")
+            row[bench] = _ci(scored, metric, n_bootstrap=n_bootstrap, interval=interval)["median"] if scored else float("nan")
         rows.append(row)
     return pd.DataFrame(rows).set_index("model")
 
@@ -545,7 +549,7 @@ def export_data(
         rec: dict[str, Any] = {"series": run.model, "version": run.version,
                                "benchmark": run.benchmark, "axis": run.axis, "x": _json_num(run.scaling)}
         for m in resolved:
-            ci = _ci([scored], m.key, n_bootstrap=n_bootstrap, interval=interval)
+            ci = _ci([scored], m, n_bootstrap=n_bootstrap, interval=interval)
             rec[m.key] = {"median": _json_num(ci["median"]), "lo": _json_num(ci["ci_lower"]),
                           "hi": _json_num(ci["ci_upper"]), "n": int(ci["n_groups"])}
         records.append(rec)

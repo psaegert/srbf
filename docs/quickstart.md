@@ -77,8 +77,8 @@ srbf analyze -c bench/adapters/mymethod/config.yaml -o report
 over the laws, and `report/figures/` the plots:
 
 ```text
-| Model    | N expr | Numeric recovery (val) | Symbolic recovery    | Skeleton F1          | MDL ratio            | log10 FVU (val)         | R² (val)             |
-| mymethod | 12     | 0.000 [0.000, 0.000]   | 0.000 [0.000, 0.000] | 0.703 [0.648, 0.746] | 4.796 [3.244, 6.830] | -1.102 [-1.551, -0.735] | 0.813 [0.638, 0.923] |
+| Model    | N expr | Numeric recovery (val) | Symbolic recovery    | Skeleton F1          | MDL ratio            | log10 FVU (val)         | Median R² (val)      |
+| mymethod | 12     | 0.000 [0.000, 0.000]   | 0.000 [0.000, 0.000] | 0.703 [0.648, 0.746] | 4.753 [3.242, 6.697] | -1.107 [-1.550, -0.746] | 0.910 [0.742, 0.963] |
 ```
 
 A straight line recovers none of the twelve Nguyen laws, as it should. Drop `--experiment` to run

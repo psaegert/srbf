@@ -309,6 +309,34 @@ def _answered(row_columns: Mapping[str, Any], prediction_key: str) -> np.ndarray
     return has_values & np.array([bool(ok) if ok is not None else True for ok in success], dtype=bool)
 
 
+#: Analysis metrics whose range has a worst value, and that value. A problem the method failed takes it, so a method
+#: cannot raise its mean similarity by failing on the hard laws. The value is the end of the metric's RANGE, not the
+#: score of some stand-in answer: an overlap is a share in [0, 1] and nothing is below 0; a normalized edit distance is
+#: a share of the longer sequence, and an answer that grows without bound tends to 1. Every other analysis metric is
+#: unbounded on the bad side (R^2, FVU, a length, a ratio of lengths, a raw distance) and has no worst value to take.
+WORST_VALUE: dict[str, float] = {
+    'f1_score': 0.0, 'precision_score': 0.0, 'recall_score': 0.0, 'edit_distance_norm': 1.0,
+    'f1_score_unique_variables': 0.0, 'precision_unique_variables': 0.0, 'recall_unique_variables': 0.0,
+}
+
+
+def _failed(row_columns: Mapping[str, Any], n_rows: int) -> list[bool]:
+    """Which problems the method failed: it reported no success or, where it does not report, returned no
+    expression. A placeholder row is not a problem the method was given, so it is never a failure."""
+    success = row_columns.get('prediction_success')
+    skeletons = row_columns.get('predicted_skeleton_prefix')
+    placeholder = row_columns.get('placeholder')
+    failed = []
+    for i in range(n_rows):
+        if placeholder is not None and i < len(placeholder) and placeholder[i]:
+            failed.append(False)
+        elif success is not None and i < len(success) and success[i] is not None:
+            failed.append(not bool(success[i]))
+        else:
+            failed.append(skeletons is None or i >= len(skeletons) or skeletons[i] is None)
+    return failed
+
+
 def compute_derived_metrics(
     results: dict[str, Any],
     test_sets: Sequence[str],
@@ -326,16 +354,19 @@ def compute_derived_metrics(
     - ``fvu_fit``, ``fvu_val``, ``log10_fvu_fit``, ``log10_fvu_val``, ``r2_fit``, ``r2_val``
     - ``numeric_recovery_fit``, ``numeric_recovery_val``
     - ``only_approx_fvu_*``, ``only_approx_log10_fvu_*``
-    - ``skeleton_simplified``, ``f1_score``, ``skeleton_length``,
-      ``predicted_skeleton_prefix_length``
+    - ``skeleton_simplified``, ``f1_score``, ``precision_score``, ``recall_score``,
+      ``skeleton_length``, ``predicted_skeleton_prefix_length``
     - ``n_variables``, ``n_constants``, ``predicted_n_constants``, ``n_constants_delta``
     - ``symbolic_recovery``, ``skeleton_length_ratio``
     - ``predicted_mdl``, ``ground_truth_mdl``, ``mdl_ratio`` (when ``mdl_fn`` is given)
-    - ``edit_distance``, ``zss_edit_distance``
+    - ``edit_distance``, ``edit_distance_norm``, ``zss_edit_distance``
     - ``unique_variables``, ``predicted_unique_variables``
     - ``f1_score_unique_variables``, ``precision_unique_variables``,
       ``recall_unique_variables``
     - ``total_nestedness``, ``predicted_total_nestedness``
+
+    A problem the method failed is a miss on every rate, takes the worst value of the metrics that
+    have one (:data:`WORST_VALUE`) and has no value on the others.
 
     Parameters
     ----------
@@ -448,13 +479,24 @@ def compute_derived_metrics(
                     r['skeleton_simplified'] = list(r['skeleton'])
 
                 skel_sim = r['skeleton_simplified']
-                pred_skel = r['predicted_skeleton_prefix']
+                # The columns below describe answers. A failed prediction is none, whatever text it left behind.
+                failed = _failed(r, len(skel_sim))
+                pred_skel = [None if miss else ps for ps, miss in zip(r['predicted_skeleton_prefix'], failed)]
 
                 # ── Token-level F1 ────────────────────────────────
                 r['f1_score'] = np.array([
                     f1_score(np.array([ps]), np.array([sk])) if ps is not None else None
                     for ps, sk in zip(pred_skel, skel_sim)
                 ])
+
+                r['precision_score'] = np.array([
+                    float(precision([ps], [sk])) if ps is not None and sk is not None else None
+                    for ps, sk in zip(pred_skel, skel_sim)
+                ], dtype=object)
+                r['recall_score'] = np.array([
+                    float(recall([ps], [sk])) if ps is not None and sk is not None else None
+                    for ps, sk in zip(pred_skel, skel_sim)
+                ], dtype=object)
 
                 # ── Lengths ───────────────────────────────────────
                 r['skeleton_length'] = np.array([
@@ -522,6 +564,13 @@ def compute_derived_metrics(
                     if ps is not None and sk is not None else None
                     for ps, sk in zip(pred_skel, skel_sim)
                 ])
+                # over the longer sequence, so in [0, 1]; an answer that grows without bound tends to 1
+                normalized: list[Any] = [
+                    edit_distance(ps, sk) / max(len(ps), len(sk))
+                    if ps is not None and sk is not None and max(len(ps), len(sk)) else None
+                    for ps, sk in zip(pred_skel, skel_sim)
+                ]
+                r['edit_distance_norm'] = np.array(normalized, dtype=object)
                 r['zss_edit_distance'] = np.array([
                     zss_tree_edit_distance(ps, sk, operator_arity)
                     if ps is not None and sk is not None else None
@@ -575,6 +624,14 @@ def compute_derived_metrics(
                     total_nestedness(ps, operator_arity) if ps is not None else None
                     for ps in pred_skel
                 ])
+
+                # ── A failed problem takes the worst value where the range has one ──
+                for column, worst in WORST_VALUE.items():
+                    values = np.array(list(r[column]), dtype=object)
+                    for i, miss in enumerate(failed):
+                        if miss:
+                            values[i] = worst
+                    r[column] = values
 
 
 def derive_metrics(

@@ -165,18 +165,14 @@ def fvu_exact(y_true: np.ndarray | None, y_pred: np.ndarray | None) -> float:
 
 
 def r2(y_true: np.ndarray | None, y_pred: np.ndarray | None) -> float:
-    """Coefficient of determination, clipped to [0, 1]; 0 for an invalid or failed prediction.
+    """Coefficient of determination, ``1 - fvu``: 1 is a perfect fit, 0 is as good as predicting the mean.
 
-    Defined as ``1 - fvu`` with :func:`fvu`'s numerics, so a recovered fit reads exactly 1.0 and
-    the two metrics can never disagree. The clip follows the convention under which the
-    literature reports a mean R^2 across problems: a prediction worse than the constant mean, or
-    no prediction at all, contributes 0 rather than an unbounded negative value. ``1 - fvu(...)``
-    is the unclipped quantity.
+    It has :func:`fvu`'s numerics, so a recovered fit reads exactly 1.0 and the two metrics can never
+    disagree. There is no lower bound: an answer worse than the mean predictor is negative, and one with
+    an infinite FVU (a non-finite prediction, or no prediction at all) is ``-inf``. One diverging answer
+    therefore decides a mean; summarize the column by its median.
     """
-    unexplained = fvu(y_true, y_pred)
-    if not np.isfinite(unexplained):
-        return 0.0
-    return float(min(1.0, max(0.0, 1.0 - unexplained)))
+    return float(1.0 - fvu(y_true, y_pred))
 
 
 def log10_fvu(y_true: np.ndarray | None, y_pred: np.ndarray | None) -> float:

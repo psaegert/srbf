@@ -24,17 +24,35 @@ A **success metric** says whether a problem was solved, and it is defined for ev
 problems that got an answer at all (`prediction_success`). Whenever a method errors or returns no
 result it has failed the problem, and the metric is 0.
 
-An **analysis metric** describes the answers that were made: how well they fit (`fvu_*`,
-`log10_fvu_*`, `r2_*`), what they look like (lengths, constants, nestedness, description
-lengths) and how close they come to the law (token overlap, edit distances). A problem without an
-answer has no value there (`None`, or NaN in the numeric columns), and no value is filled in for
-it: no value would be the worst one, since \(R^2\) has no lower bound and an expression can be
-arbitrarily far from the law. Summaries of these columns describe the answers a method gave, so
-read them next to the share of problems it answered.
+An **analysis metric** describes an answer: how well it fits (`fvu_*`, `log10_fvu_*`, `r2_*`),
+what it looks like (lengths, constants, nestedness, description lengths) and how close it comes
+to the law (token overlap, edit distances). What a failed problem counts there depends on the
+range of the metric.
 
-The numeric columns read the predicted values, the symbolic columns read the stored skeleton. An
-answer that could be read as an expression and then failed to evaluate, because it divides by zero
-on the data, say, is a numeric miss and still has a skeleton to compare.
+Where the range has a worst value, a failed problem takes it, so that a method cannot raise its
+mean by failing on the hard laws. These are the overlaps, which are shares in \([0, 1]\), and the
+normalized edit distance:
+
+| column | a failed problem counts |
+|---|---|
+| `f1_score`, `precision_score`, `recall_score` | 0 |
+| `f1_score_unique_variables`, `precision_unique_variables`, `recall_unique_variables` | 0 |
+| `edit_distance_norm` | 1 |
+
+The table is `srbf.result_processing.WORST_VALUE`. The value is the end of the metric's range,
+not the score of some stand-in answer.
+
+Every other analysis metric has no worst value, because an answer can be arbitrarily bad:
+\(R^2\) has no lower bound, a predicted expression no largest length, a ratio of lengths lies in
+\([0, \infty)\) with its ideal at 1. A failed problem has no value there (`None`, or NaN in the
+numeric columns), and none is filled in. Summaries of these columns describe the answers a method
+gave, so read them next to the share of problems it answered: the
+[results explorer](https://psaegert.github.io/srbf/) draws a point hollow when that share is below
+90 %.
+
+A problem is failed when the method reports no success (`prediction_success` is false) or, where
+it does not report, returned no expression. An expression that could be read and then failed to
+evaluate, because it divides by zero on the data, say, is a failed problem like any other.
 
 Placeholder rows, written when a problem could not be produced at all, carry no metric and are
 left out of every summary ([Results](results.md#failures-and-placeholders)).
@@ -62,11 +80,11 @@ it next to the recovery rate, which counts the exact fits.
 
 ### `r2_fit`, `r2_val`
 
-\(\max(0,\, 1 - \operatorname{FVU})\): \(R^2\) floored at 0. \(R^2\) itself has no lower bound, and
-one diverging answer would decide the mean of a whole catalog. The floor is the mean predictor, an
-answer every method can always return: an answer worse than that counts 0. That is what gives the
-column a mean; `1 - fvu_val` is the unfloored quantity, and it is summarized like the FVU, by its
-median. Like every analysis metric it exists only for the problems that were answered.
+\(R^2 = 1 - \operatorname{FVU}\): 1 is a perfect fit, 0 is as good as predicting the mean, and an
+answer worse than that is negative, without a lower bound. An answer with a non-finite value has
+\(R^2 = -\infty\). One diverging answer would decide the mean of a whole catalog, so summarize
+this column by its median: `srbf analyze` does, and with `bootstrap_report` pass
+`aggregate=np.nanmedian, reduce=np.nanmedian`.
 
 ### `numeric_recovery_fit`, `numeric_recovery_val`
 
@@ -132,10 +150,16 @@ Precision, recall and \(F_1\) between the *sets* of distinct tokens of \(\hat\ta
 \(\bar\tau\): did the answer use the right operators and variables at all? Order and multiplicity
 are ignored.
 
-### `edit_distance`
+`precision_score` and `recall_score` are the two parts of `f1_score`: the share of the answer's
+distinct tokens that the law uses, and the share of the law's distinct tokens that the answer
+uses. The precision of an empty answer is 0 by definition.
+
+### `edit_distance`, `edit_distance_norm`
 
 The Levenshtein distance between the two prefix token sequences: the number of token insertions,
-deletions and substitutions that turn one into the other.
+deletions and substitutions that turn one into the other. `edit_distance_norm` divides it by the
+length of the longer sequence, which puts it in \([0, 1]\): 0 for the same sequence, and 1 is
+what a wrong answer tends to as it grows without bound.
 
 ### `zss_edit_distance`
 
@@ -187,8 +211,8 @@ These are raw columns, written by the adapter and not recomputed:
 ## Names on the results explorer
 
 The [results explorer](https://psaegert.github.io/srbf/) calls the success metrics *rates* and
-follows the same rule: a failure counts 0 in a rate, and every other metric describes the answers
-that were made. It shows the same quantities under reader names: *Numeric recovery (vNRR)* is `numeric_recovery_val`, *fNRR* is `numeric_recovery_fit`,
+follows the same rules: a failure counts 0 in a rate and the worst value where a metric has one,
+and every other metric describes the answers that were made. It shows the same quantities under reader names: *Numeric recovery (vNRR)* is `numeric_recovery_val`, *fNRR* is `numeric_recovery_fit`,
 *Expression length ratio* is `skeleton_length_ratio`, *Prediction success rate* is the mean of
 `prediction_success`, and *Exact skeleton match (raw)* is the equality of the skeletons as written,
 without simplification.

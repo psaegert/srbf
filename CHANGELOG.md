@@ -14,11 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `x2 * x4 / (c * x4 ** 3)` and `c * x2 / x4 ** 2` were different skeletons: an answer in the other spelling
   could not be recovered symbolically. A match of the skeletons as written counts as well, since no simplifier
   is complete. `skeleton_simplified` holds the law's judged form.
-- **Analysis metrics describe the answers that were made.** `derive_metrics` wrote the worst value into the fit
-  columns of a problem without an answer (FVU infinite, R² 0), so a mean R² mixed how often a method answers
-  into how well it fits. `fvu_*`, `log10_fvu_*` and `r2_*` have no value there (NaN), like the structural
-  columns; whether a problem was solved is what the recovery rates and `prediction_success` say, and there a
-  failure counts 0. R² is documented as what it is, floored at 0.
+- **What a failed problem counts in an analysis metric follows from the metric's range.** `derive_metrics`
+  wrote the worst fit into a problem without an answer (FVU infinite, R² 0) and left the structural columns
+  empty, so a mean R² mixed how often a method answers into how well it fits, and a mean token overlap rose
+  when a method failed on the hard laws. Where the range has a worst value, a failed problem takes it: 0 for
+  `f1_score`, `precision_score`, `recall_score` and the three variable-set columns, 1 for
+  `edit_distance_norm` (`srbf.result_processing.WORST_VALUE`). Every other analysis metric has no worst
+  value, since an answer can be arbitrarily bad, and has no value for a failed problem (`None`, NaN in the fit
+  columns). A problem is failed when `prediction_success` is false, whatever text the method left behind.
+- **R² has no floor.** `r2_*` is `1 - FVU`: negative for an answer worse than the mean predictor, `-inf` for a
+  non-finite one. It was clipped to `[0, 1]`. One diverging answer decides a mean of it, so `srbf analyze`
+  reports its median (`Metric(..., statistic="median")`).
+- **The precision of an empty prediction is 0**, not NaN (`srbf.metrics.precision`).
 - **A method that raises has failed the problem.** An exception escaping an in-process adapter was recorded as a
   placeholder row, which every summary leaves out; it is a failed prediction, a miss on every rate, like a
   failure the adapter reports itself. A placeholder marks only a problem the catalog could not pose.
@@ -68,6 +75,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   function; nothing in srbf has to be edited for an in-process adapter.
 - **What a worker reports about itself is stored with the results**: `__meta__["worker"]` holds the return
   value of the worker's `info()` (its interpreter, package versions, checkpoint).
+- **`precision_score`, `recall_score` and `edit_distance_norm`** among the derived metrics: the two parts of
+  the token F1, and the edit distance over the length of the longer sequence.
 - **The documentation is tested against the package** (`tests/test_docs.py`): every command, flag, adapter
   type, suite catalog and derived metric is documented; every documented flag, import and repository path
   exists; every example parses; and the site builds with broken links as errors.

@@ -242,7 +242,8 @@ def _compute_precision_values(pred_sequences: list[list[Any]], label_sequences: 
         label_set = set(filtered_labels)
 
         if not pred_set:
-            batch_values.append(float('nan'))
+            # Precision of an empty prediction is 0 by definition: nothing that was asked for was named.
+            batch_values.append(0.0)
             continue
 
         true_positives = len(pred_set & label_set)

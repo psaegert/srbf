@@ -67,9 +67,11 @@ digits of constants. See [Metrics](metrics.md).
 A **success metric**, such as numeric recovery, says whether a problem was solved and is defined
 for every problem: a method that errors or returns nothing has failed it, and the metric is 0. An
 **analysis metric**, such as the FVU or the length of the predicted expression, describes the
-answers that were made. A problem without an answer has no value there, and none is filled in:
-summaries of analysis metrics are read next to the share of problems a method answered. The two
-kinds are applied the same way to every method.
+answers that were made. Where the range of such a metric has a worst value, as a token overlap
+in \([0, 1]\) has, a problem without an answer takes it; where it has none, because an answer can
+be arbitrarily bad, the problem has no value and none is filled in, and the summary is read next
+to the share of problems a method answered. The two kinds are applied the same way to every
+method.
 
 ## Provenance
 

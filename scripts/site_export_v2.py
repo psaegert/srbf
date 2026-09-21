@@ -60,8 +60,11 @@ CATALOG_GROUPS = {
 NB = 128
 
 # key, label, short, group, kind, higher_is_better (None = 1 is ideal / descriptive), tier, format, histogram (lo, hi, transform), description
-# Rate metrics are defined for EVERY law (a failed prediction is a miss). Continuous metrics cover successful predictions
-# only, except the ground-truth descriptors (every law).
+# Rate metrics are defined for EVERY law (a failed prediction is a miss). So are the continuous metrics whose range
+# has a worst value (WORST below): a failed prediction takes it. Every other continuous metric has no worst value --
+# R^2, a length, a ratio of lengths can be arbitrarily bad -- and describes the answers that were made; the page
+# marks a point as hollow when fewer laws than the reader's threshold have a value. Ground-truth descriptors cover
+# every law.
 # NO WALL-CLOCK METRIC IS PUBLISHED. Seconds measured where a unit happened to run depend on the node, its GPU
 # and whatever shared it, so they are not comparable between methods. The only time this benchmark publishes is
 # the reference-machine ladder in timing.json, which the site uses for the time AXIS and nothing else.
@@ -84,10 +87,10 @@ METRICS = [
      "Fraction of variance unexplained on the validation split, log10. -inf is a perfect fit and counts in the median; the mean is over finite values only."),
     ("log10_fvu_fit", "log10 FVU (support)", "log10 FVU fit", "Fit quality", "cont", False, "more", "num2", (-17.0, 3.0, None),
      "Fraction of variance unexplained on the support points, log10."),
-    ("r2_val", "R² floored at 0 (validation)", "R² val", "Fit quality", "cont", True, "more", "num3", (0.0, 1.0, None),
-     "1 - FVU on the validation points, floored at 0. R² itself has no lower bound; an answer worse than predicting the mean, which every method can always return, counts 0. The floor is what gives the metric a mean."),
-    ("r2_fit", "R² floored at 0 (support)", "R² fit", "Fit quality", "cont", True, "more", "num3", (0.0, 1.0, None),
-     "1 - FVU on the support points, floored at 0: an answer worse than predicting the mean counts 0."),
+    ("r2_val", "R² (validation)", "R² val", "Fit quality", "cont", True, "more", "num3", (-1.0, 1.0, None),
+     "1 - FVU on the validation points: 1 is a perfect fit, 0 is as good as predicting the mean, and there is no lower bound. One diverging answer would decide a mean, so the median is shown whichever statistic is chosen."),
+    ("r2_fit", "R² (support)", "R² fit", "Fit quality", "cont", True, "more", "num3", (-1.0, 1.0, None),
+     "1 - FVU on the support points, without a lower bound; the median is shown whichever statistic is chosen."),
     ("mdl_ratio", "MDL ratio (pred / law)", "MDL ratio", "Length and complexity", "cont", None, "main", "ratio", (-4.0, 4.0, "log2"),
      "Description length of the prediction over the law's, both priced in the certified f64 canon (SimpliPy mu). 1 = as long as the law; the median is taken on the log2 scale."),
     ("predicted_mdl", "Predicted description length (bits)", "pred. MDL", "Length and complexity", "cont", False, "more", "num1", (0.0, 256.0, None),
@@ -109,23 +112,23 @@ METRICS = [
     ("total_nestedness_delta", "Unary-nestedness delta (pred - law)", "nesting delta", "Length and complexity", "cont", False, "more", "num1", (-8.0, 8.0, None),
      "Predicted minus true unary nestedness."),
     ("f1_score", "Skeleton token F1", "token F1", "Skeleton similarity", "cont", True, "more", "num3", (0.0, 1.0, None),
-     "Token-multiset F1 between the predicted skeleton and the simplified law's skeleton."),
+     "F1 between the sets of distinct tokens of the predicted skeleton and of the simplified law's skeleton. A failed prediction counts 0, the end of the range."),
     ("precision_score", "Skeleton token precision", "token precision", "Skeleton similarity", "cont", True, "more", "num3", (0.0, 1.0, None),
-     "Share of predicted skeleton tokens that occur in the law's skeleton."),
+     "Share of the prediction's distinct tokens that occur in the law's skeleton. A failed prediction counts 0: the precision of an empty answer is 0 by definition."),
     ("recall_score", "Skeleton token recall", "token recall", "Skeleton similarity", "cont", True, "more", "num3", (0.0, 1.0, None),
-     "Share of the law's skeleton tokens that occur in the prediction."),
+     "Share of the law's distinct tokens that occur in the prediction. A failed prediction counts 0."),
     ("edit_distance_norm", "Skeleton edit distance (normalized)", "edit dist. norm", "Skeleton similarity", "cont", False, "more", "num3", (0.0, 1.0, None),
-     "Levenshtein distance between the prefix token sequences over the longer length, in [0, 1]."),
+     "Levenshtein distance between the prefix token sequences over the longer length, in [0, 1]. A failed prediction counts 1, the end of the range: the value an answer tends to as it grows without bound."),
     ("edit_distance", "Skeleton edit distance", "edit dist.", "Skeleton similarity", "cont", False, "more", "num1", (0.0, 64.0, None),
      "Levenshtein distance between the prefix token sequences."),
     ("zss_edit_distance", "Tree edit distance (ZSS)", "tree edit dist.", "Skeleton similarity", "cont", False, "more", "num1", (0.0, 128.0, None),
      "Zhang-Shasha tree edit distance between the expression trees."),
     ("f1_score_unique_variables", "Variable-set F1", "variables F1", "Skeleton similarity", "cont", True, "more", "num3", (0.0, 1.0, None),
-     "F1 between the sets of input variables the prediction and the law use."),
+     "F1 between the sets of input variables the prediction and the law use. A failed prediction counts 0."),
     ("precision_unique_variables", "Variable-set precision", "variables prec.", "Skeleton similarity", "cont", True, "more", "num3", (0.0, 1.0, None),
-     "Share of the prediction's variables that the law uses."),
+     "Share of the prediction's variables that the law uses. A failed prediction counts 0."),
     ("recall_unique_variables", "Variable-set recall", "variables recall", "Skeleton similarity", "cont", True, "more", "num3", (0.0, 1.0, None),
-     "Share of the law's variables that the prediction uses."),
+     "Share of the law's variables that the prediction uses. A failed prediction counts 0."),
     ("predicted_log_prob", "Predicted log-probability", "log-prob", "Model internals", "cont", True, "more", "num1", (-64.0, 0.0, None),
      "Log-probability of the selected candidate's token sequence under the model's decoder. Sampling methods only."),
     ("predicted_score", "Selection score", "score", "Model internals", "cont", False, "more", "num1", (-2048.0, 512.0, None),
@@ -145,6 +148,18 @@ METRICS = [
 # A metric that repeats another in EVERY published cell says nothing of its own, so the menu does not list it (its
 # numbers stay in the cells). Recovery relative to the reference law is numeric recovery wherever the targets are
 # computed from the law (reference FVU = 0); it is a metric of its own only once a catalog of measured data is in.
+# The continuous metrics whose range has a worst value, and that value: a failed prediction takes it, so these are
+# read over every law (the rows carry the value already: srbf.result_processing.WORST_VALUE, checked by the tests).
+WORST = {"f1_score": 0.0, "precision_score": 0.0, "recall_score": 0.0, "edit_distance_norm": 1.0,
+         "f1_score_unique_variables": 0.0, "precision_unique_variables": 0.0, "recall_unique_variables": 0.0}
+# Metrics without a bound on the bad side AND with a heavy tail there: one answer decides a mean, so the page reads
+# the median whatever the reader chose. R^2 = 1 - FVU is a monotone map of the FVU, so near 1, where its own linear
+# histogram cannot tell 0.99 from 0.9999, and below the histogram's lower end, the page reads the order statistic from
+# the log10 FVU histogram instead (bins of 0.16 decades).
+MEDIAN_ONLY = {"r2_val": "log10_fvu_val", "r2_fit": "log10_fvu_fit"}
+# A metric that is undefined for some laws whatever the method does: the laws it could be defined for are the base of
+# its share of valid results. (The constant-count ratio needs a law with at least one constant.)
+ELIGIBLE = {"n_constants_ratio": lambda row: bool(row.get("n_constants"))}
 COPY_OF = {"numeric_recovery_relative_val": "numeric_recovery_val", "numeric_recovery_relative_fit": "numeric_recovery_fit"}
 
 
@@ -168,14 +183,14 @@ RATE_KEYS = [m[0] for m in METRICS if m[4] == "rate"]
 CONT_KEYS = [m[0] for m in METRICS if m[4] == "cont"]
 HIST_SPECS = {m[0]: m[8] for m in METRICS if m[8]}
 METRIC_HIGHER = {m[0]: m[5] for m in METRICS}
-PAIRED_KEYS = ["numeric_recovery_val", "symbolic_recovery", "success", "log10_fvu_val", "r2_val", "mdl_ratio", "expr_length_ratio", "f1_score"]
+PAIRED_KEYS = ["numeric_recovery_val", "symbolic_recovery", "success", "log10_fvu_val", "mdl_ratio", "expr_length_ratio", "f1_score"]
 # The Ranks view: within every law the methods are placed 1st, 2nd, ... on one continuous metric, a method without a
 # usable answer last. A mean rank over any set of laws and any roster of methods follows from PAIRWISE outcomes alone
 # (rank_i = 1 + sum_j [j beats i] + 0.5 [j ties i]), and pairwise counts add up over catalogs, so that is what ships:
 # per pair x catalog x slot, [n laws, then (wins of the first, wins of the second) per rank key]. A slot is a rung
 # ("64": both methods at that rung) or a time budget ("t3": each method at its largest rung the reference machine
 # timed at or under 3 s per problem). The first key is the primary league.
-RANK_KEYS = ["log10_fvu_val", "r2_val", "mdl_ratio", "expr_length_ratio", "f1_score"]
+RANK_KEYS = ["log10_fvu_val", "mdl_ratio", "expr_length_ratio", "f1_score"]   # R^2 orders the answers exactly as the FVU does
 TIME_BUDGETS = [0.1, 0.3, 1, 3, 10, 30, 100, 300, 1000]
 
 
@@ -185,6 +200,10 @@ def registry_json() -> list[dict[str, Any]]:
         m: dict[str, Any] = {"key": k, "label": label, "short": short, "group": group, "kind": kind, "higher": higher, "tier": tier, "fmt": fmt, "desc": desc}
         if hist:
             m["hist"] = {"lo": hist[0], "hi": hist[1], "tf": hist[2]}
+        if k in WORST:
+            m["worst"] = WORST[k]
+        if k in MEDIAN_ONLY:
+            m["median_via"] = MEDIAN_ONLY[k]
         out.append(m)
     return out
 
@@ -254,7 +273,12 @@ def summarize_cell(rows: dict[int, dict[str, Any]], expected: int | None) -> dic
         if not xs:
             continue
         fin = np.asarray([x for x in xs if math.isfinite(x)], float)
-        cell["m"][k] = [len(xs), int(fin.size), float(fin.sum()) if fin.size else 0.0, float((fin * fin).sum()) if fin.size else 0.0]
+        if k in MEDIAN_ONLY:   # no mean is read, and the sums of an unbounded metric overflow
+            cell["m"][k] = [len(xs), int(fin.size), 0.0, 0.0]
+        else:
+            cell["m"][k] = [len(xs), int(fin.size), float(fin.sum()) if fin.size else 0.0, float((fin * fin).sum()) if fin.size else 0.0]
+    for k, eligible in ELIGIBLE.items():
+        cell.setdefault("e", {})[k] = int(sum(1 for x in vals if eligible(x)))
     return cell
 
 
