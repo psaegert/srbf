@@ -388,6 +388,7 @@
   function nearRange(lo, hi, ref, frac) { var span = Math.max(hi - lo, 1e-9); return ref >= lo - frac * span && ref <= hi + frac * span; }
 
   // ---- SVG chart: series of points {x, v, lo, hi, hollow, title} on a rung/time x axis -----------------------------
+  function coarse() { return !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches); }   // a finger, not a mouse: no keyboard until one is asked for
   function narrow() { return window.innerWidth < 700; }   // the viewport, like the CSS breakpoints: a container reflows, this does not
   var CHART_MIN = 520, CHART_GAP = 14;   // must match the grid in styles.css (.v2charts, .v2hlcharts)
   function inner(el) {   // the width the grid actually has: clientWidth still counts the padding
@@ -1219,7 +1220,9 @@
       }
       renderHeadline();
       view.innerHTML = state.view === "table" ? renderTable(shown) : state.view === "matrix" ? renderMatrix(shown) : state.view === "dist" ? renderDist(shown) : state.view === "ranks" ? renderRanks(shown) : state.view === "paired" ? renderPaired(shown) : renderCurves(shown);
-      if (pickerFor && !document.body.contains(pickerFor)) { closePicker(); }
+      // A redraw replaces the button an open menu hangs on (a histogram that arrives, a container that settles).
+      // The menu moves to the button's successor; it closes only when the control itself is gone.
+      if (pickerFor && !document.body.contains(pickerFor)) { var again = samePick(pickerFor); if (again) { pickerFor = again; again.setAttribute("aria-expanded", "true"); placePicker(again); } else { closePicker(); } }
       root.querySelector(".v2err").textContent = ""; save();
     } catch (e) { root.querySelector(".v2err").textContent = "The explorer hit an error while drawing: " + (e && e.message ? e.message : e) + ". Reload the page, or press “all” under Catalogs to reset the selection."; if (window.console) { console.error(e); } }
   }
@@ -1296,11 +1299,15 @@
     if (pickerEl) { pickerEl.remove(); pickerEl = null; }
     if (pickerFor) { pickerFor.setAttribute("aria-expanded", "false"); pickerFor = null; }
   }
+  function samePick(old) {   // the control a redraw has put where `old` was
+    return Array.prototype.filter.call(document.querySelectorAll(".v2pick"), function (b) { return b.className === old.className && b.dataset.axis === old.dataset.axis && b.dataset.i === old.dataset.i; })[0] || null;
+  }
   function placePicker(btn) {
     var margin = 8, r = btn.getBoundingClientRect(), h = pickerEl.offsetHeight, w = pickerEl.offsetWidth;
+    var viewH = window.visualViewport ? Math.min(window.innerHeight, window.visualViewport.height) : window.innerHeight;   // what a keyboard leaves
     var left = Math.min(Math.max(r.left, margin), Math.max(margin, window.innerWidth - w - margin));
     var top = r.bottom + 6;
-    if (top + h > window.innerHeight - margin) { top = Math.max(margin, window.innerHeight - h - margin); }
+    if (top + h > viewH - margin) { top = Math.max(margin, viewH - h - margin); }
     pickerEl.style.left = left + "px"; pickerEl.style.top = top + "px";
   }
   function openPicker(btn) {
@@ -1325,7 +1332,9 @@
       else if (btn.dataset.i !== undefined) { state.plots[+btn.dataset.i][axis] = it.dataset.k; }
       closePicker(); render();
     });
-    if (!narrow()) { q.focus(); }
+    // The cursor goes into the search field only where typing costs nothing. On a touch screen a focused field
+    // summons the on-screen keyboard over the menu the reader has just asked for.
+    if (!narrow() && !coarse()) { q.focus(); }
   }
   document.addEventListener("click", function (e) {
     if (!e.target.closest) { return; }
@@ -1335,7 +1344,14 @@
     if (root.contains(trigger)) { openPicker(trigger); }
   });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") { closePop(); closePicker(); } });
-  window.addEventListener("resize", function () { closeArmed(); closePicker(); scheduleRender(); });
+  // Only a change of WIDTH changes the layout. An on-screen keyboard (or a browser bar that slides away) takes
+  // height and nothing else: the open menu stays, and moves back into what is left of the window.
+  var lastInnerW = window.innerWidth;
+  window.addEventListener("resize", function () {
+    if (window.innerWidth === lastInnerW) { if (pickerEl && pickerFor) { placePicker(pickerFor); } return; }
+    lastInnerW = window.innerWidth; closeArmed(); closePicker(); scheduleRender();
+  });
+  if (window.visualViewport) { window.visualViewport.addEventListener("resize", function () { if (pickerEl && pickerFor) { placePicker(pickerFor); } }); }
   // The first paint can measure a container that has not settled (fonts, the sidebar, a scrollbar), and a
   // chart built for the wrong width is a chart whose labels are the wrong size. Watch and redraw.
   if (window.ResizeObserver) {

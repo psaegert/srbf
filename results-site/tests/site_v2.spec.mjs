@@ -1048,3 +1048,61 @@ test('metric names say Prediction and Ground Truth, in title caps, and single-ex
     'predicted_total_nestedness', 'skeleton_length', 'total_nestedness']);
   expect(reg.filter((m) => /Ground Truth$/.test(m.group)).every((m) => alone.indexOf(m.key) < 0)).toBe(true);
 });
+
+// A tablet is wide enough for the desktop layout and has no keyboard until a text field takes the focus. The
+// keyboard changes the height of the window, never its width: the picker must survive that, and must not summon it.
+test.describe('the picker on a touch tablet', () => {
+  test.use({ viewport: { width: 820, height: 1180 }, hasTouch: true, isMobile: true });
+  test('opening it does not put the cursor into the search field', async ({ page }) => {
+    await page.goto('/?release=2026-09&v=curves&p=time~numeric_recovery_val');
+    expect(await page.evaluate(() => window.matchMedia('(pointer: coarse)').matches)).toBe(true);   // the premise of this test
+    await page.locator(`${V2} .v2plothead .v2pick[data-axis="y"]`).first().tap();
+    await expect(page.locator('.v2picker')).toBeVisible();
+    expect(await page.evaluate(() => document.activeElement && document.activeElement.className)).not.toContain('v2pickq');
+  });
+  test('it stays open when the on-screen keyboard takes height away, and closes when the width changes', async ({ page }) => {
+    const errors = collectErrors(page);
+    await page.goto('/?release=2026-09&v=curves&p=time~numeric_recovery_val');
+    await page.locator(`${V2} .v2plothead .v2pick[data-axis="y"]`).first().tap();
+    const picker = page.locator('.v2picker');
+    await expect(picker).toBeVisible();
+    await picker.locator('.v2pickq').tap();                      // the reader asks for the keyboard
+    await page.setViewportSize({ width: 820, height: 640 });      // ... and it takes the lower half of the window
+    await page.waitForTimeout(400);
+    await expect(picker).toBeVisible();
+    const box = await picker.boundingBox();
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    await picker.locator('.v2pickq').fill('recovery');
+    await expect(picker.locator('.v2pickitem:visible').first()).toBeVisible();
+    await picker.locator('.v2pickitem[data-k="symbolic_recovery"]').tap();
+    await expect(picker).toHaveCount(0);
+    await expect(page.locator(`${V2} .v2plothead .v2pick[data-axis="y"]`).first()).toContainText('Symbolic Recovery');
+    await page.locator(`${V2} .v2plothead .v2pick[data-axis="y"]`).first().tap();
+    await expect(picker).toBeVisible();
+    await page.setViewportSize({ width: 1180, height: 820 });     // the tablet is turned: the layout changes under the menu
+    await expect(picker).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+test('a redraw under an open picker does not close it', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  // a median metric needs its histogram, which arrives late here: the redraw lands while the menu is open
+  await page.route('**/data/2026-09/hist/**', async (route) => { await new Promise((r) => setTimeout(r, 1500)); await route.continue(); });
+  const arrived = page.waitForResponse((r) => r.url().includes('/hist/') && r.status() === 200);
+  await page.goto('/?release=2026-09&v=curves&p=time~r2_val', { waitUntil: 'domcontentloaded' });   // `load` would wait for the histogram
+  const trigger = page.locator(`${V2} .v2plothead .v2pick[data-axis="y"]`).first();
+  await trigger.click();
+  const picker = page.locator('.v2picker');
+  await expect(picker).toBeVisible();
+  await page.evaluate(() => { window.__pickBefore = document.querySelector('#results-explorer-v2 .v2plothead .v2pick[data-axis="y"]'); });
+  await arrived;
+  await expect.poll(() => page.evaluate(() => document.body.contains(window.__pickBefore))).toBe(false);   // the premise: the redraw replaced the button
+  await expect(picker).toBeVisible();
+  await expect(page.locator(`${V2} .v2plothead .v2pick[data-axis="y"]`).first()).toHaveAttribute('aria-expanded', 'true');
+  await picker.locator('.v2pickitem[data-k="symbolic_recovery"]').click();
+  await expect(picker).toHaveCount(0);
+  await expect(page.locator(`${V2} .v2plothead .v2pick[data-axis="y"]`).first()).toContainText('Symbolic Recovery');
+  expect(errors).toEqual([]);
+});
