@@ -25,7 +25,7 @@ it the token resolves to a directory that depends on how `flash-ansr` was instal
 ```yaml
 run:
   data_source:
-    catalog: fastsrb                 # which laws
+    catalog: fastsrb                 # which expressions
     sampling:
       n_support: 512                 # points the method fits on
       n_validation: 512              # held-out points
@@ -159,7 +159,7 @@ the problems after them. A finished run is recognized before the method is loade
 whole suite costs nothing for the parts that are done. `--no-resume` ignores the existing file and
 overwrites it.
 
-Resuming is positional: it relies on the catalog yielding the laws in the same order, which holds
+Resuming is positional: it relies on the catalog yielding the expressions in the same order, which holds
 for the default `method: iterate`.
 
 A problem whose fit failed is a result like any other: it is stored with its error, counts as a
@@ -203,7 +203,7 @@ count, that no index repeats, that the columns are identical and that no problem
 It orders the rows by their position in the catalog and writes the file an unsharded run would
 have written. Missing shards are an error unless `--allow-partial` is given, which records the gap
 in the merged file. `--shard` applies to every run that the command selects, and a catalog with
-fewer laws than shards leaves some shards empty.
+fewer expressions than shards leaves some shards empty.
 
 ## On a cluster
 

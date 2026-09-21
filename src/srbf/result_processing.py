@@ -201,7 +201,7 @@ def _convert_prefix(convert_fn: Callable[[list[str]], list[str]], tokens: Any) -
         return list(tokens)
 
 
-#: Rounds of mask -> simplify before the judged skeleton is taken as it stands. Two settle every law of the
+#: Rounds of mask -> simplify before the judged skeleton is taken as it stands. Two settle every ground truth of the
 #: srbf suite; the bound only keeps a pathological input from looping.
 _JUDGE_ROUNDS = 4
 
@@ -239,15 +239,15 @@ def _settled(simplify_fn: Callable[[list[str]], list[str] | None], mask_fn: Mask
     return list(current)
 
 
-#: Judged forms by (engine, mask, kind, tokens). One law is judged once per process, not once per result file, and a
-#: method that answers a law the same way at several budgets is judged once. Bounded; cleared when full.
+#: Judged forms by (engine, mask, kind, tokens). One ground truth is judged once per process, not once per result file, and a
+#: method that predicts a problem the same way at several budgets is judged once. Bounded; cleared when full.
 _JUDGE_CACHE: dict[tuple[Any, ...], list[str] | None] = {}
 _JUDGE_CACHE_MAX = 200_000
 
 
 def _judged_form(simplify_fn: Callable[[list[str]], list[str] | None], mask_fn: MaskFn, tokens: Any, *,
                  canonical: bool, level: str = 'all') -> list[str] | None:
-    """One of the two forms an expression is judged in, the same function for the law and for the prediction.
+    """One of the two forms an expression is judged in, the same function for the ground truth and for the prediction.
 
     ``canonical=True``: the expression WITH its numbers is brought into canonical form first, because that is
     where it shows what it is (``x2 * x4 / (c * x4 ** 3)`` cancels to ``x2 / (c * x4 ** 2)`` only while the ``3``
@@ -276,7 +276,7 @@ def _judged_form(simplify_fn: Callable[[list[str]], list[str] | None], mask_fn: 
 def _judged_pair(simplify_fn: Callable[[list[str]], list[str] | None], mask_fn: MaskFn, law: Any, law_skeleton: Any,
                  prediction: Any, prediction_skeleton: Any,
                  fittable: tuple[list[str] | None, list[str] | None] = (None, None)) -> tuple[list[str] | None, list[str] | None]:
-    """The judged skeletons of a law and of its prediction, ``(law, prediction)``.
+    """The judged skeletons of a ground truth and of its prediction, ``(ground truth, prediction)``.
 
     Two expressions are the same up to their constants when they arrive at one skeleton, and the judge looks
     for that in two places: in their canonical forms (:func:`_judged_form`, ``canonical=True``) and in their
@@ -314,7 +314,7 @@ def _fittable_form(simplify_fn: Callable[[list[str]], list[str] | None], fittabl
 
 
 def _answered(row_columns: Mapping[str, Any], prediction_key: str) -> np.ndarray:
-    """Which problems have an answer: the method reported success (where it reports at all) and predicted values
+    """Which problems have a prediction: the method reported success (where it reports at all) and predicted values
     exist."""
     predictions = row_columns[prediction_key]
     has_values = np.array([yp is not None for yp in predictions], dtype=bool)
@@ -325,10 +325,10 @@ def _answered(row_columns: Mapping[str, Any], prediction_key: str) -> np.ndarray
 
 
 #: Analysis metrics whose range has a worst value, and that value. A problem the method failed takes it, so a method
-#: cannot raise its mean similarity by failing on the hard laws. The value is the end of the metric's RANGE, not the
-#: score of some stand-in answer: an overlap is a share in [0, 1] and nothing is below 0. These are the overlaps and
+#: cannot raise its mean similarity by failing on the hard problems. The value is the end of the metric's RANGE, not the
+#: score of some stand-in prediction: an overlap is a share in [0, 1] and nothing is below 0. These are the overlaps and
 #: nothing else. R^2, FVU, a length, a ratio of lengths and a raw distance have no bound on the bad side, and the
-#: edit distances, normalized or not, describe the answers that were made.
+#: edit distances, normalized or not, describe the predictions that were made.
 WORST_VALUE: dict[str, float] = {
     'f1_score': 0.0, 'precision_score': 0.0, 'recall_score': 0.0,
     'f1_score_unique_variables': 0.0, 'precision_unique_variables': 0.0, 'recall_unique_variables': 0.0,
@@ -406,7 +406,7 @@ def compute_derived_metrics(
 
     A problem the method failed is a miss on every rate, takes the worst value of the metrics that
     have one (:data:`WORST_VALUE`) and has no value on the others. With ``impute_failed=False`` it has
-    no value on any analysis metric, and every one of them describes the answers that were made.
+    no value on any analysis metric, and every one of them describes the predictions that were made.
 
     Parameters
     ----------
@@ -457,9 +457,9 @@ def compute_derived_metrics(
                         if key in r:
                             r[key] = [_convert_prefix(convert_fn, p) for p in r[key]]
 
-                # ── The judged skeletons of law and prediction (`_judged_pair`) ──
+                # ── The judged skeletons of ground truth and prediction (`_judged_pair`) ──
                 # A factor the fit made cancel (`tanh(x)^2 / tanh(x)^2`) or a constant it made fold is judged as
-                # what it is, not as it was spelled; the law goes through the same function. The stored spelling of
+                # what it is, not as it was spelled; the ground truth goes through the same function. The stored spelling of
                 # the prediction stays under `_as_emitted`.
                 n_rows = len(r['skeleton']) if 'skeleton' in r else 0
                 fittable_pairs: list[tuple[list[str] | None, list[str] | None]] = []
@@ -508,7 +508,7 @@ def compute_derived_metrics(
                     )
 
                     # ── Reference-relative recovery (real-data catalogs) ──
-                    # reference_fvu = the accepted law's own FVU on the same target; recovery
+                    # reference_fvu = the accepted ground truth's own FVU on the same target; recovery
                     # relative to it: candidate at least as good as the reference (with the
                     # float32-eps floor). On clean synthetic data reference_fvu == 0, the
                     # threshold is eps, and the relative criterion reduces EXACTLY to
@@ -523,9 +523,9 @@ def compute_derived_metrics(
                         thr = np.where(np.isfinite(ref), np.maximum(ref, eps), eps)
                         r[f'numeric_recovery_relative_{split}'] = r[f'fvu_{split}'] <= thr
 
-                    # ── Analysis metrics describe the answers that were made ──
-                    # Whether a problem was solved is what the recovery rates say, and a problem without an answer
-                    # is a miss there. How good an answer is can only be said of an answer: a problem without one
+                    # ── Analysis metrics describe the predictions that were made ──
+                    # Whether a problem was solved is what the recovery rates say, and a problem without a prediction
+                    # is a miss there. How good a prediction is can only be said of a prediction: a problem without one
                     # has no fit quality, not the worst one (no value would be the worst: R^2 has no lower bound).
                     answered = _answered(r, yp_key)
                     for column in (f'fvu_{split}', f'log10_fvu_{split}', f'r2_{split}',
@@ -540,7 +540,7 @@ def compute_derived_metrics(
                     r['skeleton_simplified'] = list(r['skeleton'])
 
                 skel_sim = r['skeleton_simplified']
-                # The columns below describe answers. A failed prediction is none, whatever text it left behind.
+                # The columns below describe predictions. A failed prediction is none, whatever text it left behind.
                 failed = _failed(r, len(skel_sim))
                 pred_skel = [None if miss else ps for ps, miss in zip(r['predicted_skeleton_prefix'], failed)]
 
@@ -587,7 +587,7 @@ def compute_derived_metrics(
 
                 # ── Symbolic recovery ─────────────────────────────
                 # A RATE: defined for every problem. A problem without a prediction is a miss, as it is
-                # for numeric recovery; conditioning on success would reward failing on the hard laws.
+                # for numeric recovery; conditioning on success would reward failing on the hard problems.
                 r['symbolic_recovery'] = np.array([
                     ps is not None and ps == sk
                     for ps, sk in zip(pred_skel, skel_sim)
@@ -597,7 +597,7 @@ def compute_derived_metrics(
                 # `symbolic_recovery` masks every number: the structure is right. With only the fittable constants
                 # masked, the numbers of the structure (exponents, root indices) have to be right as well. With
                 # nothing masked, the constants have to be right too, and what is right for a fitted constant is what
-                # numeric recovery measures: the law is reproduced to float32 precision on the validation points.
+                # numeric recovery measures: the ground truth is reproduced to float32 precision on the validation points.
                 # (A token-by-token comparison of numbers is not available: the canonical form spreads a rational
                 # through the tree, `1.5 * x2` is `(3 * x2) / 2`.) Each level implies the one before it.
                 if fittable_mask_fn is not None and fittable_pairs:
@@ -752,7 +752,7 @@ def derive_metrics(
         What a failed problem counts in the analysis metrics whose range has a worst value
         (:data:`WORST_VALUE`): that value (the default), so the column is read over every problem and a
         method cannot gain by failing on the hard ones; or, with ``False``, nothing, so the column
-        describes the answers that were made, like the metrics without a worst value.
+        describes the predictions that were made, like the metrics without a worst value.
 
     Returns
     -------

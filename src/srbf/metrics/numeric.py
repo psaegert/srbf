@@ -168,8 +168,8 @@ def r2(y_true: np.ndarray | None, y_pred: np.ndarray | None) -> float:
     """Coefficient of determination, ``1 - fvu``: 1 is a perfect fit, 0 is as good as predicting the mean.
 
     It has :func:`fvu`'s numerics, so a recovered fit reads exactly 1.0 and the two metrics can never
-    disagree. There is no lower bound: an answer worse than the mean predictor is negative, and one with
-    an infinite FVU (a non-finite prediction, or no prediction at all) is ``-inf``. One diverging answer
+    disagree. There is no lower bound: a prediction worse than the mean predictor is negative, and one with
+    an infinite FVU (a non-finite prediction, or no prediction at all) is ``-inf``. One diverging prediction
     therefore decides a mean; summarize the column by its median.
     """
     return float(1.0 - fvu(y_true, y_pred))

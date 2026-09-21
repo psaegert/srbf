@@ -169,15 +169,15 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         record["predicted_mdl"] = best.mdl
         record["predicted_n_nodes"] = best.n_nodes
         record["predicted_pareto_rank"] = best.pareto_rank
-        # Provenance of the answer (flash-ansr >= 0.16.1): how many predicted typed literals it kept
+        # Provenance of the prediction (flash-ansr >= 0.16.1): how many predicted typed literals it kept
         # frozen, whether it is a thawed duplicate (the typed token indices it re-fitted) and the
         # constant ladder's re-spelling record. Without these a run cannot say where its rank-0
-        # answers come from.
+        # predictions come from.
         record["predicted_typed_frozen"] = int(getattr(best, "typed_frozen", 0) or 0)
         record["predicted_typed_thaw"] = getattr(best, "typed_thaw", None)
         record["predicted_spelling"] = getattr(best, "spelling", None)
 
-        # The answer's curves, evaluated through the result (a candidate carries no predictions):
+        # The prediction's curves, evaluated through the result (a candidate carries no predictions):
         # the support set as fitted and the validation split when the sample has one.
         record["y_pred"] = np.asarray(result.predict(sample.x_support), dtype=float).copy()
         record["y_pred_val"] = (np.asarray(result.predict(x_val), dtype=float).copy()
@@ -583,7 +583,7 @@ class NeSymReSAdapter(EvaluationModelAdapter):
         self.simplipy_engine = simplipy_engine
         self.device = device
         self.beam_width = beam_width
-        # accepted, ignored: which columns a law uses is the answer, so the method is handed every column
+        # accepted, ignored: which columns the ground truth uses is part of the solution, so the method is handed every column
         self.remove_padding = False
         self.debug = debug
         self._fit_cfg_params: Any | None = None

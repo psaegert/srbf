@@ -6,19 +6,19 @@ carries a label for who chose it, and the labels are shown wherever methods are 
 
 ## One protocol for every method
 
-- **The same laws, sampled the same way.** Every method is evaluated on the same laws from the same
-  catalogs, with points drawn from the same distributions, and comparisons pair the methods law by
-  law ([Paired comparisons](paired.md)). The points themselves are drawn afresh in every run
+- **The same expressions, sampled the same way.** Every method is evaluated on the same expressions from the same
+  catalogs, with points drawn from the same distributions, and comparisons pair the methods expression by
+  expression ([Paired comparisons](paired.md)). The points themselves are drawn afresh in every run
   ([Concepts](concepts.md)). Holdout rules belong to the data source, so they apply to the data and
   never to one method.
 - **The same scoring.** Metrics are derived from stored predictions by one code path. A method
-  that returns no answer has failed the problem on every success metric, for every method alike
+  that returns no prediction has failed the problem on every success metric, for every method alike
   ([Metrics](metrics.md#success-metrics-and-analysis-metrics)).
 - **The same timing conditions.** The driver fits one problem at a time, so a fit never competes
   with another. One-time costs, such as loading weights or compiling a Julia backend, are paid
   before the first problem and are not part of any fit time.
-- **The same comparison rules.** Methods are compared at equal budgets or at equal time, law by
-  law, with exact tests on the laws they disagree on; several methods at once are compared by
+- **The same comparison rules.** Methods are compared at equal budgets or at equal time, expression by
+  expression, with exact tests on the expressions they disagree on; several methods at once are compared by
   their ranks, with a critical difference that accounts for how many methods there are
   ([Paired comparisons](paired.md)).
 
@@ -28,7 +28,7 @@ Seconds depend on the machine, its GPU and whatever shares it. Published times t
 one reference machine that runs one problem at a time with nothing else on it, on a fixed subset of
 the suite: 262 problems, stratified by catalog, the same instances for every method and every
 budget. The subset estimates the pooled mean of the whole suite, because each catalog's problems
-are weighted by the catalog's full size. A fit that returns no answer does not enter the mean
+are weighted by the catalog's full size. A fit that returns no prediction does not enter the mean
 time; how often that happens is a metric of its own, the success rate.
 
 Three scripts in the repository implement the protocol. They expect a config with one experiment
@@ -50,13 +50,13 @@ noise, wherever it runs.
 > consequence and documents it next to the method's results.
 
 PySR's complexity budget is the worked example. At its default `maxsize` of 30, seven of the 120
-FastSRB laws (5.8 %) cannot be represented at all; the largest needs 40 nodes. That is a property of
+FastSRB expressions (5.8 %) cannot be represented at all; the largest needs 40 nodes. That is a property of
 running PySR as it ships, and `python scripts/audit_pysr_maxsize.py` measures it for any catalog
 against the PySR you have installed. The adapter's optional `maxsize` key exists for side
 experiments; published results use the default.
 
 Two things are set by the benchmark and not by a method's defaults, for every method alike: the
-operator vocabulary, which is the one the laws are written in (the PySR adapter searches over these
+operator vocabulary, which is the one the expressions are written in (the PySR adapter searches over these
 operators, not over PySR's own default set), and the budget, which is swept and never tuned.
 
 ## Configuration provenance labels
@@ -105,7 +105,7 @@ represents it better than its defaults:
 
 ## Verifying decontamination
 
-A model trained on generated expressions should not have seen the benchmark laws.
+A model trained on generated expressions should not have seen the benchmark expressions.
 `srbf decontamination -t <training catalog>` probes every benchmark problem against the training
 catalog's holdout and reports the coverage per catalog. The check fails closed: a problem that
 cannot be probed is reported as unverified, not as covered, and the exit code is 0 only when every

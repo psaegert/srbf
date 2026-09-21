@@ -8,7 +8,7 @@
  * methods"); the public page never references such a file.
  * Views: Curves (every plotted metric vs budget or time) | Table (rungs, or catalogs at one rung) | Catalogs (matrix
  * of one metric at one rung) | Distribution (per-method histograms, cumulative curves, a box per catalog, quartiles
- * along the ladder; per-catalog rates for rate metrics) | Ranks (mean rank within each law, critical difference,
+ * along the ladder; per-catalog rates for rate metrics) | Ranks (mean rank within each problem, critical difference,
  * head-to-head table; from the pairwise outcomes in <base>ranks.js) | Paired Δ (each method against a baseline on
  * the same laws: exact McNemar for rates, paired t + sign test otherwise).
  * State lives in the URL (?release=...&v=...) for sharing and in localStorage for convenience; colours in the same
@@ -75,7 +75,7 @@
   function mdef(m) {
     if (!m) { return ""; }
     if (AXIS[m.key]) { return m.desc; }
-    return m.desc + (m.kind === "rate" || m.every ? " Defined for every law." : m.worst !== undefined ? " Counted over every law unless failed predictions are left out." : " Successful predictions only.") +
+    return m.desc + (m.kind === "rate" || m.every ? " Defined for every problem." : m.worst !== undefined ? " Counted over every problem unless failed predictions are left out." : " Successful predictions only.") +
       (m.higher === true ? " Higher is better." : m.higher === false ? " Lower is better." : "");
   }
   function mhelp(m) { return help(mdef(m), "What is " + mname(m) + "?"); }
@@ -88,24 +88,24 @@
     harness_tuned: "Configuration: maintainer-chosen, set by the benchmark maintainers."
   };
   var TERMS = {
-    complete: "A pooled number is shown only where a method has finished EVERY selected catalog at that budget, so every point, row and ranking is over the same laws: all of the selected ones. The catalogs differ too much for a part to stand for the whole (one synthetic corpus is four fifths of the laws), so a budget that is still running is not shown at all. Narrow the catalog selection to read budgets that are finished only there.",
+    complete: "A pooled number is shown only where a method has finished EVERY selected catalog at that budget, so every point, row and ranking is over the same problems: all of the selected ones. The catalogs differ too much for a part to stand for the whole (one synthetic corpus is four fifths of the problems), so a budget that is still running is not shown at all. Narrow the catalog selection to read budgets that are finished only there.",
     wilson: "95 % Wilson score interval for a rate; t-interval for a mean; order-statistic interval for a median (from the pooled histogram). A band is the region the ladder could occupy: the interval box of every point and the hull between consecutive ones, in both axes where both are measured. Crosses draw the same intervals as bars through each point. Either, both or neither.",
     median: "The median is read from a 128-bin histogram per cell, so it is exact to a bin. Ratios and times are binned on a log scale.",
-    mean: "The default. A mean is taken over the finite values of the pooled laws, so an exactly recovered law (log10 FVU = -inf) is counted by the recovery rates and by the median, but not by the mean; every point reports how many finite values it averaged and how many it had. Switch to the median where that matters.",
-    regime: "Rates are defined for every law: a failed prediction is a miss. So is a metric whose range has a worst value, unless the reader leaves the failed predictions out: a failed prediction takes it. These are the token and variable overlaps, where it counts 0. Every other metric describes the answers that were made: most can be arbitrarily bad, so there is no worst value to take.",
-    impute: "A metric whose range has a worst value can be read two ways. Counted, the default: a failed prediction takes the worst value, 0 for the token and variable overlaps, so the number is over every law and a method cannot gain by failing on the hard ones. Left out: the number describes the answers that were made, like a metric without a worst value, and is drawn hollow when too few laws have one. Rates count a failed prediction as a miss either way.",
-    valid: "A metric without a worst value describes only the laws a method answered, so a method that fails on the hard laws looks better on it than it is. A point is drawn hollow when fewer than this share of the laws have a value. Rates and metrics with a worst value count every law and are always solid; 0 % turns the marking off.",
-    mcnemar: "Exact McNemar test on the laws the two methods disagree on (one recovered, the other did not): two-sided binomial p-value, no asymptotics. The difference of paired rates carries a 95 % Wald interval.",
-    signtest: "Paired mean difference with a t-interval over laws where both methods have a finite value, plus a two-sided exact sign test on the wins and losses.",
-    draw1: "One draw per problem so far. These are paired contrasts on the same laws, not the repeated-draw noise margins of the 2026-07 release; those follow when draws 2 and up exist.",
+    mean: "The default. A mean is taken over the finite values of the pooled problems, so an exactly recovered problem (log10 FVU = -inf) is counted by the recovery rates and by the median, but not by the mean; every point reports how many finite values it averaged and how many it had. Switch to the median where that matters.",
+    regime: "Rates are defined for every problem: a failed prediction is a miss. So is a metric whose range has a worst value, unless the reader leaves the failed predictions out: a failed prediction takes it. These are the token and variable overlaps, where it counts 0. Every other metric describes the predictions that were made: most can be arbitrarily bad, so there is no worst value to take.",
+    impute: "A metric whose range has a worst value can be read two ways. Counted, the default: a failed prediction takes the worst value, 0 for the token and variable overlaps, so the number is over every problem and a method cannot gain by failing on the hard ones. Left out: the number describes the predictions that were made, like a metric without a worst value, and is drawn hollow when too few problems have one. Rates count a failed prediction as a miss either way.",
+    valid: "A metric without a worst value describes only the problems a method has a prediction for, so a method that fails on the hard problems looks better on it than it is. A point is drawn hollow when fewer than this share of the problems have a value. Rates and metrics with a worst value count every problem and are always solid; 0 % turns the marking off.",
+    mcnemar: "Exact McNemar test on the problems the two methods disagree on (one recovered, the other did not): two-sided binomial p-value, no asymptotics. The difference of paired rates carries a 95 % Wald interval.",
+    signtest: "Paired mean difference with a t-interval over problems where both methods have a finite value, plus a two-sided exact sign test on the wins and losses.",
+    draw1: "One draw per problem so far. These are paired contrasts on the same problems, not the repeated-draw noise margins of the 2026-07 release; those follow when draws 2 and up exist.",
     time: "Seconds per problem on ONE reference machine (one RTX 4090, 16 refiner workers, a fixed subset of 262 problems), the only timing this benchmark publishes. Seconds measured where a unit happened to run depend on the node, its GPU and whatever shared it, so they are not comparable between methods and are never drawn: a method the reference machine has not timed has no position here, so it is left out of the chart and named underneath; a chart with no timed method at all has no time axis.",
     candidates: "Samples, beam width, candidates or draws per problem: the budget a generative method spends. PySR's budget is a number of search iterations rather than a candidate count, so it has no position on this axis and appears on the time axis only.",
     rungs: "A budget is one rung of a method's own ladder: samples, beam width, candidates or draws per problem, or search iterations for PySR. A snapshot at budget 64 reads every method at rung 64 of its ladder. The Ranks view can hold the methods equal on reference-machine time instead.",
     tbudget: "Every method is read at the largest rung of its ladder that it has finished and that the reference machine timed at or under this many seconds per problem. A method whose smallest rung already takes longer sits out; a method whose finished, timed ladder ends below the limit is read at its last rung, which is its worst case: more budget could only help it.",
-    worstrank: "Within one law the methods are ordered by the chosen metric. A method that returned no usable answer for that law is placed behind every method that did; methods with the same value, or all without an answer, share the mean of the places they occupy. Every law hands out the same places, so easy and hard laws count alike and a win by a hair counts like a win by a mile.",
+    worstrank: "Within one problem the methods are ordered by the chosen metric. A method that returned no usable prediction for that problem is placed behind every method that did; methods with the same value, or all without a prediction, share the mean of the places they occupy. Every problem hands out the same places, so easy and hard problems count alike and a win by a hair counts like a win by a mile.",
     friedman: "Friedman's omnibus test asks whether the spread of mean ranks is larger than interchangeable methods would produce by chance. It is computed here without the correction for ties, which can only make it more cautious. Groups are drawn only when it rejects at 5 %.",
-    cd: "Nemenyi's critical difference at 5 %: the smallest gap between two mean ranks that counts as real after allowing for every pair being compared at once. It shrinks with the number of laws and grows with the number of methods.",
-    winshare: "The share of head-to-head comparisons a method wins, a tie counting as half: over every other ranked method and every law. It is the mean rank rescaled to 0 to 100 %, so it does not change meaning when the number of ranked methods does.",
+    cd: "Nemenyi's critical difference at 5 %: the smallest gap between two mean ranks that counts as real after allowing for every pair being compared at once. It shrinks with the number of problems and grows with the number of methods.",
+    winshare: "The share of head-to-head comparisons a method wins, a tie counting as half: over every other ranked method and every problem. It is the mean rank rescaled to 0 to 100 %, so it does not change meaning when the number of ranked methods does.",
     provenance: "Who chose each method's configuration. Upstream defaults: nothing tuned. Author-blessed: the method's authors chose it (Flash-ANSR shares authors with the benchmark). Maintainer-chosen: the benchmark maintainers set it."
   };
   var COOKIE = "srbf_colors";
@@ -124,10 +124,10 @@
     return { view: "curves", cats: CATS.slice(), methods: D.methods.filter(withData).map(function (m) { return m.key; }),
       plots: D.metrics.filter(function (m) { return m.tier === "main"; }).map(function (m) { return { x: defaultAxis(), y: m.key }; }),
       focus: "numeric_recovery_val", stat: "mean", band: true, cross: false, xaxis: anyTime() ? "time" : "rung", rung: 64, base: null, tier: "main", q: "", rows: "rungs",
-      // the Distribution view reads a continuous metric by default (a rate has no distribution over laws), the Ranks
+      // the Distribution view reads a continuous metric by default (a rate has no distribution over problems), the Ranks
       // view the primary ranking metric; each display remembers its own
       dmetric: "log10_fvu_val", dmode: "hist", dnorm: "ok", rmetric: (D.rank_keys || ["log10_fvu_val"])[0], tbudget: null,
-      // a point that rests on fewer than this share of the laws is drawn hollow
+      // a point that rests on fewer than this share of the problems is drawn hollow
       valid: VALID_DEFAULT,
       // a metric whose range has a worst value: does a failed prediction count that value, or is it left out?
       impute: true };
@@ -275,12 +275,12 @@
   function cell(m, c, r) { var x = D.cells[m] && D.cells[m][c] && D.cells[m][c][String(r)]; return x && x.state === "complete" ? x : null; }
   function hasRung(m, r) { return CATS.some(function (c) { return cell(m, c, r); }); }
   function shownMethods() { return D.methods.filter(function (m) { return state.methods.indexOf(m.key) >= 0 && withData(m); }); }
-  // A pooled number stands for the selected catalogs only if it holds ALL of their laws: a budget is shown
+  // A pooled number stands for the selected catalogs only if it holds ALL of their problems: a budget is shown
   // once it is entirely complete, never as a thin rung. The catalogs differ far too much for a
-  // part to speak for the whole -- one synthetic corpus is four fifths of the laws, and recovery on it is a fraction
+  // part to speak for the whole -- one synthetic corpus is four fifths of the problems, and recovery on it is a fraction
   // of recovery elsewhere -- and a rung that is still running would move as its catalogs land. So a method has a
   // pooled value at a rung when it has finished every selected catalog there, and none otherwise; every method that
-  // has one is then pooled over the same laws, which is what "matched" used to arrange.
+  // has one is then pooled over the same problems, which is what "matched" used to arrange.
   function poolCats(m, r) {
     return state.cats.length && state.cats.every(function (c) { return cell(m, c, r); }) ? state.cats.slice() : [];
   }
@@ -300,9 +300,9 @@
   function fwd(metric, x) { var tf = tfOf(metric); return tf === "log2" ? Math.log2(Math.max(1e-300, x)) : tf === "log10" ? Math.log10(Math.max(1e-300, x)) : x; }
   function back(metric, x) { var tf = tfOf(metric); return tf === "log2" ? Math.pow(2, x) : tf === "log10" ? Math.pow(10, x) : x; }
   // every statistic is returned in the metric's TRANSFORMED space (log2 for ratios, log10 for seconds), where the charts live
-  // A rate is read over every law, and so is a metric whose range has a worst value: a failed prediction takes it.
-  // Every other metric has no worst value and describes the answers that were made, so a method that fails on the
-  // hard laws looks better there than it is. `share` is the part of the laws behind a point (of the laws the metric
+  // A rate is read over every problem, and so is a metric whose range has a worst value: a failed prediction takes it.
+  // Every other metric has no worst value and describes the predictions that were made, so a method that fails on the
+  // hard problems looks better there than it is. `share` is the part of the problems behind a point (of the problems the metric
   // can be defined for); below the reader's threshold the point is drawn hollow.
   function validShare(metric, cells) {
     if (metric.kind === "rate") { return 1; }
@@ -310,9 +310,9 @@
     return e ? d / e : null;
   }
   function thin(st) { return !!st && !st.pending && typeof st.share === "number" && st.share < state.valid / 100; }
-  function shareText(st) { return Math.floor(100 * st.share) + " % of the laws have a value"; }
+  function shareText(st) { return Math.floor(100 * st.share) + " % of the problems have a value"; }
   var THIN_MARK = '<span class="v2hollow" aria-hidden="true">\u25cb</span> ';
-  // An unbounded metric with a heavy tail has no usable mean (one diverging answer decides it): it is read by its
+  // An unbounded metric with a heavy tail has no usable mean (one diverging prediction decides it): it is read by its
   // median whatever the reader chose. R^2 = 1 - FVU is read from two histograms, each where it is the finer one:
   // its own linear bins (0.016 wide) up to 0.96, and the log10 FVU bins (0.16 decades) above that, where the linear
   // ones cannot tell 0.99 from 0.9999, and below -1, where they end.
@@ -383,7 +383,7 @@
     return kept.sort(function (a, b) { return a - b; });
   }
   function roundness(v) { var a = Math.abs(v); if (a < 1e-12) { return 9; } var e = Math.floor(Math.log10(a)), m = a / Math.pow(10, e); return Math.abs(m - 1) < 1e-9 ? 3 : (Math.abs(m - 5) < 1e-9 || Math.abs(m - 2) < 1e-9 ? 2 : 1); }
-  // a reference value (the law itself, no difference) joins the range only when it is near what is drawn: far away
+  // a reference value (the problem itself, no difference) joins the range only when it is near what is drawn: far away
   // it would leave most of the chart empty
   function nearRange(lo, hi, ref, frac) { var span = Math.max(hi - lo, 1e-9); return ref >= lo - frac * span && ref <= hi + frac * span; }
 
@@ -498,7 +498,7 @@
   function timeOf(m, r, cs, src) { return src === "ref" ? refTime(m, r) : null; }
 
   // A chart whose x is a metric, not a budget: each method's ladder walks a path through the plane
-  // (here: how long its answer is against how well it fits), so the points keep their rung order.
+  // (here: how long its prediction is against how well it fits), so the points keep their rung order.
   function frontSVG(opts) {
     var nr = narrow(), W = opts.width || hostWidth(), L = 62, T = opts.title ? 34 : 16, R = nr ? 16 : 180;
     var B = nr ? 56 + 20 * Math.max(1, opts.series.length) : 52, H = plotHeight(W) + B;
@@ -547,7 +547,7 @@
     if (pending && !series.length) { return frontSVG({ title: title, aria: aria, series: [], empty: "loading the distributions\u2026" }); }
     if (!series.length) { return frontSVG({ title: title, aria: aria, series: [], empty: "no finished units for this selection yet" }); }
     var xpad = (xmax - xmin) * 0.06 || 0.3, ypad = (ymax - ymin) * 0.06 || 0.3;
-    if (nearRange(xmin, xmax, 0, 0.35)) { xmin = Math.min(xmin, 0); xmax = Math.max(xmax, 0); }   // the law's own length, when it is near
+    if (nearRange(xmin, xmax, 0, 0.35)) { xmin = Math.min(xmin, 0); xmax = Math.max(xmax, 0); }   // the problem's own length, when it is near
     xmin -= xpad; xmax += xpad; ymin -= ypad; ymax += ypad;
     return frontSVG({ title: title, aria: aria, series: series, xmin: xmin, xmax: xmax, ymin: ymin, ymax: ymax,
       xticks: ticksFor(xm, xmin, xmax), xtick: function (g) { return tickLabel(xm, g); },
@@ -567,14 +567,14 @@
 
   // ---- Curves ----------------------------------------------------------------------------------------------------
   var thinDrawn = false;   // set by a chart that drew a hollow point, so the block around it can say what that means
-  function thinNote() { return "A hollow point rests on fewer than " + state.valid + " % of the laws"; }
+  function thinNote() { return "A hollow point rests on fewer than " + state.valid + " % of the problems"; }
   function curveChart(metric, shown, title, aria) {
     var keys = shown.map(function (x) { return x.key; }), series = [], ymin = Infinity, ymax = -Infinity, pending = false, tmin = Infinity, tmax = -Infinity;
     var src = timeSource(keys);
     shown.forEach(function (m) { var pts = [];
       D.rungs.forEach(function (r) { var use = poolCats(m.key, r, keys); if (!use.length) { return; } var x = xOf(m.key, r, use, src); if (x === null) { return; }
         var st = stat(metric, m.key, r, use); if (!st) { return; } if (st.pending) { pending = true; return; } if (!isFinite(st.v)) { return; }
-        var title = m.label + " @ " + r + (state.xaxis === "time" ? " (" + x.toFixed(2) + " s)" : "") + ": " + fmt(metric, st.v, st.edge) + " [" + fmt(metric, st.lo) + ", " + fmt(metric, st.hi) + "], n = " + st.n + (st.ndef ? " finite of " + st.ndef : "") + ", " + laws(use).toLocaleString() + " laws" + (st.share < 1 ? ", " + shareText(st) : "");
+        var title = m.label + " @ " + r + (state.xaxis === "time" ? " (" + x.toFixed(2) + " s)" : "") + ": " + fmt(metric, st.v, st.edge) + " [" + fmt(metric, st.lo) + ", " + fmt(metric, st.hi) + "], n = " + st.n + (st.ndef ? " finite of " + st.ndef : "") + ", " + laws(use).toLocaleString() + " problems" + (st.share < 1 ? ", " + shareText(st) : "");
         if (thin(st)) { thinDrawn = true; }
         pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, hollow: thin(st), title: title });   // a budget has no interval: the candidate count is exact, and the measured time is within a pixel of its mean (0.4-1.1 px, measured)
         [st.v, anyCI() ? st.lo : st.v, anyCI() ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
@@ -660,9 +660,9 @@
   // what it costs. They are deliberately not wired to the controls below -- everything adjustable is the explorer.
   var HEADLINE = [
     { key: "numeric_recovery_val", title: function () { return anyTime() ? "Recovery vs time" : "Recovery vs budget"; },
-      caption: "Laws reproduced to float32 precision on held-out points. Up and left is better." },
+      caption: "Problems reproduced to float32 precision on held-out points. Up and left is better." },
     { x: "mdl_ratio", y: "log10_fvu_val", title: "Fit vs length",
-      caption: "Description length in the certified canon; dashed line: the law itself. Down and left is better." }];
+      caption: "Description length in the certified canon; dashed line: the ground truth itself. Down and left is better." }];
   function hlText(v) { return typeof v === "function" ? v() : v; }
   function withState(over, fn) { var prev = state; state = Object.assign({}, prev, over); try { return fn(); } finally { state = prev; } }
   function renderHeadline() {
@@ -684,7 +684,7 @@
           return '<figure class="v2hlfig">' + svg + "<figcaption>" + esc(hlText(h.caption)) + "</figcaption></figure>";
         }).join("");
         return '<h2 class="v2hltitle">Recovery, cost and length</h2>' +
-          '<p class="v2hlsub">One point per budget ' + term("complete", "a method has finished") + ': the ' + (state.stat === "mean" ? "mean" : "median") + ' over all ' + laws(CATS).toLocaleString() + ' laws of the ' + CATS.length + ' catalogs, with ' + term("wilson", "95 % intervals") + '.</p>' +
+          '<p class="v2hlsub">One point per budget ' + term("complete", "a method has finished") + ': the ' + (state.stat === "mean" ? "mean" : "median") + ' over all ' + laws(CATS).toLocaleString() + ' problems of the ' + CATS.length + ' catalogs, with ' + term("wilson", "95 % intervals") + '.</p>' +
           '<div class="v2hlcharts">' + charts + "</div>" +
           '<p class="v2hint">' + (src === "ref" ? term("time", "Fit time on the reference machine") +
               (off.length ? "; " + esc(off.map(function (m) { return m.label; }).join(", ")) + " not timed there yet, so " +
@@ -701,7 +701,7 @@
   function renderTable(shown) {
     var plots = plotMetrics().map(function (k) { return METRIC[k]; }); var keys = shown.map(function (m) { return m.key; });
     if (!plots.length || !shown.length) { return '<p class="v2hint">Select at least one method and one metric.</p>'; }
-    var head = '<tr><th>' + (state.rows === "cats" ? "catalog" : "rung") + '</th><th>laws</th>' + shown.map(function (m) { return '<th colspan="' + plots.length + '"><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + '</th>'; }).join("") + '</tr>' +
+    var head = '<tr><th>' + (state.rows === "cats" ? "catalog" : "rung") + '</th><th>problems</th>' + shown.map(function (m) { return '<th colspan="' + plots.length + '"><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + '</th>'; }).join("") + '</tr>' +
       '<tr><th></th><th></th>' + shown.map(function () { return plots.map(function (p) { return '<th>' + esc(mname(p)) + " " + mhelp(p) + '</th>'; }).join(""); }).join("") + '</tr>';
     var body = "", rowsOut = []; thinDrawn = false;
     var emit = function (label, nl, tds) { body += '<tr><td>' + esc(label) + '</td><td>' + esc(nl) + '</td>' + tds.map(function (x) { return '<td>' + x.t + '</td>'; }).join("") + '</tr>'; rowsOut.push([label, nl].concat(tds.map(function (x) { return x.raw; }))); };
@@ -719,10 +719,10 @@
       body += '<tr class="v2total"><td>all selected</td><td>' + laws(state.cats) + '</td>' + tds2.map(function (x) { return '<td>' + x.t + '</td>'; }).join("") + '</tr>';
       rowsOut.push(["all selected", String(laws(state.cats))].concat(tds2.map(function (x) { return x.raw; })));
     }
-    lastTable = { header: [state.rows === "cats" ? "catalog" : "rung", "laws"].concat(shown.reduce(function (a, m) { return a.concat(plots.map(function (p) { return m.label + " · " + mname(p); })); }, [])), rows: rowsOut };
+    lastTable = { header: [state.rows === "cats" ? "catalog" : "rung", "problems"].concat(shown.reduce(function (a, m) { return a.concat(plots.map(function (p) { return m.label + " · " + mname(p); })); }, [])), rows: rowsOut };
     var ctl = '<div class="v2row v2tablectl"><span class="v2lab">rows</span><label><input type="radio" name="v2rows" value="rungs"' + (state.rows === "rungs" ? " checked" : "") + '> every rung</label><label><input type="radio" name="v2rows" value="cats"' + (state.rows === "cats" ? " checked" : "") + '> catalogs at one budget</label>' + (state.rows === "cats" ? rungStepper(shown) : "") +
       '<span class="v2spacer"></span><button type="button" class="v2btn" data-act="copy-tsv">copy as TSV</button><button type="button" class="v2btn" data-act="csv">download CSV</button></div>';
-    return ctl + '<div class="v2table-wrap"><table class="v2table"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div><p class="v2hint">' + (anyCI() ? "Brackets: 95 % interval (" + term("wilson", "Wilson / t / order statistic") + "). " : "") + term("regime", "Rates count every law; a metric without a worst value describes the answers that were made") + ". " + (thinDrawn ? term("valid", "\u25cb marks a number that rests on fewer than " + state.valid + " % of the laws") + ". " : "") + term("complete", "A pooled number appears once a method has finished every selected catalog at that budget") + ".</p>";
+    return ctl + '<div class="v2table-wrap"><table class="v2table"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div><p class="v2hint">' + (anyCI() ? "Brackets: 95 % interval (" + term("wilson", "Wilson / t / order statistic") + "). " : "") + term("regime", "Rates count every problem; a metric without a worst value describes the predictions that were made") + ". " + (thinDrawn ? term("valid", "\u25cb marks a number that rests on fewer than " + state.valid + " % of the problems") + ". " : "") + term("complete", "A pooled number appears once a method has finished every selected catalog at that budget") + ".</p>";
   }
 
   // ---- Catalog matrix --------------------------------------------------------------------------------------------
@@ -739,12 +739,12 @@
     if (pending && !all.length) { return bar + '<p class="v2hint">Loading the distribution…</p>'; }
     var lo = Math.min.apply(null, all), hi = Math.max.apply(null, all), ideal = tfOf(p) === "log2" ? 0 : 1;
     var score = function (v) { if (!(hi > lo)) { return 0.5; } if (p.higher === null) { var dm = Math.max(Math.abs(lo - ideal), Math.abs(hi - ideal)); return dm ? 1 - Math.abs(v - ideal) / dm : 1; } var t = (v - lo) / (hi - lo); return p.higher ? t : 1 - t; };
-    var h = '<div class="v2table-wrap"><table class="v2table v2matrix"><thead><tr><th>catalog</th><th>laws</th>' + shown.map(function (m) { return '<th><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + '</th>'; }).join("") + '</tr></thead><tbody>';
+    var h = '<div class="v2table-wrap"><table class="v2table v2matrix"><thead><tr><th>catalog</th><th>problems</th>' + shown.map(function (m) { return '<th><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + '</th>'; }).join("") + '</tr></thead><tbody>';
     cats.forEach(function (c) { h += '<tr><td>' + esc(c) + ' <span class="v2hint">' + GROUPS[CAT[c].group] + '</span></td><td>' + CAT[c].laws + '</td>' + shown.map(function (m) { var st = vals[c][m.key]; if (!st) { return '<td class="v2na">' + (cell(m.key, c, r) ? "…" : "") + '</td>'; } var a = 0.06 + 0.5 * score(st.v); return '<td style="background:rgba(' + rgb.join(",") + "," + a.toFixed(2) + ')" title="' + esc(fmt(p, st.lo) + " to " + fmt(p, st.hi) + ", n = " + st.n + (st.share < 1 ? ", " + shareText(st) : "")) + '">' + (thin(st) ? (thinDrawn = true, THIN_MARK) : "") + fmt(p, st.v, st.edge) + '</td>'; }).join("") + '</tr>'; });
     var pooled = shown.map(function (m) { var use = poolCats(m.key, r); var st = use.length ? stat(p, m.key, r, use) : null; return '<td>' + (st && !st.pending ? cellText(st, p) : "") + '</td>'; }).join("");
     h += '<tr class="v2total"><td>all selected ' + help(TERMS.complete, "When is a pooled number shown?") + '</td><td>' + laws(state.cats).toLocaleString() + '</td>' + pooled + '</tr></tbody></table></div>';
-    var thinHint = thinDrawn ? '<p class="v2hint v2hollownote">' + term("valid", "\u25cb marks a number that rests on fewer than " + state.valid + " % of the laws") + ".</p>" : "";
-    return bar + missingNote(asked, shown, "any selected catalog at budget " + r) + thinHint + '<p class="v2hint">' + esc(p.label) + " at budget " + r + ", one cell per catalog; darker = better" + (p.higher === null ? " (closer to 1)" : "") + ". " + (p.kind === "cont" ? (statOf(p) === "mean" ? term("mean", "Means") : term("median", "Medians")) + (p.worst !== undefined && state.impute ? " over every law, a failed prediction counting " + p.worst + "." : " over the answers that were made.") : term("regime", "Rates over every law") + ".") + "</p>" + h;
+    var thinHint = thinDrawn ? '<p class="v2hint v2hollownote">' + term("valid", "\u25cb marks a number that rests on fewer than " + state.valid + " % of the problems") + ".</p>" : "";
+    return bar + missingNote(asked, shown, "any selected catalog at budget " + r) + thinHint + '<p class="v2hint">' + esc(p.label) + " at budget " + r + ", one cell per catalog; darker = better" + (p.higher === null ? " (closer to 1)" : "") + ". " + (p.kind === "cont" ? (statOf(p) === "mean" ? term("mean", "Means") : term("median", "Medians")) + (p.worst !== undefined && state.impute ? " over every problem, a failed prediction counting " + p.worst + "." : " over the predictions that were made.") : term("regime", "Rates over every problem") + ".") + "</p>" + h;
   }
 
   // ---- controls that live on the display itself -----------------------------------------------------------------
@@ -783,8 +783,8 @@
   // ---- Distribution ----------------------------------------------------------------------------------------------
   // Four readings of the same pooled histograms: one histogram per method, the cumulative curves of all of them on
   // one axis, a box per catalog, and the quartiles along the ladder. A rate has no distribution over laws (every
-  // law is a hit or a miss), so a rate shows how it is spread over the catalogs instead.
-  var DMODES = [["hist", "histograms", "One histogram per method, on a shared axis"], ["ecdf", "cumulative", "The share of laws at or below each value, all methods on one axis"],
+  // problem is a hit or a miss), so a rate shows how it is spread over the catalogs instead.
+  var DMODES = [["hist", "histograms", "One histogram per method, on a shared axis"], ["ecdf", "cumulative", "The share of problems at or below each value, all methods on one axis"],
     ["cats", "by catalog", "A box per catalog and method: 5th, 25th, 50th, 75th and 95th percentile"], ["rungs", "along the ladder", "Median and interquartile range at every budget"]];
   function qv(ph, q) { return binVal(ph, quantileBin(ph, Math.max(1, Math.ceil(q * ph.n)))); }
   function five(ph) { return [0.05, 0.25, 0.5, 0.75, 0.95].map(function (q) { return qv(ph, q); }); }
@@ -802,7 +802,7 @@
     return '<div class="v2viewbar">' + '<span class="v2segwrap"><span class="v2lab">metric</span>' + pickButton("v2viewpick", 'data-axis="focus" aria-label="metric whose distribution is shown"', p.key) + " " + mhelp(p) + "</span>" +
       (cont ? seg("dmode", state.dmode, DMODES, "show", "how the distribution is drawn") : "") +
       (cont && state.dmode === "rungs" ? "" : rungStepper(shown, cont && state.dmode !== "cats")) +
-      (cont && state.dmode === "ecdf" ? seg("dnorm", state.dnorm, [["ok", "answered laws", "100 % is every law the method answered with a finite value"], ["all", "all laws", "100 % is every law in the pool: a law without an answer never enters the curve"]], "out of", "what the cumulative share is a share of") : "") +
+      (cont && state.dmode === "ecdf" ? seg("dnorm", state.dnorm, [["ok", "predicted problems", "100 % is every problem the method has a finite value for"], ["all", "all problems", "100 % is every problem in the pool: a problem without a prediction never enters the curve"]], "out of", "what the cumulative share is a share of") : "") +
       (cont && state.dmode === "rungs" ? seg("xaxis", state.xaxis, [["time", "time"], ["rung", "candidates"]].filter(function (o) { return o[0] !== "time" || anyTime(); }), "x axis", "what the ladder is drawn against") : "") + "</div>";
   }
   function boxSVG(f, xs, yc, h, col, title) {   // whiskers 5-95, box 25-75, median tick
@@ -820,7 +820,7 @@
   function renderDistRate(shown, p, r) {   // per-catalog rates: a dot plot with Wilson intervals
     var present = withAt(shown, r), nr = narrow(), W = hostWidth(), T = 34, R = 16;
     var cats = state.cats.slice().sort(function (a, b) { return CAT[b].laws - CAT[a].laws; }).filter(function (c) { return present.some(function (m) { return cell(m.key, c, r); }); });
-    var swap = '<p class="v2hint">A rate is a hit or a miss on every law, so what varies is the catalog. ' + '<button type="button" class="v2btn" data-set="dmetric:log10_fvu_val">show the distribution of log10 FVU instead</button></p>';
+    var swap = '<p class="v2hint">A rate is a hit or a miss on every problem, so what varies is the catalog. ' + '<button type="button" class="v2btn" data-set="dmetric:log10_fvu_val">show the distribution of log10 FVU instead</button></p>';
     if (!cats.length) { return swap + '<p class="v2hint">Nothing finished at budget ' + r + " for this selection: step to another budget above.</p>"; }
     var rowH = Math.max(20, 7 * present.length + 8), B1 = 44 + 18 * present.length, Hh = T + cats.length * rowH + B1, Lw = nr ? 110 : 150;
     var s = '<svg viewBox="0 0 ' + W + " " + Hh + '" class="v2chart v2dist" role="img" aria-label="' + esc(p.label) + ' per catalog"><text x="' + Lw + '" y="18" class="ct">' + esc(p.label) + " per catalog at budget " + r + "</text>";
@@ -848,17 +848,17 @@
       var rows = use.reduce(function (a, c) { return a + cell(m.key, c, r).n; }, 0); series.push({ m: m, ph: ph, f: five(ph), use: use, laws: laws(use), rows: rows }); });
     var gone = missingNote(shown, series.map(function (sr) { return sr.m; }), state.dmode === "cats" ? "any selected catalog at budget " + r : "every selected catalog at budget " + r + ", so " + term("complete", "its distribution is not pooled yet") + " (its finished catalogs are under \u201cby catalog\u201d)");
     if (!series.length) { return head + '<p class="v2hint">No selected method has finished ' + (state.dmode === "cats" ? "a selected catalog" : "every selected catalog") + " at budget " + r + ": step to another budget above, or narrow the catalogs.</p>" + gone; }
-    var pooled = state.dmode !== "cats" ? " Every method is read on the same " + series[0].laws.toLocaleString() + " laws: all of the selected catalogs." : "";
+    var pooled = state.dmode !== "cats" ? " Every method is read on the same " + series[0].laws.toLocaleString() + " problems: all of the selected catalogs." : "";
     var body = state.dmode === "ecdf" ? distEcdf(series, p, r) : state.dmode === "cats" ? distCats(series, p, r) : distHists(series, p, r);
-    return head + body + '<p class="v2hint">' + (state.dmode === "cats" ? "" : (state.dmode === "ecdf" && state.dnorm === "all" ? "" : (p.worst !== undefined && state.impute ? "Every law: a failed prediction sits at " + p.worst + "." : "Successful predictions only: a law without an answer has no value to place.")) + pooled + " ") + term("median", "Read from 128-bin histograms") + "; values beyond the binned range sit in the outermost bins.</p>" + gone;
+    return head + body + '<p class="v2hint">' + (state.dmode === "cats" ? "" : (state.dmode === "ecdf" && state.dnorm === "all" ? "" : (p.worst !== undefined && state.impute ? "Every problem: a failed prediction sits at " + p.worst + "." : "Successful predictions only: a problem without a prediction has no value to place.")) + pooled + " ") + term("median", "Read from 128-bin histograms") + "; values beyond the binned range sit in the outermost bins.</p>" + gone;
   }
   function distHists(series, p, r) {
     var nr = narrow(), W = hostWidth(), L = nr ? 14 : 168, R = 16, T = 34, ph0 = series[0].ph, vr = viewRange(series.map(function (sr) { return sr.ph; }));
-    var nmax = Math.max.apply(null, series.map(function (sr) { return sr.ph.n; })), f = nmax < 150 ? 4 : nmax < 600 ? 2 : 1;   // fewer laws, wider bins
+    var nmax = Math.max.apply(null, series.map(function (sr) { return sr.ph.n; })), f = nmax < 150 ? 4 : nmax < 600 ? 2 : 1;   // fewer problems, wider bins
     var panelH = nr ? 118 : 96, gap = 16, boxH = 22, capH = nr ? 34 : 0, step = panelH + boxH + capH + gap, H = T + series.length * step + 34;
     var xs = function (x) { return L + (Math.min(vr.hi, Math.max(vr.lo, x)) - vr.lo) / (vr.hi - vr.lo) * (W - L - R); };
     var groups = series.map(function (sr) { var g = []; for (var b = vr.b0; b <= vr.b1; b += f) { var c = 0; for (var j = b; j < Math.min(b + f, vr.b1 + 1); j++) { c += sr.ph.h[j]; } g.push({ b: b, share: c / sr.ph.n, edge: (b === 0 && vr.b0 === 0) || (b + f > ph0.nb - 1 && vr.b1 === ph0.nb - 1) }); } return g; });
-    // One scale for every panel, set by the body of the distributions: a lone spike (every law that fits no better
+    // One scale for every panel, set by the body of the distributions: a lone spike (every problem that fits no better
     // than the mean lands in one bin) would flatten everything else, so it is cut at the scale and labelled instead.
     var top = 0; groups.forEach(function (g) { var v = g.filter(function (x) { return !x.edge; }).map(function (x) { return x.share; }).sort(function (a, b) { return b - a; }); if (v.length) { top = Math.max(top, v.length > 1 && v[0] > 1.6 * v[1] ? v[1] : v[0]); } });
     if (!top) { groups.forEach(function (g) { g.forEach(function (x) { top = Math.max(top, x.share); }); }); }
@@ -875,25 +875,25 @@
           '<line x1="' + xa + '" y1="' + by + '" x2="' + xb + '" y2="' + (by - 4) + '" stroke="' + col + '" stroke-width="1.4"/><line x1="' + xa + '" y1="' + (by - 5) + '" x2="' + xb + '" y2="' + (by - 9) + '" stroke="' + col + '" stroke-width="1.4"/>';
         s += '<text x="' + (right ? c.x0 - 8 : c.x1 + 8).toFixed(1) + '" y="' + (by + 14 * row) + '" class="tick" text-anchor="' + (right ? "end" : "start") + '">' + (100 * c.share).toFixed(0) + (c.edge ? " % in the outermost bin" : " % in this bin") + "</text>"; });
       s += boxSVG(sr.f, xs, yb + boxH / 2 + 3, 9, col, sr.m.label + ": " + fiveText(p, sr.f));
-      var name = sr.m.label + (sr.m.local ? " (local)" : ""), cap = "median " + fmt(p, sr.f[2]) + " · n = " + sr.ph.n.toLocaleString() + " of " + sr.rows.toLocaleString() + " laws";
+      var name = sr.m.label + (sr.m.local ? " (local)" : ""), cap = "median " + fmt(p, sr.f[2]) + " · n = " + sr.ph.n.toLocaleString() + " of " + sr.rows.toLocaleString() + " problems";
       if (nr) { s += '<rect x="' + L + '" y="' + (yb + boxH + 9) + '" width="10" height="10" rx="2" fill="' + col + '"/><text x="' + (L + 15) + '" y="' + (yb + boxH + 18) + '" class="leg">' + esc(name) + '</text><text x="' + L + '" y="' + (yb + boxH + 33) + '" class="tick">' + esc(cap) + "</text>"; }
       else { s += '<rect x="10" y="' + (y0 + 8) + '" width="10" height="10" rx="2" fill="' + col + '"/><text x="25" y="' + (y0 + 17) + '" class="leg">' + esc(name) + '</text><text x="10" y="' + (y0 + 36) + '" class="tick">median ' + esc(fmt(p, sr.f[2])) + '</text><text x="10" y="' + (y0 + 52) + '" class="tick">n = ' + sr.ph.n.toLocaleString() + " of " + sr.rows.toLocaleString() + "</text>"; } });
-    return s + "</svg>" + '<p class="v2hint">Height: the share of the method’s answered laws in each bin, on one scale for every panel; a bin taller than the scale is drawn broken, with its share beside it. Under each histogram: 5th to 95th percentile (line), middle half (box), median (tick).</p>';
+    return s + "</svg>" + '<p class="v2hint">Height: the share of the method’s predicted problems in each bin, on one scale for every panel; a bin taller than the scale is drawn broken, with its share beside it. Under each histogram: 5th to 95th percentile (line), middle half (box), median (tick).</p>';
   }
   function distEcdf(series, p, r) {
     var nr = narrow(), W = hostWidth(), L = 62, T = 34, R = nr ? 16 : 180, B = nr ? 56 + 20 * series.length : 52, H = plotHeight(W) + B;
-    var vr = viewRange(series.map(function (sr) { return sr.ph; })), all = state.dnorm === "all", low = p.higher === true;   // a law without an answer sits at the worse end
+    var vr = viewRange(series.map(function (sr) { return sr.ph; })), all = state.dnorm === "all", low = p.higher === true;   // a problem without a prediction sits at the worse end
     var xs = function (x) { return L + (Math.min(vr.hi, Math.max(vr.lo, x)) - vr.lo) / (vr.hi - vr.lo) * (W - L - R); }, y = function (v) { return T + (1 - v) * (H - T - B); };
-    var s = '<svg viewBox="0 0 ' + W + " " + H + '" class="v2chart" role="img" aria-label="' + esc(p.label) + ' cumulative distribution"><text x="' + (nr ? 10 : L) + '" y="18" class="ct">' + esc(nr ? p.short + " @ " + r + ": share at or below" : p.label + " at budget " + r + ": share of " + (all ? "all" : "answered") + " laws at or below") + "</text>";
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" class="v2chart" role="img" aria-label="' + esc(p.label) + ' cumulative distribution"><text x="' + (nr ? 10 : L) + '" y="18" class="ct">' + esc(nr ? p.short + " @ " + r + ": share at or below" : p.label + " at budget " + r + ": share of " + (all ? "all" : "predicted") + " problems at or below") + "</text>";
     [0, 0.25, 0.5, 0.75, 1].forEach(function (g) { s += '<line x1="' + L + '" y1="' + y(g).toFixed(1) + '" x2="' + (W - R) + '" y2="' + y(g).toFixed(1) + '" class="grid' + (g === 0.5 ? " zero" : "") + '"/><text x="' + (L - 6) + '" y="' + (y(g) + 4).toFixed(1) + '" class="tick" text-anchor="end">' + (100 * g) + "%</text>"; });
     s += xAxisSVG(p, vr, xs, T, H - B, W, L, R);
     var ly = nr ? H - B + 50 : T + 6, lx = nr ? L : W - R + 10;
     series.forEach(function (sr) { var col = colorOf(sr.m), den = all ? sr.rows : sr.ph.n, cum = all && low ? sr.rows - sr.ph.n : 0, pts = [];
       for (var b = 0; b < sr.ph.nb; b++) { var before = cum; cum += sr.ph.h[b]; if (b < vr.b0) { continue; } if (b > vr.b1) { break; } var x0 = vr.lo + (b - vr.b0) * vr.w; if (!pts.length) { pts.push(xs(x0).toFixed(1) + "," + y(before / den).toFixed(1)); } pts.push(xs(x0 + vr.w).toFixed(1) + "," + y(before / den).toFixed(1), xs(x0 + vr.w).toFixed(1) + "," + y(cum / den).toFixed(1)); }
-      s += '<polyline fill="none" stroke="' + col + '" stroke-width="2" points="' + pts.join(" ") + '"><title>' + esc(sr.m.label + ": " + fiveText(p, sr.f) + "; " + sr.ph.n + " answered of " + sr.rows + " laws") + "</title></polyline>";
+      s += '<polyline fill="none" stroke="' + col + '" stroke-width="2" points="' + pts.join(" ") + '"><title>' + esc(sr.m.label + ": " + fiveText(p, sr.f) + "; " + sr.ph.n + " predicted of " + sr.rows + " problems") + "</title></polyline>";
       s += '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 20) + '" y2="' + ly + '" stroke="' + col + '" stroke-width="3"/><text x="' + (lx + 26) + '" y="' + (ly + 4) + '" class="leg">' + esc(sr.m.label + (sr.m.local ? " (local)" : "")) + "</text>"; ly += 20; });
-    return s + "</svg>" + '<p class="v2hint">' + (p.higher === true ? "Further right is better: a curve that stays low longer holds more of its laws at high values." : p.higher === false ? "Further left is better: a curve that rises early holds more of its laws at low values." : "Closer to 1 is better: a curve that rises steeply around 1 is the tighter one.") +
-      (all ? " Out of all laws, a method that leaves laws unanswered " + (low ? "starts above 0 %." : "ends below 100 %.") : "") + "</p>";
+    return s + "</svg>" + '<p class="v2hint">' + (p.higher === true ? "Further right is better: a curve that stays low longer holds more of its problems at high values." : p.higher === false ? "Further left is better: a curve that rises early holds more of its problems at low values." : "Closer to 1 is better: a curve that rises steeply around 1 is the tighter one.") +
+      (all ? " Out of all problems, a method that leaves problems without a prediction " + (low ? "starts above 0 %." : "ends below 100 %.") : "") + "</p>";
   }
   function distCats(series, p, r) {
     var nr = narrow(), W = hostWidth(), T = 34, R = 16, Lw = nr ? 110 : 160, per = {}, phs = [];
@@ -912,7 +912,7 @@
     cats.forEach(function (c, i) { row(c + " · " + CAT[c].laws, i, function (sr) { return per[c][sr.m.key]; }, false); });
     row("all listed", cats.length, function (sr) { return sr.ph; }, true);
     var ly = H - B + 46; series.forEach(function (sr) { s += '<rect x="' + (Lw + 1) + '" y="' + (ly - 6) + '" width="10" height="10" rx="2" fill="' + colorOf(sr.m) + '"/><text x="' + (Lw + 16) + '" y="' + (ly + 4) + '" class="leg">' + esc(sr.m.label + (sr.m.local ? " (local)" : "")) + "</text>"; ly += 18; });
-    return s + "</svg>" + '<p class="v2hint">One row per catalog, largest first; per method the 5th to 95th percentile (line), the middle half (box) and the median (tick) of its answered laws. Tap or hover a box for its numbers.</p>';
+    return s + "</svg>" + '<p class="v2hint">One row per catalog, largest first; per method the 5th to 95th percentile (line), the middle half (box) and the median (tick) of its predicted problems. Tap or hover a box for its numbers.</p>';
   }
   function renderDistLadder(shown, p) {
     var drawn = axisMethods(shown), keys = drawn.map(function (m) { return m.key; }), src = timeSource(keys), series = [], ymin = Infinity, ymax = -Infinity, tmin = Infinity, tmax = -Infinity;
@@ -926,7 +926,7 @@
     if (!series.length) { return chartSVG({ title: title, aria: title, series: [], empty: "nothing to draw on this axis yet" }) + note; }
     var pad = (ymax - ymin) * 0.08 || 0.1; ymin -= pad; ymax += pad; var tr = state.xaxis === "time" ? timeRange(tmin, tmax) : [0, 0];
     var svg = withState({ band: true, cross: false }, function () { return chartSVG({ title: title, aria: title, series: series, ymin: ymin, ymax: ymax, ticks: ticksFor(p, ymin, ymax), tick: function (g) { return tickLabel(p, g); }, ylabel: axisName(p), timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: tfOf(p) === "log2" ? 0 : undefined }); });
-    return '<div class="v2charts v2one">' + svg + "</div>" + '<p class="v2hint">Line: the median of the answered laws. Band: their middle half (25th to 75th percentile), not a confidence interval. Tap or hover a point for all five percentiles.</p>' + note;
+    return '<div class="v2charts v2one">' + svg + "</div>" + '<p class="v2hint">Line: the median of the predicted problems. Band: their middle half (25th to 75th percentile), not a confidence interval. Tap or hover a point for all five percentiles.</p>' + note;
   }
 
   // ---- Paired ----------------------------------------------------------------------------------------------------
@@ -953,12 +953,12 @@
     if (!state.base || !shown.some(function (m) { return m.key === state.base; })) { state.base = shown[0].key; }
     var base = D.methods.filter(function (m) { return m.key === state.base; })[0], others = shown.filter(function (m) { return m.key !== state.base; }), keys = shown.map(function (m) { return m.key; });
     var plots = plotMetrics().filter(function (k) { return PAIRED_KEYS.indexOf(k) >= 0; }).map(function (k) { return METRIC[k]; });
-    var ctl = '<p class="v2hint">Every method is read as method \u2212 ' + esc(base.label) + ' on the same laws \u00b7 ' + term("draw1", "draw 1") + '</p>';
+    var ctl = '<p class="v2hint">Every method is read as method \u2212 ' + esc(base.label) + ' on the same problems \u00b7 ' + term("draw1", "draw 1") + '</p>';
     if (!plots.length) { return ctl + '<p class="v2hint">None of the plotted metrics has paired contrasts. Paired contrasts exist for: ' + esc(PAIRED_KEYS.map(function (k) { return METRIC[k] ? mname(METRIC[k]) : k; }).join(", ")) + '.</p>'; }
     var src = timeSource(axisMethods(others).map(function (m) { return m.key; }));   // the drawn set, not the baseline
     var charts = inBlock(root.querySelector(".v2main"), plots.length, function () { return plots.map(function (p) { var series = [], ymin = Infinity, ymax = -Infinity, tmin = Infinity, tmax = -Infinity;
       axisMethods(others).forEach(function (m) { var pts = []; D.rungs.forEach(function (r) { var use = bothDone(m.key, base.key, r); if (!use.length) { return; } var x = xOf(m.key, r, use, src); if (x === null) { return; } var st = pairedStat(p, m.key, base.key, r, use); if (!st || !isFinite(st.v)) { return; }
-          pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, title: m.label + " − " + base.label + " @ " + r + ": " + fmtDelta(p, st.v) + " [" + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + "], n = " + st.n + " laws, p = " + fmtP(st.p) });
+          pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, title: m.label + " − " + base.label + " @ " + r + ": " + fmtDelta(p, st.v) + " [" + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + "], n = " + st.n + " problems, p = " + fmtP(st.p) });
           [st.v, anyCI() ? st.lo : st.v, anyCI() ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } }); if (state.xaxis === "time") { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); } });
         if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: pts }); } });
       var title = "Δ " + mname(p) + " vs " + base.label;
@@ -972,15 +972,15 @@
     others.forEach(function (m) { rows += '<tr><td><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + '</td>' + plots.map(function (p) { var use = bothDone(m.key, base.key, r); var st = use.length ? pairedStat(p, m.key, base.key, r, use) : null; if (!st) { return '<td class="v2na">–</td><td class="v2na">–</td><td class="v2na">–</td>'; } var sig = st.p !== null && st.p < 0.05; return '<td' + (sig ? ' class="v2sig"' : "") + '>' + fmtDelta(p, st.v) + ' <span class="v2ci-txt">[' + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + ']</span></td><td>' + fmtP(st.p) + '</td><td class="v2hint">' + st.wins + " / " + st.losses + " of " + st.n + '</td>'; }).join("") + '</tr>'; });
     var anyRow = others.some(function (m) { return plots.some(function (p) { var use = bothDone(m.key, base.key, r); return use.length && pairedStat(p, m.key, base.key, r, use); }); });
     var table = '<h3 class="v2h">At one budget</h3><div class="v2viewbar">' + rungStepper(shown, true) + "</div>" + (anyRow ? "" : '<p class="v2hint">No method and the baseline have both ' + term("complete", "finished every selected catalog") + " at budget " + r + ": step to another budget above, or narrow the catalogs.</p>") + '<div class="v2table-wrap"><table class="v2table"><thead><tr><th>method − ' + esc(base.label) + '</th>' + plots.map(function (p) { return '<th colspan="3">' + esc(mname(p)) + " " + mhelp(p) + '</th>'; }).join("") + '</tr><tr><th></th>' + plots.map(function () { return '<th>Δ [95 %]</th><th>p</th><th>wins / losses</th>'; }).join("") + '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
-      '<p class="v2hint">Rates: ' + term("mcnemar", "exact McNemar") + ' on the laws the pair disagrees on. Continuous metrics: ' + term("signtest", "mean difference and exact sign test") + ' over laws where both have a value; ratios and times read as factors. Bold: p below 0.05, uncorrected. <a href="#paired">How paired numbers are made</a></p>';
+      '<p class="v2hint">Rates: ' + term("mcnemar", "exact McNemar") + ' on the problems the pair disagrees on. Continuous metrics: ' + term("signtest", "mean difference and exact sign test") + ' over problems where both have a value; ratios and times read as factors. Bold: p below 0.05, uncorrected. <a href="#paired">How paired numbers are made</a></p>';
     return ctl + '<div class="v2charts">' + charts.join("") + "</div>" + table;
   }
 
   // ---- Ranks -----------------------------------------------------------------------------------------------------
-  // Within every law the methods are placed 1st, 2nd, ... on one continuous metric; a method without a usable answer
+  // Within every problem the methods are placed 1st, 2nd, ... on one continuous metric; a method without a usable answer
   // is placed last, ties share a place. The release ships PAIRWISE outcomes per catalog (ranks.js), and a mean rank
-  // is 1 + sum over opponents of (their wins + half the ties) / laws, so any roster of methods over any set of
-  // catalogs is ranked here, on the same laws for every method. A snapshot is taken at one budget: every method at
+  // is 1 + sum over opponents of (their wins + half the ties) / problems, so any roster of methods over any set of
+  // catalogs is ranked here, on the same problems for every method. A snapshot is taken at one budget: every method at
   // the same rung of its own ladder, or every method at the largest rung the reference machine timed within a time
   // budget. The Friedman omnibus test is computed without the tie correction, which can only understate it; the
   // critical difference is Nemenyi's at 5 %.
@@ -1081,34 +1081,34 @@
     lg.order.forEach(function (x, i) { var yy = T + (i + 0.5) * rowH, col = colorOf(x.m);
       s += '<text x="' + (Lw - 12) + '" y="' + (yy + 4) + '" class="leg" text-anchor="end">' + esc(x.m.label + (x.m.local ? " (local)" : "")) + "</text>";
       s += '<line x1="' + xs(1).toFixed(1) + '" y1="' + yy + '" x2="' + xs(x.rank).toFixed(1) + '" y2="' + yy + '" stroke="' + col + '" stroke-width="2" stroke-opacity="0.3"/>';
-      s += '<circle cx="' + xs(x.rank).toFixed(1) + '" cy="' + yy + '" r="6.5" fill="' + (x.capped ? "var(--surface)" : col) + '" stroke="' + col + '" stroke-width="2.5"><title>' + esc(x.m.label + ": mean rank " + x.rank.toFixed(2) + " of " + k + " at budget " + x.r + (x.capped ? ", the end of its finished, timed ladder" : "") + "; wins " + (100 * x.share).toFixed(1) + " % of its comparisons; no answer on " + x.blank + " laws") + "</title></circle>";
+      s += '<circle cx="' + xs(x.rank).toFixed(1) + '" cy="' + yy + '" r="6.5" fill="' + (x.capped ? "var(--surface)" : col) + '" stroke="' + col + '" stroke-width="2.5"><title>' + esc(x.m.label + ": mean rank " + x.rank.toFixed(2) + " of " + k + " at budget " + x.r + (x.capped ? ", the end of its finished, timed ladder" : "") + "; wins " + (100 * x.share).toFixed(1) + " % of its comparisons; no prediction on " + x.blank + " problems") + "</title></circle>";
       s += '<text x="' + (xs(x.rank) + 12).toFixed(1) + '" y="' + (yy + 4) + '" class="tick">' + x.rank.toFixed(2) + "</text>"; });
-    return s + "</svg>" + '<p class="v2hint">' + k + " methods ranked within each of " + lg.n.toLocaleString() + " laws (" + lg.cats.length + " catalogs); " + term("worstrank", "no answer ranks last, ties share a place") + ". " +
+    return s + "</svg>" + '<p class="v2hint">' + k + " methods ranked within each of " + lg.n.toLocaleString() + " problems (" + lg.cats.length + " catalogs); " + term("worstrank", "no prediction ranks last, ties share a place") + ". " +
       (reject ? (lg.cliques.length ? "A shaded band joins methods closer than the " + term("cd", "critical difference") + ": no reliable difference between them." : "Every gap exceeds the " + term("cd", "critical difference") + ".")
         : "<b>" + term("friedman", "The omnibus test does not find rank differences") + " (p = " + lg.p.toFixed(3) + "), so no groups are drawn.</b>") +
       (lg.order.some(function (x) { return x.capped; }) ? " A hollow dot is a method whose timed ladder ends below the limit: its place is a worst case." : "") + ' <a href="#ranks">How ranks are read</a></p>';
   }
   function rankTables(R, lg, p, slot, timed) {
     var k = lg.k, ord = lg.order, idx = ord.map(function (x) { return lg.roster.indexOf(x); });
-    var t1 = '<h3 class="v2h">Standings</h3><div class="v2table-wrap"><table class="v2table v2ranktable"><thead><tr><th>method</th><th>' + (timed ? "budget within " + slotSeconds(R, slot) + " s" : "budget") + "</th><th>mean rank</th><th>comparisons won " + help(TERMS.winshare, "What is the share of comparisons won?") + "</th><th>laws without an answer</th></tr></thead><tbody>" +
+    var t1 = '<h3 class="v2h">Standings</h3><div class="v2table-wrap"><table class="v2table v2ranktable"><thead><tr><th>method</th><th>' + (timed ? "budget within " + slotSeconds(R, slot) + " s" : "budget") + "</th><th>mean rank</th><th>comparisons won " + help(TERMS.winshare, "What is the share of comparisons won?") + "</th><th>problems without a prediction</th></tr></thead><tbody>" +
       ord.map(function (x) { return '<tr><td><span class="v2sw" style="background:' + colorOf(x.m) + '"></span>' + esc(x.m.label) + "</td><td>" + x.r + (timed && refTime(x.m.key, x.r) ? ' <span class="v2ci-txt">' + refTime(x.m.key, x.r).toFixed(2) + " s</span>" : "") + "</td><td><b>" + x.rank.toFixed(2) + "</b></td><td>" + (100 * x.share).toFixed(1) + " %</td><td>" + x.blank.toLocaleString() + ' <span class="v2ci-txt">of ' + lg.n.toLocaleString() + "</span></td></tr>"; }).join("") + "</tbody></table></div>";
     var t2 = '<h3 class="v2h">Head to head</h3><div class="v2table-wrap"><table class="v2table v2matrix v2h2h"><thead><tr><th>row beats column on</th>' + ord.map(function (x) { return '<th><span class="v2sw" style="background:' + colorOf(x.m) + '"></span>' + esc(x.m.label) + "</th>"; }).join("") + "</tr></thead><tbody>" +
       ord.map(function (x, a) { return '<tr><td><span class="v2sw" style="background:' + colorOf(x.m) + '"></span>' + esc(x.m.label) + "</td>" + ord.map(function (z, b) { if (a === b) { return '<td class="v2na">·</td>'; } var e = lg.beat[idx[a]][idx[b]], w = e.w / e.n, l = lg.beat[idx[b]][idx[a]].w / e.n, rgb = accentRGB();
-        return '<td style="background:rgba(' + rgb.join(",") + "," + (0.04 + 0.5 * w).toFixed(2) + ')" title="' + esc(x.m.label + " beats " + z.m.label + " on " + e.w + ", ties on " + e.t + " and loses on " + lg.beat[idx[b]][idx[a]].w + " of " + e.n + " laws") + '">' + (w > l ? "<b>" : "") + (100 * w).toFixed(1) + " %" + (w > l ? "</b>" : "") + ' <span class="v2ci-txt">' + (100 * e.t / e.n).toFixed(0) + " % tied</span></td>"; }).join("") + "</tr>"; }).join("") + "</tbody></table></div>" +
-      '<p class="v2hint">Share of the laws on which the row’s answer is better than the column’s on ' + esc(p.label) + "; the rest are ties or losses. Bold: the row wins more often than it loses.</p>";
+        return '<td style="background:rgba(' + rgb.join(",") + "," + (0.04 + 0.5 * w).toFixed(2) + ')" title="' + esc(x.m.label + " beats " + z.m.label + " on " + e.w + ", ties on " + e.t + " and loses on " + lg.beat[idx[b]][idx[a]].w + " of " + e.n + " problems") + '">' + (w > l ? "<b>" : "") + (100 * w).toFixed(1) + " %" + (w > l ? "</b>" : "") + ' <span class="v2ci-txt">' + (100 * e.t / e.n).toFixed(0) + " % tied</span></td>"; }).join("") + "</tr>"; }).join("") + "</tbody></table></div>" +
+      '<p class="v2hint">Share of the problems on which the row’s prediction is better than the column’s on ' + esc(p.label) + "; the rest are ties or losses. Bold: the row wins more often than it loses.</p>";
     return t1 + t2;
   }
   function rankLadder(R, shown, p, ki, timed) {
     var slots = timed ? rankSlots(R) : D.rungs.map(String), by = {}, tmin = Infinity, tmax = -Infinity;
     slots.forEach(function (slot) { var lg = ranking(R, shown, slot, ki); if (lg.roster.length < 2 || !lg.cats.length) { return; }
       var x = timed ? slotSeconds(R, slot) : +slot; if (timed) { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); }
-      lg.roster.forEach(function (e) { (by[e.m.key] = by[e.m.key] || { m: e.m, pts: [] }).pts.push({ x: x, v: e.share, lo: NaN, hi: NaN, hollow: e.capped, title: e.m.label + " at " + slotLabel(R, slot) + ": wins " + (100 * e.share).toFixed(1) + " % of its comparisons, mean rank " + e.rank.toFixed(2) + " of " + lg.k + ", " + lg.n + " laws" }); }); });
+      lg.roster.forEach(function (e) { (by[e.m.key] = by[e.m.key] || { m: e.m, pts: [] }).pts.push({ x: x, v: e.share, lo: NaN, hi: NaN, hollow: e.capped, title: e.m.label + " at " + slotLabel(R, slot) + ": wins " + (100 * e.share).toFixed(1) + " % of its comparisons, mean rank " + e.rank.toFixed(2) + " of " + lg.k + ", " + lg.n + " problems" }); }); });
     var series = shown.filter(function (m) { return by[m.key]; }).map(function (m) { return { label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: by[m.key].pts }; });
     if (!series.length) { return ""; }
     var title = narrow() ? "Comparisons won" : "Comparisons won, along " + (timed ? "the time limit" : "the ladder"), rate = { kind: "rate", fmt: "pct", hist: null }, tr = timed ? timeRange(tmin, tmax) : [0, 0];
     var svg = withState({ band: false, cross: false }, function () { return chartSVG({ title: title, aria: title, series: series, ymin: 0, ymax: 1, ticks: [0, 0.25, 0.5, 0.75, 1], tick: function (g) { return tickLabel(rate, g); }, ylabel: narrow() ? "won" : "comparisons won", timeAxis: timed, timeSource: "budget", tmin: tr[0], tmax: tr[1], zero: 0.5, xlabel: timed ? (narrow() ? "time limit (s, ref)" : "time limit per problem (s, log, reference machine)") : (narrow() ? "budget / problem" : "budget per problem (log scale)") }); });
     return '<h3 class="v2h">Along ' + (timed ? "the time limit" : "the ladder") + '</h3><div class="v2charts v2one">' + svg + "</div>" +
-      '<p class="v2hint">' + term("winshare", "Comparisons won") + " is the mean rank on a fixed scale: 100 % beats every other method on every law, 50 % breaks even." + (timed ? " A hollow marker is a method whose timed ladder ends below the limit." : "") + "</p>";
+      '<p class="v2hint">' + term("winshare", "Comparisons won") + " is the mean rank on a fixed scale: 100 % beats every other method on every problem, 50 % breaks even." + (timed ? " A hollow marker is a method whose timed ladder ends below the limit." : "") + "</p>";
   }
 
   // ---- shell -----------------------------------------------------------------------------------------------------
@@ -1139,12 +1139,12 @@
   function shell() {
     var rel = D.release;
     var strip = D.methods.filter(function (m) { return D.status[m.key]; }).map(function (m) { var d = D.status[m.key][0], t = D.status[m.key][1]; return '<div class="v2tile" title="' + esc(m.label) + '"><b><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + (m.local ? " (local)" : "") + '</b><span>' + d + '<small> / ' + (t == null ? "?" : t) + ' units</small></span><div class="v2bar"><i style="width:' + (t ? 100 * d / t : 0) + '%"></i></div></div>'; }).join("");
-    var catList = CATS.map(function (c) { var m = CAT[c]; return '<label title="' + esc(GROUPS[m.group] + (m.mu ? " · median law complexity " + m.mu[1] + " bits (IQR " + m.mu[0] + " to " + m.mu[2] + ")" : "")) + '"><input type="checkbox" data-c="' + c + '"> ' + esc(c) + ' <span class="v2hint">' + m.laws + '</span></label>'; }).join("");
-    var methList = D.methods.filter(withData).map(function (m) { return '<div class="v2meth"><label><input type="checkbox" data-m="' + m.key + '"><input type="color" class="v2swatch" data-m="' + m.key + '" value="' + colorOf(m) + '" title="Colour for ' + esc(m.label) + '"><span class="v2mname">' + esc(m.label) + '</span></label>' + (m.local ? ' <span class="v2tag v2tag-local">local only</span>' : "") + ' <span class="v2hint">' + esc(m.param) + '</span>' + (m.selection ? " " + help(m.selection, "How does " + m.label + " choose its answer?") : "") + ' <span class="v2tag" title="' + esc(PROV_NOTE[m.provenance] || "") + '">' + esc(PROV[m.provenance] || m.provenance || "") + '</span><button type="button" class="v2reset" data-m="' + m.key + '" title="Reset colour to default" hidden>↺</button></div>'; }).join("") || '<span class="v2hint">no method has finished units yet</span>';
+    var catList = CATS.map(function (c) { var m = CAT[c]; return '<label title="' + esc(GROUPS[m.group] + (m.mu ? " · median ground-truth complexity " + m.mu[1] + " bits (IQR " + m.mu[0] + " to " + m.mu[2] + ")" : "")) + '"><input type="checkbox" data-c="' + c + '"> ' + esc(c) + ' <span class="v2hint">' + m.laws + '</span></label>'; }).join("");
+    var methList = D.methods.filter(withData).map(function (m) { return '<div class="v2meth"><label><input type="checkbox" data-m="' + m.key + '"><input type="color" class="v2swatch" data-m="' + m.key + '" value="' + colorOf(m) + '" title="Colour for ' + esc(m.label) + '"><span class="v2mname">' + esc(m.label) + '</span></label>' + (m.local ? ' <span class="v2tag v2tag-local">local only</span>' : "") + ' <span class="v2hint">' + esc(m.param) + '</span>' + (m.selection ? " " + help(m.selection, "How does " + m.label + " choose its prediction?") : "") + ' <span class="v2tag" title="' + esc(PROV_NOTE[m.provenance] || "") + '">' + esc(PROV[m.provenance] || m.provenance || "") + '</span><button type="button" class="v2reset" data-m="' + m.key + '" title="Reset colour to default" hidden>↺</button></div>'; }).join("") || '<span class="v2hint">no method has finished units yet</span>';
     var metricList = MGROUPS.map(function (g) { var ms = D.metrics.filter(function (m) { return m.group === g; }); return '<div class="v2mgroup" data-group="' + esc(g) + '"><h4>' + esc(g) + '</h4>' + ms.map(function (m) { return '<div class="v2metric" data-tier="' + m.tier + '" data-key="' + m.key + '"><label><input type="checkbox" data-p="' + m.key + '"> ' + esc(m.label) + '</label> ' + mhelp(m) + '</div>'; }).join("") + "</div>"; }).join("");
     root.innerHTML =
       '<div class="v2head"><div><div class="v2kicker">benchmark release ' + esc(rel.id) + '</div><p class="v2sub">' + esc(rel.title !== rel.id ? rel.title + " · " : "") + 'generated ' + esc(rel.generated) + '. ' + esc(rel.notes || "") + '</p></div><div class="v2row"><button type="button" class="v2btn" data-act="link">copy link to this view</button><span class="v2linkok v2hint" hidden>link copied</span></div></div>' +
-      '<details class="v2release"><summary>Protocol of this release</summary><ul><li><b>Choosing an answer.</b> ' + esc(rel.scoring || "") + '</li><li><b>Judging it.</b> ' + esc(rel.judge || "") + '</li><li><b>Data.</b> One problem per law: 512 support points and 512 validation points from the catalog\'s own ranges, no noise; ' + CATS.length + ' catalogs, ' + laws(CATS) + ' laws.</li><li><b>Configurations.</b> ' + term("provenance", "Who chose each method\'s configuration") + ' is shown next to every method.</li><li><b>Time axis.</b> ' + term("time", "Reference-machine timing") + (D.timing_note ? " · " + esc(D.timing_note) : "") + '</li><li><b>Statistics.</b> ' + term("regime", "Two regimes") + ', ' + term("complete", "complete budgets only") + ', ' + term("wilson", "95 % intervals") + '.</li></ul></details>' +
+      '<details class="v2release"><summary>Protocol of this release</summary><ul><li><b>Choosing a prediction.</b> ' + esc(rel.scoring || "") + '</li><li><b>Judging it.</b> ' + esc(rel.judge || "") + '</li><li><b>Data.</b> One problem per ground-truth expression: 512 support points and 512 validation points from the catalog\'s own ranges, no noise; ' + CATS.length + ' catalogs, ' + laws(CATS) + ' problems.</li><li><b>Configurations.</b> ' + term("provenance", "Who chose each method\'s configuration") + ' is shown next to every method.</li><li><b>Time axis.</b> ' + term("time", "Reference-machine timing") + (D.timing_note ? " · " + esc(D.timing_note) : "") + '</li><li><b>Statistics.</b> ' + term("regime", "Two regimes") + ', ' + term("complete", "complete budgets only") + ', ' + term("wilson", "95 % intervals") + '.</li></ul></details>' +
       '<div class="v2strip">' + strip + '</div>' +
       '<div class="v2tabs" role="tablist">' + VIEWS.map(function (v) { return '<button type="button" class="v2tab" role="tab" data-view="' + v[0] + '">' + v[1] + '</button>'; }).join("") + '</div>' +
       '<div class="v2layout"><aside class="v2side">' +
@@ -1171,7 +1171,7 @@
       '<div class="v2row v2checks" data-uses="ci"><span class="v2lab" data-uses="ci">95 % intervals ' + help(TERMS.wilson) + '</span>' +
       '<label data-uses="ci"><input type="checkbox" class="v2band"> bands</label><label data-uses="ci"><input type="checkbox" class="v2cross"> crosses</label></div>' +
       '<div class="v2row" data-uses="impute"><span class="v2lab">failed predictions ' + help(TERMS.impute, "What does a failed prediction count?") + '</span><label><input type="checkbox" class="v2impute"> count at the worst value</label></div>' +
-      '<div class="v2row" data-uses="valid"><span class="v2lab">hollow below ' + help(TERMS.valid, "When is a point drawn hollow?") + '</span><input type="range" class="v2valid" min="0" max="100" step="5" aria-label="share of the laws a point must rest on to be drawn solid, in percent"><output class="v2validout"></output></div></div>' +
+      '<div class="v2row" data-uses="valid"><span class="v2lab">hollow below ' + help(TERMS.valid, "When is a point drawn hollow?") + '</span><input type="range" class="v2valid" min="0" max="100" step="5" aria-label="share of the problems a point must rest on to be drawn solid, in percent"><output class="v2validout"></output></div></div>' +
       '</aside><section class="v2main"><p class="v2err" role="alert"></p><div class="v2view"></div></section></div>';
     var hasTiming = anyTime();
     root.querySelector(".v2xtime").disabled = !hasTiming; root.querySelector(".v2xtimehint").textContent = hasTiming ? "" : "(no measurements yet)";
@@ -1189,7 +1189,7 @@
     root.querySelectorAll("input[name=v2xaxis]").forEach(function (i) { i.checked = i.value === state.xaxis; });
     root.querySelector(".v2band").checked = state.band; root.querySelector(".v2cross").checked = state.cross;
     root.querySelector(".v2impute").checked = state.impute;
-    var vs = root.querySelector(".v2valid"); if (document.activeElement !== vs) { vs.value = String(state.valid); } root.querySelector(".v2validout").textContent = state.valid + " % of the laws";
+    var vs = root.querySelector(".v2valid"); if (document.activeElement !== vs) { vs.value = String(state.valid); } root.querySelector(".v2validout").textContent = state.valid + " % of the problems";
     setPick(root.querySelector(".v2focus"), state[focusKey()]); root.querySelector(".v2rung").value = String(state.rung);
     root.querySelectorAll("input[name=v2rows]").forEach(function (i) { i.checked = i.value === state.rows; });
     if (state.base) { root.querySelector(".v2base").value = state.base; }
@@ -1205,7 +1205,7 @@
       var rows = p.querySelectorAll("[data-uses]");
       if (rows.length) { p.hidden = !Array.prototype.some.call(rows, function (r) { return !r.hidden; }); }
     });
-    root.querySelector(".v2catcount").textContent = state.cats.length + " of " + CATS.length + " \u00b7 " + laws(state.cats).toLocaleString() + " laws";
+    root.querySelector(".v2catcount").textContent = state.cats.length + " of " + CATS.length + " \u00b7 " + laws(state.cats).toLocaleString() + " problems";
   }
   var rt = null;
   function scheduleRender() { clearTimeout(rt); rt = setTimeout(render, 30); }

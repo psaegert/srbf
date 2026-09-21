@@ -1,19 +1,19 @@
 """Export a srbf benchmark release for the results site's explorer (results-site/explorer_v2.js), schema 2.
 
-Reads the per-law judged rows of a campaign root (rows_full_<method>.csv written by the full-metric readout:
-srbf's derive_metrics plus the 2026-07 site's derived columns, one row per law x rung) and writes
+Reads the per-problem judged rows of a campaign root (rows_full_<method>.csv written by the full-metric readout:
+srbf's derive_metrics plus the 2026-07 site's derived columns, one row per problem x rung) and writes
 
   <out.js>                       window.RESULTS_V2: release, catalogs, rungs, methods, the METRIC REGISTRY, and per
-                                 method x catalog x rung cell: n laws, n successful, and for every metric
-                                 [n defined, n finite, sum, sum of squares] (rates: [hits, n]); "e": the laws a
-                                 metric can be defined for, where that is not every law; "w": how many values of a
+                                 method x catalog x rung cell: n problems, n successful, and for every metric
+                                 [n defined, n finite, sum, sum of squares] (rates: [hits, n]); "e": the problems a
+                                 metric can be defined for, where that is not every problem; "w": how many values of a
                                  worst-value metric were filled in for failed predictions; status; timing.
   <out dir>/hist/<metric>.js     per-metric histograms of the same cells (pooled medians and the distribution view),
                                  loaded by the page on demand.
   <out dir>/paired.js            draw-1 paired contrasts per method pair x catalog x rung: 2x2 tables for the rate
                                  metrics (exact McNemar on the client), [n, sum d, sum d^2, wins, losses] for the
-                                 continuous ones; a worst-value metric also as "<key>@answered", over the laws both
-                                 methods answered.
+                                 continuous ones; a worst-value metric also as "<key>@answered", over the problems both
+                                 methods have a prediction for.
 
 LOCAL-ONLY METHODS. The methods named in --public go into the release files the site ships. A method named in
 --private is written to --private-dir only, a directory outside the deployed tree (results-site/README.md,
@@ -63,11 +63,11 @@ CATALOG_GROUPS = {
 NB = 128
 
 # key, label, short, group, kind, higher_is_better (None = 1 is ideal / descriptive), tier, format, histogram (lo, hi, transform), description
-# Rate metrics are defined for EVERY law (a failed prediction is a miss). So are the continuous metrics whose range
+# Rate metrics are defined for EVERY problem (a failed prediction is a miss). So are the continuous metrics whose range
 # has a worst value (WORST below, the overlaps): a failed prediction takes it. Every other continuous metric
 # describes the answers that were made -- R^2, a length, a ratio of lengths can be arbitrarily bad --; the page
-# marks a point as hollow when fewer laws than the reader's threshold have a value. Ground-truth descriptors cover
-# every law.
+# marks a point as hollow when fewer problems than the reader's threshold have a value. Ground-truth descriptors cover
+# every problem.
 # NO WALL-CLOCK METRIC IS PUBLISHED. Seconds measured where a unit happened to run depend on the node, its GPU
 # and whatever shared it, so they are not comparable between methods. The only time this benchmark publishes is
 # the reference-machine ladder in timing.json, which the site uses for the time AXIS and nothing else.
@@ -158,10 +158,10 @@ METRICS = [
     ("predicted_pareto_rank", "Pareto Rank of the Prediction", "Pareto Rank", "Method Internals", "cont", False, "more", "num1", (0.0, 64.0, None),
      "Rank of the selected candidate on the method's FVU / length front (0 = on the front).")]
 # A metric that repeats another in EVERY published cell says nothing of its own, so the menu does not list it (its
-# numbers stay in the cells). Recovery relative to the reference law is numeric recovery wherever the targets are
-# computed from the law (reference FVU = 0); it is a metric of its own only once a catalog of measured data is in.
+# numbers stay in the cells). Recovery relative to the ground truth is numeric recovery wherever the targets are
+# computed from the ground truth (reference FVU = 0); it is a metric of its own only once a catalog of measured data is in.
 # The continuous metrics whose range has a worst value, and that value: a failed prediction takes it, so these are
-# read over every law (the rows carry the value already: srbf.result_processing.WORST_VALUE, checked by the tests).
+# read over every problem (the rows carry the value already: srbf.result_processing.WORST_VALUE, checked by the tests).
 # The reader may leave the failed predictions out instead. Nothing is exported twice for that: a cell names how many
 # of its values were filled in ("w"), and the page takes that many off the sums and out of the histogram bin of the
 # worst value. Only a paired contrast cannot be undone that way, so it ships in both readings (key + ANSWERED).
@@ -172,12 +172,12 @@ WORST = {"f1_score": 0.0, "precision_score": 0.0, "recall_score": 0.0,
 # histogram cannot tell 0.99 from 0.9999, and below the histogram's lower end, the page reads the order statistic from
 # the log10 FVU histogram instead (bins of 0.16 decades).
 MEDIAN_ONLY = {"r2_val": "log10_fvu_val", "r2_fit": "log10_fvu_fit"}
-# A metric that is undefined for some laws whatever the method does: the laws it could be defined for are the base of
-# its share of valid results. (The constant-count ratio needs a law with at least one constant.)
+# A metric that is undefined for some problems whatever the method does: the problems it could be defined for are the base of
+# its share of valid results. (The constant-count ratio needs a ground truth with at least one constant.)
 ELIGIBLE = {"n_constants_ratio": lambda row: bool(row.get("n_constants"))}
 # Properties of the ground truth alone: defined for every problem, whatever the method did.
 EVERY_PROBLEM = {"ground_truth_mdl", "skeleton_length", "n_constants", "total_nestedness", "n_variables"}
-ANSWERED = "@answered"   # suffix of a paired contrast taken over the laws BOTH methods answered
+ANSWERED = "@answered"   # suffix of a paired contrast taken over the problems BOTH methods have a prediction for
 COPY_OF = {"numeric_recovery_relative_val": "numeric_recovery_val", "numeric_recovery_relative_fit": "numeric_recovery_fit"}
 
 
@@ -202,13 +202,13 @@ CONT_KEYS = [m[0] for m in METRICS if m[4] == "cont"]
 HIST_SPECS = {m[0]: m[8] for m in METRICS if m[8]}
 METRIC_HIGHER = {m[0]: m[5] for m in METRICS}
 PAIRED_KEYS = ["numeric_recovery_val", "symbolic_recovery", "success", "log10_fvu_val", "mdl_ratio", "expr_length_ratio", "f1_score"]
-# The Ranks view: within every law the methods are placed 1st, 2nd, ... on one continuous metric, a method without a
-# usable answer last. A mean rank over any set of laws and any roster of methods follows from PAIRWISE outcomes alone
+# The Ranks view: within every problem the methods are placed 1st, 2nd, ... on one continuous metric, a method without a
+# usable prediction last. A mean rank over any set of problems and any roster of methods follows from PAIRWISE outcomes alone
 # (rank_i = 1 + sum_j [j beats i] + 0.5 [j ties i]), and pairwise counts add up over catalogs, so that is what ships:
-# per pair x catalog x slot, [n laws, then (wins of the first, wins of the second) per rank key]. A slot is a rung
+# per pair x catalog x slot, [n problems, then (wins of the first, wins of the second) per rank key]. A slot is a rung
 # ("64": both methods at that rung) or a time budget ("t3": each method at its largest rung the reference machine
 # timed at or under 3 s per problem). The first key is the primary league.
-RANK_KEYS = ["log10_fvu_val", "mdl_ratio", "expr_length_ratio", "f1_score"]   # R^2 orders the answers exactly as the FVU does
+RANK_KEYS = ["log10_fvu_val", "mdl_ratio", "expr_length_ratio", "f1_score"]   # R^2 orders the predictions exactly as the FVU does
 TIME_BUDGETS = [0.1, 0.3, 1, 3, 10, 30, 100, 300, 1000]
 
 
@@ -345,7 +345,7 @@ def budget_key(t: float) -> str:
 
 
 def rank_score(value: float | None, higher: bool | None) -> float:
-    """Oriented so that larger is better; a law without a usable value scores -inf (placed last). `higher` None
+    """Oriented so that larger is better; a problem without a usable value scores -inf (placed last). `higher` None
     marks a ratio whose ideal is 1: closer to 1 on the log scale is better."""
     if value is None or math.isnan(value):
         return -math.inf
@@ -478,7 +478,7 @@ def main() -> None:
     def leagues(pairs: list[tuple[str, str]], keys: list[str]) -> dict[str, Any]:
         """Pairwise rank outcomes for `pairs`, and for every method of `keys` the rung a time budget buys it."""
         rungs_of = {k: {r for (_c, r) in data.get(k, {}) if usable(k, r)} for k in {x for p in pairs for x in p} | set(keys)}
-        # a time budget buys a rung the method has FINISHED: every catalog, every law (the site shows no pooled number
+        # a time budget buys a rung the method has FINISHED: every catalog, every problem (the site shows no pooled number
         # for a rung that is still running, so a budget must not point at one)
         finished = {k: {r for r in rungs_of[k] if all(len(data[k].get((c, r), {})) >= n for c, n in sizes.items())} for k in rungs_of}
         at: dict[str, dict[str, int]] = {k: {} for k in rungs_of}
@@ -535,8 +535,8 @@ def main() -> None:
             timing_note = t.get("note", "")
         payload = {"schema": 2, "base": base,
                    "release": {"id": a.release, "title": a.title or a.release, "notes": a.notes, "generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
-                               "scoring": "Every method submits one answer per problem and chooses it by its own rule; the rule is named next to the method, along with who chose its configuration.",
-                               "judge": "One judge for every answer: the predicted expression and the law are compared in one certified canonical form (SimpliPy acj-5-4-llm, f64), and numeric recovery is float32 precision on 512 held-out points."},
+                               "scoring": "Every method submits one prediction per problem and chooses it by its own rule; the rule is named next to the method, along with who chose its configuration.",
+                               "judge": "One judge for every prediction: the predicted expression and the ground truth are compared in one certified canonical form (SimpliPy acj-5-4-llm, f64), and numeric recovery is float32 precision on 512 held-out points."},
                    "catalogs": cats, "rungs": RUNGS, "nb": NB, "metrics": listed_metrics(cells), "paired_keys": PAIRED_KEYS, "rank_keys": RANK_KEYS,
                    # budget: what one rung of the ladder buys. "candidates" is a count a generative method draws;
                    # PySR's rungs are search iterations, which have no place on the candidate axis of the site.

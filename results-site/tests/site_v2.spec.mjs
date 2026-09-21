@@ -230,7 +230,7 @@ test('the public page carries no private overlay', async ({ page }) => {
   expect(html).not.toContain('private/');
 });
 
-test('every method says how it picks the answer it submits', async ({ page }) => {
+test('every method says how it picks the prediction it submits', async ({ page }) => {
   await page.goto('/?release=2026-09&v=curves');
   const withData = await page.evaluate(() => (window.RESULTS_V2.methods || []).filter((m) => window.RESULTS_V2.cells[m.key] && Object.keys(window.RESULTS_V2.cells[m.key]).length));
   expect(withData.length).toBeGreaterThan(0);
@@ -572,7 +572,7 @@ test('ranks follow the selection: another metric, fewer methods, fewer catalogs'
   const rows = page.locator(V2 + ' .v2ranktable tbody tr');
   await expect(rows.first()).toBeVisible({ timeout: 15000 });
   const k = await rows.count();
-  const laws = () => page.locator(V2 + ' .v2view').textContent().then((t) => +t.match(/within each of ([\d,]+) laws/)[1].replace(/,/g, ''));
+  const laws = () => page.locator(V2 + ' .v2view').textContent().then((t) => +t.match(/within each of ([\d,]+) problems/)[1].replace(/,/g, ''));
   const all = await laws();
   await page.locator(V2 + ' button[data-act="phys"]').click();
   await expect.poll(laws).toBeLessThan(all);
@@ -842,10 +842,10 @@ const HOLLOW = 'circle[fill="var(--surface)"]';
 const HALF = '/?release=2026-09&m=fixture-half&x=rung&s=mean&p=rung~mdl_ratio,rung~f1_score,rung~n_constants_ratio,rung~numeric_recovery_val';
 async function setThreshold(page, value) {
   await page.locator(V2 + ' .v2valid').fill(String(value));
-  await expect(page.locator(V2 + ' .v2validout')).toHaveText(value + ' % of the laws');
+  await expect(page.locator(V2 + ' .v2validout')).toHaveText(value + ' % of the problems');
 }
 
-test('a point that rests on too few laws is drawn hollow, and the reader sets how few', async ({ page }) => {
+test('a point that rests on too few problems is drawn hollow, and the reader sets how few', async ({ page }) => {
   const errors = collectErrors(page);
   await withHalfAnswered(page);
   await page.goto(HALF + '&v=curves');
@@ -854,8 +854,8 @@ test('a point that rests on too few laws is drawn hollow, and the reader sets ho
   // the default threshold is 90 %: half of the laws is too few, 95 % is enough
   await expect(page.locator(V2 + ' .v2valid')).toHaveValue('90');
   await expect(plot(0).locator(HOLLOW)).toHaveCount(1);
-  await expect(plot(0).locator(HOLLOW + ' title')).toHaveText(/@ 16.*50 % of the laws have a value/);
-  await expect(page.locator(V2 + ' .v2hollownote')).toContainText('fewer than 90 % of the laws');
+  await expect(plot(0).locator(HOLLOW + ' title')).toHaveText(/@ 16.*50 % of the problems have a value/);
+  await expect(page.locator(V2 + ' .v2hollownote')).toContainText('fewer than 90 % of the problems');
   // a metric with a worst value counts every law, and so does a rate: never hollow
   await expect(plot(1).locator('svg circle')).toHaveCount(2);
   await expect(plot(1).locator(HOLLOW)).toHaveCount(0);
@@ -873,7 +873,7 @@ test('a point that rests on too few laws is drawn hollow, and the reader sets ho
   await expect(page.locator(V2 + ' .v2hollownote')).toHaveCount(0);
   // the two fixed charts above do not follow the control: they keep the default
   await expect(page.locator('#results-headline-v2 ' + HOLLOW).first()).toBeVisible();
-  await expect(page.locator('#results-headline-v2')).toContainText('fewer than 90 % of the laws');
+  await expect(page.locator('#results-headline-v2')).toContainText('fewer than 90 % of the problems');
   // a link carries the threshold
   await page.goto(HALF + '&v=curves&ok=40');
   await expect(page.locator(V2 + ' .v2valid')).toHaveValue('40');
@@ -889,7 +889,7 @@ test('a table marks the same numbers, and a display without such numbers has no 
   await expect(row(16)).toBeVisible();
   await expect(row(16).locator('.v2hollow')).toHaveCount(1);   // the description-length ratio, not the overlap, the ratio of constants or the rate
   await expect(row(32).locator('.v2hollow')).toHaveCount(0);
-  await expect(page.locator(V2 + ' .v2view')).toContainText('fewer than 90 % of the laws');
+  await expect(page.locator(V2 + ' .v2view')).toContainText('fewer than 90 % of the problems');
   for (const v of ['dist', 'ranks', 'paired']) {
     await page.locator(V2 + ` .v2tab[data-view="${v}"]`).click();
     await expect(page.locator(V2 + ' .v2valid')).toBeHidden();
@@ -974,7 +974,7 @@ test('leaving failed predictions out is exact for the median, the distribution a
     const D = window.RESULTS_V2; let best = null;
     D.methods.forEach((m) => { const per = D.cells[m.key] || {}; let n = 0, ok = 0; Object.keys(per).forEach((c) => { const x = per[c]['1']; if (x) { n += x.n; ok += x.ok; } }); if (n && ok / n < 0.45 && (!best || ok / n < best.share)) { best = { key: m.key, share: ok / n }; } });
     return best; }));
-  test.skip(!low, 'no method of this release answers under half of the laws');
+  test.skip(!low, 'no method of this release has a prediction for under half of the problems');
   const url = (extra) => '/?release=2026-09&rows=rungs&x=rung&s=median&band=0&p=rung~f1_score&m=' + low.key + extra;
   const first = () => page.locator(V2 + ' .v2table tbody tr').first().locator('td').nth(2);
   await page.goto(url('&v=table&imp=1'));
@@ -985,7 +985,7 @@ test('leaving failed predictions out is exact for the median, the distribution a
   expect(parseFloat((await first().textContent()).replace(/^[≤≥○ ]+/, ''))).toBeGreaterThan(0.3);
   // the distribution loses exactly the laws that were filled in
   await page.goto(url('&v=dist&dm=f1_score&dv=hist&r=1&imp=1'));   // the choice is remembered, so the link states it
-  await expect(page.locator(V2 + ' .v2view')).toContainText('Every law: a failed prediction sits at 0', { timeout: 15000 });
+  await expect(page.locator(V2 + ' .v2view')).toContainText('Every problem: a failed prediction sits at 0', { timeout: 15000 });
   await page.locator(V2 + ' .v2impute').uncheck();
   await expect(page.locator(V2 + ' .v2view')).toContainText('Successful predictions only');
   // a paired contrast is then taken over the laws both methods answered

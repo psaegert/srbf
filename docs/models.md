@@ -14,7 +14,7 @@ block. To enter a method of your own, see [Adding your method](adapters.md).
 
 Two keys are common to every block. `config_provenance` states who chose the configuration
 ([Fairness](fairness.md#configuration-provenance-labels)). `simplipy_engine` names the engine the
-answers are judged with; the srbf suite uses `acj-5-4-llm`, which is downloaded on first use.
+predictions are judged with; the srbf suite uses `acj-5-4-llm`, which is downloaded on first use.
 Every type needs it except `flash_ansr`, which takes the engine from its checkpoint.
 
 **One environment per method.** Each method has a dependency set of its own: PySR brings Julia,
@@ -59,7 +59,7 @@ model_adapter:
 | `evaluation_config.generation_config` | required | `method` (`softmax_sampling`, or `prior_sampling` for the prior reference) and its `kwargs`; `draws` is the budget |
 | `evaluation_config.n_restarts`, `refiner_p0_noise` | required | restarts of the constant fit and the distribution of its starting points |
 | `evaluation_config.refiner_method` | `curve_fit_lm` | the optimizer of the constant fit |
-| `evaluation_config.ranking` | required | how the answer is chosen among the fitted candidates; see below. A `ranking` block directly under `model_adapter` replaces it |
+| `evaluation_config.ranking` | required | how the prediction is chosen among the fitted candidates; see below. A `ranking` block directly under `model_adapter` replaces it |
 | `generation_overrides`, `evaluation_overrides` | none | mappings merged over `generation_config` and `evaluation_config`: the place for a `!sweep` |
 | `device` | `cpu` | the device of the model |
 | `refiner_workers` | flash-ansr's default | processes that fit constants in parallel |
@@ -109,11 +109,11 @@ model_adapter:
 | `niterations` | `100` | search iterations: the budget |
 | `timeout_in_seconds` | `60` | PySR's own limit on one search; a guard, not the budget |
 | `maxsize`, `parsimony` | PySR's defaults | passed on only when set; published results leave them unset ([Fairness](fairness.md#baselines-run-at-their-upstream-defaults)) |
-| `model_selection` | `best` | which equation of PySR's hall of fame is the answer |
+| `model_selection` | `best` | which equation of PySR's hall of fame is the prediction |
 | `warmup` | `true` | run a throwaway fit when the worker starts, so that Julia's one-time compilation is not part of the first problem's time |
 | `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
 
-PySR searches over the operators the laws are written in: `+ - * / ^`, `rootn`, and the unary
+PySR searches over the operators the expressions are written in: `+ - * / ^`, `rootn`, and the unary
 operators `neg abs inv sin cos tan asin acos atan sinh cosh tanh asinh acosh atanh exp log`. The
 worker returns PySR's own predictions and stores the whole hall of fame in the `equations` column.
 `configs/evaluation/scaling/pysr_fastsrb.yaml` sweeps the iterations from 1 to 16,384.
@@ -153,7 +153,7 @@ The three paths and the engine are required. `beam_width` is the budget and `n_r
 restarts of its constant fit; both default to the values in the checkpoint's own config. `device`
 defaults to `cpu`. The model takes a fixed number of input variables. A problem with fewer is
 padded with zero columns; a problem with more is given to the model with its first columns only,
-with a warning, and the answer is still judged against the full problem.
+with a warning, and the prediction is still judged against the full problem.
 
 ## E2E
 
@@ -196,7 +196,7 @@ model_adapter:
 `lample_charton` fits expressions sampled from a generative `symbolic-data` catalog and
 `brute_force` enumerates them. Neither has weights. Both need `simplipy_engine` and a `catalog` to
 draw from; this is the adapter's own key and unrelated to `data_source.catalog`, which names the
-laws being evaluated.
+expressions being evaluated.
 
 ```yaml
 model_adapter:
@@ -212,5 +212,5 @@ model_adapter:
 | `samples` (`lample_charton`) | `32` | expressions sampled per problem: the budget |
 | `max_expressions`, `max_length` (`brute_force`) | `10000`, none | how far the enumeration goes |
 | `n_restarts`, `refiner_method`, `refiner_p0_noise` | `8`, `curve_fit_lm`, `normal` | the constant fit |
-| `node_penalty` | `0.05` | the answer minimizes log10 FVU plus this penalty per node |
+| `node_penalty` | `0.05` | the prediction minimizes log10 FVU plus this penalty per node |
 | `unique`, `seed` (`lample_charton`) | `true`, none | skip duplicate samples; seed the sampler |

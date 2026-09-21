@@ -3,7 +3,7 @@
 E2E names the columns it is handed ``x_0, x_1, ...`` and NeSymReS names them ``x_1, x_2, ...``; the
 ground-truth skeleton names the same columns ``x1, x2, ...`` in column order (a problem's
 ``variables`` are often catalog names such as ``v1``, so they cannot be matched by name). Without
-this map a prediction that IS the law shares no variable with it, and every symbolic comparison is
+this map a prediction that IS the ground truth shares no variable with it, and every symbolic comparison is
 structurally impossible: symbolic recovery, the raw skeleton match, the token F1 and the
 variable-set precision / recall / F1 all read zero. Both adapters hand the model a known block of
 columns in a known order, so the map is positional and exact.
@@ -62,11 +62,11 @@ def rename_variables_in_infix(expression: str, names: Sequence[str], *, first_in
 
 
 def rename_named_variables(tokens: Sequence[str] | None, columns: Sequence[str]) -> list[str] | None:
-    """Rename a worker's answer, which speaks the column names it was handed, into the skeleton's.
+    """Rename a worker's prediction, which speaks the column names it was handed, into the skeleton's.
 
-    Out-of-process workers are told the problem's variable names, so PySR answers in ``v1, v2`` on a
+    Out-of-process workers are told the problem's variable names, so PySR predicts in ``v1, v2`` on a
     catalog that calls its columns that, while the ground truth spells the same columns ``x1, x2``.
-    A worker that ignores the names it was given and answers in ``x1, x2`` already is left
+    A worker that ignores the names it was given and predicts in ``x1, x2`` already is left
     alone: only a token that IS one of the handed names is renamed. srbf spells a catalog's columns
     ``v1..vn`` (measured across all 29 catalogs), so no handed name collides with an operator or a
     named constant; a catalog that called a column ``e`` would need more care than this.

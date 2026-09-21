@@ -43,7 +43,7 @@ BINARY_OPERATORS = ["+", "-", "*", "/", "^", ROOTN_JULIA]
 
 def create_model(*, timeout_in_seconds, niterations, maxsize=None, model_selection="best", parsimony=None,
                  guesses=None):
-    """A PySRRegressor over the 23 operators the benchmark's laws are written in: 17 unaries +
+    """A PySRRegressor over the 23 operators the benchmark's expressions are written in: 17 unaries +
     {+, -, *, /, pow, rootn}. maxsize/parsimony are forwarded only when
     set; None = PySR's own (version-dependent) defaults, never hardcoded here."""
     PySRRegressor = _require_pysr()

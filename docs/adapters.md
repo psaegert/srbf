@@ -1,6 +1,6 @@
 # Adding your method
 
-To evaluate your symbolic regression method on the same laws and with the same judge as every
+To evaluate your symbolic regression method on the same expressions and with the same judge as every
 other, you write an adapter. The usual adapter is a **worker**: one Python file that runs in your
 method's own environment. srbf never imports your code, so your method keeps whatever versions of
 torch, NumPy or Julia it was built against.
@@ -52,7 +52,7 @@ def fit(x, y, *, x_val, variables, meta, options, state):
 | `y` | their targets, a list of floats; the noisy ones when the run adds noise |
 | `x_val` | the validation points, or an empty list. Their targets are never handed over |
 | `variables` | the names of the columns of `x`, in order, as the catalog writes them (`v1, v2, ...` in the srbf catalogs). Write the expression in these names |
-| `meta` | identifiers of the problem for your logs: `catalog`, `benchmark_eq_id`, `eq_id`, `eval_row_index`, `n_support`, `noise_level`. The law itself never reaches the worker |
+| `meta` | identifiers of the problem for your logs: `catalog`, `benchmark_eq_id`, `eq_id`, `eval_row_index`, `n_support`, `noise_level`. The ground truth itself never reaches the worker |
 | `options` | the `options` block of the config, with `{{ROOT}}` replaced in its strings |
 | `state` | whatever `load` returned; `None` without a `load` |
 
@@ -65,7 +65,7 @@ A dict with at least `expression`, or with `error`:
 
 | key | meaning |
 |---|---|
-| `expression` | the answer, an infix string with numeric constants |
+| `expression` | the prediction, an infix string with numeric constants |
 | `y_pred`, `y_pred_val` | your method's own values on `x` and `x_val`. Without them srbf evaluates the expression itself. With them the numeric metrics are computed from these values, so return them only if they are what the expression computes |
 | `constants` | the fitted constants, stored as `predicted_constants` |
 | `fit_time` | seconds. Without it, the time around the call to `fit` is taken; the protocol and srbf's own work are never part of it |
@@ -87,11 +87,11 @@ The expression is parsed by the judge's SimpliPy engine. It reads
 - the variable names it handed you.
 
 What sympy prints is read as it is: `str(expression)` may contain `sqrt`, `Abs` and the constant
-`E`. Print constants at full precision (`repr(float)`); a rounded constant costs the answer its
+`E`. Print constants at full precision (`repr(float)`); a rounded constant costs the prediction its
 numeric recovery.
 
 srbf then evaluates the expression on the support and validation points and judges it like every
-other method's answer. The stored answer names the columns `x1, x2, ...` by position, whatever the
+other method's prediction. The stored prediction names the columns `x1, x2, ...` by position, whatever the
 catalog called them. An expression that cannot be parsed or evaluated is a failed prediction with
 the reason in `error`: a function outside the list is named in it, as in `the judge does not read
 erf`. `srbf check` shows this for real problems before you start a long run.
@@ -141,7 +141,7 @@ complete config and the job array that runs it.
 | `worker` | required | the worker file, or the name of a built-in worker (`example`, `pysr`) |
 | `python` | srbf's interpreter | the interpreter of your method's environment |
 | `options` | `{}` | handed to `load` and to every `fit`; `{{ROOT}}` is replaced in its strings |
-| `simplipy_engine` | required | the engine the answers are judged with; keep `acj-5-4-llm` for the srbf suite |
+| `simplipy_engine` | required | the engine the predictions are judged with; keep `acj-5-4-llm` for the srbf suite |
 | `config_provenance` | `harness_tuned` | who chose this configuration ([Fairness](fairness.md#configuration-provenance-labels)) |
 | `env` | `{}` | environment variables for the worker, added to the environment srbf runs in, for example `{CUDA_VISIBLE_DEVICES: "0"}` |
 | `cwd` | none | the worker's working directory |
@@ -154,7 +154,7 @@ complete config and the job array that runs it.
 them. A search that hangs usually still burns a CPU thread, so it only shows in the time it takes.
 `hang_overdue_factor: 30` treats a fit as hung when it takes more than 30 times
 the run's median fit, and never less than `hang_overdue_floor_s` (60 seconds), once
-`hang_overdue_min_history` (10) fits have answered. `hang_after_idle_s: 120` treats a fit as hung
+`hang_overdue_min_history` (10) fits have returned. `hang_after_idle_s: 120` treats a fit as hung
 when the worker's processes used less than `hang_idle_cpu_s` (1) CPU second in the last 120 seconds.
 A hung fit is stopped, the worker restarted without touching `max_restarts`, and the problem tried
 once more; `hang_log` names a file that records every such event.
@@ -198,7 +198,7 @@ class EvaluationModelAdapter(Protocol):
 
 An optional `close()` is called when the run ends, however it ends. A sample carries `x_support`,
 `y_support`, `y_support_noisy` (or `None`), `x_validation`, `y_validation` and `metadata`. The
-result is a dict started from `sample.clone_metadata()`, so that the law travels with the answer.
+result is a dict started from `sample.clone_metadata()`, so that the ground truth travels with the prediction.
 An in-process adapter writes its expression in the names `x1, x2, ...`, by column position:
 
 ```python

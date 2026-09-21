@@ -237,7 +237,7 @@ class Benchmark:
         return benchmarks
 
     def _leave_empty_shard_file(self, meta: Optional[Mapping[str, Any]]) -> None:
-        """A shard can hold no problem at all (a one-law catalog split eight ways). It is complete, not missing:
+        """A shard can hold no problem at all (a one-expression catalog split eight ways). It is complete, not missing:
         it writes its empty file, so that `srbf merge` finds every index of the run."""
         if self.shard is None or self.output_path is None or self.existing_results:
             return

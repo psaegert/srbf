@@ -38,7 +38,7 @@ def fit(x, y, *, x_val, variables, meta, options, state):
 
 A worker returns an expression as a string, written in the variable names it was given and with
 its constants at full precision. Everything else, parsing, evaluation on held-out points and
-comparison with the law, is done by srbf.
+comparison with the ground truth, is done by srbf.
 
 Check the config before running it. `srbf check` walks the path a run takes and fits two real
 problems:
@@ -74,14 +74,14 @@ srbf analyze -c bench/adapters/mymethod/config.yaml -o report
 ```
 
 `report/results.md` holds one row per method, each cell a bootstrap median with its 95 % interval
-over the laws, and `report/figures/` the plots:
+over the expressions, and `report/figures/` the plots:
 
 ```text
 | Model    | N expr | Numeric recovery (val) | Symbolic recovery    | Skeleton F1          | MDL ratio            | log10 FVU (val)         | Median R² (val)      |
 | mymethod | 12     | 0.000 [0.000, 0.000]   | 0.000 [0.000, 0.000] | 0.703 [0.648, 0.746] | 4.753 [3.242, 6.697] | -1.107 [-1.550, -0.746] | 0.910 [0.742, 0.963] |
 ```
 
-A straight line recovers none of the twelve Nguyen laws, as it should. Drop `--experiment` to run
+A straight line recovers none of the twelve Nguyen expressions, as it should. Drop `--experiment` to run
 all 29 catalogs; a run that is interrupted resumes where it stopped, and
 `srbf status -c bench/adapters/mymethod/config.yaml` lists how far every catalog is.
 

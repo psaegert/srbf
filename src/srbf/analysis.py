@@ -56,8 +56,8 @@ class Metric:
     key: str
     label: str
     higher_is_better: bool
-    #: The statistic a report takes over the laws: ``"mean"``, or ``"median"`` for a column without a lower or
-    #: upper bound, where one diverging answer would decide the mean.
+    #: The statistic a report takes over the expressions: ``"mean"``, or ``"median"`` for a column without a lower or
+    #: upper bound, where one diverging prediction would decide the mean.
     statistic: str = "mean"
 
 
@@ -375,7 +375,7 @@ def build_report(
 
     lb = leaderboard(runs, metrics=resolved, engine=engine, operator_arity=operator_arity, n_bootstrap=n_bootstrap)
     lines: list[str] = [f"# {title}", ""]
-    lines += ["Each cell is a bootstrap median with a 95% confidence interval over the laws. Problems are "
+    lines += ["Each cell is a bootstrap median with a 95% confidence interval over the expressions. Problems are "
               "sampled afresh in every run, so a cell describes a distribution, not one seeded draw.", ""]
 
     has_scaling = any(r.scaling is not None for r in runs)

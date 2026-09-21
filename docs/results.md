@@ -1,6 +1,6 @@
 # Results
 
-A run stores what the method answered; everything else is derived from that afterwards. This page
+A run stores what the method predicted; everything else is derived from that afterwards. This page
 covers the result file, the metric step, summaries with intervals, and the standard report. The
 published results of the methods entered so far are on the
 [results explorer](https://psaegert.github.io/srbf/); its Table view exports every number as TSV or
@@ -27,19 +27,19 @@ frame = pd.DataFrame({key: snapshot[key] for key in ("benchmark_eq_id", "predict
 
 | columns | meaning |
 |---|---|
-| `benchmark_eq_id`, `eval_row_index` | the law's id in its catalog and the problem's position in the run |
-| `skeleton`, `expression`, `ground_truth_prefix`, `ground_truth_infix` | the law: its skeleton with constants masked, and the expression with its constants, in prefix and infix notation |
-| `variables` | the names of the columns as the catalog writes them, for example `v1, v2`; skeletons and answers name the same columns `x1, x2, ...` by position |
+| `benchmark_eq_id`, `eval_row_index` | the ground truth's id in its catalog and the problem's position in the run |
+| `skeleton`, `expression`, `ground_truth_prefix`, `ground_truth_infix` | the ground truth: its skeleton with constants masked, and the expression with its constants, in prefix and infix notation |
+| `variables` | the names of the columns as the catalog writes them, for example `v1, v2`; skeletons and predictions name the same columns `x1, x2, ...` by position |
 | `x`, `y`, `x_val`, `y_val` | the support and validation points, without noise |
 | `y_noisy`, `y_noisy_val` | the targets with the run's noise. A method is given `y_noisy` when the run adds noise, and never any validation target |
 | `n_support`, `noise_level` | the sampling parameters of the problem |
-| `complexity` | the number of tokens of the law's skeleton |
-| `predicted_expression` | the answer as an infix string, in the names `x1, x2, ...` |
-| `predicted_expression_prefix`, `predicted_skeleton_prefix` | the answer in prefix notation, with its constants and with constants masked |
-| `y_pred`, `y_pred_val` | the answer's values on the support and validation points |
-| `prediction_success`, `error` | whether an answer could be parsed and evaluated, and why not |
+| `complexity` | the number of tokens of the ground truth's skeleton |
+| `predicted_expression` | the prediction as an infix string, in the names `x1, x2, ...` |
+| `predicted_expression_prefix`, `predicted_skeleton_prefix` | the prediction in prefix notation, with its constants and with constants masked |
+| `y_pred`, `y_pred_val` | the prediction's values on the support and validation points |
+| `prediction_success`, `error` | whether a prediction could be parsed and evaluated, and why not |
 | `fit_time` | seconds for the problem |
-| `predicted_constants`, `predicted_score`, `predicted_log_prob` | what the method reports about its answer, where it does |
+| `predicted_constants`, `predicted_score`, `predicted_log_prob` | what the method reports about its prediction, where it does |
 | `placeholder`, `placeholder_reason` | see below |
 
 An adapter may add columns of its own; the Flash-ANSR adapter records `generation_time` and
@@ -55,12 +55,12 @@ have one, and has no value in the others
 ([Metrics](metrics.md#success-metrics-and-analysis-metrics)).
 
 A **placeholder** row marks a problem that was never posed: the catalog could not draw valid
-points for the law within `max_trials`. Placeholders keep the rows of different runs aligned and
+points for the ground truth within `max_trials`. Placeholders keep the rows of different runs aligned and
 are left out of every summary, for every method alike.
 
 ### What a result file records
 
-`__meta__` answers what ran:
+`__meta__` records what ran:
 
 | key | content |
 |---|---|
@@ -97,7 +97,7 @@ description-length columns are not added. Every column is defined in [Metrics](m
 ## Summaries with intervals
 
 Sampling is not seeded, so a number is reported with its uncertainty. The unit of resampling is the
-law: the problems drawn for one law are averaged first, and the laws are bootstrapped.
+expression: the problems drawn for one expression are averaged first, and the expressions are bootstrapped.
 
 ```python
 from srbf import bootstrap_report, draw_distribution
@@ -106,14 +106,14 @@ report = bootstrap_report(scored, "numeric_recovery_val")
 # {'metric': 'numeric_recovery_val', 'n_groups': 12, 'n_rows': 12,
 #  'median': 0.083, 'ci_lower': 0.0, 'ci_upper': 0.25, 'interval': 0.95}
 
-per_law = draw_distribution(scored, "log10_fvu_val")    # {law id: mean over its problems}
+per_expression = draw_distribution(scored, "log10_fvu_val")    # {expression id: mean over its problems}
 ```
 
-`bootstrap_report` resamples the per-law values 10,000 times and returns the median of the
+`bootstrap_report` resamples the per-expression values 10,000 times and returns the median of the
 resampled means with the percentile interval. It is seeded (`rng=0`), so a report is reproducible;
 pass `rng=None` for fresh randomness, and `n`, `interval`, `aggregate` or `reduce` to change the
-resampling. Placeholder rows are dropped, and so are values that are `None`; a law whose value is
-not finite is left out, which for `log10_fvu_val` means the laws that were fitted exactly
+resampling. Placeholder rows are dropped, and so are values that are `None`; an expression whose value is
+not finite is left out, which for `log10_fvu_val` means the expressions that were fitted exactly
 (\(-\infty\)) and the failed predictions (\(+\infty\)). Read it next to the recovery rate.
 
 ## The standard report
@@ -131,7 +131,7 @@ is the benchmark, a numeric sweep label is the budget, and the method's name com
 or from the adapter block. `report/results.md` holds one row per method at its largest budget,
 pooled over the benchmarks, each cell a bootstrap median with its 95 % interval, for numeric
 recovery, symbolic recovery, skeleton F1, the MDL ratio, log10 FVU and R². `report/figures/` holds the
-metric along the budget, per benchmark, and as a distribution over laws.
+metric along the budget, per benchmark, and as a distribution over expressions.
 
 ### From Python
 

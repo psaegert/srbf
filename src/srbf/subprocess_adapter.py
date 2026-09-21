@@ -131,7 +131,7 @@ def evaluate_prefix(engine: Any, prefix: list[str], variables: list[str], *array
     return tuple(outputs)
 
 
-# What a worker is told about a problem besides its data: which problem it is and how it was sampled. The law
+# What a worker is told about a problem besides its data: which problem it is and how it was sampled. The ground truth
 # itself (its skeleton, its expression, its constants, its complexity) stays on srbf's side of the socket.
 WORKER_META_KEYS = ("benchmark_eq_id", "eq_id", "catalog", "eval_row_index", "n_support", "noise_level", "variables", "variable_names")
 
@@ -531,7 +531,7 @@ class SubprocessAdapter(EvaluationModelAdapter):
 
     def _overdue_limit(self) -> float | None:
         """Seconds after which the problem in flight is overdue, or None while the rule is off or has too little
-        to go on. The median, not the mean or the maximum: one slow answer must not move the bar."""
+        to go on. The median, not the mean or the maximum: one slow fit must not move the bar."""
         if self.hang_overdue_factor is None or len(self._answered_s) < self.hang_overdue_min_history:
             return None
         ordered = sorted(self._answered_s)
@@ -635,7 +635,7 @@ class SubprocessAdapter(EvaluationModelAdapter):
             record["error"] = "worker returned no expression"
             record["prediction_success"] = False
             return EvaluationResult(record)
-        # A worker answers in the column names it was handed (PySR spells them v1, v2 on a catalog
+        # A worker predicts in the column names it was handed (PySR spells them v1, v2 on a catalog
         # that calls its columns that); the ground truth spells the same columns x1, x2, ... , so
         # both the stored expression and its prefix are mapped back before anything is judged.
         names = skeleton_variable_names(variables)

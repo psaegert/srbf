@@ -1,7 +1,7 @@
 # Benchmarks
 
 srbf evaluates on catalogs of the [`symbolic-data`](https://symbolic-data.readthedocs.io/) package.
-A catalog is a list of laws, each with the ranges its variables are sampled from; srbf draws the
+A catalog is a list of expressions, each with the ranges its variables are sampled from; srbf draws the
 support and validation points from those ranges when a run starts. Nothing is built or downloaded
 by hand: a catalog is fetched from the
 [asset repository](https://huggingface.co/datasets/psaegert/symbolic-data-assets) on Hugging Face
@@ -9,12 +9,12 @@ on first use, checked against its SHA-256 and cached.
 
 ## The srbf suite
 
-`suite: srbf` names 29 catalogs with 6,660 laws. In every one of them the targets are computed
-from the law, so a perfect answer exists for every problem.
+`suite: srbf` names 29 catalogs with 6,660 expressions. In every one of them the targets are computed
+from the ground truth, so a perfect prediction exists for every problem.
 
 ### Physics
 
-| catalog | laws | variables | what it is | source and license |
+| catalog | expressions | variables | what it is | source and license |
 |---|---|---|---|---|
 | `fastsrb` | 120 | 1 to 8 | the FastSRB benchmark: the Feynman equations with realistic, mostly log-uniform ranges | Martinek 2025, [arXiv:2508.14481](https://arxiv.org/abs/2508.14481); MIT |
 | `feynman` | 100 | 1 to 9 | the Feynman Symbolic Regression Database, uniform ranges | Udrescu & Tegmark 2020, Science Advances 6(16); formulas and ranges as cited facts |
@@ -23,7 +23,7 @@ from the law, so a perfect answer exists for every problem.
 | `erbench-densities` | 33 | 1 | probability densities from the Equation Recovery Benchmark | Kahlmeyer et al., [arXiv:2606.09276](https://arxiv.org/abs/2606.09276); BSD-3-Clause |
 | `erbench-phybench` | 90 | 1 to 9 | the PHYBench family of the Equation Recovery Benchmark | Kahlmeyer et al.; MIT |
 | `physo-astro` | 2 | 1 | the two astrophysical laws of the PhySO paper | Tenachi et al. 2023, [arXiv:2303.03192](https://arxiv.org/abs/2303.03192) |
-| `physo-class` | 8 | 1 to 2 | the Class-SR benchmark laws, one realization each | Tenachi et al. 2024, [arXiv:2312.01816](https://arxiv.org/abs/2312.01816); MIT |
+| `physo-class` | 8 | 1 to 2 | the Class-SR benchmark expressions, one realization each | Tenachi et al. 2024, [arXiv:2312.01816](https://arxiv.org/abs/2312.01816); MIT |
 
 ### Classical
 
@@ -33,7 +33,7 @@ ranges follow the benchmark table of
 2021, Mundhenk et al. 2021; BSD-3-Clause); grids that are evenly spaced upstream are sampled
 uniformly here.
 
-| catalog | laws | variables | origin |
+| catalog | expressions | variables | origin |
 |---|---|---|---|
 | `nguyen` | 12 | 1 to 2 | Uy et al. 2011 |
 | `keijzer` | 15 | 1 to 3 | Keijzer 2003 |
@@ -55,14 +55,14 @@ uniformly here.
 
 ### Synthetic
 
-| catalog | laws | variables | what it is | source and license |
+| catalog | expressions | variables | what it is | source and license |
 |---|---|---|---|---|
 | `erbench-syneq` | 5,301 | 1 to 3 | the synthetic family of the Equation Recovery Benchmark | Kahlmeyer et al.; MIT |
 | `soose-nc` | 200 | 1 to 3 | the NeSymReS out-of-sample test skeletons without constants | Biggio et al. 2021, [arXiv:2106.06427](https://arxiv.org/abs/2106.06427); MIT |
 | `soose-wc` | 200 | 1 to 3 | the same skeletons with up to three constants | Biggio et al. 2021; MIT |
 | `soose-fc` | 200 | 1 to 3 | the same skeletons with every constant slot filled | Biggio et al. 2021; MIT |
 
-`erbench-syneq` holds four fifths of all laws. A number pooled over the whole suite is therefore
+`erbench-syneq` holds four fifths of all expressions. A number pooled over the whole suite is therefore
 close to a number on that one catalog, which is why the [results explorer](https://psaegert.github.io/srbf/)
 lets you choose the catalogs a number is pooled over, and why per-catalog tables matter.
 
@@ -123,7 +123,7 @@ catalog is used; after that the cache is enough (`HF_HUB_OFFLINE=1` works). A ca
 its checksum is an error, not a silent re-download.
 
 Versions only move forward, and a bare name follows the default. `fastsrb` currently resolves to
-version 2, which has all 120 laws realizable; pin `fastsrb@1` to reproduce numbers made on version
+version 2, which has all 120 expressions realizable; pin `fastsrb@1` to reproduce numbers made on version
 1, and do not pool rates across the two.
 
 ### `sampling`
@@ -133,17 +133,17 @@ version 2, which has all 120 laws realizable; pin `fastsrb@1` to reproduce numbe
 | `n_support` | the catalog's own default, else 100 (32 for a generative catalog) | points the method fits on. `prior` draws the size per problem from a generative catalog's prior and requires `n_validation: 0` |
 | `n_validation` | `n_support` | held-out points. Support and validation are drawn together; the first `n_support` rows are the support |
 | `noise` | `0.0` | Gaussian noise on the targets, as a fraction of their standard deviation. The method is given the noisy support targets; metrics are always computed against the clean targets |
-| `problems_per_expression` | `1` | how many problems are drawn per law |
-| `method` | `iterate` for a fixed catalog | the order laws are visited in: `iterate`, `random_without_replacement`, `random_with_replacement`; `procedural` streams from a generative catalog |
+| `problems_per_expression` | `1` | how many problems are drawn per expression |
+| `method` | `iterate` for a fixed catalog | the order expressions are visited in: `iterate`, `random_without_replacement`, `random_with_replacement`; `procedural` streams from a generative catalog |
 | `layout` | `random` | `random` draws points independently, `grid` spaces them evenly and shuffles |
-| `max_trials` | `100` | attempts to draw valid points for a law before a placeholder row is written |
+| `max_trials` | `100` | attempts to draw valid points for an expression before a placeholder row is written |
 | `size` | unbounded | number of expressions drawn from a generative catalog |
 
 Points are drawn from each variable's declared range (uniform, log-uniform or integer, with a
-declared sign) and rejected one by one where the law is not finite, so the accepted points follow
-the declared distribution on the law's valid domain.
+declared sign) and rejected one by one where the ground truth is not finite, so the accepted points follow
+the declared distribution on the ground truth's valid domain.
 
-Sampling is not seeded: two runs of the same config see the same laws at different points. A
+Sampling is not seeded: two runs of the same config see the same expressions at different points. A
 number therefore comes with an interval ([Results](results.md#summaries-with-intervals)), and
 running a config again under another root is a genuine repeat.
 
@@ -185,7 +185,7 @@ A list of rules applied to every problem the catalog yields.
 - `{filter: {finite: true}}` keeps problems whose values are all finite. Other filters:
   `max_complexity`, `n_variables`, `max_variables`.
 
-To verify that a model's training data held out the benchmark laws, see
+To verify that a model's training data held out the benchmark expressions, see
 [`srbf decontamination`](cli.md#srbf-decontamination).
 
 ### `target_size`
@@ -208,7 +208,7 @@ data_source:
 
 ## Bringing your own catalog
 
-Write a `symbolic-data` catalog file, with one entry per law and the range of each variable, and
+Write a `symbolic-data` catalog file, with one entry per expression and the range of each variable, and
 point `data_source.catalog` at its path. To share it, publish it to a Hugging Face dataset
 repository with a manifest and refer to it as `user/repo:name@version`. The catalog format is
 documented in the [`symbolic-data` documentation](https://symbolic-data.readthedocs.io/).

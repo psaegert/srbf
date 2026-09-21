@@ -102,7 +102,7 @@ Figures need the `analysis` extra. See [Results](results.md#the-standard-report)
 
 ## `srbf decontamination`
 
-Verify that the holdout of a training catalog covers the benchmark laws.
+Verify that the holdout of a training catalog covers the benchmark expressions.
 
 | flag | meaning |
 |---|---|

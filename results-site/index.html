@@ -26,12 +26,12 @@
     })();
   </script>
   <title>srbf: Symbolic Regression Benchmark Framework · Results</title>
-  <meta name="description" content="Interactive results explorer of srbf, the Symbolic Regression Benchmark Framework: symbolic regression methods on the same laws, sampled the same way and read by one judge, over compute, noise, and support-size sweeps." />
+  <meta name="description" content="Interactive results explorer of srbf, the Symbolic Regression Benchmark Framework: symbolic regression methods on the same problems, sampled the same way and read by one judge, over compute, noise, and support-size sweeps." />
   <link rel="icon" type="image/svg+xml" href="srbf-icon.svg" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="srbf: Symbolic Regression Benchmark Framework" />
-  <meta property="og:description" content="Interactive results explorer: symbolic regression methods on the same laws, sampled the same way and read by one judge, over compute, noise, and sample-count sweeps." />
+  <meta property="og:description" content="Interactive results explorer: symbolic regression methods on the same problems, sampled the same way and read by one judge, over compute, noise, and sample-count sweeps." />
   <meta property="og:url" content="https://psaegert.github.io/srbf/" />
   <meta property="og:image" content="https://psaegert.github.io/srbf/srbf-social.png" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -70,9 +70,9 @@
     <section class="hero">
       <h1>Benchmark results</h1>
       <p class="lede">
-        Symbolic regression methods on the same laws, sampled the same way, read by one judge:
+        Symbolic regression methods on the same problems, sampled the same way, read by one judge:
         <strong>E2E</strong>, <strong>NeSymReS</strong>, <strong>PySR</strong> and the
-        <strong>Flash-ANSR</strong> series on 6,660 laws from 29 catalogs, next to a reference that
+        <strong>Flash-ANSR</strong> series on 6,660 problems from 29 catalogs, next to a reference that
         samples expressions from Flash-ANSR's training prior with no model at all. The explorer
         reads one set of results six ways: curves along the budget, tables, a catalog matrix,
         distributions, ranks and paired differences. <a href="#about">About</a> says how a number
@@ -195,8 +195,8 @@
     <section id="about" class="prose">
       <h2>About these numbers</h2>
       <p class="section-lede" data-for="2026-09">
-        The 2026-09 release is a fresh <code>srbf</code> run: every method sees the same laws, sampled
-        the same way, and every answer is read the same way.
+        The 2026-09 release is a fresh <code>srbf</code> run: every method sees the same problems, sampled
+        the same way, and every prediction is read the same way.
       </p>
       <p class="section-lede" data-for="2026-07">
         The 2026-07 release re-scores the archived predictions behind the Flash-ANSR paper.
@@ -206,7 +206,7 @@
         <h3>Problems</h3>
         <div>
           <p>
-            29 catalogs hold 6,660 laws, and each law is one problem: 512 support points for the
+            29 catalogs hold 6,660 ground-truth expressions, and each is one problem: 512 support points for the
             method and 512 validation points it never sees, drawn from the catalog's own ranges
             without noise. The numbers on this page come from one draw per problem.
           </p>
@@ -214,13 +214,13 @@
       </section>
 
       <section class="topic" data-for="2026-09">
-        <h3>Judging an answer</h3>
+        <h3>Judging a prediction</h3>
         <div>
           <p>
-            An answer is read twice. Numerically, by its fraction of variance unexplained on the
-            validation points. Symbolically, by simplifying the prediction and the law into one
-            certified canonical form, in the law's own variable names, and comparing the two. How a
-            method arrives at the answer it submits is its own affair: the explorer states that
+            A prediction is read twice. Numerically, by its fraction of variance unexplained on the
+            validation points. Symbolically, by simplifying the prediction and the ground truth into one
+            certified canonical form, in the ground truth's own variable names, and comparing the two. How a
+            method arrives at the prediction it submits is its own affair: the explorer states that
             rule next to the method's name.
           </p>
         </div>
@@ -243,16 +243,16 @@
         <h3>Pooling and intervals</h3>
         <div>
           <p>
-            A pooled number is a statistic over all laws of the selected catalogs. It is shown for a
+            A pooled number is a statistic over all problems of the selected catalogs. It is shown for a
             budget once the method has finished every selected catalog there, so every point, row
-            and rank is over the same laws. A rate counts every law, and a failed prediction is a
-            miss. A metric whose range has a worst value counts every law too: a failed prediction
+            and rank is over the same problems. A rate counts every problem, and a failed prediction is a
+            miss. A metric whose range has a worst value counts every problem too: a failed prediction
             takes that value: the token and variable overlaps, where it counts 0. The explorer can
             leave the failed predictions out of these metrics instead. Every other metric describes
-            the answers that were made, since most can be arbitrarily bad; a point that rests on fewer than 90 % of
-            the laws is drawn hollow, and the threshold can be moved. Intervals are 95 %: a
+            the predictions that were made, since most can be arbitrarily bad; a point that rests on fewer than 90 % of
+            the problems is drawn hollow, and the threshold can be moved. Intervals are 95 %: a
             t-interval for a mean, an order-statistic interval for a median, and for a rate
-            \(\hat{p}\) over \(K\) laws the Wilson score interval
+            \(\hat{p}\) over \(K\) problems the Wilson score interval
           </p>
           $$
             \frac{\hat{p} + \frac{z^2}{2K} \;\pm\; z \sqrt{\frac{\hat{p}(1 - \hat{p})}{K} + \frac{z^2}{4K^2}}}
@@ -361,10 +361,10 @@
     <section id="paired" class="prose">
       <h2>Paired comparisons</h2>
       <p class="section-lede">
-        Every method solved the same laws, so two methods are compared law by law,
+        Every method solved the same problems, so two methods are compared problem by problem,
         \(\Delta_k = m_A^{(k)} - m_B^{(k)}\), rather than through two separate averages: the
         difficulty both share widens each average's interval and cancels in the difference. Two
-        intervals can overlap while one method is reliably better law after law, so an A-versus-B
+        intervals can overlap while one method is reliably better problem after problem, so an A-versus-B
         question belongs in a paired view.
       </p>
 
@@ -372,7 +372,7 @@
         <h3>Rates</h3>
         <div>
           <p>
-            For a rate, only the laws the two methods disagree on carry information: \(b\) laws
+            For a rate, only the problems the two methods disagree on carry information: \(b\) problems
             that A alone recovers and \(c\) that B alone recovers, out of \(K\). The exact McNemar
             test needs no asymptotics, and the difference of the rates carries a 95 % Wald
             interval:
@@ -389,11 +389,11 @@
         <h3>Continuous metrics</h3>
         <div>
           <p>
-            Over the laws where both methods have a finite value, the view reports the mean
+            Over the problems where both methods have a finite value, the view reports the mean
             difference \(\bar{\Delta}\) with its 95 % interval and a two-sided exact sign test on
             the wins and losses. Ratios and times are differenced on a log scale and read as
             factors: \(\times\, 0.5\) is half. These are contrasts from one draw per problem, on the
-            same laws for both methods.
+            same problems for both methods.
           </p>
         </div>
       </section>
@@ -505,20 +505,20 @@
     <section id="ranks" class="prose">
       <h2>Ranks</h2>
       <p class="section-lede">
-        Ranks answer the standings question: how do all methods compare at once? Within each law
+        Ranks answer the standings question: how do all methods compare at once? Within each problem
         the methods are placed 1st, 2nd, and so on by the chosen metric, and a method's standing
-        is its mean rank over the \(K\) laws, \(\bar{r}_j = \frac{1}{K} \sum_{k} r_{jk}\).
+        is its mean rank over the \(K\) problems, \(\bar{r}_j = \frac{1}{K} \sum_{k} r_{jk}\).
       </p>
 
       <section class="topic">
         <h3>What a rank measures</h3>
         <div>
           <p>
-            Every law hands out the same places, so easy and hard laws count alike, and a win by a
+            Every problem hands out the same places, so easy and hard problems count alike, and a win by a
             hair counts like a win by a mile. Ranks measure <em>consistency</em> where the paired
             views measure <em>by how much</em>, which is why the two complement each other. Methods
             with the same value share the mean of the places they occupy.
-            <span data-for="2026-09">A method without a usable answer for a law is placed last on
+            <span data-for="2026-09">A method without a usable prediction for a problem is placed last on
             it, on every ranking metric.</span>
             <span data-for="2026-07">Failures rank last within their expression on quality metrics;
             expression-property metrics such as length are ranked over the expressions every method
@@ -550,7 +550,7 @@
           <p>
             The share of head-to-head comparisons a method wins, a tie counting as half, is the
             mean rank on a fixed scale: \(w_j = (k - \bar{r}_j) / (k - 1)\). At 100 % a method beats
-            every other on every law and at 50 % it breaks even, whatever the number of ranked
+            every other on every problem and at 50 % it breaks even, whatever the number of ranked
             methods, so it can be followed along the budget while the roster changes.
           </p>
         </div>
@@ -598,7 +598,7 @@
     <section id="metrics" class="prose">
       <h2>Metrics</h2>
       <p class="section-lede">
-        A problem is a law with prefix skeleton \(\bar{\tau}\) (constants masked, structure
+        A problem is a ground-truth expression with prefix skeleton \(\bar{\tau}\) (constants masked, structure
         simplified with SimpliPy), a <em>support set</em> \((X, y)\) of \(N\) points given to the
         method, and a disjoint, equally sized <em>validation set</em>
         \((X_{\mathrm{val}}, y_{\mathrm{val}})\) it never sees. A method returns an expression
@@ -686,7 +686,7 @@
           <h4>R², Validation / Support <span class="dir up">higher is better</span></h4>
           <p>
             \(1 - \operatorname{FVU}\) on either set of points: 1 is a perfect fit, 0 is as good as
-            predicting the mean, and there is no lower bound. One answer that diverges would decide
+            predicting the mean, and there is no lower bound. One prediction that diverges would decide
             the mean of a whole catalog, so \(R^2\) is read by its median, whichever statistic is
             chosen for the other metrics.
           </p>
@@ -721,8 +721,8 @@
           are offset between method families and the signal is the trend within a series.
         </p>
         <p data-for="2026-09">
-          These metrics compare the predicted skeleton \(\hat{\tau}\) to the law's skeleton
-          \(\bar{\tau}\). Every prediction is first mapped into the law's variable names and
+          These metrics compare the predicted skeleton \(\hat{\tau}\) to the ground-truth skeleton
+          \(\bar{\tau}\). Every prediction is first mapped into the ground truth's variable names and
           simplified into the same canonical form, so the levels are comparable across methods.
         </p>
 
@@ -733,18 +733,18 @@
             \mathbb{1}\!\left[ \operatorname{canon}\big(\hat{f}^{(k)}\big) = \operatorname{canon}\big(f^{(k)}\big) \right]
           $$
           <p>
-            The prediction \(\hat{f}\) and the law \(f\) have the same certified canonical form
+            The prediction \(\hat{f}\) and the ground truth \(f\) have the same certified canonical form
             (SimpliPy, float64) once both are simplified and their numbers are masked: structurally
-            the same law. A re-ordered sum or an unsimplified sub-term still counts, and a close
+            the same expression. A re-ordered sum or an unsimplified sub-term still counts, and a close
             numerical fit of another shape does not. Failed predictions count as 0.
           </p>
           <p>
             The same question is asked at three levels of masking, each implying the one before it.
             <em>Structure</em> (SRRs) masks every number, so \(x^2\) and \(x^3\) are one structure.
             <em>Structure + Exponents</em> (SRRe) masks only the fittable constants: the numbers of the structure,
-            exponents and root indices, have to be the law's, and an exponent left at 1.9999 is a
+            exponents and root indices, have to be the ground truth's, and an exponent left at 1.9999 is a
             miss. <em>Structure + All Numbers</em> (SRRa) masks nothing: the fitted constants have to be right too,
-            which is measured as numeric recovery is, by reproducing the law to float32 precision on
+            which is measured as numeric recovery is, by reproducing the ground truth to float32 precision on
             the validation points.
           </p>
         </article>
@@ -783,7 +783,7 @@
           </p>
           <p data-for="2026-09">
             All three lie in \([0, 1]\), so they have a worst value, and a failed prediction takes
-            it: it counts 0, the precision of an empty answer being 0 by definition.
+            it: it counts 0, the precision of an empty prediction being 0 by definition.
           </p>
         </article>
 
@@ -791,8 +791,8 @@
           <h4>Variable Overlap: F1 / Precision / Recall <span class="dir up">higher is better</span></h4>
           <p>
             The same three quantities over the sets of input variables that the prediction and the
-            law use: precision falls when a prediction leans on a variable the law ignores, recall
-            when it leaves out one the law needs. A failed prediction counts 0.
+            ground truth use: precision falls when a prediction leans on a variable the ground truth ignores, recall
+            when it leaves out one the ground truth needs. A failed prediction counts 0.
           </p>
         </article>
 
@@ -838,10 +838,10 @@
           <h4>MDL Ratio (Prediction / Ground Truth) <span class="dir one">1 is ideal</span></h4>
           $$ \frac{L(\hat{f})}{L(f)} $$
           <p>
-            The description length \(L\) of the prediction over the law's, in bits, both priced in
+            The description length \(L\) of the prediction over the ground truth's, in bits, both priced in
             the certified canonical form: operators, variables and the digits a constant needs.
             Unlike a token count it charges a long constant more than a short one. 1 means as long
-            as the law, and the median is taken on the \(\log_2\) scale.
+            as the ground truth, and the median is taken on the \(\log_2\) scale.
           </p>
         </article>
 
@@ -855,9 +855,9 @@
             A ratio of 1 means the prediction is exactly as concise as the true expression; values
             above 1 flag verbose, over-parameterized predictions (a common failure mode: fitting
             the data with a longer expression than necessary), values below 1 flag predictions that
-            are too simple to be the true law. This is the second headline metric because it tracks
+            are too simple to be the true expression. This is the second headline metric because it tracks
             <em>interpretability</em>, the point of symbolic regression: a recovered-looking fit
-            made of twice as many terms is a worse scientific answer.
+            made of twice as many terms is a worse scientific explanation.
           </p>
         </article>
 
@@ -935,7 +935,7 @@
           <h4>Selection Score and Pareto Rank <span class="dir down">lower is better</span></h4>
           $$ S(\hat{f}) \;=\; \tfrac{N}{2} \log_2 \operatorname{FVU}(y, \hat{y}) \;+\; L(\hat{f}) $$
           <p>
-            The score by which the method chose its answer, as the method computed it. For
+            The score by which the method chose its prediction, as the method computed it. For
             Flash-ANSR this is a two-part code in bits: the cost of the residuals on the \(N\)
             support points plus the description length of the expression. It is only comparable
             within one method. The Pareto rank says where the chosen candidate sits on the method's
@@ -969,7 +969,7 @@
         <article class="metric" data-for="2026-09">
           <h4>Fit Time on the Reference Machine (s) <span class="dir down">lower is better</span></h4>
           <p>
-            Wall-clock seconds to solve one problem, from the data to the submitted answer, measured
+            Wall-clock seconds to solve one problem, from the data to the submitted prediction, measured
             for every budget of every method on one machine over a fixed, stratified subset of 262
             problems. It is an axis of the explorer rather than a metric in its menu: a method is
             placed on it once the reference machine has timed it.

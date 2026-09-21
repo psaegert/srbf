@@ -131,7 +131,7 @@ class CandidateStoreWriter:
         cols: dict[str, np.ndarray] = {
             "tokens": tokens,
             "offsets": offsets,
-            # float64, not float32: an FVU of ~1e-50 (reachable on the extreme-magnitude laws)
+            # float64, not float32: an FVU of ~1e-50 (reachable on the extreme-magnitude problems)
             # flushes to 0.0 in float32 and reads back as a PERFECT RECOVERY.
             "fvu": np.asarray(fvu, dtype=np.float64),
             "log_prob": np.asarray(log_prob, dtype=np.float64),

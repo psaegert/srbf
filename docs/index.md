@@ -1,7 +1,7 @@
 # srbf
 
 **srbf**, the Symbolic Regression Benchmark Framework, runs symbolic regression methods on the same
-laws, sampled the same way, and reads every answer with one judge. A method is plugged in with a
+expressions, sampled the same way, and reads every prediction with one judge. A method is plugged in with a
 small adapter, a YAML config describes the evaluation, and four commands take it from a first
 smoke test to a report:
 
@@ -17,17 +17,17 @@ The published results of the methods entered so far are on the
 
 ## What srbf gives you
 
-- **29 catalogs, 6,660 laws.** Feynman, FastSRB, Nguyen and the other classical suites, physics
+- **29 catalogs, 6,660 expressions.** Feynman, FastSRB, Nguyen and the other classical suites, physics
   collections and synthetic corpora, all served by [`symbolic-data`](https://github.com/psaegert/symbolic-data)
   and fetched on first use. See [Benchmarks](benchmarks.md).
 - **Any method, in its own environment.** A worker is one Python file with a `fit()` function. It
   runs in the interpreter you name, with whatever torch, Julia or NumPy version your method needs.
   See [Adding your method](adapters.md).
-- **One judge.** Every answer is parsed, evaluated on held-out points and compared with the law in
+- **One judge.** Every prediction is parsed, evaluated on held-out points and compared with the ground truth in
   one canonical form, so a number means the same thing for every method. See [Metrics](metrics.md).
 - **Evaluations that scale.** Inline `!sweep` ladders, whole-suite configs, resumable runs, and
   sharding across GPUs with a checked merge. See [Running evaluations](running.md).
-- **Statistics that fit the design.** Paired comparisons on the same laws, rank analysis with
+- **Statistics that fit the design.** Paired comparisons on the same expressions, rank analysis with
   critical differences, bootstrap intervals. See [Paired comparisons](paired.md).
 - **Stated provenance.** Every configuration carries a label for who chose it, and every result file
   records what ran. See [Fairness](fairness.md).
@@ -48,7 +48,7 @@ The example configs live in the [repository](https://github.com/psaegert/srbf); 
 | You want to | Read |
 |---|---|
 | see it work in a minute, without a GPU or a model | [Quickstart](quickstart.md) |
-| understand the vocabulary: law, catalog, budget, judge | [Concepts](concepts.md) |
+| understand the vocabulary: ground truth, problem, catalog, budget, judge | [Concepts](concepts.md) |
 | enter your own method | [Adding your method](adapters.md) |
 | write a config, sweep a budget, run on a cluster | [Running evaluations](running.md) |
 | look up a command or a flag | [Command line](cli.md) |

@@ -5,14 +5,14 @@ every method. This page defines each column it adds. For how to call it, see
 [Results](results.md#deriving-metrics).
 
 **Notation.** A problem has support targets \(y\) and validation targets \(y_{\mathrm{val}}\),
-both without noise, and a law with skeleton \(\bar\tau\): the law's expression in prefix notation
+both without noise, and a ground truth with skeleton \(\bar\tau\): its expression in prefix notation
 (operator first, `+ x1 sin x2` for `x1 + sin(x2)`) with every numeric constant replaced by
 `<constant>`, simplified by the run's SimpliPy engine. An exponent is a constant like any other, so
 `x1**2` and `x1**3` share the skeleton `pow x1 <constant>`. The method's
-answer has values \(\hat y\) and \(\hat y_{\mathrm{val}}\) on the two sets and the skeleton
+prediction has values \(\hat y\) and \(\hat y_{\mathrm{val}}\) on the two sets and the skeleton
 \(\hat\tau\). Columns ending in `_fit` are computed on the support points and columns ending in
 `_val` on the validation points. Metrics are always computed against the noise-free targets, also
-when the method was given noisy ones: the question is whether the law was found, not whether the
+when the method was given noisy ones: the question is whether the ground truth was found, not whether the
 noise was reproduced.
 
 ## Success metrics and analysis metrics
@@ -21,16 +21,16 @@ The columns fall into two kinds, and a failed prediction means something differe
 
 A **success metric** says whether a problem was solved, and it is defined for every problem:
 `numeric_recovery_*`, `numeric_recovery_relative_*`, `symbolic_recovery`, and the share of
-problems that got an answer at all (`prediction_success`). Whenever a method errors or returns no
+problems that got a prediction at all (`prediction_success`). Whenever a method errors or returns no
 result it has failed the problem, and the metric is 0.
 
-An **analysis metric** describes an answer: how well it fits (`fvu_*`, `log10_fvu_*`, `r2_*`),
+An **analysis metric** describes a prediction: how well it fits (`fvu_*`, `log10_fvu_*`, `r2_*`),
 what it looks like (lengths, constants, nestedness, description lengths) and how close it comes
-to the law (token overlap, edit distances). What a failed problem counts there depends on the
+to the ground truth (token overlap, edit distances). What a failed problem counts there depends on the
 range of the metric.
 
 Where the range has a worst value, a failed problem takes it, so that a method cannot raise its
-mean by failing on the hard laws. These are the overlaps, which are shares in \([0, 1]\):
+mean by failing on the hard expressions. These are the overlaps, which are shares in \([0, 1]\):
 
 | column | a failed problem counts |
 |---|---|
@@ -38,15 +38,15 @@ mean by failing on the hard laws. These are the overlaps, which are shares in \(
 | `f1_score_unique_variables`, `precision_unique_variables`, `recall_unique_variables` | 0 |
 
 The table is `srbf.result_processing.WORST_VALUE`. The value is the end of the metric's range,
-not the score of some stand-in answer. To read these columns over the answers that were made
+not the score of some stand-in prediction. To read these columns over the predictions that were made
 instead, call `derive_metrics(..., impute_failed=False)`: a failed problem then has no value in
 them either. The results explorer offers the same choice.
 
-No other analysis metric is filled in. Most have no worst value, because an answer can be
+No other analysis metric is filled in. Most have no worst value, because a prediction can be
 arbitrarily bad: \(R^2\) has no lower bound, a predicted expression no largest length, a ratio of
 lengths lies in \([0, \infty)\) with its ideal at 1. A failed problem has no value there (`None`, or NaN in the
-numeric columns), and none is filled in. Summaries of these columns describe the answers a method
-gave, so read them next to the share of problems it answered: the
+numeric columns), and none is filled in. Summaries of these columns describe the predictions a method
+gave, so read them next to the share of problems it has a prediction for: the
 [results explorer](https://psaegert.github.io/srbf/) draws a point hollow when that share is below
 90 %.
 
@@ -69,7 +69,7 @@ $$
 
 0 is a perfect fit, 1 is as good as predicting the mean, and the measure does not depend on the
 scale of the targets. Both sums are rescaled before they are squared, so very large and very small
-targets neither overflow nor underflow. An answer with a non-finite value has FVU \(\infty\). A
+targets neither overflow nor underflow. A prediction with a non-finite value has FVU \(\infty\). A
 constant target has FVU 0 when it is matched exactly and \(\infty\) otherwise. FVU is never NaN.
 
 ### `log10_fvu_fit`, `log10_fvu_val`
@@ -81,8 +81,8 @@ it next to the recovery rate, which counts the exact fits.
 ### `r2_fit`, `r2_val`
 
 \(R^2 = 1 - \operatorname{FVU}\): 1 is a perfect fit, 0 is as good as predicting the mean, and an
-answer worse than that is negative, without a lower bound. An answer with a non-finite value has
-\(R^2 = -\infty\). One diverging answer would decide the mean of a whole catalog, so summarize
+prediction worse than that is negative, without a lower bound. A prediction with a non-finite value has
+\(R^2 = -\infty\). One diverging prediction would decide the mean of a whole catalog, so summarize
 this column by its median: `srbf analyze` does, and with `bootstrap_report` pass
 `aggregate=np.nanmedian, reduce=np.nanmedian`.
 
@@ -93,30 +93,30 @@ $$
 $$
 
 The prediction reproduces the targets to float32 precision. On the validation points this is the
-headline metric (vNRR): an expression either is the law on its domain, numerically, or it is not,
+headline metric (vNRR): an expression either is the ground truth on its domain, numerically, or it is not,
 and a close approximation does not count. A support recovery (fNRR) above the validation recovery
 means fitting without generalizing.
 
 `only_approx_fvu_fit`, `only_approx_fvu_val`, `only_approx_log10_fvu_fit` and
 `only_approx_log10_fvu_val` repeat the FVU columns with \(-\infty\) wherever
-the problem is numerically recovered, which isolates the quality of the answers that are not exact.
+the problem is numerically recovered, which isolates the quality of the predictions that are not exact.
 
 ### `numeric_recovery_relative_fit`, `numeric_recovery_relative_val`
 
-Recovery relative to the reference law. Some catalogs hold measurements: the targets are
-observations, and the accepted law \(f_{\mathrm{ref}}\) explains them only up to measurement error.
+Recovery relative to the reference expression. Some catalogs hold measurements: the targets are
+observations, and the accepted expression \(f_{\mathrm{ref}}\) explains them only up to measurement error.
 No expression reaches float32 precision on such data, and numeric recovery is 0 for every method.
 The relative criterion asks instead whether the prediction fits the targets at least as well as the
-accepted law does:
+accepted expression does:
 
 $$
 \mathbb{1}\Big[\operatorname{FVU}(y, \hat y) \le \max\big(\operatorname{FVU}(y, y_{\mathrm{ref}}),\; \varepsilon_{32}\big)\Big] .
 $$
 
 `reference_fvu_fit` and `reference_fvu_val` hold \(\operatorname{FVU}(y, y_{\mathrm{ref}})\), the
-law's own misfit. For example, if the accepted law leaves \(10^{-3}\) of the variance of a measured
-data set unexplained, an answer with FVU \(8 \times 10^{-4}\) counts as recovered and one with
-\(2 \times 10^{-3}\) does not. Where the targets are computed from the law itself, the law's misfit
+ground truth's own misfit. For example, if the accepted expression leaves \(10^{-3}\) of the variance of a measured
+data set unexplained, a prediction with FVU \(8 \times 10^{-4}\) counts as recovered and one with
+\(2 \times 10^{-3}\) does not. Where the targets are computed from the ground truth itself, the ground truth's misfit
 is 0 and the criterion is numeric recovery exactly. That is the case for all 29 catalogs of the
 srbf suite, so there the two columns agree on every problem.
 
@@ -150,18 +150,18 @@ whether the constants are right is what numeric recovery measures.
 The same question with fewer numbers masked. Each level implies the one before it, and a failed
 problem is a miss at all three.
 
-| column | masked | has to be the law's |
+| column | masked | has to be the ground truth's |
 |---|---|---|
 | `symbolic_recovery` | every number | the structure |
 | `symbolic_recovery_mask_fittable` | the fittable constants: coefficients and offsets | the structure and its numbers: exponents, root indices |
 | `symbolic_recovery_mask_none` | nothing | the structure, its numbers and the constants |
 
-For the law `x1 ** 2 + 1.5 * x2`, the answer `x1 * x1 + 1.4 * x2` is recovered at the first two
+For the ground truth `x1 ** 2 + 1.5 * x2`, the prediction `x1 * x1 + 1.4 * x2` is recovered at the first two
 levels, `x1 ** 3 + 1.5 * x2` at the first only, and `x1 ** 2.0000001 + 1.5 * x2`, an exponent the
 method left unsnapped, at the first only, although it fits to float32 precision. Which numbers are
 fittable is decided by the engine (`engine.mask(expression, 'fittable')`).
 
-A fitted constant is right when the answer reproduces the law: `symbolic_recovery_mask_none` is
+A fitted constant is right when the prediction reproduces the ground truth: `symbolic_recovery_mask_none` is
 `symbolic_recovery_mask_fittable` together with `numeric_recovery_val`. Numbers are not compared
 token by token, because the canonical form spreads a rational through the expression (`1.5 * x2`
 is `(3 * x2) / 2`). Both columns need an engine.
@@ -169,18 +169,18 @@ is `(3 * x2) / 2`). Both columns need an engine.
 ### `f1_score`
 
 Precision, recall and \(F_1\) between the *sets* of distinct tokens of \(\hat\tau\) and
-\(\bar\tau\): did the answer use the right operators and variables at all? Order and multiplicity
+\(\bar\tau\): did the prediction use the right operators and variables at all? Order and multiplicity
 are ignored.
 
-`precision_score` and `recall_score` are the two parts of `f1_score`: the share of the answer's
-distinct tokens that the law uses, and the share of the law's distinct tokens that the answer
-uses. The precision of an empty answer is 0 by definition.
+`precision_score` and `recall_score` are the two parts of `f1_score`: the share of the prediction's
+distinct tokens that the ground truth uses, and the share of the ground truth's distinct tokens that the prediction
+uses. The precision of an empty prediction is 0 by definition.
 
 ### `edit_distance`, `edit_distance_norm`
 
 The Levenshtein distance between the two prefix token sequences: the number of token insertions,
 deletions and substitutions that turn one into the other. `edit_distance_norm` divides it by the
-length of the longer sequence, which puts it in \([0, 1]\). Both describe the answers that were
+length of the longer sequence, which puts it in \([0, 1]\). Both describe the predictions that were
 made: a failed problem has no value in either.
 
 ### `zss_edit_distance`
@@ -192,11 +192,11 @@ of the expression.
 
 ### Variables
 
-`unique_variables` and `predicted_unique_variables` list the distinct variables of the law and of
-the answer, `n_variables` counts the law's.
+`unique_variables` and `predicted_unique_variables` list the distinct variables of the ground truth and of
+the prediction, `n_variables` counts the ground truth's.
 `precision_unique_variables`, `recall_unique_variables` and `f1_score_unique_variables` compare the
-two sets: precision falls when the answer uses a variable the law ignores, recall when it leaves out
-one the law needs.
+two sets: precision falls when the prediction uses a variable the ground truth ignores, recall when it leaves out
+one the ground truth needs.
 
 ## Length and complexity
 
@@ -204,7 +204,7 @@ one the law needs.
 |---|---|
 | `skeleton_length` | number of prefix tokens of \(\bar\tau\) |
 | `predicted_skeleton_prefix_length` | number of prefix tokens of \(\hat\tau\) |
-| `skeleton_length_ratio` | predicted over true length; 1 is as long as the law |
+| `skeleton_length_ratio` | predicted over true length; 1 is as long as the ground truth |
 | `n_constants`, `predicted_n_constants` | number of `<constant>` tokens in \(\bar\tau\) and \(\hat\tau\) |
 | `n_constants_delta` | predicted minus true number of constants; positive means excess free parameters |
 | `total_nestedness`, `predicted_total_nestedness` | over every chain of \(m\) directly nested unary operators, the excess \(m - 1\), summed: `sin(cos(x))` counts 1, `sin(cos(exp(x)))` counts 2, `sin(x) + cos(x)` counts 0 |
@@ -214,8 +214,8 @@ one the law needs.
 The description length of an expression, with its constants, as priced by the SimpliPy engine
 (`engine.complexity`), in thousandths of a bit. Unlike a token count it charges a long constant
 more than a short one: with `acj-5-4-llm`, `x1` costs 6 bits, `sin(x1)` 12 bits, `x1 + 1.5` 13.6
-bits and `x1 + 3.14159` 30.8 bits. `mdl_ratio` is the prediction's length over the law's; 1 is as
-long as the law. These columns need an engine and are added only when `derive_metrics` is given
+bits and `x1 + 3.14159` 30.8 bits. `mdl_ratio` is the prediction's length over the ground truth's; 1 is as
+long as the ground truth. These columns need an engine and are added only when `derive_metrics` is given
 one.
 
 ## What the method reports itself
@@ -226,9 +226,9 @@ These are raw columns, written by the adapter and not recomputed:
 |---|---|
 | `prediction_success` | the method returned an expression that could be parsed and evaluated |
 | `fit_time` | seconds for the problem, measured around the fit; one-time loading is not included |
-| `predicted_score` | the score by which the method chose its answer, comparable only within one method |
-| `predicted_log_prob` | the log-probability of the answer under a generative model |
-| `predicted_pareto_rank` | the answer's rank on the method's own front of fit against length; `None`, or \(-1\) for Flash-ANSR, when the method does not rank that way |
+| `predicted_score` | the score by which the method chose its prediction, comparable only within one method |
+| `predicted_log_prob` | the log-probability of the prediction under a generative model |
+| `predicted_pareto_rank` | the prediction's rank on the method's own front of fit against length; `None`, or \(-1\) for Flash-ANSR, when the method does not rank that way |
 
 ## Names on the results explorer
 

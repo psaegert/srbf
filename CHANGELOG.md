@@ -7,25 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- **Symbolic recovery judges law and prediction by one function.** Both are brought into canonical form with
+- **Symbolic recovery judges ground truth and prediction by one function.** Both are brought into canonical form with
   their numbers, then every number is masked (`pi` and `e` included) and the skeleton is simplified and masked
-  until it stands still. Before, the law was judged in the form its catalog wrote and a number that
+  until it stands still. Before, the ground truth was judged in the form its catalog wrote and a number that
   simplification wrote itself stayed unmasked, so `x1 * x1` and `x1 ** 2`, `pow(u, 0.5)` and `rootn(u, 2)`, or
-  `x2 * x4 / (c * x4 ** 3)` and `c * x2 / x4 ** 2` were different skeletons: an answer in the other spelling
+  `x2 * x4 / (c * x4 ** 3)` and `c * x2 / x4 ** 2` were different skeletons: a prediction in the other spelling
   could not be recovered symbolically. A match of the skeletons as written counts as well, since no simplifier
-  is complete. `skeleton_simplified` holds the law's judged form.
+  is complete. `skeleton_simplified` holds the ground truth's judged form.
 - **What a failed problem counts in an analysis metric follows from the metric's range.** `derive_metrics`
-  wrote the worst fit into a problem without an answer (FVU infinite, R² 0) and left the structural columns
-  empty, so a mean R² mixed how often a method answers into how well it fits, and a mean token overlap rose
-  when a method failed on the hard laws. A failed problem counts 0 in the overlaps, whose range ends there:
+  wrote the worst fit into a problem without a prediction (FVU infinite, R² 0) and left the structural columns
+  empty, so a mean R² mixed how often a method returns a prediction into how well it fits, and a mean token overlap rose
+  when a method failed on the hard problems. A failed problem counts 0 in the overlaps, whose range ends there:
   `f1_score`, `precision_score`, `recall_score` and the three variable-set columns
   (`srbf.result_processing.WORST_VALUE`). No other analysis metric is filled in: most can be arbitrarily
   bad, and a failed problem has no value there (`None`, NaN in the fit columns). A problem is failed when `prediction_success` is false, whatever text the method left behind.
   `derive_metrics(..., impute_failed=False)` leaves the failed problems out of every analysis metric.
 - **A failed prediction has recovered nothing.** `numeric_recovery_*` and `numeric_recovery_relative_*` are
   false for a problem whose `prediction_success` is false, whatever values the method left behind.
-- **R² has no floor.** `r2_*` is `1 - FVU`: negative for an answer worse than the mean predictor, `-inf` for a
-  non-finite one. It was clipped to `[0, 1]`. One diverging answer decides a mean of it, so `srbf analyze`
+- **R² has no floor.** `r2_*` is `1 - FVU`: negative for a prediction worse than the mean predictor, `-inf` for a
+  non-finite one. It was clipped to `[0, 1]`. One diverging prediction decides a mean of it, so `srbf analyze`
   reports its median (`Metric(..., statistic="median")`).
 - **The precision of an empty prediction is 0**, not NaN (`srbf.metrics.precision`).
 - **A method that raises has failed the problem.** An exception escaping an in-process adapter was recorded as a
@@ -36,9 +36,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   without a prediction, so `bootstrap_report`, `srbf analyze` and the paired reports computed symbolic
   recovery over the successful predictions only, while numeric recovery counted every problem. Both are
   rates: a method that returns nothing has missed.
-- **An answer may use SymPy's spellings.** `sqrt(u)`, `Abs(u)` and the constant `E` are read; an answer that
+- **A prediction may use SymPy's spellings.** `sqrt(u)`, `Abs(u)` and the constant `E` are read; a prediction that
   uses a function the judge does not know fails with a message that names it.
-- **A shard without problems leaves its file.** A one-law catalog split eight ways has seven empty shards;
+- **A shard without problems leaves its file.** A one-expression catalog split eight ways has seven empty shards;
   they wrote nothing, and `srbf merge` then reported them missing. They write an empty shard file, and
   `srbf merge` takes the columns from the shards that hold rows.
 - **`{{ROOT}}` means the same directory everywhere a config names a file.** It was left as it is in
@@ -47,25 +47,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A run started from Python documents itself like `srbf run`.** `Benchmark.run()` on a benchmark built from
   a config file stored only the provenance label, and resuming a file written by the command line replaced
   its record of what ran. It now stores the config, its hash, the versions, the git state and the inputs.
-- `scripts/audit_pysr_maxsize.py` reads the laws with the engine the catalogs are judged with and audits any
+- `scripts/audit_pysr_maxsize.py` reads the expressions with the engine the catalogs are judged with and audits any
   catalog (`--catalogs`, `--suite`, `--maxsize`).
 - `srbf new` printed the `{{ROOT}}` token of the config language inside a shell command, and `srbf run -v`
   inside the path it reported; both print the real path. `srbf analyze` wrote `nan` as the budget of a
   method without a ladder when it stood next to one with a ladder.
 
 ### Changed
-- **A worker is handed the problem and nothing of the law.** `meta` carries the problem's identifiers and
+- **A worker is handed the problem and nothing of the ground truth.** `meta` carries the problem's identifiers and
   sampling parameters (`benchmark_eq_id`, `eval_row_index`, `n_support`, `noise_level`, the variable
-  names); the law's skeleton, expression, constants and complexity stay on srbf's side.
+  names); the ground truth's skeleton, expression, constants and complexity stay on srbf's side.
 - **Every method sees every column.** `drop_unused_variables` (and the PySR block's `padding`, and
-  `remove_padding` of the NeSymReS and E2E adapters) selected the columns the law uses before handing a problem
+  `remove_padding` of the NeSymReS and E2E adapters) selected the columns the ground truth uses before handing a problem
   over. The keys are still accepted, and ignored.
 - **The documentation is rewritten**: a quickstart that needs no GPU and no model, a concepts page, a command
   reference, a metric reference with the definition of every derived column, the 29 catalogs with their
   sources and licenses, and one page each for running, results, paired comparisons, models, adapters and
   fairness.
 - The results explorer lists a metric that repeats another in every published cell only once: recovery
-  relative to the reference law equals numeric recovery wherever the targets are computed from the law.
+  relative to the reference ground truth equals numeric recovery wherever the targets are computed from the ground truth.
 - The tables and figures of `srbf.analysis` take a metric by the name of its column as well as a `Metric`.
   The report's table shows its `Scaling` column only when a run has a ladder.
 - `scripts/run_timing_ladder.py` measures on any machine; `--host NAME` restricts it to one.
@@ -79,8 +79,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **What a worker reports about itself is stored with the results**: `__meta__["worker"]` holds the return
   value of the worker's `info()` (its interpreter, package versions, checkpoint).
 - **Symbolic recovery at three levels of masking.** `symbolic_recovery` masks every number (the structure is
-  the law's); `symbolic_recovery_mask_fittable` masks only the fittable constants, so exponents and root
-  indices have to be the law's as well; `symbolic_recovery_mask_none` also asks for the constants, measured as
+  the ground truth's); `symbolic_recovery_mask_fittable` masks only the fittable constants, so exponents and root
+  indices have to be the ground truth's as well; `symbolic_recovery_mask_none` also asks for the constants, measured as
   numeric recovery is. Each level implies the one before it, and agreement at a stricter level is a witness
   at the looser one. The two new columns need an engine.
 - **`precision_score`, `recall_score` and `edit_distance_norm`** among the derived metrics: the two parts of

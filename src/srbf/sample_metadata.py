@@ -78,7 +78,7 @@ def build_base_metadata(
         "x_val": x_validation.copy(),
         "y_val": y_validation.copy(),
         "y_noisy_val": y_validation_noisy.copy(),
-        # Reference-law predictions on the same points (real-data catalogs, WP7). For synthetic
+        # Reference-expression predictions on the same points (real-data catalogs, WP7). For synthetic
         # problems the generating expression IS the reference, so the default is the clean y:
         # reference_fvu is then exactly 0 and reference-relative recovery reduces to the
         # machine-precision criterion.
