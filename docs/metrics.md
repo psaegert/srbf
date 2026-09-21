@@ -40,7 +40,9 @@ normalized edit distance:
 | `edit_distance_norm` | 1 |
 
 The table is `srbf.result_processing.WORST_VALUE`. The value is the end of the metric's range,
-not the score of some stand-in answer.
+not the score of some stand-in answer. To read these columns over the answers that were made
+instead, call `derive_metrics(..., impute_failed=False)`: a failed problem then has no value in
+them either. The results explorer offers the same choice.
 
 Every other analysis metric has no worst value, because an answer can be arbitrarily bad:
 \(R^2\) has no lower bound, a predicted expression no largest length, a ratio of lengths lies in

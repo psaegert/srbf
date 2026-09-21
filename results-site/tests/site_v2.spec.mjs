@@ -828,9 +828,10 @@ async function withHalfAnswered(page) {
   await page.route('**/data/2026-09/results.js', async (route) => {
     const res = await route.fetch();
     const add = `;(function () { var D = window.RESULTS_V2;
-      var mk = function (k) { return { state: 'complete', n: 100, ok: k, e: { n_constants_ratio: 42 }, m: {
+      // its answers have a token F1 of 0.8; the laws it failed are counted at 0, and the cell says how many those are
+      var mk = function (k) { return { state: 'complete', n: 100, ok: k, e: { n_constants_ratio: 42 }, w: { f1_score: 100 - k }, m: {
         numeric_recovery_val: [10, 100], success: [k, 100], mdl_ratio: [k, k, 1.5 * k, 2.5 * k], log10_fvu_val: [k, k, -2 * k, 5 * k],
-        f1_score: [100, 100, 40, 20], n_constants_ratio: [40, 40, 44, 50] } }; };
+        f1_score: [100, 100, 0.8 * k, 0.64 * k], n_constants_ratio: [40, 40, 44, 50] } }; };
       D.methods.push({ key: 'fixture-half', label: 'Fixture half answered', param: 'draws', budget: 'candidates', color: '#555555', group: 'baseline', provenance: 'upstream_default', selection: '' });
       D.cells['fixture-half'] = {}; D.catalogs.forEach(function (c) { D.cells['fixture-half'][c.key] = { '16': mk(50), '32': mk(95) }; });
       D.status['fixture-half'] = [2, 2]; })();`;
@@ -929,5 +930,70 @@ test('R² has no floor and is read by its median', async ({ page }) => {
   await page.locator(V2 + ' input[name="v2stat"][value="median"]').check();
   await expect(chart).not.toContainText(/, median/);
   expect(await chart.locator('circle title').allTextContents()).toEqual(titles);
+  expect(errors, errors.join('\n')).toEqual([]);
+});
+
+test('a failed prediction counts the worst value, or is left out: the reader chooses', async ({ page }) => {
+  const errors = collectErrors(page);
+  await withHalfAnswered(page);
+  await page.goto('/?release=2026-09&m=fixture-half&x=rung&s=mean&band=0&p=rung~f1_score,rung~mdl_ratio&v=table&rows=rungs');
+  const row = (r) => page.locator(V2 + ' .v2table tbody tr').filter({ has: page.locator('td:first-child', { hasText: new RegExp('^' + r + '$') }) });
+  const f1 = (r) => row(r).locator('td').nth(2);
+  // counted, the default: half of the laws at 0.8 and half at 0
+  await expect(page.locator(V2 + ' .v2impute')).toBeChecked();
+  await expect(f1(16)).toHaveText('0.400');
+  await expect(f1(32)).toHaveText('0.760');
+  await expect(row(16).locator('td').nth(3)).toHaveText(/1\.50/);          // a metric without a worst value: answers only, either way
+  // left out: the answers that were made, and half of the laws is too few for a solid number
+  await page.locator(V2 + ' .v2impute').uncheck();
+  await expect(f1(16)).toHaveText(/^○ 0\.800$/);
+  await expect(f1(32)).toHaveText('0.800');
+  await expect(row(16).locator('td').nth(3)).toHaveText(/1\.50/);
+  expect(page.url()).toContain('imp=0');
+  // the same in a chart: the marker of the thin point turns hollow
+  await page.locator(V2 + ' .v2tab[data-view="curves"]').click();
+  const plot = page.locator(V2 + ' .v2plot').first();
+  await expect(plot.locator('svg circle')).toHaveCount(2);
+  await expect(plot.locator(HOLLOW)).toHaveCount(1);
+  await page.locator(V2 + ' .v2impute').check();
+  await expect(plot.locator(HOLLOW)).toHaveCount(0);
+  // a link carries the choice, and a display without such a metric does not offer it
+  await page.goto('/?release=2026-09&m=fixture-half&x=rung&s=mean&band=0&p=rung~f1_score&v=table&rows=rungs&imp=0');
+  await expect(page.locator(V2 + ' .v2impute')).not.toBeChecked();
+  await expect(f1(16)).toHaveText(/0\.800/);
+  await page.goto('/?release=2026-09&m=fixture-half&x=rung&s=mean&p=rung~mdl_ratio&v=table&rows=rungs');
+  await expect(page.locator(V2 + ' .v2impute')).toBeHidden();
+  expect(errors, errors.join('\n')).toEqual([]);
+});
+
+test('leaving failed predictions out is exact for the median, the distribution and a paired contrast', async ({ page }) => {
+  const errors = collectErrors(page);
+  // the release's own numbers: a method that answers under half of the laws has a median overlap of 0 when its
+  // failures count, and the median of its answers when they do not
+  const low = await page.goto('/?release=2026-09&v=table&rows=rungs&x=rung&s=median&band=0&p=rung~f1_score').then(() => page.evaluate(() => {
+    const D = window.RESULTS_V2; let best = null;
+    D.methods.forEach((m) => { const per = D.cells[m.key] || {}; let n = 0, ok = 0; Object.keys(per).forEach((c) => { const x = per[c]['1']; if (x) { n += x.n; ok += x.ok; } }); if (n && ok / n < 0.45 && (!best || ok / n < best.share)) { best = { key: m.key, share: ok / n }; } });
+    return best; }));
+  test.skip(!low, 'no method of this release answers under half of the laws');
+  const url = (extra) => '/?release=2026-09&rows=rungs&x=rung&s=median&band=0&p=rung~f1_score&m=' + low.key + extra;
+  const first = () => page.locator(V2 + ' .v2table tbody tr').first().locator('td').nth(2);
+  await page.goto(url('&v=table&imp=1'));
+  await expect(first()).toHaveText(/\d/, { timeout: 15000 });
+  expect(parseFloat((await first().textContent()).replace(/^[≤≥○ ]+/, ''))).toBeLessThan(0.05);
+  await page.locator(V2 + ' .v2impute').uncheck();
+  await expect(first()).toHaveText(/○/);
+  expect(parseFloat((await first().textContent()).replace(/^[≤≥○ ]+/, ''))).toBeGreaterThan(0.3);
+  // the distribution loses exactly the laws that were filled in
+  await page.goto(url('&v=dist&dm=f1_score&dv=hist&r=1&imp=1'));   // the choice is remembered, so the link states it
+  await expect(page.locator(V2 + ' .v2view')).toContainText('Every law: a failed prediction sits at 0', { timeout: 15000 });
+  await page.locator(V2 + ' .v2impute').uncheck();
+  await expect(page.locator(V2 + ' .v2view')).toContainText('Successful predictions only');
+  // a paired contrast is then taken over the laws both methods answered
+  const other = await page.evaluate((k) => window.RESULTS_V2.methods.filter((m) => m.key !== k && window.RESULTS_V2.cells[m.key] && Object.keys(window.RESULTS_V2.cells[m.key]).length)[0].key, low.key);
+  await page.goto('/?release=2026-09&v=paired&x=rung&p=rung~f1_score&m=' + low.key + ',' + other + '&b=' + other + '&imp=1');
+  await expect(page.locator(V2 + ' .v2view')).toContainText(/\d/, { timeout: 15000 });
+  const counted = await page.locator(V2 + ' .v2view').innerText();
+  await page.locator(V2 + ' .v2impute').uncheck();
+  await expect(page.locator(V2 + ' .v2view')).not.toHaveText(counted);
   expect(errors, errors.join('\n')).toEqual([]);
 });

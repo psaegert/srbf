@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `edit_distance_norm` (`srbf.result_processing.WORST_VALUE`). Every other analysis metric has no worst
   value, since an answer can be arbitrarily bad, and has no value for a failed problem (`None`, NaN in the fit
   columns). A problem is failed when `prediction_success` is false, whatever text the method left behind.
+  `derive_metrics(..., impute_failed=False)` leaves the failed problems out of every analysis metric.
 - **R² has no floor.** `r2_*` is `1 - FVU`: negative for an answer worse than the mean predictor, `-inf` for a
   non-finite one. It was clipped to `[0, 1]`. One diverging answer decides a mean of it, so `srbf analyze`
   reports its median (`Metric(..., statistic="median")`).

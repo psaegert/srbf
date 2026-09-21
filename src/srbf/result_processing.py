@@ -345,6 +345,7 @@ def compute_derived_metrics(
     mdl_fn: Callable[[list[str]], float] | None = None,
     convert_fn: Callable[[list[str]], list[str]] | None = None,
     mask_fn: MaskFn | None = None,
+    impute_failed: bool = True,
 ) -> None:
     """Compute derived evaluation metrics in-place on *results*.
 
@@ -366,7 +367,8 @@ def compute_derived_metrics(
     - ``total_nestedness``, ``predicted_total_nestedness``
 
     A problem the method failed is a miss on every rate, takes the worst value of the metrics that
-    have one (:data:`WORST_VALUE`) and has no value on the others.
+    have one (:data:`WORST_VALUE`) and has no value on the others. With ``impute_failed=False`` it has
+    no value on any analysis metric, and every one of them describes the answers that were made.
 
     Parameters
     ----------
@@ -390,6 +392,9 @@ def compute_derived_metrics(
     mask_fn : callable, optional
         Masks the numbers of a token list; defaults to masking every numeric token.
         :func:`derive_metrics` passes the engine's own mask, which covers ``pi`` and ``e`` as well.
+    impute_failed : bool, optional
+        Count a failed problem at the worst value of the metrics that have one (the default). ``False``
+        leaves it without a value there too.
     """
     if mask_fn is None:
         mask_fn = _mask_every_number
@@ -626,7 +631,7 @@ def compute_derived_metrics(
                 ])
 
                 # ── A failed problem takes the worst value where the range has one ──
-                for column, worst in WORST_VALUE.items():
+                for column, worst in (WORST_VALUE if impute_failed else {}).items():
                     values = np.array(list(r[column]), dtype=object)
                     for i, miss in enumerate(failed):
                         if miss:
@@ -642,6 +647,7 @@ def derive_metrics(
     simplify_fn: Callable[[list[str]], list[str] | None] | None = None,
     mdl_fn: Callable[[list[str]], float] | None = None,
     convert_fn: Callable[[list[str]], list[str]] | None = None,
+    impute_failed: bool = True,
 ) -> dict[str, Any]:
     """Compute the standardized derived metrics for one raw ``Benchmark.run()`` snapshot.
 
@@ -673,6 +679,11 @@ def derive_metrics(
         Converts the stored predicted prefixes into the engine grammar before they are judged or
         priced; defaults to the engine's ``convert_expression`` when an ``engine`` is given (the
         identity on prefixes already in that grammar), else ``None``.
+    impute_failed : bool, optional
+        What a failed problem counts in the analysis metrics whose range has a worst value
+        (:data:`WORST_VALUE`): that value (the default), so the column is read over every problem and a
+        method cannot gain by failing on the hard ones; or, with ``False``, nothing, so the column
+        describes the answers that were made, like the metrics without a worst value.
 
     Returns
     -------
@@ -705,5 +716,5 @@ def derive_metrics(
     leaf = dict(snapshot)
     results = {"model": {"results": {"test": {0: leaf}}}}
     compute_derived_metrics(results, test_sets=["test"], operator_arity=operator_arity, simplify_fn=simplify_fn, mdl_fn=mdl_fn,
-                            convert_fn=convert_fn, mask_fn=mask_fn)
+                            convert_fn=convert_fn, mask_fn=mask_fn, impute_failed=impute_failed)
     return results["model"]["results"]["test"][0]

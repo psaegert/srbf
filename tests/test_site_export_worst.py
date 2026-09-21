@@ -40,3 +40,24 @@ def test_a_cell_names_the_laws_a_metric_can_be_defined_for():
     cell = export.summarize_cell(rows, None)
     assert cell["n"] == 3 and cell["e"] == {"n_constants_ratio": 2}        # the third law has no constant to count
     assert cell["m"]["n_constants_ratio"][0] == 1                         # one of the two has a value: the other failed
+
+
+def test_a_cell_names_how_many_of_its_values_were_filled_in():
+    """The page can then leave the failed predictions out again: off the sums, out of the worst value's bin."""
+    rows = {0: _row(success=1.0, f1_score=0.5, edit_distance_norm=0.25), 1: _row(f1_score=0.0, edit_distance_norm=1.0),
+            2: _row(success=1.0, f1_score=0.0, edit_distance_norm=1.0), 3: _row()}   # an answer may score the worst value itself
+    cell = export.summarize_cell(rows, None)
+    assert cell["w"] == {"f1_score": 1, "edit_distance_norm": 1}
+    assert cell["m"]["f1_score"][:3] == [3, 3, 0.5] and cell["m"]["edit_distance_norm"][:3] == [3, 3, 2.25]
+    assert "w" not in export.summarize_cell({0: rows[0], 2: rows[2]}, None)
+
+
+def test_a_paired_contrast_ships_in_both_readings():
+    a = {0: _row(success=1.0, f1_score=0.8), 1: _row(success=1.0, f1_score=0.6), 2: _row(f1_score=0.0)}
+    b = {0: _row(success=1.0, f1_score=0.5), 1: _row(f1_score=0.0), 2: _row(success=1.0, f1_score=0.4)}
+    paired = export.paired_cell(a, b)["m"]
+    n, total = paired["f1_score"][:2]
+    assert n == 3 and math.isclose(total, 0.3 + 0.6 - 0.4)               # every law, a failure at 0
+    n, total = paired["f1_score" + export.ANSWERED][:2]
+    assert n == 1 and math.isclose(total, 0.3)                             # the one law both answered
+    assert "log10_fvu_val" + export.ANSWERED not in paired                 # a metric without a worst value has one reading

@@ -92,7 +92,8 @@
     wilson: "95 % Wilson score interval for a rate; t-interval for a mean; order-statistic interval for a median (from the pooled histogram). A band is the region the ladder could occupy: the interval box of every point and the hull between consecutive ones, in both axes where both are measured. Crosses draw the same intervals as bars through each point. Either, both or neither.",
     median: "The median is read from a 128-bin histogram per cell, so it is exact to a bin. Ratios and times are binned on a log scale.",
     mean: "The default. A mean is taken over the finite values of the pooled laws, so an exactly recovered law (log10 FVU = -inf) is counted by the recovery rates and by the median, but not by the mean; every point reports how many finite values it averaged and how many it had. Switch to the median where that matters.",
-    regime: "Rates are defined for every law: a failed prediction is a miss. So is a metric whose range has a worst value: a failed prediction takes it (0 for the token and variable overlaps, 1 for the normalized edit distance). Every other metric has no worst value, because an answer can be arbitrarily bad, and describes the answers that were made.",
+    regime: "Rates are defined for every law: a failed prediction is a miss. So is a metric whose range has a worst value, unless the reader leaves the failed predictions out: a failed prediction takes it (0 for the token and variable overlaps, 1 for the normalized edit distance). Every other metric has no worst value, because an answer can be arbitrarily bad, and describes the answers that were made.",
+    impute: "A metric whose range has a worst value can be read two ways. Counted, the default: a failed prediction takes the worst value, 0 for the token and variable overlaps and 1 for the normalized edit distance, so the number is over every law and a method cannot gain by failing on the hard ones. Left out: the number describes the answers that were made, like a metric without a worst value, and is drawn hollow when too few laws have one. Rates count a failed prediction as a miss either way.",
     valid: "A metric without a worst value describes only the laws a method answered, so a method that fails on the hard laws looks better on it than it is. A point is drawn hollow when fewer than this share of the laws have a value. Rates and metrics with a worst value count every law and are always solid; 0 % turns the marking off.",
     mcnemar: "Exact McNemar test on the laws the two methods disagree on (one recovered, the other did not): two-sided binomial p-value, no asymptotics. The difference of paired rates carries a 95 % Wald interval.",
     signtest: "Paired mean difference with a t-interval over laws where both methods have a finite value, plus a two-sided exact sign test on the wins and losses.",
@@ -127,10 +128,12 @@
       // view the primary ranking metric; each display remembers its own
       dmetric: "log10_fvu_val", dmode: "hist", dnorm: "ok", rmetric: (D.rank_keys || ["log10_fvu_val"])[0], tbudget: null,
       // a point that rests on fewer than this share of the laws is drawn hollow
-      valid: VALID_DEFAULT };
+      valid: VALID_DEFAULT,
+      // a metric whose range has a worst value: does a failed prediction count that value, or is it left out?
+      impute: true };
   };
   var state = DEFAULTS();
-  var LS = "srbf-v2-" + REL + ".7";   // bumped whenever a default changes (.2 time axis, .3 mean, .4 bands, .5 per-view metrics, .6 complete pools only, .7 hollow markers), so a saved state cannot pin the old one
+  var LS = "srbf-v2-" + REL + ".8";   // bumped whenever a default changes (.2 time axis, .3 mean, .4 bands, .5 per-view metrics, .6 complete pools only, .7 hollow markers, .8 failed predictions counted or left out), so a saved state cannot pin the old one
   var rungChosen = false;   // a budget from a link or from storage is kept; otherwise the first render picks one that has data
   function loadState() {
     try { var s = JSON.parse(localStorage.getItem(LS) || "null"); if (s) { rungChosen = s.rung !== undefined; Object.keys(state).forEach(function (k) { if (s[k] !== undefined) { state[k] = s[k]; } }); } } catch (e) { /* no storage */ }
@@ -155,6 +158,7 @@
     if (q.has("b")) { state.base = q.get("b"); any = true; }
     if (q.has("rows")) { state.rows = q.get("rows") === "cats" ? "cats" : "rungs"; any = true; }
     if (q.has("ok")) { state.valid = parseInt(q.get("ok"), 10); any = true; }
+    if (q.has("imp")) { state.impute = q.get("imp") !== "0"; any = true; }
     if (q.has("tier")) { state.tier = q.get("tier") === "all" ? "all" : "main"; }
     if (["curves", "table", "matrix", "dist", "ranks", "paired"].indexOf(state.view) < 0) { state.view = "curves"; }
     if (["hist", "ecdf", "cats", "rungs"].indexOf(state.dmode) < 0) { state.dmode = "hist"; }
@@ -169,6 +173,7 @@
     if (!METRIC[state.focus]) { state.focus = "numeric_recovery_val"; }
     if (!state.base || state.methods.indexOf(state.base) < 0) { state.base = state.methods[0] || null; }
     if (D.rungs.indexOf(state.rung) < 0) { state.rung = 64; }
+    state.impute = state.impute !== false;
     state.valid = isFinite(state.valid) ? Math.min(100, Math.max(0, Math.round(state.valid))) : VALID_DEFAULT;
     return any;
   }
@@ -190,7 +195,7 @@
     ["view", "bench", "baseline", "metric", "budget"].forEach(function (k) { q.delete(k); });   // never carry 2026-07 keys
     q.set("release", REL); q.set("v", state.view); q.set("c", catsParam()); q.set("m", sharedMethods().join(",")); q.set("p", state.plots.map(plotKey).join(","));
     q.set("f", state.focus); q.set("s", state.stat); q.delete("pool"); q.delete("thin"); q.set("band", state.band ? "1" : "0"); q.set("cross", state.cross ? "1" : "0");
-    q.set("x", state.xaxis); q.set("r", String(state.rung)); if (state.base) { q.set("b", state.base); } q.set("rows", state.rows); q.set("ok", String(state.valid));
+    q.set("x", state.xaxis); q.set("r", String(state.rung)); if (state.base) { q.set("b", state.base); } q.set("rows", state.rows); q.set("ok", String(state.valid)); q.set("imp", state.impute ? "1" : "0");
     ["dm", "dv", "dn", "rm", "t"].forEach(function (k) { q.delete(k); });   // a link carries only what its display reads
     if (state.view === "dist") { q.set("dm", state.dmetric); q.set("dv", state.dmode); q.set("dn", state.dnorm); }
     if (state.view === "ranks") { q.set("rm", state.rmetric); if (state.tbudget) { q.set("t", state.tbudget); } }
@@ -283,7 +288,13 @@
   function wilson(a, b) { if (!b) { return null; } var p = a / b, z2 = Z * Z; var ctr = (p + z2 / (2 * b)) / (1 + z2 / b), half = Z * Math.sqrt(p * (1 - p) / b + z2 / (4 * b * b)) / (1 + z2 / b); return { v: p, lo: ctr - half, hi: ctr + half, n: b }; }
   function binVal(h, i) { return h.lo + (i + 0.5) * (h.hi - h.lo) / h.nb; }
   function addHist(acc, hc, nb) { if (hc.length && Array.isArray(hc[0])) { hc.forEach(function (p) { acc[p[0]] += p[1]; }); } else { for (var i = 0; i < nb; i++) { acc[i] += hc[i] || 0; } } }
-  function pooledHist(k, m, r, cs) { var H = histOf(k); if (!H || !H.cells[m]) { return null; } var acc = new Array(H.nb).fill(0); cs.forEach(function (c) { var hc = H.cells[m][c] && H.cells[m][c][String(r)]; if (hc) { addHist(acc, hc, H.nb); } }); var n = acc.reduce(function (a, b) { return a + b; }, 0); return n ? { h: acc, n: n, lo: H.lo, hi: H.hi, nb: H.nb } : null; }
+  // A metric whose range has a worst value ships with the failed predictions counted at it, and every cell says how
+  // many of its values were filled in that way ("w"). Leaving them out again is exact: that many come off the sums
+  // and out of the bin the worst value falls into.
+  function leftOut(k) { return METRIC[k] && METRIC[k].worst !== undefined && !state.impute; }
+  function filled(c, k) { return c && c.w && c.w[k] ? c.w[k] : 0; }
+  function worstBin(H, k) { return Math.min(H.nb - 1, Math.max(0, Math.floor((METRIC[k].worst - H.lo) / (H.hi - H.lo) * H.nb))); }
+  function pooledHist(k, m, r, cs) { var H = histOf(k); if (!H || !H.cells[m]) { return null; } var acc = new Array(H.nb).fill(0); cs.forEach(function (c) { var hc = H.cells[m][c] && H.cells[m][c][String(r)]; if (hc) { addHist(acc, hc, H.nb); if (leftOut(k)) { var wb = worstBin(H, k); acc[wb] = Math.max(0, acc[wb] - filled(cell(m, c, r), k)); } } }); var n = acc.reduce(function (a, b) { return a + b; }, 0); return n ? { h: acc, n: n, lo: H.lo, hi: H.hi, nb: H.nb } : null; }
   function quantileBin(h, kth) { var cum = 0; for (var i = 0; i < h.nb; i++) { cum += h.h[i]; if (cum >= kth) { return i; } } return h.nb - 1; }
   function tfOf(metric) { return metric.hist && metric.hist.tf; }
   function fwd(metric, x) { var tf = tfOf(metric); return tf === "log2" ? Math.log2(Math.max(1e-300, x)) : tf === "log10" ? Math.log10(Math.max(1e-300, x)) : x; }
@@ -295,7 +306,7 @@
   // can be defined for); below the reader's threshold the point is drawn hollow.
   function validShare(metric, cells) {
     if (metric.kind === "rate") { return 1; }
-    var d = 0, e = 0; cells.forEach(function (c) { var t = c.m[metric.key]; d += t ? t[0] : 0; e += c.e && c.e[metric.key] !== undefined ? c.e[metric.key] : c.n; });
+    var d = 0, e = 0, out = leftOut(metric.key); cells.forEach(function (c) { var t = c.m[metric.key]; d += t ? t[0] - (out ? filled(c, metric.key) : 0) : 0; e += c.e && c.e[metric.key] !== undefined ? c.e[metric.key] : c.n; });
     return e ? d / e : null;
   }
   function thin(st) { return !!st && !st.pending && typeof st.share === "number" && st.share < state.valid / 100; }
@@ -321,8 +332,9 @@
     if (metric.kind === "rate") { var a = 0, b = 0; cells.forEach(function (c) { var t = c.m[metric.key]; if (t) { a += t[0]; b += t[1]; } }); var w = wilson(a, b); if (w) { w.share = 1; } return w; }
     var share = validShare(metric, cells);
     if (statOf(metric) === "mean") {
-      var nd = 0, n = 0, s = 0, ss = 0; cells.forEach(function (c) { var t = c.m[metric.key]; if (t) { nd += t[0]; n += t[1]; s += t[2]; ss += t[3]; } });
-      if (!n) { return null; } var mean = s / n, varr = Math.max(0, (ss - n * mean * mean) / Math.max(1, n - 1)), se = Math.sqrt(varr / n);
+      var nd = 0, n = 0, s = 0, ss = 0, out = leftOut(metric.key), w = out ? metric.worst : 0;
+      cells.forEach(function (c) { var t = c.m[metric.key]; if (t) { var k = out ? filled(c, metric.key) : 0; nd += t[0] - k; n += t[1] - k; s += t[2] - k * w; ss += t[3] - k * w * w; } });
+      if (n <= 0) { return null; } var mean = s / n, varr = Math.max(0, (ss - n * mean * mean) / Math.max(1, n - 1)), se = Math.sqrt(varr / n);
       return { v: fwd(metric, mean), lo: fwd(metric, mean - Z * se), hi: fwd(metric, mean + Z * se), n: n, ndef: nd, share: share };
     }
     if (!histKeys(metric).every(function (k) { return ready("hist/" + k + ".js"); })) { return { pending: true }; }
@@ -657,7 +669,7 @@
     if (!headRoot) { return; }
     headRoot.innerHTML = inBlock(headRoot, HEADLINE.length, function () { return withState(
       { cats: CATS.slice(), methods: D.methods.filter(withData).map(function (m) { return m.key; }),
-        stat: "mean", band: true, cross: false, xaxis: anyTime() ? "time" : "rung", valid: VALID_DEFAULT },
+        stat: "mean", band: true, cross: false, xaxis: anyTime() ? "time" : "rung", valid: VALID_DEFAULT, impute: true },
       function () {
         var shown = shownMethods();
         if (!shown.length) { return '<p class="v2hint">No method has finished units in this release yet.</p>'; }
@@ -732,7 +744,7 @@
     var pooled = shown.map(function (m) { var use = poolCats(m.key, r); var st = use.length ? stat(p, m.key, r, use) : null; return '<td>' + (st && !st.pending ? cellText(st, p) : "") + '</td>'; }).join("");
     h += '<tr class="v2total"><td>all selected ' + help(TERMS.complete, "When is a pooled number shown?") + '</td><td>' + laws(state.cats).toLocaleString() + '</td>' + pooled + '</tr></tbody></table></div>';
     var thinHint = thinDrawn ? '<p class="v2hint v2hollownote">' + term("valid", "\u25cb marks a number that rests on fewer than " + state.valid + " % of the laws") + ".</p>" : "";
-    return bar + missingNote(asked, shown, "any selected catalog at budget " + r) + thinHint + '<p class="v2hint">' + esc(p.label) + " at budget " + r + ", one cell per catalog; darker = better" + (p.higher === null ? " (closer to 1)" : "") + ". " + (p.kind === "cont" ? (statOf(p) === "mean" ? term("mean", "Means") : term("median", "Medians")) + (p.worst !== undefined ? " over every law, a failed prediction counting " + p.worst + "." : " over the answers that were made.") : term("regime", "Rates over every law") + ".") + "</p>" + h;
+    return bar + missingNote(asked, shown, "any selected catalog at budget " + r) + thinHint + '<p class="v2hint">' + esc(p.label) + " at budget " + r + ", one cell per catalog; darker = better" + (p.higher === null ? " (closer to 1)" : "") + ". " + (p.kind === "cont" ? (statOf(p) === "mean" ? term("mean", "Means") : term("median", "Medians")) + (p.worst !== undefined && state.impute ? " over every law, a failed prediction counting " + p.worst + "." : " over the answers that were made.") : term("regime", "Rates over every law") + ".") + "</p>" + h;
   }
 
   // ---- controls that live on the display itself -----------------------------------------------------------------
@@ -838,7 +850,7 @@
     if (!series.length) { return head + '<p class="v2hint">No selected method has finished ' + (state.dmode === "cats" ? "a selected catalog" : "every selected catalog") + " at budget " + r + ": step to another budget above, or narrow the catalogs.</p>" + gone; }
     var pooled = state.dmode !== "cats" ? " Every method is read on the same " + series[0].laws.toLocaleString() + " laws: all of the selected catalogs." : "";
     var body = state.dmode === "ecdf" ? distEcdf(series, p, r) : state.dmode === "cats" ? distCats(series, p, r) : distHists(series, p, r);
-    return head + body + '<p class="v2hint">' + (state.dmode === "cats" ? "" : (state.dmode === "ecdf" && state.dnorm === "all" ? "" : "Successful predictions only: a law without an answer has no value to place.") + pooled + " ") + term("median", "Read from 128-bin histograms") + "; values beyond the binned range sit in the outermost bins.</p>" + gone;
+    return head + body + '<p class="v2hint">' + (state.dmode === "cats" ? "" : (state.dmode === "ecdf" && state.dnorm === "all" ? "" : (p.worst !== undefined && state.impute ? "Every law: a failed prediction sits at " + p.worst + "." : "Successful predictions only: a law without an answer has no value to place.")) + pooled + " ") + term("median", "Read from 128-bin histograms") + "; values beyond the binned range sit in the outermost bins.</p>" + gone;
   }
   function distHists(series, p, r) {
     var nr = narrow(), W = hostWidth(), L = nr ? 14 : 168, R = 16, T = 34, ph0 = series[0].ph, vr = viewRange(series.map(function (sr) { return sr.ph; }));
@@ -924,7 +936,8 @@
   function pairedStat(metric, a, b, r, cs) {
     var Pd = pairedOf(); if (!Pd) { return null; } var key = a + "|" + b, flip = false; if (!Pd[key]) { key = b + "|" + a; flip = true; } if (!Pd[key]) { return null; }
     var x = [0, 0, 0, 0, 0], any = false;
-    cs.forEach(function (c) { var pc = Pd[key][c] && Pd[key][c][String(r)]; if (!pc || !pc.m[metric.key]) { return; } any = true; var t = pc.m[metric.key]; for (var i = 0; i < t.length; i++) { x[i] += t[i]; } });
+    var pk = metric.key + (leftOut(metric.key) ? "@answered" : "");
+    cs.forEach(function (c) { var pc = Pd[key][c] && Pd[key][c][String(r)]; if (!pc || !pc.m[pk]) { return; } any = true; var t = pc.m[pk]; for (var i = 0; i < t.length; i++) { x[i] += t[i]; } });
     if (!any) { return null; }
     if (metric.kind === "rate") { var n10 = flip ? x[2] : x[1], n01 = flip ? x[1] : x[2], N = x[0] + x[1] + x[2] + x[3]; if (!N) { return null; } var d = (n10 - n01) / N, se = Math.sqrt(Math.max(0, (n10 + n01) - (n10 - n01) * (n10 - n01) / N)) / N; return { v: d, lo: d - Z * se, hi: d + Z * se, n: N, p: binomTwoSided(n10, n10 + n01), wins: n10, losses: n01 }; }
     if (!x[0]) { return null; }
@@ -1113,9 +1126,11 @@
     ranks: {},
     paired: { plots: 1, base: 1, ci: 1, xaxis: 1 }
   };
+  function shownMetricKeys(view) { return view === "matrix" ? [state.focus] : view === "dist" ? [state.dmetric] : view === "ranks" ? [] : plotAxes(); }
   function usesFor(view) {
     var u = {}, src = USES[view] || {};
     Object.keys(src).forEach(function (k) { u[k] = src[k]; });
+    if (shownMetricKeys(view).some(function (k) { return METRIC[k] && METRIC[k].worst !== undefined; })) { u.impute = 1; }
     if (view === "table" && state.rows !== "cats") { delete u.rung; }   // the budget only binds the by-catalog table
     if (view === "dist" && METRIC[state.dmetric].kind !== "rate" && state.dmode === "rungs") { delete u.rung; }
     if (view === "ranks" && state.xaxis === "time" && anyTime()) { delete u.rung; }
@@ -1155,6 +1170,7 @@
       '<div class="v2row" data-uses="xaxis"><span class="v2lab">x axis ' + help("Time: " + TERMS.time + " Candidates: " + TERMS.candidates, "What do the two x axes measure?") + '</span><label><input type="radio" name="v2xaxis" value="time" class="v2xtime"> time</label><label><input type="radio" name="v2xaxis" value="rung"> candidates</label><span class="v2hint v2xtimehint"></span></div>' +
       '<div class="v2row v2checks" data-uses="ci"><span class="v2lab" data-uses="ci">95 % intervals ' + help(TERMS.wilson) + '</span>' +
       '<label data-uses="ci"><input type="checkbox" class="v2band"> bands</label><label data-uses="ci"><input type="checkbox" class="v2cross"> crosses</label></div>' +
+      '<div class="v2row" data-uses="impute"><span class="v2lab">failed predictions ' + help(TERMS.impute, "What does a failed prediction count?") + '</span><label><input type="checkbox" class="v2impute"> count at the worst value</label></div>' +
       '<div class="v2row" data-uses="valid"><span class="v2lab">hollow below ' + help(TERMS.valid, "When is a point drawn hollow?") + '</span><input type="range" class="v2valid" min="0" max="100" step="5" aria-label="share of the laws a point must rest on to be drawn solid, in percent"><output class="v2validout"></output></div></div>' +
       '</aside><section class="v2main"><p class="v2err" role="alert"></p><div class="v2view"></div></section></div>';
     var hasTiming = anyTime();
@@ -1172,6 +1188,7 @@
     root.querySelectorAll("input[name=v2stat]").forEach(function (i) { i.checked = i.value === state.stat; });
     root.querySelectorAll("input[name=v2xaxis]").forEach(function (i) { i.checked = i.value === state.xaxis; });
     root.querySelector(".v2band").checked = state.band; root.querySelector(".v2cross").checked = state.cross;
+    root.querySelector(".v2impute").checked = state.impute;
     var vs = root.querySelector(".v2valid"); if (document.activeElement !== vs) { vs.value = String(state.valid); } root.querySelector(".v2validout").textContent = state.valid + " % of the laws";
     setPick(root.querySelector(".v2focus"), state[focusKey()]); root.querySelector(".v2rung").value = String(state.rung);
     root.querySelectorAll("input[name=v2rows]").forEach(function (i) { i.checked = i.value === state.rows; });
@@ -1222,7 +1239,7 @@
     else if (t.dataset.m && t.type === "checkbox") { if (t.checked) { state.methods.push(t.dataset.m); } else { state.methods = state.methods.filter(function (c) { return c !== t.dataset.m; }); } }
     else if (t.dataset.p) { if (t.checked) { state.plots.push({ x: lastAxis(), y: t.dataset.p }); } else { state.plots = state.plots.filter(function (c) { return c.y !== t.dataset.p; }); } }
     else if (t.name === "v2stat") { state.stat = t.value; } else if (t.name === "v2xaxis") { state.xaxis = t.value; } else if (t.name === "v2rows") { state.rows = t.value; }
-    else if (t.classList.contains("v2band")) { state.band = t.checked; } else if (t.classList.contains("v2cross")) { state.cross = t.checked; } else if (t.classList.contains("v2tier")) { state.tier = t.checked ? "all" : "main"; }
+    else if (t.classList.contains("v2band")) { state.band = t.checked; } else if (t.classList.contains("v2cross")) { state.cross = t.checked; } else if (t.classList.contains("v2impute")) { state.impute = t.checked; } else if (t.classList.contains("v2tier")) { state.tier = t.checked ? "all" : "main"; }
     else if (t.classList.contains("v2rung")) { state.rung = parseInt(t.value, 10); } else if (t.classList.contains("v2base")) { state.base = t.value; }
     else if (t.dataset.state) { setState(t.dataset.state, t.value); }
     else if (t.classList.contains("v2swatch")) { userColors[t.dataset.m] = t.value; writeCookie(userColors); root.querySelector(".v2cookie").hidden = false; }

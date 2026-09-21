@@ -248,7 +248,8 @@
             and rank is over the same laws. A rate counts every law, and a failed prediction is a
             miss. A metric whose range has a worst value counts every law too: a failed prediction
             takes that value, 0 for the token and variable overlaps and 1 for the normalized edit
-            distance. Every other metric has no worst value, since an answer can be arbitrarily
+            distance; the explorer can leave the failed predictions out of these metrics instead.
+            Every other metric has no worst value, since an answer can be arbitrarily
             bad, and describes the answers that were made; a point that rests on fewer than 90 % of
             the laws is drawn hollow, and the threshold can be moved. Intervals are 95 %: a
             t-interval for a mean, an order-statistic interval for a median, and for a rate

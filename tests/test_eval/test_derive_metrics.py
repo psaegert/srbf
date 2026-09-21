@@ -391,3 +391,16 @@ def test_the_normalized_edit_distance_is_a_share_of_the_longer_sequence() -> Non
     assert float(scored["edit_distance_norm"][0]) == 0.0
     assert float(scored["edit_distance_norm"][1]) == 1.0          # sin x2 against + x1 <constant>: all three differ
     assert float(scored["precision_score"][1]) == 0.0 and float(scored["recall_score"][1]) == 0.0
+
+
+def test_failed_problems_can_be_left_out_instead() -> None:
+    """The other reading of the same columns: every analysis metric describes the answers that were made."""
+    from srbf.result_processing import WORST_VALUE
+    snapshot = _three_problems_one_failed(["+", "x1", "<constant>"])
+    counted = derive_metrics(snapshot, operator_arity={"+": 2, "sin": 1})
+    left_out = derive_metrics(snapshot, operator_arity={"+": 2, "sin": 1}, impute_failed=False)
+    for column in WORST_VALUE:
+        assert left_out[column][2] is None, column
+        assert [float(v) for v in left_out[column][:2]] == [float(v) for v in counted[column][:2]], column
+    assert bootstrap_report(left_out, "f1_score")["n_groups"] == 2 and bootstrap_report(counted, "f1_score")["n_groups"] == 3
+    assert list(left_out["symbolic_recovery"]) == [True, False, False]     # a rate counts the failure either way

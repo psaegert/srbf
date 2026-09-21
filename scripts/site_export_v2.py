@@ -150,6 +150,9 @@ METRICS = [
 # computed from the law (reference FVU = 0); it is a metric of its own only once a catalog of measured data is in.
 # The continuous metrics whose range has a worst value, and that value: a failed prediction takes it, so these are
 # read over every law (the rows carry the value already: srbf.result_processing.WORST_VALUE, checked by the tests).
+# The reader may leave the failed predictions out instead. Nothing is exported twice for that: a cell names how many
+# of its values were filled in ("w"), and the page takes that many off the sums and out of the histogram bin of the
+# worst value. Only a paired contrast cannot be undone that way, so it ships in both readings (key + ANSWERED).
 WORST = {"f1_score": 0.0, "precision_score": 0.0, "recall_score": 0.0, "edit_distance_norm": 1.0,
          "f1_score_unique_variables": 0.0, "precision_unique_variables": 0.0, "recall_unique_variables": 0.0}
 # Metrics without a bound on the bad side AND with a heavy tail there: one answer decides a mean, so the page reads
@@ -160,6 +163,7 @@ MEDIAN_ONLY = {"r2_val": "log10_fvu_val", "r2_fit": "log10_fvu_fit"}
 # A metric that is undefined for some laws whatever the method does: the laws it could be defined for are the base of
 # its share of valid results. (The constant-count ratio needs a law with at least one constant.)
 ELIGIBLE = {"n_constants_ratio": lambda row: bool(row.get("n_constants"))}
+ANSWERED = "@answered"   # suffix of a paired contrast taken over the laws BOTH methods answered
 COPY_OF = {"numeric_recovery_relative_val": "numeric_recovery_val", "numeric_recovery_relative_fit": "numeric_recovery_fit"}
 
 
@@ -279,6 +283,10 @@ def summarize_cell(rows: dict[int, dict[str, Any]], expected: int | None) -> dic
             cell["m"][k] = [len(xs), int(fin.size), float(fin.sum()) if fin.size else 0.0, float((fin * fin).sum()) if fin.size else 0.0]
     for k, eligible in ELIGIBLE.items():
         cell.setdefault("e", {})[k] = int(sum(1 for x in vals if eligible(x)))
+    for k in WORST:
+        filled = int(sum(1 for x in vals if not x["success"] and x[k] is not None))
+        if filled:
+            cell.setdefault("w", {})[k] = filled
     return cell
 
 
@@ -303,14 +311,15 @@ def paired_cell(rows_a: dict[int, dict[str, Any]], rows_b: dict[int, dict[str, A
             out[k] = [n11, n10, n01, n00]
         else:
             tf = HIST_SPECS[k][2] if k in HIST_SPECS else None
-            ds = []
-            for i in common:
-                va, vb = transform(rows_a[i][k], tf), transform(rows_b[i][k], tf)
-                if va is None or vb is None or not (math.isfinite(va) and math.isfinite(vb)):
-                    continue
-                ds.append(va - vb)
-            d = np.asarray(ds, float)
-            out[k] = [int(d.size), float(d.sum()) if d.size else 0.0, float((d * d).sum()) if d.size else 0.0, int((d > 0).sum()), int((d < 0).sum())]
+            for name, laws in ((k, common),) + (((k + ANSWERED, [i for i in common if rows_a[i]["success"] and rows_b[i]["success"]]),) if k in WORST else ()):
+                ds = []
+                for i in laws:
+                    va, vb = transform(rows_a[i][k], tf), transform(rows_b[i][k], tf)
+                    if va is None or vb is None or not (math.isfinite(va) and math.isfinite(vb)):
+                        continue
+                    ds.append(va - vb)
+                d = np.asarray(ds, float)
+                out[name] = [int(d.size), float(d.sum()) if d.size else 0.0, float((d * d).sum()) if d.size else 0.0, int((d > 0).sum()), int((d < 0).sum())]
     return {"n": len(common), "m": out}
 
 
