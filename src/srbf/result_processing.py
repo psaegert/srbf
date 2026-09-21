@@ -320,6 +320,19 @@ WORST_VALUE: dict[str, float] = {
 }
 
 
+def _raised(row_columns: Mapping[str, Any], i: int) -> bool:
+    """Whether row ``i`` is a method's exception that an earlier srbf stored as a placeholder.
+
+    An exception escaping an adapter used to be recorded as a placeholder row: ``placeholder`` true, the exception
+    in ``error``, and no reason from the catalog (``placeholder_reason`` empty or ``adapter_exception``). The
+    problem was posed and the method failed it, so such a row is read as the failed prediction it is. A placeholder
+    of the catalog, a problem that could not be drawn, carries the catalog's reason or no error at all."""
+    def at(key: str) -> Any:
+        column = row_columns.get(key)
+        return column[i] if column is not None and i < len(column) else None
+    return bool(at('placeholder')) and at('error') is not None and at('placeholder_reason') in (None, 'adapter_exception')
+
+
 def _failed(row_columns: Mapping[str, Any], n_rows: int) -> list[bool]:
     """Which problems the method failed: it reported no success or, where it does not report, returned no
     expression. A placeholder row is not a problem the method was given, so it is never a failure."""
@@ -404,6 +417,10 @@ def compute_derived_metrics(
                 continue
             for scaling_value in results[model]['results'][test_set]:
                 r = results[model]['results'][test_set][scaling_value]
+
+                # ── A method's exception is a failed prediction, in files of every age (`_raised`) ──
+                if 'placeholder' in r:
+                    r['placeholder'] = [bool(flag) and not _raised(r, i) for i, flag in enumerate(r['placeholder'])]
 
                 # ── Stored prefixes into the engine grammar ────────
                 if convert_fn is not None:

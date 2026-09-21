@@ -651,7 +651,7 @@
     var cards = inBlock(main, state.plots.length + 1, function () {
       return state.plots.map(function (p, i) { return plotCard(p, i, shown); }).join("");
     });
-    if (thinDrawn) { note += '<p class="v2hint v2hollownote">' + term("valid", thinNote()) + ": the method failed on the others, and this metric has no worst value to count for them.</p>"; }
+    if (thinDrawn) { note += '<p class="v2hint v2hollownote">' + term("valid", thinNote()) + ": the method failed on the others, and they have no value in this metric.</p>"; }
     return note + '<div class="v2charts">' + cards + add + "</div>";
   }
 

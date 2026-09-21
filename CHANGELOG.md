@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A method that raises has failed the problem.** An exception escaping an in-process adapter was recorded as a
   placeholder row, which every summary leaves out; it is a failed prediction, a miss on every rate, like a
   failure the adapter reports itself. A placeholder marks only a problem the catalog could not pose.
+  `derive_metrics` reads such a row in a result file of an earlier version as the failed prediction it is.
 - **Symbolic recovery of a failed prediction is a miss.** `derive_metrics` wrote `None` for a problem
   without a prediction, so `bootstrap_report`, `srbf analyze` and the paired reports computed symbolic
   recovery over the successful predictions only, while numeric recovery counted every problem. Both are

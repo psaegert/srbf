@@ -404,3 +404,28 @@ def test_failed_problems_can_be_left_out_instead() -> None:
         assert [float(v) for v in left_out[column][:2]] == [float(v) for v in counted[column][:2]], column
     assert bootstrap_report(left_out, "f1_score")["n_groups"] == 2 and bootstrap_report(counted, "f1_score")["n_groups"] == 3
     assert list(left_out["symbolic_recovery"]) == [True, False, False]     # a rate counts the failure either way
+
+
+def test_an_exception_stored_as_a_placeholder_is_read_as_the_failed_prediction_it_is() -> None:
+    """Result files written before an escaping exception became a failed prediction hold it as a placeholder with
+    the exception in `error`. The problem was posed and the method failed it: it is a miss and takes the worst
+    values, while a placeholder of the catalog (a problem that could not be drawn) stays out of every summary."""
+    snapshot = _three_problems_one_failed(None)
+    for key, values in (("skeleton", ["+", "x1", "<constant>"]), ("expression", ["+", "x1", "1.5"])):
+        snapshot[key] = snapshot[key] + [values]
+    for key in ("x", "y", "x_val", "y_val"):
+        snapshot[key] = snapshot[key] + [snapshot[key][0]]
+    for key in ("y_pred", "y_pred_val", "predicted_skeleton_prefix", "predicted_expression_prefix"):
+        snapshot[key] = snapshot[key] + [None]
+    snapshot["prediction_success"] = [True, True, False, False]
+    snapshot["benchmark_eq_id"] = ["a", "b", "c", "d"]
+    snapshot["placeholder"] = [False, False, True, True]
+    snapshot["placeholder_reason"] = [None, None, None, "max_trials_exhausted"]
+    snapshot["error"] = [None, None, "'__builtins__'", "max_trials_exhausted"]
+    before = list(snapshot["placeholder"])
+    scored = derive_metrics(snapshot, operator_arity={"+": 2, "sin": 1})
+    assert list(scored["placeholder"]) == [False, False, False, True] and snapshot["placeholder"] == before
+    assert float(scored["f1_score"][2]) == 0.0 and float(scored["edit_distance_norm"][2]) == 1.0
+    assert scored["f1_score"][3] is None
+    report = bootstrap_report(scored, "numeric_recovery_val")
+    assert report["n_groups"] == 3 and report["n_rows"] == 3             # the exception counts, the undrawn problem does not
