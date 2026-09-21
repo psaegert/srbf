@@ -320,6 +320,15 @@ WORST_VALUE: dict[str, float] = {
 }
 
 
+def _normalized_edit_distance(a: Sequence[str] | None, b: Sequence[str] | None) -> float | None:
+    """The edit distance over the length of the longer sequence, so in [0, 1]: 0 for the same sequence, and what a
+    wrong answer tends to as it grows without bound is 1."""
+    if a is None or b is None:
+        return None
+    longest = max(len(a), len(b))
+    return float(edit_distance(a, b)) / longest if longest else None
+
+
 def _raised(row_columns: Mapping[str, Any], i: int) -> bool:
     """Whether row ``i`` is a method's exception that an earlier srbf stored as a placeholder.
 
@@ -586,12 +595,7 @@ def compute_derived_metrics(
                     if ps is not None and sk is not None else None
                     for ps, sk in zip(pred_skel, skel_sim)
                 ])
-                # over the longer sequence, so in [0, 1]; an answer that grows without bound tends to 1
-                normalized: list[Any] = [
-                    edit_distance(ps, sk) / max(len(ps), len(sk))
-                    if ps is not None and sk is not None and max(len(ps), len(sk)) else None
-                    for ps, sk in zip(pred_skel, skel_sim)
-                ]
+                normalized: list[Any] = [_normalized_edit_distance(ps, sk) for ps, sk in zip(pred_skel, skel_sim)]
                 r['edit_distance_norm'] = np.array(normalized, dtype=object)
                 r['zss_edit_distance'] = np.array([
                     zss_tree_edit_distance(ps, sk, operator_arity)
