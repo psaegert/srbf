@@ -53,7 +53,11 @@ it next to the recovery rate, which counts the exact fits.
 
 ### `r2_fit`, `r2_val`
 
-\(R^2 = 1 - \operatorname{FVU}\), clipped to \([0, 1]\); 0 for a failed or divergent prediction.
+\(\max(0,\, 1 - \operatorname{FVU})\): \(R^2\) floored at 0. \(R^2\) itself has no lower bound, and
+one diverging answer would decide the mean of a whole catalog. The floor is the mean predictor, an
+answer every method can always return: an answer worse than that counts 0, and so does a failed
+prediction. That is what gives the column a mean; `1 - fvu_val` is the unfloored quantity, and it
+is summarized like the FVU, by its median.
 
 ### `numeric_recovery_fit`, `numeric_recovery_val`
 

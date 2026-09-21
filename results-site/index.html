@@ -679,11 +679,13 @@
         </article>
 
         <article class="metric" data-for="2026-09">
-          <h4>R² (validation / support) <span class="dir up">higher is better</span></h4>
+          <h4>R² floored at 0 (validation / support) <span class="dir up">higher is better</span></h4>
           <p>
-            The coefficient of determination, \(R^2 = 1 - \operatorname{FVU}\), on either set of
-            points: the same information as the FVU on a linear scale, where 1 is a perfect fit
-            and 0 is the mean predictor.
+            \(\max(0,\, 1 - \operatorname{FVU})\) on either set of points. \(R^2\) itself has no
+            lower bound: one answer that diverges would decide the mean of a whole catalog. The
+            floor is the mean predictor, an answer every method can always return, so an answer
+            worse than that counts 0 and the metric has a mean. The FVU keeps the full range and
+            is summarized by its median.
           </p>
         </article>
         </div>
