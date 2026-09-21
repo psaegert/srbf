@@ -83,7 +83,7 @@ METRICS = [
      "The same criterion on the support points: FVU at or below the ground truth's own FVU there, and never below the float32 bar."),
     ("success", "Successful Prediction Rate", "Success", "Numeric Recovery", "rate", True, "more", "pct", None,
      "Share of problems for which the method returned any evaluable expression at all: decoding, parsing, compiling and constant fitting completed."),
-    ("symbolic_recovery", "Symbolic Recovery: Structure (SRR)", "SRR", "Symbolic Recovery", "rate", True, "main", "pct", None,
+    ("symbolic_recovery", "Symbolic Recovery: Structure (SRRs)", "SRRs", "Symbolic Recovery", "rate", True, "main", "pct", None,
      "Share of problems whose predicted expression has the same certified canonical form (SimpliPy, f64) as the ground truth once every number is masked: structurally the same expression, whatever its constants and exponents."),
     ("symbolic_recovery_mask_fittable", "Symbolic Recovery: Structure + Exponents (SRRe)", "SRRe", "Symbolic Recovery", "rate", True, "more", "pct", None,
      "Symbolic recovery with only the fittable constants masked: the numbers of the structure, exponents and root indices, have to be the ground truth's as well. x^2 and x^3 differ here, and an exponent left at 1.9999 is a miss."),

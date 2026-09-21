@@ -83,7 +83,7 @@ def test_the_three_levels_of_symbolic_recovery_are_in_the_registry():
     keys = [m["key"] for m in registry]
     at = keys.index("symbolic_recovery")
     assert keys[at:at + 4] == ["symbolic_recovery", "symbolic_recovery_mask_fittable", "symbolic_recovery_mask_none", "skeleton_match_raw"]
-    assert [m["short"] for m in registry[at:at + 4]] == ["SRR", "SRRe", "SRRa", "SRRr"]
+    assert [m["short"] for m in registry[at:at + 4]] == ["SRRs", "SRRe", "SRRa", "SRRr"]
 
 
 def test_metric_names_are_written_in_title_caps_with_one_word_for_each_side():

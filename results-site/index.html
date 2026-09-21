@@ -727,9 +727,9 @@
         </p>
 
         <article class="metric" data-for="2026-09">
-          <h4>Symbolic Recovery (SRR, SRRe, SRRa) <span class="dir up">higher is better</span></h4>
+          <h4>Symbolic Recovery (SRRs, SRRe, SRRa) <span class="dir up">higher is better</span></h4>
           $$
-            \mathrm{SRR} \;=\; \frac{1}{K} \sum_{k=1}^{K}
+            \mathrm{SRR}_{\mathrm{s}} \;=\; \frac{1}{K} \sum_{k=1}^{K}
             \mathbb{1}\!\left[ \operatorname{canon}\big(\hat{f}^{(k)}\big) = \operatorname{canon}\big(f^{(k)}\big) \right]
           $$
           <p>
@@ -740,7 +740,7 @@
           </p>
           <p>
             The same question is asked at three levels of masking, each implying the one before it.
-            <em>Structure</em> (SRR) masks every number, so \(x^2\) and \(x^3\) are one structure.
+            <em>Structure</em> (SRRs) masks every number, so \(x^2\) and \(x^3\) are one structure.
             <em>Structure + Exponents</em> (SRRe) masks only the fittable constants: the numbers of the structure,
             exponents and root indices, have to be the law's, and an exponent left at 1.9999 is a
             miss. <em>Structure + All Numbers</em> (SRRa) masks nothing: the fitted constants have to be right too,
@@ -752,7 +752,7 @@
         <article class="metric">
           <h4><span data-for="2026-09">Raw Symbolic Recovery (SRRr)</span><span data-for="2026-07">Exact skeleton match (raw)</span> <span class="dir up">higher is better</span></h4>
           $$
-            \mathrm{SRR}_{\mathrm{raw}} \;=\; \frac{1}{K} \sum_{k=1}^{K}
+            \mathrm{SRR}_{\mathrm{r}} \;=\; \frac{1}{K} \sum_{k=1}^{K}
             \mathbb{1}\!\left[ \hat{\tau}^{(k)} = \bar{\tau}^{(k)} \right]
           $$
           <p>

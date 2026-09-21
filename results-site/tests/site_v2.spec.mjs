@@ -1017,7 +1017,7 @@ test('symbolic recovery is asked at three levels of masking, each implying the o
   expect(seen.missing).toBe(0);
   expect(seen.broken).toBe(0);
   expect(seen.strict).toBeGreaterThan(0);   // the stricter level is a level of its own: somewhere an exponent is not the law's
-  expect(seen.labels).toEqual(['Symbolic Recovery: Structure (SRR)', 'Symbolic Recovery: Structure + Exponents (SRRe)', 'Symbolic Recovery: Structure + All Numbers (SRRa)']);
+  expect(seen.labels).toEqual(['Symbolic Recovery: Structure (SRRs)', 'Symbolic Recovery: Structure + Exponents (SRRe)', 'Symbolic Recovery: Structure + All Numbers (SRRa)']);
   // all three are rates over every law, so none of their numbers is marked as resting on too few
   const row = page.locator(V2 + ' .v2table tbody tr').first();
   await expect(row).toBeVisible({ timeout: 15000 });
@@ -1041,7 +1041,7 @@ test('metric names say Prediction and Ground Truth, in title caps, and single-ex
   expect(by('mdl_ratio').label).toBe('MDL Ratio (Prediction / Ground Truth)');
   expect(by('edit_distance').label).toContain('Levenshtein');
   expect(by('edit_distance_norm').label).toContain('Levenshtein');
-  expect(['symbolic_recovery', 'symbolic_recovery_mask_fittable', 'symbolic_recovery_mask_none', 'skeleton_match_raw'].map((k) => by(k).short)).toEqual(['SRR', 'SRRe', 'SRRa', 'SRRr']);
+  expect(['symbolic_recovery', 'symbolic_recovery_mask_fittable', 'symbolic_recovery_mask_none', 'skeleton_match_raw'].map((k) => by(k).short)).toEqual(['SRRs', 'SRRe', 'SRRa', 'SRRr']);
   // a property of one expression is not a comparison: those have a group of their own
   const alone = reg.filter((m) => m.group === 'Expression Properties').map((m) => m.key).sort();
   expect(alone).toEqual(['ground_truth_mdl', 'n_constants', 'n_variables', 'predicted_mdl', 'predicted_n_constants', 'predicted_skeleton_prefix_length',
