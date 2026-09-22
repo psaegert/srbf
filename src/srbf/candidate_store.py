@@ -33,6 +33,8 @@ Per-problem files keep both write-time and read-time (analysis) memory bounded t
 from __future__ import annotations
 
 import json
+import os
+import warnings
 from pathlib import Path
 from typing import Any, Iterator, Sequence
 
@@ -184,10 +186,23 @@ class CandidateStoreWriter:
             "total_bytes": sum(p["bytes"] for p in index),
             "problems": index,
         }
-        tmp = self.out_dir / "manifest.json.tmp"
-        tmp.write_text(json.dumps(manifest, indent=0))
-        tmp.replace(self.out_dir / "manifest.json")
+        # The shards of one unit share this directory and each writes the manifest: the temp file carries the
+        # writer's identity, so two writers never race on one name (a shared name lost a 20-hour shard to a
+        # FileNotFoundError in the rename). The manifest is advisory, so a failed write is a warning, never
+        # the end of the run.
+        tmp = self._manifest_tmp()
+        try:
+            tmp.write_text(json.dumps(manifest, indent=0))
+            tmp.replace(self.out_dir / "manifest.json")
+        except OSError as e:
+            warnings.warn(f"candidate store: manifest not refreshed ({e}); the reader globs the directory", RuntimeWarning)
+            tmp.unlink(missing_ok=True)
         return manifest
+
+    def _manifest_tmp(self) -> Path:
+        """A temp name no other writer of this directory uses (process, writer, and a counter)."""
+        self._manifest_writes = getattr(self, "_manifest_writes", 0) + 1
+        return self.out_dir / f"manifest.json.{os.getpid()}-{id(self):x}-{self._manifest_writes}.tmp"
 
     def close(self) -> dict:
         """Write the final manifest and return summary stats (no candidate data held in RAM)."""

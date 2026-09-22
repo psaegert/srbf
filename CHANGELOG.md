@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **The shards of one unit no longer race on the candidate store's manifest.** Every shard of a unit writes the
+  manifest of the unit's store directory; the temp file they renamed had one shared name, so two shards renaming
+  at once ended one of them with `FileNotFoundError` after hours of work. The temp name now carries the writer's
+  identity, and a manifest that cannot be written is a warning: the manifest is advisory, the reader globs the
+  directory.
 - **Symbolic recovery judges ground truth and prediction by one function.** Both are brought into canonical form with
   their numbers, then every number is masked (`pi` and `e` included) and the skeleton is simplified and masked
   until it stands still. Before, the ground truth was judged in the form its catalog wrote and a number that

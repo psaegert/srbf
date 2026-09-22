@@ -220,3 +220,41 @@ def test_ladder_columns_round_trip(tmp_path):
     block = next(iter(CandidateStoreReader(tmp_path)))
     assert list(block["spelling"]) == ["", "c0=2"]
     np.testing.assert_array_equal(block["parent"], np.array([-1, 0], np.int32))
+
+
+# The shards of one unit write the manifest of ONE directory. A shared temp name made two writers race on the rename
+# (FileNotFoundError, the end of a 20-hour shard). The manifest is advisory: it may be stale, never fatal.
+def test_two_writers_of_one_directory_never_share_a_manifest_temp_name(tmp_path):
+    a, b = CandidateStoreWriter(tmp_path, vocab_size=83), CandidateStoreWriter(tmp_path, vocab_size=83)
+    assert a._manifest_tmp() != b._manifest_tmp()
+    assert a._manifest_tmp() != a._manifest_tmp()      # nor does one writer reuse a name it may still be renaming
+
+
+def test_concurrent_manifest_writers_do_not_raise(tmp_path):
+    import threading
+    writers = [CandidateStoreWriter(tmp_path, vocab_size=83) for _ in range(8)]
+    errors: list[BaseException] = []
+
+    def spin(w):
+        try:
+            for _ in range(400):
+                w._write_manifest()
+        except BaseException as e:   # noqa: BLE001 -- the test reports whatever escaped
+            errors.append(e)
+    threads = [threading.Thread(target=spin, args=(w,)) for w in writers]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == [], errors[:1]
+    assert json.loads((tmp_path / "manifest.json").read_text())["n_problems"] == 0
+    assert not list(tmp_path.glob("manifest.json.*.tmp"))   # every temp file was renamed or removed
+
+
+def test_a_manifest_write_that_fails_is_a_warning_not_the_end_of_the_run(tmp_path, monkeypatch):
+    w = CandidateStoreWriter(tmp_path, vocab_size=83)
+    monkeypatch.setattr(w, "_manifest_tmp", lambda: tmp_path / "no-such-dir" / "manifest.json.tmp")
+    with _warnings.catch_warnings(record=True) as caught:
+        _warnings.simplefilter("always")
+        w.close()
+    assert any("manifest not refreshed" in str(c.message) for c in caught)
