@@ -612,7 +612,7 @@
     var cols = pickerGroups(axis).map(function (g) {
       return '<div class="v2pickgroup"><h5>' + esc(g.title) + "</h5>" + g.items.map(function (m) {
         var off = m.key === "time" && !anyTime();
-        return '<button type="button" class="v2pickitem' + (m.key === cur ? " on" : "") + '" data-k="' + esc(m.key) + '"' + (off ? " disabled" : "") +
+        return '<button type="button" class="v2pickitem' + (m.key === cur ? " on" : "") + '" data-k="' + esc(m.key) + '" data-alt="' + esc((m.short || "").toLowerCase()) + '"' + (off ? " disabled" : "") +
           ' title="' + esc(mdef(m)) + '"><span>' + esc(mname(m)) + "</span>" + (off ? ' <span class="v2hint">no reference timing yet</span>' : "") + "</button>";
       }).join("") + "</div>";
     }).join("");
@@ -1326,7 +1326,9 @@
     var q = pickerEl.querySelector(".v2pickq");
     q.addEventListener("input", function () {
       var v = q.value.trim().toLowerCase();
-      pickerEl.querySelectorAll(".v2pickitem").forEach(function (it) { it.hidden = !!v && it.textContent.toLowerCase().indexOf(v) < 0 && it.dataset.k.indexOf(v) < 0; });
+      pickerEl.querySelectorAll(".v2pickitem").forEach(function (it) {   // the short name answers the filter too ("vnrr")
+        it.hidden = !!v && it.textContent.toLowerCase().indexOf(v) < 0 && it.dataset.k.indexOf(v) < 0 && (it.dataset.alt || "").indexOf(v) < 0;
+      });
       pickerEl.querySelectorAll(".v2pickgroup").forEach(function (g) { g.hidden = !Array.prototype.some.call(g.querySelectorAll(".v2pickitem"), function (it) { return !it.hidden; }); });
     });
     pickerEl.addEventListener("click", function (e) {

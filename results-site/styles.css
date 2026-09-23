@@ -507,7 +507,7 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 .explorer-v2 .v2release li { margin: 3px 0; }
 .explorer-v2 .v2strip { display: flex; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
 .explorer-v2 .v2tile { flex: 1 1 150px; max-width: 260px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 8px 12px; }
-.explorer-v2 .v2tile b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.explorer-v2 .v2tile b { display: block; }   /* a name wraps; it is never cut to an ellipsis */
 .explorer-v2 .v2tile span { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .explorer-v2 .v2tile small { color: var(--ink-faint); }
 .explorer-v2 .v2bar { height: 5px; background: var(--line); border-radius: 3px; margin-top: 6px; overflow: hidden; }
@@ -617,7 +617,8 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
   border-radius: var(--r-ctl); padding: 2px 6px; cursor: pointer; text-align: left; }
 .explorer-v2 .v2pick:hover, .explorer-v2 .v2pick:focus-visible { border-color: var(--line); background: var(--surface); outline: none; }
 .explorer-v2 .v2pick[aria-expanded="true"] { border-color: var(--accent); background: var(--surface); }
-.explorer-v2 .v2picklab { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* a title wraps onto as many lines as it needs, balanced, and is never cut to an ellipsis */
+.explorer-v2 .v2picklab { min-width: 0; white-space: normal; text-wrap: balance; }
 .explorer-v2 .v2caret { color: var(--ink-faint); font-size: 11px; flex: none; }
 .explorer-v2 .v2row .v2pick { max-width: 100%; border-color: var(--line); background: var(--surface); }
 .v2picker { position: fixed; z-index: 70; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card);

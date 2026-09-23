@@ -434,9 +434,8 @@ test('provenance: footnotes appear only at snapped budgets (descriptive slices s
 
 test('provenance: an old cached payload without labels degrades gracefully', async ({ page }) => {
   const errors = collectErrors(page);
-  await page.route('**/results_data.js', async (route) => {
-    const body = (await (await fetch(new URL('/results_data.js', 'http://localhost:8123'))).text())
-      .replace(/"config_provenance":\s*"[a-z_]+",?/g, '');
+  await page.route('**/results_data.js', async (route) => {   // the served file, whatever port the suite runs on
+    const body = (await (await route.fetch()).text()).replace(/"config_provenance":\s*"[a-z_]+",?/g, '');
     await route.fulfill({ status: 200, contentType: 'application/javascript', body });
   });
   await gotoView(page, 'table');

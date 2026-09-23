@@ -239,12 +239,12 @@ under reader names, which say *Prediction* and *Ground Truth* for the two expres
 
 | on the explorer | column |
 |---|---|
-| Numeric Recovery, Validation (vNRR) / Support (fNRR) | `numeric_recovery_val`, `numeric_recovery_fit` |
+| Numeric Recovery, Validation / Support; short vNRR / fNRR | `numeric_recovery_val`, `numeric_recovery_fit` |
 | Fits as Well as the Ground Truth | `numeric_recovery_relative_*` |
 | Successful Prediction Rate | the mean of `prediction_success` |
-| Symbolic Recovery: Structure (SRRs), + Exponents (SRRe), + All Numbers (SRRa) | `symbolic_recovery`, `symbolic_recovery_mask_fittable`, `symbolic_recovery_mask_none` |
-| Raw Symbolic Recovery (SRRr) | the equality of the two skeletons as written, every number masked, without simplification |
-| MDL Ratio, Token Count Ratio (Prediction / Ground Truth) | `mdl_ratio`, `skeleton_length_ratio` |
+| Symbolic Recovery: Structure, + Exponents, + All Numbers; short SRRs / SRRe / SRRa | `symbolic_recovery`, `symbolic_recovery_mask_fittable`, `symbolic_recovery_mask_none` |
+| Raw Symbolic Recovery; short SRRr | the equality of the two skeletons as written, every number masked, without simplification |
+| MDL Ratio, Token Count Ratio, both prediction over ground truth | `mdl_ratio`, `skeleton_length_ratio` |
 | Token Overlap, Variable Overlap | `f1_score`, `precision_score`, `recall_score` and the `*_unique_variables` columns |
-| Levenshtein Edit Distance (Tokens), Tree Edit Distance (Zhang-Shasha) | `edit_distance`, `edit_distance_norm`, `zss_edit_distance` |
+| Levenshtein Edit Distance, Tree Edit Distance | `edit_distance`, `edit_distance_norm`, `zss_edit_distance` |
 | Function Nesting | `total_nestedness`, `predicted_total_nestedness` |

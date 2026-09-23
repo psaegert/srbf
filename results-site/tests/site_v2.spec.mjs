@@ -316,7 +316,10 @@ test('a metric carries one name and one definition wherever it appears', async (
   await page.setViewportSize({ width: 1600, height: 1100 });
   await page.goto('/?release=2026-09&v=curves&p=time~numeric_recovery_val');
   const M = await page.evaluate(() => (window.RESULTS_V2.metrics || []).find((m) => m.key === 'numeric_recovery_val'));
-  // the plot header, the picker entry and the table column all use the registry label
+  // the plot header, the picker entry and the table column all use the registry label: one plain name, no
+  // parenthesized qualifier (the abbreviation lives in the short name, the definition in the hint)
+  expect(M.label).not.toMatch(/[()]/);
+  expect(M.short).toBe('vNRR');
   await expect(page.locator(V2 + ' .v2plot .v2ysel .v2picklab')).toHaveText(M.label);
   await page.locator(V2 + ' .v2plot .v2ysel').click();
   await expect(page.locator(`.v2picker .v2pickitem[data-k="${M.key}"]`)).toContainText(M.label);
@@ -359,6 +362,51 @@ test('the picker lists every metric in columns and filters', async ({ page }) =>
   await expect(picker.locator('.v2pickitem:visible')).toHaveCount(await page.evaluate(() => (window.RESULTS_V2.metrics || []).filter((m) => (m.label + m.key).toLowerCase().includes('recovery')).length));
   await page.keyboard.press('Escape');
   await expect(picker).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('the picker lists plain names, and the filter still answers to the dropped qualifier', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.setViewportSize({ width: 1600, height: 1100 });
+  await page.goto('/?release=2026-09&v=curves&p=time~numeric_recovery_val');
+  await page.locator(V2 + ' .v2plot .v2ysel').click();
+  const picker = page.locator('.v2picker');
+  await expect(picker).toBeVisible();
+  const names = await picker.locator('.v2pickitem > span:first-child').allTextContents();
+  expect(names.length).toBeGreaterThan(30);
+  expect(names.filter((t) => /[()]/.test(t))).toEqual([]);          // no "(vNRR)", no "(Prediction / Ground Truth)"
+  expect(new Set(names).size).toBe(names.length);                    // the names stay distinct without their qualifiers
+  await picker.locator('.v2pickq').fill('vnrr');                     // the short name is not in the text, but it answers the filter
+  await expect(picker.locator('.v2pickitem:visible')).toHaveCount(1);
+  await expect(picker.locator('.v2pickitem:visible')).toHaveAttribute('data-k', 'numeric_recovery_val');
+  await page.keyboard.press('Escape');
+  expect(errors).toEqual([]);
+});
+
+test('a long plot title wraps onto more lines; no title is cut to an ellipsis', async ({ page }) => {
+  const errors = collectErrors(page);
+  const url = '/?release=2026-09&v=curves&p=time~symbolic_recovery_mask_none,symbolic_recovery_mask_none~edit_distance_norm';
+  const read = () => page.locator(V2 + ' .v2plothead .v2picklab').evaluateAll((els) => els.map((el) => {
+    const cs = getComputedStyle(el);
+    return { text: el.textContent, nowrap: cs.whiteSpace === 'nowrap', clipped: el.scrollWidth > el.clientWidth + 1,
+      lines: Math.round(el.getBoundingClientRect().height / parseFloat(cs.lineHeight)) };
+  }));
+  // wide: the plain names fit on one line, and nothing is set to be cut
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto(url);
+  await expect(page.locator(V2 + ' .v2plothead .v2picklab')).toHaveCount(4);
+  for (const l of await read()) { expect(l.nowrap, l.text).toBe(false); expect(l.clipped, l.text).toBe(false); }
+  // the method tiles follow the same rule
+  const tiles = await page.locator(V2 + ' .v2tile b').evaluateAll((els) => els.map((el) => getComputedStyle(el).whiteSpace === 'nowrap' || el.scrollWidth > el.clientWidth + 1));
+  expect(tiles.length).toBeGreaterThan(0);
+  expect(tiles.filter(Boolean)).toEqual([]);
+  // narrow: the long names take a second line instead of an ellipsis
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(url);
+  await expect(page.locator(V2 + ' .v2plothead .v2picklab')).toHaveCount(4);
+  const narrow = await read();
+  for (const l of narrow) { expect(l.nowrap, l.text).toBe(false); expect(l.clipped, l.text).toBe(false); }
+  expect(narrow.filter((l) => l.lines >= 2).length).toBeGreaterThan(0);
   expect(errors).toEqual([]);
 });
 
@@ -1017,7 +1065,7 @@ test('symbolic recovery is asked at three levels of masking, each implying the o
   expect(seen.missing).toBe(0);
   expect(seen.broken).toBe(0);
   expect(seen.strict).toBeGreaterThan(0);   // the stricter level is a level of its own: somewhere an exponent is not the law's
-  expect(seen.labels).toEqual(['Symbolic Recovery: Structure (SRRs)', 'Symbolic Recovery: Structure + Exponents (SRRe)', 'Symbolic Recovery: Structure + All Numbers (SRRa)']);
+  expect(seen.labels).toEqual(['Symbolic Recovery: Structure', 'Symbolic Recovery: Structure + Exponents', 'Symbolic Recovery: Structure + All Numbers']);
   // all three are rates over every law, so none of their numbers is marked as resting on too few
   const row = page.locator(V2 + ' .v2table tbody tr').first();
   await expect(row).toBeVisible({ timeout: 15000 });
@@ -1038,7 +1086,7 @@ test('metric names say Prediction and Ground Truth, in title caps, and single-ex
   }
   const by = (k) => reg.filter((m) => m.key === k)[0];
   expect(by('success').label).toBe('Successful Prediction Rate');
-  expect(by('mdl_ratio').label).toBe('MDL Ratio (Prediction / Ground Truth)');
+  expect(by('mdl_ratio').label).toBe('MDL Ratio');
   expect(by('edit_distance').label).toContain('Levenshtein');
   expect(by('edit_distance_norm').label).toContain('Levenshtein');
   expect(['symbolic_recovery', 'symbolic_recovery_mask_fittable', 'symbolic_recovery_mask_none', 'skeleton_match_raw'].map((k) => by(k).short)).toEqual(['SRRs', 'SRRe', 'SRRa', 'SRRr']);
