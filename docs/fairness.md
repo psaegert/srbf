@@ -40,6 +40,11 @@ python scripts/run_timing_ladder.py    -c <config> --data-dir <root>/timing_data
 python scripts/timing_readout.py --root <root> --manifest <root>/timing_data/timing_subset.json --models mymethod
 ```
 
+The subset the published times were measured on is `configs/timing/timing_subset.json`. The results
+explorer's time axis is rebuilt from the timing result files with
+`python scripts/site_timing.py --manifest configs/timing/timing_subset.json --subset <key>=<results dir> --out timing.json`;
+a rung is placed on the axis only once every catalog has all of its problems.
+
 Recovery metrics do not depend on the machine: a config gives the same numbers, up to sampling
 noise, wherever it runs.
 

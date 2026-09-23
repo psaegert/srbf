@@ -1,0 +1,503 @@
+{
+ "description": "The frozen 262-problem subset the published times were measured on (scripts/freeze_timing_subset.py). Per catalog: its full size, the problems in the subset (count, source_row_index) and its weight (size / suite size) in the pooled mean.",
+ "rule": "50:40,20:4,10:2",
+ "suite_size": 6660,
+ "total_problems": 262,
+ "created": "2026-09-17T11:54:05",
+ "catalogs": {
+  "fastsrb": {
+   "size": 120,
+   "shard": 40,
+   "count": 3,
+   "weight": 0.018018018018018018,
+   "source_row_index": [
+    0,
+    40,
+    80
+   ]
+  },
+  "feynman": {
+   "size": 100,
+   "shard": 40,
+   "count": 3,
+   "weight": 0.015015015015015015,
+   "source_row_index": [
+    0,
+    40,
+    80
+   ]
+  },
+  "feynman-bonus": {
+   "size": 20,
+   "shard": 4,
+   "count": 5,
+   "weight": 0.003003003003003003,
+   "source_row_index": [
+    0,
+    4,
+    8,
+    12,
+    16
+   ]
+  },
+  "srsd-dummy": {
+   "size": 120,
+   "shard": 40,
+   "count": 3,
+   "weight": 0.018018018018018018,
+   "source_row_index": [
+    0,
+    40,
+    80
+   ]
+  },
+  "erbench-syneq": {
+   "size": 5301,
+   "shard": 40,
+   "count": 133,
+   "weight": 0.7959459459459459,
+   "source_row_index": [
+    0,
+    40,
+    80,
+    120,
+    160,
+    200,
+    240,
+    280,
+    320,
+    360,
+    400,
+    440,
+    480,
+    520,
+    560,
+    600,
+    640,
+    680,
+    720,
+    760,
+    800,
+    840,
+    880,
+    920,
+    960,
+    1000,
+    1040,
+    1080,
+    1120,
+    1160,
+    1200,
+    1240,
+    1280,
+    1320,
+    1360,
+    1400,
+    1440,
+    1480,
+    1520,
+    1560,
+    1600,
+    1640,
+    1680,
+    1720,
+    1760,
+    1800,
+    1840,
+    1880,
+    1920,
+    1960,
+    2000,
+    2040,
+    2080,
+    2120,
+    2160,
+    2200,
+    2240,
+    2280,
+    2320,
+    2360,
+    2400,
+    2440,
+    2480,
+    2520,
+    2560,
+    2600,
+    2640,
+    2680,
+    2720,
+    2760,
+    2800,
+    2840,
+    2880,
+    2920,
+    2960,
+    3000,
+    3040,
+    3080,
+    3120,
+    3160,
+    3200,
+    3240,
+    3280,
+    3320,
+    3360,
+    3400,
+    3440,
+    3480,
+    3520,
+    3560,
+    3600,
+    3640,
+    3680,
+    3720,
+    3760,
+    3800,
+    3840,
+    3880,
+    3920,
+    3960,
+    4000,
+    4040,
+    4080,
+    4120,
+    4160,
+    4200,
+    4240,
+    4280,
+    4320,
+    4360,
+    4400,
+    4440,
+    4480,
+    4520,
+    4560,
+    4600,
+    4640,
+    4680,
+    4720,
+    4760,
+    4800,
+    4840,
+    4880,
+    4920,
+    4960,
+    5000,
+    5040,
+    5080,
+    5120,
+    5160,
+    5200,
+    5240,
+    5280
+   ]
+  },
+  "erbench-densities": {
+   "size": 33,
+   "shard": 4,
+   "count": 9,
+   "weight": 0.004954954954954955,
+   "source_row_index": [
+    0,
+    4,
+    8,
+    12,
+    16,
+    20,
+    24,
+    28,
+    32
+   ]
+  },
+  "erbench-phybench": {
+   "size": 90,
+   "shard": 40,
+   "count": 3,
+   "weight": 0.013513513513513514,
+   "source_row_index": [
+    0,
+    40,
+    80
+   ]
+  },
+  "soose-fc": {
+   "size": 200,
+   "shard": 40,
+   "count": 5,
+   "weight": 0.03003003003003003,
+   "source_row_index": [
+    0,
+    40,
+    80,
+    120,
+    160
+   ]
+  },
+  "soose-nc": {
+   "size": 200,
+   "shard": 40,
+   "count": 5,
+   "weight": 0.03003003003003003,
+   "source_row_index": [
+    0,
+    40,
+    80,
+    120,
+    160
+   ]
+  },
+  "soose-wc": {
+   "size": 200,
+   "shard": 40,
+   "count": 5,
+   "weight": 0.03003003003003003,
+   "source_row_index": [
+    0,
+    40,
+    80,
+    120,
+    160
+   ]
+  },
+  "physo-astro": {
+   "size": 2,
+   "shard": 1,
+   "count": 2,
+   "weight": 0.0003003003003003003,
+   "source_row_index": [
+    0,
+    1
+   ]
+  },
+  "physo-class": {
+   "size": 8,
+   "shard": 1,
+   "count": 8,
+   "weight": 0.0012012012012012011,
+   "source_row_index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+   ]
+  },
+  "nguyen": {
+   "size": 12,
+   "shard": 2,
+   "count": 6,
+   "weight": 0.0018018018018018018,
+   "source_row_index": [
+    0,
+    2,
+    4,
+    6,
+    8,
+    10
+   ]
+  },
+  "keijzer": {
+   "size": 15,
+   "shard": 2,
+   "count": 8,
+   "weight": 0.0022522522522522522,
+   "source_row_index": [
+    0,
+    2,
+    4,
+    6,
+    8,
+    10,
+    12,
+    14
+   ]
+  },
+  "korns": {
+   "size": 12,
+   "shard": 2,
+   "count": 6,
+   "weight": 0.0018018018018018018,
+   "source_row_index": [
+    0,
+    2,
+    4,
+    6,
+    8,
+    10
+   ]
+  },
+  "koza": {
+   "size": 2,
+   "shard": 1,
+   "count": 2,
+   "weight": 0.0003003003003003003,
+   "source_row_index": [
+    0,
+    1
+   ]
+  },
+  "livermore": {
+   "size": 25,
+   "shard": 4,
+   "count": 7,
+   "weight": 0.0037537537537537537,
+   "source_row_index": [
+    0,
+    4,
+    8,
+    12,
+    16,
+    20,
+    24
+   ]
+  },
+  "livermore2": {
+   "size": 150,
+   "shard": 40,
+   "count": 4,
+   "weight": 0.02252252252252252,
+   "source_row_index": [
+    0,
+    40,
+    80,
+    120
+   ]
+  },
+  "vladislavleva": {
+   "size": 8,
+   "shard": 1,
+   "count": 8,
+   "weight": 0.0012012012012012011,
+   "source_row_index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+   ]
+  },
+  "jin": {
+   "size": 6,
+   "shard": 1,
+   "count": 6,
+   "weight": 0.0009009009009009009,
+   "source_row_index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ]
+  },
+  "neat": {
+   "size": 8,
+   "shard": 1,
+   "count": 8,
+   "weight": 0.0012012012012012011,
+   "source_row_index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+   ]
+  },
+  "pagie": {
+   "size": 1,
+   "shard": 1,
+   "count": 1,
+   "weight": 0.00015015015015015014,
+   "source_row_index": [
+    0
+   ]
+  },
+  "poly": {
+   "size": 6,
+   "shard": 1,
+   "count": 6,
+   "weight": 0.0009009009009009009,
+   "source_row_index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ]
+  },
+  "nonic": {
+   "size": 1,
+   "shard": 1,
+   "count": 1,
+   "weight": 0.00015015015015015014,
+   "source_row_index": [
+    0
+   ]
+  },
+  "sine": {
+   "size": 1,
+   "shard": 1,
+   "count": 1,
+   "weight": 0.00015015015015015014,
+   "source_row_index": [
+    0
+   ]
+  },
+  "meier": {
+   "size": 2,
+   "shard": 1,
+   "count": 2,
+   "weight": 0.0003003003003003003,
+   "source_row_index": [
+    0,
+    1
+   ]
+  },
+  "r-rationals": {
+   "size": 6,
+   "shard": 1,
+   "count": 6,
+   "weight": 0.0009009009009009009,
+   "source_row_index": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ]
+  },
+  "constant": {
+   "size": 10,
+   "shard": 2,
+   "count": 5,
+   "weight": 0.0015015015015015015,
+   "source_row_index": [
+    0,
+    2,
+    4,
+    6,
+    8
+   ]
+  },
+  "grammarvae": {
+   "size": 1,
+   "shard": 1,
+   "count": 1,
+   "weight": 0.00015015015015015014,
+   "source_row_index": [
+    0
+   ]
+  }
+ }
+}
