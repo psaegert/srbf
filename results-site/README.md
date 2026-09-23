@@ -58,14 +58,25 @@ default. Client-side routing only: `?release=2026-09` (or nothing) opens the cur
 | 2026-09 (current) | `explorer_v2.js` | `data/2026-09/results.js` | 29 catalogs, the Flash-ANSR T8 series under the two-part code, the Flash-ANSR + PySR hybrid, PySR, NeSymReS, E2E at its default settings, the Flash-ANSR prior reference; fit times from one reference machine once measured. |
 | 2026-07 (paper) | `explorer.js` | `results_data.js`, `paired_data.js` | The paper's methods and sweeps, unchanged. |
 
-The 2026-09 data come from the full-metric readout (`readout_full.py` in flash-ansr-research/scripts/baselines:
-srbf's `derive_metrics` on every result file plus the 2026-07 site's derived columns, one row per law × rung);
-a release is regenerated from that root with
+The 2026-09 release is rebuilt from the result files with srbf alone, in three steps:
 
 ```bash
-python scripts/site_export_v2.py <campaign root> 2026-09 results-site/data/2026-09/results.js \
-    --sizes <suite_law_mu.json> --public e2e,nesymres-100M,PySR,T8-3M,T8-20M,T8-120M,prior
+# 1. judge every result file: one row per problem and rung, every metric (a --tree per method and draw)
+srbf table --tree T8-20M:1:<draw 1>/flash-ansr-v25.0-T8-20M --tree T8-20M:2:<draw 2>/flash-ansr-v25.0-T8-20M ... \
+           --index-variables e2e=0 --index-variables nesymres-100M=1 -o <root>/rows_full_all.csv
+# 2. the time axis, from the reference machine's timing result files
+python scripts/site_timing.py --manifest configs/timing/timing_subset.json \
+    --subset T8-20M=<timing results>/t8-20m ... --suite PySR=<PySR results> --out <root>/timing.json
+# 3. the release
+python scripts/site_export_v2.py <root> 2026-09 results-site/data/2026-09/results.js \
+    --public e2e,nesymres-100M,PySR,T8-3M,T8-20M,T8-120M,T8-20M-pysr,prior
 ```
+
+The method names in `--tree`, `--subset` and `--suite` are the site's method keys (`METHODS` in the exporter).
+`--index-variables` is for the E2E and NeSymReS result files written before srbf renamed their variables at the
+source. The catalog table reads `data/catalog_mu.json` (`scripts/catalog_mu.py`). A cell pools the draws that are
+complete for it. The progress shown per method reads optional unit lists and completion marks in the root
+(`units_<key>_d<draw>.txt`, `markers/<key>.txt`); without them it counts the finished cells.
 
 The exporter writes `results.js` (registry + cells), `hist/<metric>.js` and `paired.js` next to it.
 
