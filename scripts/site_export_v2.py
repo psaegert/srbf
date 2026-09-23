@@ -1,7 +1,7 @@
 """Export a srbf benchmark release for the results site's explorer (results-site/explorer_v2.js), schema 2.
 
-Reads the per-problem judged rows of a campaign root (rows_full_<method>.csv written by the full-metric readout:
-srbf's derive_metrics plus the 2026-07 site's derived columns, one row per problem x rung) and writes
+Reads the per-problem judged rows of a campaign root (rows_full_<name>.csv or <name>_rows_full.csv, written by
+`srbf table`: one row per problem and rung, every metric) and writes
 
   <out.js>                       window.RESULTS_V2: release, catalogs, rungs, methods, the METRIC REGISTRY, and per
                                  method x catalog x rung cell: n problems, n successful, and for every metric

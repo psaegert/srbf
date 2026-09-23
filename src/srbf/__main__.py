@@ -1,7 +1,8 @@
-"""srbf command-line interface: ``run``, ``new``, ``check``, ``merge``, ``analyze`` and ``decontamination``.
+"""srbf command-line interface: ``run``, ``new``, ``check``, ``merge``, ``analyze``, ``table`` and ``decontamination``.
 
 ``run`` executes an evaluation from a unified config (the raw stage); ``analyze`` renders the
-standardized results page from run outputs (the analysis stage); ``decontamination`` verifies a
+standardized results page from run outputs (the analysis stage); ``table`` judges result trees into one
+table, a row per problem and rung with every metric (what the results site is built from); ``decontamination`` verifies a
 training catalog's holdout covers the benchmark set (fail-closed; see ``srbf.decontamination``). flash-ansr keeps the rest of its
 CLI (train / import-data / install / ...); only these evaluation-bound commands live here. The
 benchmark imports are ``srbf.*``; the flash-ansr ``utils`` imports are the cross-repo contract.
@@ -41,6 +42,23 @@ def build_parser() -> argparse.ArgumentParser:
     analyze_parser.add_argument('-o', '--out-dir', type=str, required=True, help='Output directory for results.md + figures/')
     analyze_parser.add_argument('--engine', type=str, default='acj-5-4-llm', help='SimpliPy engine used for skeleton simplification + operator arities')
     analyze_parser.add_argument('--title', type=str, default='Results', help='Title of the rendered results page')
+
+    table_parser = subparsers.add_parser("table", help="Judge result trees into one table: a row per problem and rung, every metric")
+    table_parser.add_argument('--tree', action='append', required=True, metavar='METHOD:DRAW:PATH',
+                              help='A result tree (PATH/<catalog>/choices_<rung>.pkl) of one method and draw; repeat for more')
+    table_parser.add_argument('-o', '--out', type=str, required=True, help='The CSV to write')
+    table_parser.add_argument('--engine', type=str, default='acj-5-4-llm', help='SimpliPy engine the predictions are judged with')
+    table_parser.add_argument('--workers', type=int, default=4, help='Processes that judge files in parallel (default: 4)')
+    table_parser.add_argument('--cache', type=str, default=None, metavar='DIR',
+                              help='Keep the rows of every judged file here and read them back while neither the file nor the judge changed')
+    table_parser.add_argument('--index-variables', action='append', default=None, metavar='METHOD=FIRST',
+                              help="METHOD's result files spell variables x_<i> by column index, counted from FIRST (E2E 0, NeSymReS 1); "
+                                   "only files written by srbf versions that did not rename them at the source need it")
+    table_parser.add_argument('--max-rung', type=int, default=None, help='Leave out the rungs above this one')
+    table_parser.add_argument('--stall-timeout', type=float, default=1800.0,
+                              help='Seconds without a finished file before the workers are stopped and the table is written with what was judged')
+    table_parser.add_argument('--progress', type=str, default=None, metavar='FILE',
+                              help='Record every file as it starts and finishes, so a stall names the files in flight')
 
     new_parser = subparsers.add_parser("new", help="Scaffold an adapter: a worker, its suite config, requirements and a smoke test")
     new_parser.add_argument('name', type=str, help='The method name, a lowercase identifier (e.g. mymethod)')
@@ -172,6 +190,19 @@ def main(argv: list[str] | None = None) -> None:
             engine = SimpliPyEngine.load(args.engine, install=True)
             out = build_report(runs, args.out_dir, engine=engine, title=args.title)
             print(f"Wrote {out}")
+        case 'table':
+            from srbf.table import ResultTree, build_table, parse_index_bases
+
+            try:
+                bases = parse_index_bases(args.index_variables)
+                trees = [ResultTree.parse(spec) for spec in args.tree]
+            except ValueError as exc:
+                parser.error(str(exc))
+            trees = [ResultTree(t.method, t.draw, t.path, bases.get(t.method)) for t in trees]
+            report = build_table(trees, args.out, engine=args.engine, workers=args.workers, cache_dir=args.cache,
+                                 max_rung=args.max_rung, stall_timeout=args.stall_timeout, progress_path=args.progress)
+            if report.stalled:
+                sys.exit(1)
         case 'new':
             from srbf.scaffold import scaffold_adapter
 

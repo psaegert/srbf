@@ -100,6 +100,32 @@ runs:
 
 Figures need the `analysis` extra. See [Results](results.md#the-standard-report).
 
+## `srbf table`
+
+Judge the result files of whole evaluations into one CSV: a row per problem and rung, with every
+metric of [Metrics](metrics.md) as a column. This is the table the results explorer is built from.
+
+```bash
+srbf table --tree mymethod:1:results/evaluation/scaling/mymethod \
+           --tree mymethod:2:results_draw2/evaluation/scaling/mymethod \
+           -o table.csv --cache .table_cache
+```
+
+| flag | meaning |
+|---|---|
+| `--tree` | `METHOD:DRAW:PATH`, the result files of one method and draw: `PATH/<catalog>/choices_<rung>.pkl`, shards included. Repeat the flag for more (required) |
+| `-o`, `--out` | the CSV to write (required) |
+| `--engine` | the SimpliPy engine the predictions are judged with; by default `acj-5-4-llm` |
+| `--workers` | processes that judge files in parallel; by default 4 |
+| `--cache` | a directory that keeps the rows of every judged file; a file is judged again only when it or the judge changed (the judge is the installed srbf source, the simplipy, sympy and numpy versions and the engine) |
+| `--index-variables` | `METHOD=FIRST`: the method's result files spell the variables `x_<i>` by column index, counted from `FIRST` (E2E counts from 0, NeSymReS from 1). srbf renames them when it records a prediction, so only files written by older versions need it |
+| `--max-rung` | leave out the rungs above this one |
+| `--stall-timeout` | seconds without a finished file before the workers are stopped and the table is written with what was judged; the exit code is then 1 |
+| `--progress` | a file that records every result file as it starts and finishes, so a stall names the files in flight |
+
+A file that cannot be read, such as one that is still being written, is reported and left out. See
+[Results](results.md#one-table-for-every-problem) for the columns.
+
 ## `srbf decontamination`
 
 Verify that the holdout of a training catalog covers the benchmark expressions.

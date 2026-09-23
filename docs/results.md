@@ -10,6 +10,7 @@ CSV, for a comparison with your own.
 srbf run        ->  result file      the data and the prediction, one row per problem
 derive_metrics  ->  + metric columns FVU, recovery, lengths, ...
 bootstrap_report, srbf analyze  ->  summaries with 95 % intervals, tables, figures
+srbf table      ->  one CSV          a row per problem and rung, every metric
 ```
 
 ## The result file
@@ -115,6 +116,27 @@ pass `rng=None` for fresh randomness, and `n`, `interval`, `aggregate` or `reduc
 resampling. Placeholder rows are dropped, and so are values that are `None`; an expression whose value is
 not finite is left out, which for `log10_fvu_val` means the expressions that were fitted exactly
 (\(-\infty\)) and the failed predictions (\(+\infty\)). Read it next to the recovery rate.
+
+## One table for every problem
+
+`srbf table` judges the result files of any number of methods, draws and rungs at once and writes one
+CSV row per problem and rung ([command line](cli.md#srbf-table)):
+
+```bash
+srbf table --tree mymethod:1:results/evaluation/scaling/mymethod -o table.csv
+```
+
+| columns | meaning |
+|---|---|
+| `model`, `draw`, `catalog`, `rung`, `shard`, `row` | where the row comes from: the method and draw named in `--tree`, the catalog directory, the rung and shard of the file, and the problem's `eval_row_index` |
+| `sha` | the first 8 hex digits of the model weights' sha256, when the run recorded one |
+| `success`, the recoveries, `skeleton_match_raw` | rates: 1 or 0 for every problem, a failed prediction is 0 |
+| the analysis columns (`log10_fvu_val`, `r2_val`, `mdl_ratio`, `f1_score`, the edit distances, ...) | about the prediction; empty for a failed one, except the metrics with a worst value (token and variable F1, precision, recall), which a failed prediction takes |
+| `skeleton_length`, `ground_truth_mdl`, `n_constants`, `total_nestedness`, `n_variables`, `n_support` | about the ground truth, for every problem |
+| `fit_time`, `generation_time` | seconds as the run recorded them |
+
+Description lengths are in bits. From Python, `srbf.table.build_table` does the same and
+`srbf.table.judge_result_file` judges a single file.
 
 ## The standard report
 

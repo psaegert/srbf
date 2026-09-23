@@ -84,3 +84,24 @@ def rename_named_variables_in_infix(expression: str, columns: Sequence[str]) -> 
     if not names:
         return expression
     return re.sub(r"\b(?:" + "|".join(re.escape(n) for n in names) + r")\b", lambda x: m[x.group(0)], expression)
+
+
+def rename_prediction(tokens: Sequence[str] | None, columns: Sequence[str], *, first_index: int | None = None) -> list[str] | None:
+    """Both maps in one pass, for a stored prediction whose spelling is not known in advance.
+
+    With ``first_index`` given, a token ``x_<i>`` is the column ``i - first_index`` (the index spelling of
+    E2E and NeSymReS); every other token that is one of the handed column names takes the skeleton's
+    name for that column. Idempotent: a prediction already in the ground truth's spelling passes
+    through unchanged.
+    """
+    if tokens is None:
+        return None
+    names = skeleton_variable_names(columns)
+    by_name = dict(zip([str(c) for c in columns], names))
+    out: list[str] = []
+    for token in tokens:
+        token = str(token)
+        m = MODEL_TOKEN.fullmatch(token) if first_index is not None else None
+        column = int(m.group(1)) - first_index if m and first_index is not None else -1
+        out.append(names[column] if 0 <= column < len(names) else by_name.get(token, token))
+    return out
