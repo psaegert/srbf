@@ -1106,3 +1106,36 @@ test('a redraw under an open picker does not close it', async ({ page }) => {
   await expect(page.locator(`${V2} .v2plothead .v2pick[data-axis="y"]`).first()).toContainText('Symbolic Recovery');
   expect(errors).toEqual([]);
 });
+
+// A plot of two metrics can trade its axes with one control, where "vs" stands on a budget plot.
+test('the axis swap trades the two metrics of a plot; a budget plot keeps its plain vs', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto('/?release=2026-09&v=curves&p=log10_fvu_val~numeric_recovery_val,time~numeric_recovery_val');
+  const heads = page.locator(`${V2} .v2plothead`);
+  await expect(heads).toHaveCount(2);
+  const tradeoff = heads.nth(0), budget = heads.nth(1);
+  await expect(tradeoff.locator('.v2swap')).toHaveCount(1);
+  await expect(tradeoff.locator('.v2swap')).toHaveText('⇆');
+  await expect(tradeoff.locator('.v2vs')).toHaveCount(0);
+  await expect(budget.locator('.v2swap')).toHaveCount(0);
+  await expect(budget.locator('.v2vs')).toHaveText('vs');
+  const yBefore = await tradeoff.locator('.v2pick[data-axis="y"]').getAttribute('data-k');
+  const xBefore = await tradeoff.locator('.v2pick[data-axis="x"]').getAttribute('data-k');
+  expect([yBefore, xBefore]).toEqual(['numeric_recovery_val', 'log10_fvu_val']);
+  await tradeoff.locator('.v2swap').click();
+  const head = page.locator(`${V2} .v2plothead`).nth(0);
+  await expect(head.locator('.v2pick[data-axis="y"]')).toHaveAttribute('data-k', 'log10_fvu_val');
+  await expect(head.locator('.v2pick[data-axis="x"]')).toHaveAttribute('data-k', 'numeric_recovery_val');
+  await expect(head.locator('.v2pick[data-axis="y"]')).toContainText('FVU');
+  expect(page.url()).toContain('p=numeric_recovery_val%7Elog10_fvu_val%2Ctime%7Enumeric_recovery_val');
+  await head.locator('.v2swap').click();                                                    // and back
+  await expect(page.locator(`${V2} .v2plothead`).nth(0).locator('.v2pick[data-axis="y"]')).toHaveAttribute('data-k', 'numeric_recovery_val');
+  // the control is the quiet grey of the label it replaces, outlined and rounded
+  const style = await page.locator(`${V2} .v2swap`).first().evaluate((el) => { const c = getComputedStyle(el); return { color: c.color, border: c.borderTopWidth + ' ' + c.borderTopStyle, radius: c.borderTopLeftRadius }; });
+  const faint = await page.locator(`${V2} .v2vs`).first().evaluate((el) => getComputedStyle(el).color);
+  expect(style.color).toBe(faint);
+  expect(style.border).toBe('1px solid');
+  expect(parseFloat(style.radius)).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});

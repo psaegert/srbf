@@ -589,6 +589,10 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 .explorer-v2 .v2plot { margin: 0; min-width: 0; display: flex; flex-direction: column; }
 .explorer-v2 .v2plothead { display: flex; align-items: center; gap: 7px; padding: 0 2px 7px; min-width: 0; }
 .explorer-v2 .v2vs { font-size: 12.5px; color: var(--ink-faint); }
+/* the swap between two metric axes sits where "vs" would: the same quiet grey, a soft rounded outline */
+.explorer-v2 .v2swap { flex: none; font: inherit; font-size: 15px; line-height: 1; color: var(--ink-faint); background: none;
+  border: 1px solid var(--line); border-radius: var(--r-ctl); padding: 0 6px; height: 24px; min-width: 30px; cursor: pointer; }
+.explorer-v2 .v2swap:hover, .explorer-v2 .v2swap:focus-visible { color: var(--ink); border-color: var(--ink-faint); background: var(--surface); outline: none; }
 /* the plot's title IS its two axes: name them at title size */
 .explorer-v2 .v2plothead .v2pick { font-size: 16.5px; font-weight: 650; letter-spacing: -.01em; padding: 3px 7px; }
 .explorer-v2 .v2rmplot { margin-left: auto; border: none; background: none; color: var(--ink-faint); font-size: 23px; line-height: 1; width: 32px; height: 32px; padding: 0; cursor: pointer; border-radius: var(--r-ctl); }

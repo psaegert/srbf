@@ -629,7 +629,10 @@
     else { svg = frontChart(METRIC[p.x], ym, shown, "", mname(ym) + " against " + mname(METRIC[p.x])); }
     return '<figure class="v2plot">' +
       '<div class="v2plothead">' + pickButton("v2ysel", 'data-i="' + i + '" data-axis="y" aria-label="metric on the y axis"', p.y) +
-      '<span class="v2vs">vs</span>' + pickButton("v2xsel", 'data-i="' + i + '" data-axis="x" aria-label="axis on the x axis"', p.x) +
+      // two metrics can trade places; a budget axis cannot become the y axis, so that plot keeps its plain "vs"
+      (isBudgetAxis(p.x) ? '<span class="v2vs">vs</span>'
+        : '<button type="button" class="v2swap" data-i="' + i + '" aria-label="Swap the two axes" title="Swap the two axes">\u21c6</button>') +
+      pickButton("v2xsel", 'data-i="' + i + '" data-axis="x" aria-label="axis on the x axis"', p.x) +
       '<button type="button" class="v2rmplot" data-i="' + i + '" aria-label="Remove this plot" title="Remove this plot">\u00d7</button></div>' +
       svg + "</figure>";
   }
@@ -1256,6 +1259,7 @@
     if (b.dataset.set) { var kv = b.dataset.set.split(":"); setState(kv[0], kv.slice(1).join(":")); render(); return; }
     if (b.classList.contains("v2reset")) { delete userColors[b.dataset.m]; writeCookie(userColors); render(); return; }
     if (b.classList.contains("v2rmplot")) { state.plots.splice(+b.dataset.i, 1); render(); return; }
+    if (b.classList.contains("v2swap")) { var sp = state.plots[+b.dataset.i]; if (sp && METRIC[sp.x]) { state.plots[+b.dataset.i] = { x: sp.y, y: sp.x }; render(); } return; }
     var act = b.dataset.act; if (!act) { return; }
     if (act === "add-plot") {   // a plot the reader does not have yet, on the axis the last one uses
       var taken = plotMetrics();
