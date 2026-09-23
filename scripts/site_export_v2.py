@@ -243,23 +243,50 @@ def fnum(s: str | None) -> float | None:
         return None
 
 
-def load_rows(root: str) -> dict[str, dict[tuple[str, int], dict[int, dict[str, Any]]]]:
-    """{method: {(catalog, rung): {row: {metric: value}}}}, draw 1 only."""
-    data: dict[str, dict[tuple[str, int], dict[int, dict[str, Any]]]] = defaultdict(lambda: defaultdict(dict))
+Rows = dict[tuple[int, int], dict[str, Any]]   # (draw, row) -> {metric: value}
+
+
+def load_rows(root: str) -> dict[str, dict[tuple[str, int], Rows]]:
+    """{method: {(catalog, rung): {(draw, row): {metric: value}}}}: every draw the rows carry (a model is run twice
+    with different seeds; which draws a cell pools is decided per cell, see pooled_rows)."""
+    data: dict[str, dict[tuple[str, int], Rows]] = defaultdict(lambda: defaultdict(dict))
     files = sorted(set(glob.glob(os.path.join(root, "rows_full_*.csv")) + glob.glob(os.path.join(root, "*_rows_full.csv"))))
     for path in files:
         with open(path) as fh:
             for r in csv.DictReader(fh):
-                if r.get("draw", "1") != "1":
-                    continue
                 vals: dict[str, float | None] = {}
                 for k in RATE_KEYS:
                     v = fnum(r.get(k))
                     vals[k] = (0.0 if v is None else v) if k in r else None   # a column these rows do not have is no rate of 0
                 for k in CONT_KEYS:
                     vals[k] = fnum(r.get(k))
-                data[r["model"]][(r["catalog"], int(r["rung"]))][int(r["row"])] = vals
+                data[r["model"]][(r["catalog"], int(r["rung"]))][(int(r.get("draw") or 1), int(r["row"]))] = vals
     return data
+
+
+def by_draw(rows: dict[Any, dict[str, Any]]) -> dict[int, dict[int, dict[str, Any]]]:
+    """Rows keyed by (draw, row) split per draw; a bare row key counts as draw 1."""
+    out: dict[int, dict[int, dict[str, Any]]] = defaultdict(dict)
+    for k, v in rows.items():
+        d, i = k if isinstance(k, tuple) else (1, k)
+        out[d][i] = v
+    return out
+
+
+def complete_draws(rows: dict[Any, dict[str, Any]], expected: int | None) -> list[int]:
+    """The draws that cover every problem of the cell (all of them when no count is expected)."""
+    return sorted(d for d, rs in by_draw(rows).items() if expected is None or len(rs) >= expected)
+
+
+def pooled_rows(rows: dict[Any, dict[str, Any]], expected: int | None) -> tuple[Rows, list[int]]:
+    """What a cell pools: every complete draw, and only those (a draw still running is not a random subset of the
+    problems). With no complete draw the fullest draw stands in, and the cell is partial."""
+    per = by_draw(rows)
+    done = complete_draws(rows, expected)
+    if done:
+        return {(d, i): v for d in done for i, v in per[d].items()}, done
+    d = max(per, key=lambda k: len(per[k])) if per else 1
+    return {(d, i): v for i, v in per.get(d, {}).items()}, []
 
 
 def transform(v: float | None, tf: str | None) -> float | None:
@@ -286,10 +313,11 @@ def hist_of(values: list[float | None], lo: float, hi: float) -> list[Any] | Non
     return h.tolist()
 
 
-def summarize_cell(rows: dict[int, dict[str, Any]], expected: int | None) -> dict[str, Any]:
-    vals = list(rows.values())
+def summarize_cell(rows: dict[Any, dict[str, Any]], expected: int | None) -> dict[str, Any]:
+    pool, done = pooled_rows(rows, expected)
+    vals = list(pool.values())
     cell: dict[str, Any] = {
-        "state": "complete" if expected is None or len(rows) >= expected else "partial",
+        "state": "complete" if done else "partial", "d": max(1, len(done)),   # d: how many draws the cell pools
         "n": len(vals), "ok": int(sum(1 for x in vals if x["success"])), "m": {}}
     for k in RATE_KEYS:
         if any(x[k] is not None for x in vals):
@@ -312,7 +340,9 @@ def summarize_cell(rows: dict[int, dict[str, Any]], expected: int | None) -> dic
     return cell
 
 
-def paired_cell(rows_a: dict[int, dict[str, Any]], rows_b: dict[int, dict[str, Any]]) -> dict[str, Any] | None:
+def paired_cell(rows_a: dict[Any, dict[str, Any]], rows_b: dict[Any, dict[str, Any]], expected: int | None = None) -> dict[str, Any] | None:
+    """A problem is paired with itself within a draw, over the draws complete on both sides."""
+    rows_a, rows_b = pooled_rows(rows_a, expected)[0], pooled_rows(rows_b, expected)[0]
     common = sorted(set(rows_a) & set(rows_b))
     if not common:
         return None
@@ -361,7 +391,8 @@ def rank_score(value: float | None, higher: bool | None) -> float:
     return -abs(math.log(value)) if value > 0 and math.isfinite(value) else -math.inf
 
 
-def rank_pair_cell(rows_a: dict[int, dict[str, Any]], rows_b: dict[int, dict[str, Any]]) -> list[int] | None:
+def rank_pair_cell(rows_a: dict[Any, dict[str, Any]], rows_b: dict[Any, dict[str, Any]], expected: int | None = None) -> list[int] | None:
+    rows_a, rows_b = pooled_rows(rows_a, expected)[0], pooled_rows(rows_b, expected)[0]
     common = sorted(set(rows_a) & set(rows_b))
     if not common:
         return None
@@ -388,25 +419,30 @@ def rung_within(timing: dict[str, Any], key: str, budget: float, have: set[int])
 
 # ---- status / catalogs / timing ---------------------------------------------------------------------------------
 def load_units(root: str, ukey: str | None, key: str) -> int | None:
-    for cand in ([os.path.join(root, f"units_{ukey}_d1.txt")] if ukey else []) + [os.path.join(root, "t8s1_units_draw1.txt")]:
-        if not os.path.exists(cand):
-            continue
-        n = 0
-        for line in open(cand):
-            p = line.split()
-            if not p:
+    """Units of every draw: the draw-1 file plus a draw-2 file when the second draw has been staged."""
+    total = 0
+    for draw in (1, 2):
+        for cand in ([os.path.join(root, f"units_{ukey}_d{draw}.txt")] if ukey else []) + [os.path.join(root, f"t8s1_units_draw{draw}.txt")]:
+            if not os.path.exists(cand):
                 continue
-            if ukey or p[0] == key or (len(p) > 1 and p[1] == key):
-                n += 1
-        if n:
-            return n
-    return None
+            n = 0
+            for line in open(cand):
+                p = line.split()
+                if not p:
+                    continue
+                if ukey or p[0] == key or (len(p) > 1 and p[1] == key):
+                    n += 1
+            if n:
+                total += n
+                break
+    return total or None
 
 
 def status_of(root: str, key: str, ukey: str | None, cells_done: int) -> list[int | None]:
     total = load_units(root, ukey, key)
-    marks = os.path.join(root, "markers", f"{key}.txt")
-    done = sum(1 for line in open(marks) if line.strip()) if os.path.exists(marks) else cells_done
+    marks = [os.path.join(root, "markers", f"{key}.txt"), os.path.join(root, "markers", f"{key}.d2.txt")]
+    have = [m for m in marks if os.path.exists(m)]
+    done = sum(1 for m in have for line in open(m) if line.strip()) if have else cells_done
     return [done, total if total is not None else (664 if not ukey else None)]
 
 
@@ -458,7 +494,7 @@ def main() -> None:
     present: dict[str, int] = defaultdict(int)
     for mk in data:
         for (c, r), rows in data[mk].items():
-            present[c] = max(present[c], len(rows))
+            present[c] = max([present[c]] + [len(rs) for rs in by_draw(rows).values()])
     cats = catalog_meta(a.sizes, present)
     sizes = {c["key"]: c["laws"] for c in cats}
 
@@ -471,7 +507,7 @@ def main() -> None:
                 rows_b = data.get(kb, {}).get((c, r))
                 if not rows_b or not usable(ka, r) or not usable(kb, r):
                     continue
-                pc = paired_cell(rows_a, rows_b)
+                pc = paired_cell(rows_a, rows_b, sizes.get(c))
                 if pc:
                     paired.setdefault(ka + "|" + kb, {}).setdefault(c, {})[str(r)] = pc
 
@@ -485,7 +521,7 @@ def main() -> None:
         rungs_of = {k: {r for (_c, r) in data.get(k, {}) if usable(k, r)} for k in {x for p in pairs for x in p} | set(keys)}
         # a time budget buys a rung the method has FINISHED: every catalog, every problem (the site shows no pooled number
         # for a rung that is still running, so a budget must not point at one)
-        finished = {k: {r for r in rungs_of[k] if all(len(data[k].get((c, r), {})) >= n for c, n in sizes.items())} for k in rungs_of}
+        finished = {k: {r for r in rungs_of[k] if all(complete_draws(data[k].get((c, r), {}), n) for c, n in sizes.items())} for k in rungs_of}
         at: dict[str, dict[str, int]] = {k: {} for k in rungs_of}
         for k in rungs_of:
             for t in TIME_BUDGETS:
@@ -506,7 +542,7 @@ def main() -> None:
                     rows_a, rows_b = data.get(ka, {}).get((c, ra)), data.get(kb, {}).get((c, rb))
                     if not rows_a or not rows_b:
                         continue
-                    pc = rank_pair_cell(rows_a, rows_b)
+                    pc = rank_pair_cell(rows_a, rows_b, sizes.get(c))
                     if pc:
                         out.setdefault(ka + "|" + kb, {}).setdefault(c, {})[slot] = pc
         return {"keys": RANK_KEYS, "budgets": [budget_key(t) for t in TIME_BUDGETS], "seconds": TIME_BUDGETS,
@@ -523,8 +559,9 @@ def main() -> None:
                 if not usable(key, r):
                     continue
                 cells[key].setdefault(c, {})[str(r)] = summarize_cell(rows, sizes.get(c))
+                pool = pooled_rows(rows, sizes.get(c))[0]
                 for hk, (lo, hi, tf) in HIST_SPECS.items():
-                    h = hist_of([transform(x[hk], tf) for x in rows.values()], lo, hi)
+                    h = hist_of([transform(x[hk], tf) for x in pool.values()], lo, hi)
                     if h is not None:
                         hists[hk].setdefault(key, {}).setdefault(c, {})[str(r)] = h
             status[key] = status_of(a.root, key, ukey, sum(len(v) for v in cells[key].values()))

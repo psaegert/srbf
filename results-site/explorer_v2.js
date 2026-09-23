@@ -327,7 +327,13 @@
     var j = quantileBin(fvu, Math.min(fvu.n, Math.max(1, fvu.n + 1 - kth)));
     return { v: j === 0 ? 1 : 1 - Math.pow(10, binVal(fvu, j)), edge: j === fvu.nb - 1 ? -1 : 0 };
   }
+  // a cell pools the draws complete for it (c.d, 1 when absent); a pooled statistic reports the fewest among its cells
   function stat(metric, m, r, cs) {
+    var out = stat0(metric, m, r, cs);
+    if (out && !out.pending) { var ds = cs.map(function (c) { return cell(m, c, r); }).filter(Boolean).map(function (c) { return c.d || 1; }); out.d = ds.length ? Math.min.apply(null, ds) : 1; }
+    return out;
+  }
+  function stat0(metric, m, r, cs) {
     var cells = cs.map(function (c) { return cell(m, c, r); }).filter(Boolean); if (!cells.length) { return null; }
     if (metric.kind === "rate") { var a = 0, b = 0; cells.forEach(function (c) { var t = c.m[metric.key]; if (t) { a += t[0]; b += t[1]; } }); var w = wilson(a, b); if (w) { w.share = 1; } return w; }
     var share = validShare(metric, cells);
@@ -575,7 +581,7 @@
     shown.forEach(function (m) { var pts = [];
       D.rungs.forEach(function (r) { var use = poolCats(m.key, r, keys); if (!use.length) { return; } var x = xOf(m.key, r, use, src); if (x === null) { return; }
         var st = stat(metric, m.key, r, use); if (!st) { return; } if (st.pending) { pending = true; return; } if (!isFinite(st.v)) { return; }
-        var title = m.label + " @ " + r + (state.xaxis === "time" ? " (" + x.toFixed(2) + " s)" : "") + ": " + fmt(metric, st.v, st.edge) + " [" + fmt(metric, st.lo) + ", " + fmt(metric, st.hi) + "], n = " + st.n + (st.ndef ? " finite of " + st.ndef : "") + ", " + laws(use).toLocaleString() + " problems" + (st.share < 1 ? ", " + shareText(st) : "");
+        var title = m.label + " @ " + r + (state.xaxis === "time" ? " (" + x.toFixed(2) + " s)" : "") + ": " + fmt(metric, st.v, st.edge) + " [" + fmt(metric, st.lo) + ", " + fmt(metric, st.hi) + "], n = " + st.n + (st.ndef ? " finite of " + st.ndef : "") + (st.d > 1 ? " over " + st.d + " draws" : "") + ", " + laws(use).toLocaleString() + " problems" + (st.share < 1 ? ", " + shareText(st) : "");
         if (thin(st)) { thinDrawn = true; }
         pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, hollow: thin(st), title: title });   // a budget has no interval: the candidate count is exact, and the measured time is within a pixel of its mean (0.4-1.1 px, measured)
         [st.v, anyCI() ? st.lo : st.v, anyCI() ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
