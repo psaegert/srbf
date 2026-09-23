@@ -20,7 +20,7 @@ LOCAL-ONLY METHODS. The methods named in --public go into the release files the 
 "Local-only methods"), with the same schema; the page merges it when a local build loads it. Such a method is
 described in --methods-file, a JSON list of entries shaped like METHODS below, kept outside the repository.
 
-usage: site_export_v2.py <root> <release id> <out.js> [--title ...] [--notes ...] [--sizes suite_law_mu.json]
+usage: site_export_v2.py <root> <release id> <out.js> [--title ...] [--notes ...] [--sizes catalog_mu.json]
        [--public e2e,nesymres-100M,...] [--private KEY[,KEY] --private-dir DIR --methods-file FILE]"""
 import argparse
 import csv
@@ -468,7 +468,8 @@ def main() -> None:
     ap.add_argument("out")
     ap.add_argument("--title", default=None)
     ap.add_argument("--notes", default="")
-    ap.add_argument("--sizes", default=None)
+    ap.add_argument("--sizes", default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results-site", "data", "catalog_mu.json"),
+                    help="every catalog's ground-truth description lengths (scripts/catalog_mu.py; default: results-site/data/catalog_mu.json)")
     ap.add_argument("--site-dir", default=None, help="results-site directory (default: two levels above out.js); base paths are relative to it")
     ap.add_argument("--public", default=",".join(m[0] for m in METHODS))
     ap.add_argument("--private", default="")

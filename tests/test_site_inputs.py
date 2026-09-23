@@ -1,4 +1,5 @@
-"""The site's time axis is rebuilt from result files: complete rungs only, size-weighted, failures left out."""
+"""The site's inputs are rebuilt from files in the repository: the time axis (complete rungs only, size-weighted,
+failures left out) and the catalog descriptions."""
 import importlib.util
 import json
 import pickle
@@ -58,3 +59,13 @@ def test_the_published_subset_is_in_the_repository_and_adds_up() -> None:
     assert sum(int(m["count"]) for m in cats.values()) == int(manifest["total_problems"]) == 262
     assert sum(int(m["size"]) for m in cats.values()) == int(manifest["suite_size"])
     assert all(abs(float(m["weight"]) - int(m["size"]) / int(manifest["suite_size"])) < 1e-12 for m in cats.values())
+
+
+def test_the_catalog_description_lengths_cover_the_suite_at_the_timing_subsets_sizes() -> None:
+    from srbf.suites import SRBF_CATALOGS
+
+    root = Path(__file__).parents[1]
+    mu = json.loads((root / "results-site" / "data" / "catalog_mu.json").read_text())["per_catalog"]
+    subset = json.loads((root / "configs" / "timing" / "timing_subset.json").read_text())["catalogs"]
+    assert sorted(mu) == sorted(SRBF_CATALOGS) == sorted(subset)
+    assert {c: len(v) for c, v in mu.items()} == {c: int(m["size"]) for c, m in subset.items()}

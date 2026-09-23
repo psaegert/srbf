@@ -390,9 +390,9 @@ def build_table(trees: Iterable[ResultTree], out: str, *, engine: str = "acj-5-4
         fingerprint = judge_fingerprint(engine)
         for i, (tree, path) in enumerate(jobs):
             keys[i] = _cache_key(tree, path, fingerprint)
-            rows = _cache_load(cache_dir, keys[i])
-            if rows is not None:
-                cached[i] = rows
+            hit = _cache_load(cache_dir, keys[i])
+            if hit is not None:
+                cached[i] = hit
     pending = [i for i in range(len(jobs)) if i not in cached]
     say(f"{len(jobs)} files: {len(pending)} to judge, {len(cached)} from the cache")
     if progress_path:
