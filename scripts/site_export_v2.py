@@ -50,6 +50,11 @@ METHODS = [
     ("T8-3M", "Flash-ANSR T8-3M", "draws", "#8fcf8a", "flash-ansr", "author_blessed", None, None),
     ("T8-20M", "Flash-ANSR T8-20M", "draws", "#3e9b4a", "flash-ansr", "author_blessed", None, None),
     ("T8-120M", "Flash-ANSR T8-120M", "draws", "#1b5e20", "flash-ansr", "author_blessed", None, None),
+    # the hybrid: a rung is a pair (D draws, I iterations) chosen so that both halves take the same time on the reference
+    # machine; the ladder is labelled by its draws
+    ("T8-20M-pysr", "Flash-ANSR T8-20M + PySR", "draws", "#7b1fa2", "hybrid", "author_blessed", "hybrid",
+     "Flash-ANSR T8-20M's top-100 draws seed PySR's populations; PySR's hall of fame joins Flash-ANSR's candidate pool and the two-part code picks. "
+     "Each rung pairs a draws count with the iteration count that takes the same time on the reference machine."),
     ("prior", "Flash-ANSR prior", "draws", "#9a9a9a", "reference", "author_blessed", None,
      "Draws skeletons from Flash-ANSR's training prior with no model and no data, then refines and picks them the way Flash-ANSR does: what the prior alone is worth.")]
 FLASH_ANSR_SELECTION = ("Fits the constants of every candidate it draws and submits the one with the best two-part code: "
