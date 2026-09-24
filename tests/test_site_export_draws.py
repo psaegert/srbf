@@ -57,3 +57,13 @@ def test_the_unit_count_adds_the_second_draw(tmp_path):
     (tmp_path / "markers" / "T8-20M-pysr.txt").write_text("nguyen_000512.done\n")
     (tmp_path / "markers" / "T8-20M-pysr.d2.txt").write_text("nguyen_000512.done\nkoza_000512.done\n")
     assert export.status_of(str(tmp_path), "T8-20M-pysr", "hyb", 0) == [3, 5]
+
+
+def test_a_cell_does_not_depend_on_the_order_its_rows_were_read_in():
+    # both draws half done: a tie for the fullest draw, decided by the draw number, not by which draw was read first
+    d1 = {(1, i): _row(success=1.0, numeric_recovery_val=1.0, log10_fvu_val=0.1 * (i + 1)) for i in range(2)}
+    d2 = {(2, i): _row(success=1.0, numeric_recovery_val=0.0, log10_fvu_val=1.0 / (i + 3)) for i in range(2)}
+    first, second = export.summarize_cell({**d1, **d2}, 4), export.summarize_cell({**d2, **d1}, 4)
+    assert first == second and first["m"]["numeric_recovery_val"] == [2, 2]            # draw 1 stands in
+    rows = {(1, i): _row(success=1.0, log10_fvu_val=v) for i, v in enumerate([0.1, 1e16, -1e16, 0.3])}
+    assert export.summarize_cell(rows, 4) == export.summarize_cell(dict(reversed(list(rows.items()))), 4)

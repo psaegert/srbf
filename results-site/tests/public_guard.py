@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any
 
 SITE = Path(__file__).resolve().parents[1]
-PUBLIC_METHODS = {"e2e", "nesymres-100M", "PySR", "T8-3M", "T8-20M", "T8-120M", "prior"}
+PUBLIC_METHODS = {"e2e", "nesymres-100M", "PySR", "T8-3M", "T8-20M", "T8-120M", "T8-20M-pysr", "prior"}
 # the 2026-07 site's 21 metrics under the schema-2 keys (symbolic_recovery there = skeleton_match_raw here,
 # prediction_success_rate = success), plus the release's own headline metrics
 REQUIRED_METRICS = {

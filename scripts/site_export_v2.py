@@ -280,13 +280,14 @@ def complete_draws(rows: dict[Any, dict[str, Any]], expected: int | None) -> lis
 
 def pooled_rows(rows: dict[Any, dict[str, Any]], expected: int | None) -> tuple[Rows, list[int]]:
     """What a cell pools: every complete draw, and only those (a draw still running is not a random subset of the
-    problems). With no complete draw the fullest draw stands in, and the cell is partial."""
+    problems). With no complete draw the fullest draw stands in (the first draw on a tie), and the cell is partial.
+    The rows come back in (draw, problem) order, so the cell's sums do not depend on the order the table was read in."""
     per = by_draw(rows)
     done = complete_draws(rows, expected)
-    if done:
-        return {(d, i): v for d in done for i, v in per[d].items()}, done
-    d = max(per, key=lambda k: len(per[k])) if per else 1
-    return {(d, i): v for i, v in per.get(d, {}).items()}, []
+    if not done:
+        fullest = max(sorted(per), key=lambda k: len(per[k])) if per else 1
+        return {(fullest, i): per[fullest][i] for i in sorted(per.get(fullest, {}))}, []
+    return {(d, i): per[d][i] for d in done for i in sorted(per[d])}, done
 
 
 def transform(v: float | None, tf: str | None) -> float | None:
@@ -504,7 +505,7 @@ def main() -> None:
 
     def contrasts(pairs: list[tuple[str, str]], paired: dict[str, Any]) -> None:
         for ka, kb in pairs:
-            for (c, r), rows_a in data.get(ka, {}).items():
+            for (c, r), rows_a in sorted(data.get(ka, {}).items(), key=lambda kv: kv[0]):   # a fixed order, whatever the table's
                 rows_b = data.get(kb, {}).get((c, r))
                 if not rows_b or not usable(ka, r) or not usable(kb, r):
                     continue
