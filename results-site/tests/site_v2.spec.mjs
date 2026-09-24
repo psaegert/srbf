@@ -1188,30 +1188,40 @@ test('the axis swap trades the two metrics of a plot; a budget plot keeps its pl
   expect(errors).toEqual([]);
 });
 
-test('the release has one home for its progress and its update time', async ({ page }) => {
+test('the release has one home: a title and its update time in the headline roles, then Protocol and Progress', async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto('/?release=2026-09&v=curves');
-  const status = page.locator(V2 + ' section.v2status');
-  await expect(status).toHaveCount(1);
-  await expect(status.locator('h3')).toHaveText(/^Progress/);
-  await expect(status.locator('h3 .v2help')).toHaveCount(1);                     // what is counted, on a ?
-  // every method tile lives in the block, and nowhere else
-  const tiles = await page.locator(V2 + ' .v2tile').count();
-  expect(tiles).toBeGreaterThan(0);
-  await expect(status.locator('.v2tile')).toHaveCount(tiles);
-  await expect(status.locator('.v2tile').first()).toContainText(/ finished$/);
-  const over = await page.evaluate(() => Object.values(window.RESULTS_V2.status).filter((s) => s[1] != null && s[0] > s[1]).length);
-  expect(over).toBe(0);
-  // the update time: in the block, with its offset in the markup and a time zone on screen; not in the release header
+  const head = page.locator(V2 + ' .v2relhead');
+  await expect(head).toHaveCount(1);
+  await expect(head.locator('h2.v2hltitle')).toHaveText(/^Release 2026-09/);
+  // one role each: the title and its caption compute exactly like the headline's
+  const style = (sel) => page.locator(sel).first().evaluate((el) => { const c = getComputedStyle(el); return [c.fontSize, c.fontWeight, c.color, c.textTransform, c.letterSpacing].join(' '); });
+  expect(await style(V2 + ' .v2relhead .v2hltitle')).toBe(await style('.headline-v2 .v2hltitle'));
+  expect(await style(V2 + ' .v2relhead .v2hlsub')).toBe(await style('.headline-v2 .v2hlsub'));
+  // the update time: the caption of the title, with its offset in the markup and a time zone on screen
   const rel = await page.evaluate(() => window.RESULTS_V2.release);
-  const upd = status.locator('.v2updated');
+  const upd = head.locator('.v2hlsub .v2updated');
   await expect(upd).toHaveCount(1);
   await expect(upd).toHaveText(/^Updated /);
   if (rel.updated) {
     expect(rel.updated).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d[+-]\d\d:\d\d$/);
-    await expect(status.locator('time.v2updated')).toHaveAttribute('datetime', rel.updated);
+    await expect(head.locator('time.v2updated')).toHaveAttribute('datetime', rel.updated);
     await expect(upd).toHaveText(/\b20\d\d\b.* · (just now|\d+ (minute|minutes|hour|hours|days) ago)$/);
   }
-  await expect(page.locator(V2 + ' .v2head')).not.toContainText(/generated/i);
+  await expect(page.locator(V2 + ' .v2updated')).toHaveCount(1);                  // one place for the time
+  await expect(page.locator(V2)).not.toContainText(/generated|benchmark release/i); // the switch above names the release
+  // Protocol and Progress are named in the one label style
+  const status = page.locator(V2 + ' section.v2status');
+  await expect(status.locator('h3')).toHaveText(/^Progress/);
+  await expect(status.locator('h3 .v2help')).toHaveCount(1);                      // what is counted, on a ?
+  await expect(page.locator(V2 + ' details.v2release > summary')).toHaveText('Protocol');
+  expect(await style(V2 + ' details.v2release > summary')).toBe(await style(V2 + ' section.v2status h3'));
+  // every method tile lives in the Progress block, and none counts more finished than planned
+  const tiles = await page.locator(V2 + ' .v2tile').count();
+  expect(tiles).toBeGreaterThan(0);
+  await expect(status.locator('.v2tile')).toHaveCount(tiles);
+  await expect(status.locator('.v2tile').first()).toContainText(/\d+ \/ \d+$/);                 // finished / planned
+  const over = await page.evaluate(() => Object.values(window.RESULTS_V2.status).filter((s) => s[1] != null && s[0] > s[1]).length);
+  expect(over).toBe(0);
   expect(errors).toEqual([]);
 });

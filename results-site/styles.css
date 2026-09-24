@@ -499,16 +499,19 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 .explorer-v2 p.v2hint, .headline-v2 .v2hlfig figcaption, .plot-caption, .tap-hint, .matrix-legend {
   font-size: 13px; line-height: 1.5; color: var(--ink-soft); max-width: 88ch; margin: 8px 0 0;
 }
-.explorer-v2 .v2head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 8px; }
-.explorer-v2 .v2sub { margin: 2px 0 0; color: var(--ink-soft); }
-.explorer-v2 .v2release { margin: 6px 0 10px; font-size: 14px; color: var(--ink-soft); }
-.explorer-v2 .v2release summary { cursor: pointer; color: var(--accent); font-weight: 600; }
-.explorer-v2 .v2release ul { margin: 6px 0 0; padding-left: 1.2em; }
+/* the release's own block: a title and one caption line in the headline's roles, then Protocol and Progress, each
+   named in the one label style */
+.explorer-v2 .v2relhead { display: flex; justify-content: space-between; align-items: flex-end; gap: 8px 16px; flex-wrap: wrap; margin: 22px 0 14px; }
+.explorer-v2 .v2relhead .v2hlsub { margin: 0; }
+.explorer-v2 .v2release { margin: 0 0 14px; font-size: 14px; color: var(--ink-soft); }
+.explorer-v2 .v2release summary { cursor: pointer; width: max-content; }
+.explorer-v2 .v2release summary:hover, .explorer-v2 .v2release summary:focus-visible { color: var(--accent); }
+.explorer-v2 .v2release ul { margin: 6px 0 0; padding-left: 1.2em; max-width: 88ch; }
 .explorer-v2 .v2release li { margin: 3px 0; }
-.explorer-v2 .v2status { margin: 10px 0 12px; }
-.explorer-v2 .v2statushead { display: flex; justify-content: space-between; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; }
-.explorer-v2 .v2statushead h3 { margin: 0; }
-.explorer-v2 .v2updated { margin: 0; font-size: 13px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.explorer-v2 .v2status { margin: 0 0 14px; }
+.explorer-v2 .v2status h3 { margin: 0 0 6px; }
+.explorer-v2 .v2updated { font-variant-numeric: tabular-nums; }
+.explorer-v2 .v2ago { white-space: nowrap; }   /* "· 3 hours ago" never breaks inside */
 .explorer-v2 .v2strip { display: flex; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
 .explorer-v2 .v2tile { flex: 1 1 150px; max-width: 260px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 8px 12px; }
 .explorer-v2 .v2tile b { display: block; }   /* a name wraps; it is never cut to an ellipsis */
@@ -642,8 +645,8 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 
 /* Headline: the two fixed charts above the explorer. Same numbers for every visitor, no controls. */
 .headline-v2 { background: var(--accent-soft); border: 1px solid var(--line); border-radius: var(--r-card); padding: 14px 16px 12px; margin: 0 0 16px; }
-.headline-v2 .v2hltitle { font-size: 20px; margin: 0 0 2px; letter-spacing: -.01em; }
-.headline-v2 .v2hlsub { margin: 0 0 10px; color: var(--ink-soft); font-size: 14px; }
+.headline-v2 .v2hltitle, .explorer-v2 .v2hltitle { font-size: 20px; margin: 0 0 2px; letter-spacing: -.01em; }
+.headline-v2 .v2hlsub, .explorer-v2 .v2hlsub { margin: 0 0 10px; color: var(--ink-soft); font-size: 14px; }
 .headline-v2 .v2hlcharts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(520px, 100%), 1fr)); gap: 14px; min-width: 0; }
 .headline-v2 .v2hlfig { margin: 0; min-width: 0; }
 .headline-v2 .v2chart { box-shadow: var(--shadow); }
