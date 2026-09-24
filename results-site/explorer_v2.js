@@ -552,7 +552,7 @@
     });
     if (title == null) { title = xm.short + " vs " + ym.short; }
     if (pending && !series.length) { return frontSVG({ title: title, aria: aria, series: [], empty: "loading the distributions\u2026" }); }
-    if (!series.length) { return frontSVG({ title: title, aria: aria, series: [], empty: "no finished units for this selection yet" }); }
+    if (!series.length) { return frontSVG({ title: title, aria: aria, series: [], empty: "no budget has finished for this selection yet" }); }
     var xpad = (xmax - xmin) * 0.06 || 0.3, ypad = (ymax - ymin) * 0.06 || 0.3;
     if (nearRange(xmin, xmax, 0, 0.35)) { xmin = Math.min(xmin, 0); xmax = Math.max(xmax, 0); }   // the problem's own length, when it is near
     xmin -= xpad; xmax += xpad; ymin -= ypad; ymax += ypad;
@@ -590,7 +590,7 @@
     if (title == null) { title = metric.label; }   // the statistic is named once per block, not on every chart
     var ylabel = axisName(metric) + (metric.median_via && state.stat === "mean" ? ", median" : "");
     if (pending && !series.length) { return chartSVG({ title: title, aria: aria, series: [], empty: "loading the distribution…" }); }
-    if (!series.length) { return chartSVG({ title: title, aria: aria, series: [], empty: state.cats.length ? (shown.length ? (state.xaxis === "time" ? "the reference machine has not timed any method shown yet" : "no finished units for this selection yet") : "no method selected") : "no catalog selected" }); }
+    if (!series.length) { return chartSVG({ title: title, aria: aria, series: [], empty: state.cats.length ? (shown.length ? (state.xaxis === "time" ? "the reference machine has not timed any method shown yet" : "no budget has finished for this selection yet") : "no method selected") : "no catalog selected" }); }
     var pad = (ymax - ymin) * 0.06 || 0.05;
     if (metric.kind === "rate") { var floor0 = nearRange(ymin, ymax, 0, 0.6); ymin = floor0 ? 0 : Math.max(0, ymin - pad); ymax = Math.min(1, Math.max(ymin + 0.02, ymax + pad)); }
     else { if (tfOf(metric) === "log2" && nearRange(ymin, ymax, 0, 0.35)) { ymin = Math.min(ymin, 0); ymax = Math.max(ymax, 0); } ymin -= pad; ymax += pad; }
@@ -682,7 +682,7 @@
         stat: "mean", band: true, cross: false, xaxis: anyTime() ? "time" : "rung", valid: VALID_DEFAULT, impute: true },
       function () {
         var shown = shownMethods();
-        if (!shown.length) { return '<p class="v2hint">No method has finished units in this release yet.</p>'; }
+        if (!shown.length) { return '<p class="v2hint">No method has finished a budget in this release yet.</p>'; }
         var drawn = axisMethods(shown), off = offAxis(shown);
         var keys = drawn.map(function (m) { return m.key; }), src = timeSource(keys);
         thinDrawn = false;
@@ -1148,14 +1148,24 @@
   }
   function shell() {
     var rel = D.release;
-    var strip = D.methods.filter(function (m) { return D.status[m.key]; }).map(function (m) { var d = D.status[m.key][0], t = D.status[m.key][1]; return '<div class="v2tile" title="' + esc(m.label) + '"><b><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + (m.local ? " (local)" : "") + '</b><span>' + d + '<small> / ' + (t == null ? "?" : t) + ' units</small></span><div class="v2bar"><i style="width:' + (t ? 100 * d / t : 0) + '%"></i></div></div>'; }).join("");
+    var strip = D.methods.filter(function (m) { return D.status[m.key]; }).map(function (m) { var d = D.status[m.key][0], t = D.status[m.key][1]; return '<div class="v2tile" title="' + esc(m.label) + '"><b><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + (m.local ? " (local)" : "") + '</b><span>' + d + '<small> / ' + (t == null ? "?" : t) + ' finished</small></span><div class="v2bar"><i style="width:' + (t ? 100 * d / t : 0) + '%"></i></div></div>'; }).join("");
+    // When the release was last refreshed: stored with its offset, shown in the reader's own time zone, with how long ago
+    var stamp = (function () {
+      var t = rel.updated ? new Date(rel.updated) : null;
+      if (!t || isNaN(t.getTime())) { return rel.generated ? '<span class="v2updated v2hint">Updated ' + esc(rel.generated) + '</span>' : ""; }
+      var abs = t.toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
+      var mins = Math.round((Date.now() - t.getTime()) / 60000), ago;
+      if (mins < 1) { ago = "just now"; } else if (mins < 60) { ago = mins + (mins === 1 ? " minute" : " minutes") + " ago"; } else if (mins < 48 * 60) { var h = Math.round(mins / 60); ago = h + (h === 1 ? " hour" : " hours") + " ago"; } else { ago = Math.round(mins / 1440) + " days ago"; }
+      return '<time class="v2updated v2hint" datetime="' + esc(rel.updated) + '">Updated ' + esc(abs) + ' · ' + ago + '</time>';
+    })();
+    var progressHint = "Every method is run twice (two draws). Each count is one catalog at one budget in one draw, finished once every problem of the catalog has a result; the total is what the method's runs plan, over the budgets this release publishes. A budget appears in the plots once every catalog has finished it.";
     var catList = CATS.map(function (c) { var m = CAT[c]; return '<label title="' + esc(GROUPS[m.group] + (m.mu ? " · median ground-truth complexity " + m.mu[1] + " bits (IQR " + m.mu[0] + " to " + m.mu[2] + ")" : "")) + '"><input type="checkbox" data-c="' + c + '"> ' + esc(c) + ' <span class="v2hint">' + m.laws + '</span></label>'; }).join("");
-    var methList = D.methods.filter(withData).map(function (m) { return '<div class="v2meth"><label><input type="checkbox" data-m="' + m.key + '"><input type="color" class="v2swatch" data-m="' + m.key + '" value="' + colorOf(m) + '" title="Colour for ' + esc(m.label) + '"><span class="v2mname">' + esc(m.label) + '</span></label>' + (m.local ? ' <span class="v2tag v2tag-local">local only</span>' : "") + ' <span class="v2hint">' + esc(m.param) + '</span>' + (m.selection ? " " + help(m.selection, "How does " + m.label + " choose its prediction?") : "") + ' <span class="v2tag" title="' + esc(PROV_NOTE[m.provenance] || "") + '">' + esc(PROV[m.provenance] || m.provenance || "") + '</span><button type="button" class="v2reset" data-m="' + m.key + '" title="Reset colour to default" hidden>↺</button></div>'; }).join("") || '<span class="v2hint">no method has finished units yet</span>';
+    var methList = D.methods.filter(withData).map(function (m) { return '<div class="v2meth"><label><input type="checkbox" data-m="' + m.key + '"><input type="color" class="v2swatch" data-m="' + m.key + '" value="' + colorOf(m) + '" title="Colour for ' + esc(m.label) + '"><span class="v2mname">' + esc(m.label) + '</span></label>' + (m.local ? ' <span class="v2tag v2tag-local">local only</span>' : "") + ' <span class="v2hint">' + esc(m.param) + '</span>' + (m.selection ? " " + help(m.selection, "How does " + m.label + " choose its prediction?") : "") + ' <span class="v2tag" title="' + esc(PROV_NOTE[m.provenance] || "") + '">' + esc(PROV[m.provenance] || m.provenance || "") + '</span><button type="button" class="v2reset" data-m="' + m.key + '" title="Reset colour to default" hidden>↺</button></div>'; }).join("") || '<span class="v2hint">no method has finished a budget yet</span>';
     var metricList = MGROUPS.map(function (g) { var ms = D.metrics.filter(function (m) { return m.group === g; }); return '<div class="v2mgroup" data-group="' + esc(g) + '"><h4>' + esc(g) + '</h4>' + ms.map(function (m) { return '<div class="v2metric" data-tier="' + m.tier + '" data-key="' + m.key + '"><label><input type="checkbox" data-p="' + m.key + '"> ' + esc(m.label) + '</label> ' + mhelp(m) + '</div>'; }).join("") + "</div>"; }).join("");
     root.innerHTML =
-      '<div class="v2head"><div><div class="v2kicker">benchmark release ' + esc(rel.id) + '</div><p class="v2sub">' + esc(rel.title !== rel.id ? rel.title + " · " : "") + 'generated ' + esc(rel.generated) + '. ' + esc(rel.notes || "") + '</p></div><div class="v2row"><button type="button" class="v2btn" data-act="link">copy link to this view</button><span class="v2linkok v2hint" hidden>link copied</span></div></div>' +
+      '<div class="v2head"><div><div class="v2kicker">benchmark release ' + esc(rel.id) + '</div>' + ((rel.title !== rel.id || rel.notes) ? '<p class="v2sub">' + esc([rel.title !== rel.id ? rel.title : "", rel.notes || ""].filter(Boolean).join(" · ")) + '</p>' : "") + '</div><div class="v2row"><button type="button" class="v2btn" data-act="link">copy link to this view</button><span class="v2linkok v2hint" hidden>link copied</span></div></div>' +
       '<details class="v2release"><summary>Protocol of this release</summary><ul><li><b>Choosing a prediction.</b> ' + esc(rel.scoring || "") + '</li><li><b>Judging it.</b> ' + esc(rel.judge || "") + '</li><li><b>Data.</b> One problem per ground-truth expression: 512 support points and 512 validation points from the catalog\'s own ranges, no noise; ' + CATS.length + ' catalogs, ' + laws(CATS) + ' problems.</li><li><b>Configurations.</b> ' + term("provenance", "Who chose each method\'s configuration") + ' is shown next to every method.</li><li><b>Time axis.</b> ' + term("time", "Reference-machine timing") + (D.timing_note ? " · " + esc(D.timing_note) : "") + '</li><li><b>Statistics.</b> ' + term("regime", "Two regimes") + ', ' + term("complete", "complete budgets only") + ', ' + term("wilson", "95 % intervals") + '.</li></ul></details>' +
-      '<div class="v2strip">' + strip + '</div>' +
+      '<section class="v2status" aria-label="Progress of this release"><div class="v2statushead"><h3 class="v2kicker">Progress ' + help(progressHint, "What is counted?") + '</h3>' + stamp + '</div><div class="v2strip">' + strip + '</div></section>' +
       '<div class="v2tabs" role="tablist">' + VIEWS.map(function (v) { return '<button type="button" class="v2tab" role="tab" data-view="' + v[0] + '">' + v[1] + '</button>'; }).join("") + '</div>' +
       '<div class="v2layout"><aside class="v2side">' +
       // 1. what this display shows. Every row declares the views it belongs to; the rest stay out of the way.

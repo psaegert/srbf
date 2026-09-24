@@ -419,32 +419,30 @@ def rung_within(timing: dict[str, Any], key: str, budget: float, have: set[int])
 
 
 # ---- status / catalogs / timing ---------------------------------------------------------------------------------
-def load_units(root: str, ukey: str | None, key: str) -> int | None:
-    """Units of every draw: the draw-1 file plus a draw-2 file when the second draw has been staged."""
-    total = 0
+def planned_cells(root: str, ukey: str | None, publishes: Any) -> set[tuple[int, str, int]] | None:
+    """Every (draw, catalog, rung) a method's run plan holds: the unit lists in the root (`units_<ukey>_d<draw>.txt`, or
+    the Flash-ANSR series' shared `t8s1_units_draw<draw>.txt`; lines "draw catalog rung [shard]", the shards of a split
+    catalog are one cell), over the rungs the release publishes (`publishes(rung)`). None without a plan."""
+    plan: set[tuple[int, str, int]] = set()
     for draw in (1, 2):
-        for cand in ([os.path.join(root, f"units_{ukey}_d{draw}.txt")] if ukey else []) + [os.path.join(root, f"t8s1_units_draw{draw}.txt")]:
-            if not os.path.exists(cand):
-                continue
-            n = 0
-            for line in open(cand):
-                p = line.split()
-                if not p:
-                    continue
-                if ukey or p[0] == key or (len(p) > 1 and p[1] == key):
-                    n += 1
-            if n:
-                total += n
-                break
-    return total or None
+        path = os.path.join(root, f"units_{ukey}_d{draw}.txt" if ukey else f"t8s1_units_draw{draw}.txt")
+        if not os.path.exists(path):
+            continue
+        for line in open(path):
+            p = line.split()
+            if len(p) >= 3 and p[2].isdigit() and publishes(int(p[2])):
+                plan.add((draw, p[1], int(p[2])))
+    return plan or None
 
 
-def status_of(root: str, key: str, ukey: str | None, cells_done: int) -> list[int | None]:
-    total = load_units(root, ukey, key)
-    marks = [os.path.join(root, "markers", f"{key}.txt"), os.path.join(root, "markers", f"{key}.d2.txt")]
-    have = [m for m in marks if os.path.exists(m)]
-    done = sum(1 for m in have for line in open(m) if line.strip()) if have else cells_done
-    return [done, total if total is not None else (664 if not ukey else None)]
+def status_of(rows_by_cell: dict[tuple[str, int], Any], sizes: dict[str, int], plan: set[tuple[int, str, int]] | None) -> list[int | None]:
+    """[finished, planned]: a catalog at one rung in one draw is finished once its rows cover the catalog, the same
+    test that puts a rung in the plots; counted against the plan when there is one."""
+    done = {(d, c, r) for (c, r), rows in rows_by_cell.items() for d, rs in by_draw(rows).items()
+            if c in sizes and len(rs) >= sizes[c]}
+    if plan is not None:
+        done &= plan
+    return [len(done), len(plan) if plan is not None else None]
 
 
 def catalog_meta(sizes_path: str | None, present: dict[str, int]) -> list[dict[str, Any]]:
@@ -566,7 +564,8 @@ def main() -> None:
                     h = hist_of([transform(x[hk], tf) for x in pool.values()], lo, hi)
                     if h is not None:
                         hists[hk].setdefault(key, {}).setdefault(c, {})[str(r)] = h
-            status[key] = status_of(a.root, key, ukey, sum(len(v) for v in cells[key].values()))
+            status[key] = status_of({cr: rows for cr, rows in data.get(key, {}).items() if usable(key, cr[1])}, sizes,
+                                    planned_cells(a.root, ukey, lambda r, k=key: usable(k, r)))
         paired: dict[str, Any] = {}
         mkeys = [m[0] for m in methods]
         contrasts([(ka, kb) for i, ka in enumerate(mkeys) for kb in mkeys[i + 1:]], paired)
@@ -579,6 +578,7 @@ def main() -> None:
             timing_note = t.get("note", "")
         payload = {"schema": 2, "base": base,
                    "release": {"id": a.release, "title": a.title or a.release, "notes": a.notes, "generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                               "updated": dt.datetime.now().astimezone().isoformat(timespec="minutes"),   # with its offset: shown in the reader's time zone
                                "scoring": "Every method submits one prediction per problem and chooses it by its own rule; the rule is named next to the method, along with who chose its configuration.",
                                "judge": "One judge for every prediction: the predicted expression and the ground truth are compared in one certified canonical form (SimpliPy acj-5-4-llm, f64), and numeric recovery is float32 precision on 512 held-out points."},
                    "catalogs": cats, "rungs": RUNGS, "nb": NB, "metrics": listed_metrics(cells), "paired_keys": PAIRED_KEYS, "rank_keys": RANK_KEYS,

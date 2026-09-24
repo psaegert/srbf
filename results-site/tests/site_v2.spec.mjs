@@ -1187,3 +1187,31 @@ test('the axis swap trades the two metrics of a plot; a budget plot keeps its pl
   expect(parseFloat(style.radius)).toBeGreaterThan(0);
   expect(errors).toEqual([]);
 });
+
+test('the release has one home for its progress and its update time', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/?release=2026-09&v=curves');
+  const status = page.locator(V2 + ' section.v2status');
+  await expect(status).toHaveCount(1);
+  await expect(status.locator('h3')).toHaveText(/^Progress/);
+  await expect(status.locator('h3 .v2help')).toHaveCount(1);                     // what is counted, on a ?
+  // every method tile lives in the block, and nowhere else
+  const tiles = await page.locator(V2 + ' .v2tile').count();
+  expect(tiles).toBeGreaterThan(0);
+  await expect(status.locator('.v2tile')).toHaveCount(tiles);
+  await expect(status.locator('.v2tile').first()).toContainText(/ finished$/);
+  const over = await page.evaluate(() => Object.values(window.RESULTS_V2.status).filter((s) => s[1] != null && s[0] > s[1]).length);
+  expect(over).toBe(0);
+  // the update time: in the block, with its offset in the markup and a time zone on screen; not in the release header
+  const rel = await page.evaluate(() => window.RESULTS_V2.release);
+  const upd = status.locator('.v2updated');
+  await expect(upd).toHaveCount(1);
+  await expect(upd).toHaveText(/^Updated /);
+  if (rel.updated) {
+    expect(rel.updated).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d[+-]\d\d:\d\d$/);
+    await expect(status.locator('time.v2updated')).toHaveAttribute('datetime', rel.updated);
+    await expect(upd).toHaveText(/\b20\d\d\b.* · (just now|\d+ (minute|minutes|hour|hours|days) ago)$/);
+  }
+  await expect(page.locator(V2 + ' .v2head')).not.toContainText(/generated/i);
+  expect(errors).toEqual([]);
+});

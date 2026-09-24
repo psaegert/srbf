@@ -49,14 +49,17 @@ def test_a_paired_contrast_pairs_within_a_draw_and_skips_a_running_one():
     assert rk[0] == 4
 
 
-def test_the_unit_count_adds_the_second_draw(tmp_path):
-    (tmp_path / "units_hyb_d1.txt").write_text("1 nguyen 512\n1 koza 512\n")
-    (tmp_path / "units_hyb_d2.txt").write_text("2 nguyen 512\n2 koza 512\n2 jin 512\n")
-    assert export.load_units(str(tmp_path), "hyb", "T8-20M-pysr") == 5
-    (tmp_path / "markers").mkdir()
-    (tmp_path / "markers" / "T8-20M-pysr.txt").write_text("nguyen_000512.done\n")
-    (tmp_path / "markers" / "T8-20M-pysr.d2.txt").write_text("nguyen_000512.done\nkoza_000512.done\n")
-    assert export.status_of(str(tmp_path), "T8-20M-pysr", "hyb", 0) == [3, 5]
+def test_progress_counts_finished_catalog_rungs_per_draw_against_the_plan(tmp_path):
+    # the plan: draw 1 holds catalog a at rungs 1 and 2 (a split in two shards at rung 2), draw 2 holds a at rung 1
+    (tmp_path / "units_hyb_d1.txt").write_text("1 a 1\n1 a 2 0/2\n1 a 2 1/2\n1 a 4096\n")
+    (tmp_path / "units_hyb_d2.txt").write_text("2 a 1\n")
+    plan = export.planned_cells(str(tmp_path), "hyb", lambda r: r <= 256)       # rung 4096 is not published
+    assert plan == {(1, "a", 1), (1, "a", 2), (2, "a", 1)}
+    rows = {("a", 1): {**_draw(1, set(), n=4), **dict(list(_draw(2, set(), n=4).items())[:3])},   # draw 2 not finished
+            ("a", 2): _draw(1, set(), n=4)}
+    assert export.status_of(rows, {"a": 4}, plan) == [2, 3]
+    assert export.status_of(rows, {"a": 4}, None) == [2, None]                  # no plan: no total, never a guess
+    assert export.planned_cells(str(tmp_path / "none"), "hyb", lambda r: True) is None
 
 
 def test_a_cell_does_not_depend_on_the_order_its_rows_were_read_in():
