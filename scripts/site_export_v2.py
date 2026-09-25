@@ -57,6 +57,10 @@ METHODS = [
      "Each rung pairs a draws count with the iteration count that takes the same time on the reference machine."),
     ("prior", "Flash-ANSR prior", "draws", "#9a9a9a", "reference", "author_blessed", None,
      "Draws skeletons from Flash-ANSR's training prior with no model and no data, then refines and picks them the way Flash-ANSR does: what the prior alone is worth.")]
+# Where two methods share a component at different versions, the release says so (Protocol, "Versions").
+RELEASE_VERSIONS = ("PySR runs PySR 2.3.0 with SymbolicRegression.jl 2.4.0. The hybrid's PySR stage runs PySR 2.4.0 with "
+                    "SymbolicRegression.jl 2.4.1, and 2.4.2 where it is timed on the reference machine. The defaults it relies on "
+                    "are the same in both PySR versions, and the SymbolicRegression.jl releases between them change speed, not results.")
 FLASH_ANSR_SELECTION = ("Fits the constants of every candidate it draws and submits the one with the best two-part code: "
                         "(n/2) log2 FVU plus the description length of the expression in bits.")
 RUNGS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
@@ -610,7 +614,7 @@ def main() -> None:
             timing_note = t.get("note", "")
         listed = listed_metrics(cells)
         payload = {"schema": 2, "base": base,
-                   "release": {"id": a.release, "title": a.title or a.release, "notes": a.notes, "generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                   "release": {"id": a.release, "title": a.title or a.release, "notes": a.notes, "versions": RELEASE_VERSIONS, "generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
                                "updated": dt.datetime.now().astimezone().isoformat(timespec="minutes"),   # with its offset: shown in the reader's time zone
                                "scoring": "Every method submits one prediction per problem and chooses it by its own rule; the rule is named next to the method, along with who chose its configuration.",
                                "judge": "One judge for every prediction: the predicted expression and the ground truth are compared in one certified canonical form (SimpliPy acj-5-4-llm, f64), and numeric recovery is float32 precision on 512 held-out points."},

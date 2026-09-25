@@ -120,3 +120,17 @@ def test_an_overlay_written_with_other_rank_keys_maps_onto_the_release_keys(tmp_
         assert merged["keys"] == ["a", "b", "c"], first
         assert merged["pairs"]["x|y"]["cat"]["t1"] == [10, 6, 3, 2, 1, 5, 4], first
         assert merged["pairs"]["x|z"]["cat"]["t1"] == [9, 7, 2, None, None, 4, 5], first
+
+
+def test_the_public_guard_reads_every_method_a_written_ranks_js_names() -> None:
+    """The guard refuses to publish a ranks.js that names a private method; it must parse what the exporter writes."""
+    import json
+    sx = _exporter()
+    spec = importlib.util.spec_from_file_location("public_guard", ROOT / "results-site" / "tests" / "public_guard.py")
+    assert spec is not None and spec.loader is not None
+    guard = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(guard)
+    text = sx.RANKS_JS % ('"r"', json.dumps(["a"]), "true", '["t1"]', "[1]",
+                          json.dumps({"hidden-a|e2e": {"cat": {"t1": [3, 1, 1]}}}), json.dumps({"e2e": {"t1": 4}}),
+                          json.dumps({"hidden-b|e2e": {"t1": [4, 4]}}))
+    assert guard.rank_methods(text) == {"e2e", "hidden-a", "hidden-b"}
