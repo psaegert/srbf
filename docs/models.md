@@ -91,8 +91,9 @@ is worth (`configs/evaluation/scaling/flash-ansr-v25.0-T8-prior_srbf.yaml`).
 is the problem's ground truth, in the model's own emission format (a fittable literal is a
 `<constant>` for the refiner, a pow exponent or root index stays spelled), fitted and ranked like any
 other. Its budget is the refiner's restarts (`configs/evaluation/scaling/flash-ansr-v25.0-T8-oracle_srbf.yaml`,
-1 to 1,024). It is the ceiling of the fitting stage and runs only where a ground truth exists. Its
-symbolic recovery also audits the judge: a miss there is the exact law in another spelling.
+1 to 1,024). It is the ceiling of the fitting stage and runs only where a ground truth exists. The
+judge is strict for the oracle as for every method: where the refitted law comes back in another form,
+a constant factor or a root spelled differently, that is another structure.
 
 ## PySR
 
