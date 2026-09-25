@@ -396,7 +396,7 @@
   // ---- SVG chart: series of points {x, v, lo, hi, hollow, title} on a rung/time x axis -----------------------------
   function coarse() { return !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches); }   // a finger, not a mouse: no keyboard until one is asked for
   function narrow() { return window.innerWidth < 700; }   // the viewport, like the CSS breakpoints: a container reflows, this does not
-  var CHART_MIN = 520, CHART_GAP = 14;   // must match the grid in styles.css (.v2charts, .v2hlcharts)
+  var CHART_MIN = 520, CHART_GAP = 20;   // must match the grid in styles.css (.v2charts, .v2hlcharts)
   function inner(el) {   // the width the grid actually has: clientWidth still counts the padding
     if (!el || !el.clientWidth) { return 0; }
     var cs = window.getComputedStyle(el);
@@ -409,6 +409,17 @@
     return Math.max(300, Math.floor((avail - CHART_GAP * (cols - 1)) / cols));
   }
   function plotHeight(w) { return Math.max(250, Math.min(400, Math.round(w * 0.52))); }
+  // A legend or label column is as wide as its longest name, measured in the chart's own font (.leg, 12 px): a fixed
+  // width cuts a long method name at the chart's edge.
+  var measurer = null;
+  function textWidth(text) {
+    if (!measurer) { measurer = document.createElement("canvas").getContext("2d"); }
+    measurer.font = "12px " + (window.getComputedStyle(root).fontFamily || "sans-serif");
+    return measurer.measureText(text).width;
+  }
+  function widest(labels) { return labels.reduce(function (w, t) { return Math.max(w, textWidth(t)); }, 0); }
+  function legendRight(labels) { return Math.max(160, Math.ceil(LEG_GAP + 26 + widest(labels) + 16)); }   // gap, swatch, name, margin
+  var LEG_GAP = 14;   // between the plot area and its legend
   var chartHost = null, chartCount = 0;   // set while a block renders: its charts are built for THAT container
   function hostWidth() { return chartWidth(chartHost || root.querySelector(".v2main") || root, chartCount); }
   function inBlock(host, count, fn) { chartHost = host; chartCount = count; try { return fn(); } finally { chartHost = null; chartCount = 0; } }
@@ -453,8 +464,9 @@
     return out;
   }
   function chartSVG(opts) {
-    var nr = narrow(), W = opts.width || hostWidth(), L = 62, T = opts.title ? 34 : 16, R = nr ? 16 : 180, series = opts.series;
-    var B = nr ? 56 + 20 * Math.max(1, series.length) : 52, H = plotHeight(W) + B;
+    var series = opts.series, nr = narrow(), W = opts.width || hostWidth(), L = 66, T = opts.title ? 40 : 18;
+    var R = nr ? 18 : legendRight(series.map(function (sr) { return sr.label; }));
+    var B = nr ? 60 + 20 * Math.max(1, series.length) : 58, H = plotHeight(W) + B;
     // A narrow chart shortens the visible axis label to "(s, ref)"; the calibration is named in full here, so
     // every width -- and every screen reader -- says which clock these seconds came from.
     var aria = (opts.aria || opts.title || "") + (opts.timeAxis && opts.timeSource === "ref" ? ", timed on the reference machine" : "");
@@ -484,7 +496,7 @@
       : (nr ? "candidates / problem" : "candidates per problem (log scale)"));
     s += '<text x="' + ((L + W - R) / 2).toFixed(0) + '" y="' + (H - B + 32) + '" class="tick" text-anchor="middle">' + esc(xlab) + '</text>';
     if (opts.ylabel) { s += '<text transform="translate(14,' + ((T + H - B) / 2).toFixed(0) + ') rotate(-90)" class="tick" text-anchor="middle">' + esc(opts.ylabel) + "</text>"; }
-    var ly = nr ? H - B + 46 : T + 6, lx = nr ? L : W - R + 10;
+    var ly = nr ? H - B + 46 : T + 6, lx = nr ? L : W - R + LEG_GAP;
     series.forEach(function (sr) { var col = sr.color, pts = sr.pts.slice().sort(function (a, b) { return a.x - b.x; }); var cl = function (v) { return Math.min(ymax, Math.max(ymin, v)); };
       s += ciSVG(pts, col, xs, y, function (v) { return v; }, cl);
       s += '<polyline fill="none" stroke="' + col + '" stroke-width="2" points="' + pts.map(function (p) { return xs(p.x).toFixed(1) + "," + y(cl(p.v)).toFixed(1); }).join(" ") + '"/>';
@@ -507,8 +519,9 @@
   // A chart whose x is a metric, not a budget: each method's ladder walks a path through the plane
   // (here: how long its prediction is against how well it fits), so the points keep their rung order.
   function frontSVG(opts) {
-    var nr = narrow(), W = opts.width || hostWidth(), L = 62, T = opts.title ? 34 : 16, R = nr ? 16 : 180;
-    var B = nr ? 56 + 20 * Math.max(1, opts.series.length) : 52, H = plotHeight(W) + B;
+    var nr = narrow(), W = opts.width || hostWidth(), L = 66, T = opts.title ? 40 : 18;
+    var R = nr ? 18 : legendRight(opts.series.map(function (sr) { return sr.label; }));
+    var B = nr ? 60 + 20 * Math.max(1, opts.series.length) : 58, H = plotHeight(W) + B;
     var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="v2chart" role="img" aria-label="' + esc(opts.aria || opts.title) + '">' + (opts.title ? '<text x="' + L + '" y="18" class="ct">' + esc(opts.title) + "</text>" : "");
     if (opts.empty) { return s + '<text x="' + W / 2 + '" y="' + H / 2 + '" class="tick" text-anchor="middle">' + esc(opts.empty) + "</text></svg>"; }
     var xmin = opts.xmin, xmax = opts.xmax, ymin = opts.ymin, ymax = opts.ymax;
@@ -521,7 +534,7 @@
     if (opts.xzero !== undefined && opts.xzero > xmin && opts.xzero < xmax) { s += '<line x1="' + xs(opts.xzero).toFixed(1) + '" y1="' + T + '" x2="' + xs(opts.xzero).toFixed(1) + '" y2="' + (H - B) + '" class="grid zero" stroke-dasharray="4 4"/>'; }
     s += '<text x="' + ((L + W - R) / 2).toFixed(0) + '" y="' + (H - B + 32) + '" class="tick" text-anchor="middle">' + esc(opts.xlabel) + "</text>";
     s += '<text transform="translate(14,' + ((T + H - B) / 2).toFixed(0) + ') rotate(-90)" class="tick" text-anchor="middle">' + esc(opts.ylabel) + "</text>";
-    var ly = nr ? H - B + 46 : T + 6, lx = nr ? L : W - R + 10;
+    var ly = nr ? H - B + 46 : T + 6, lx = nr ? L : W - R + LEG_GAP;
     opts.series.forEach(function (sr) {
       var col = sr.color;
       s += ciSVG(sr.pts, col, xs, y, clx, cly);
@@ -863,7 +876,8 @@
     return head + body + '<p class="v2hint">' + (state.dmode === "cats" ? "" : (state.dmode === "ecdf" && state.dnorm === "all" ? "" : (p.worst !== undefined && state.impute ? "Every problem: a failed prediction sits at " + p.worst + "." : "Successful predictions only: a problem without a prediction has no value to place.")) + pooled + " ") + term("median", "Read from 128-bin histograms") + "; values beyond the binned range sit in the outermost bins.</p>" + gone;
   }
   function distHists(series, p, r) {
-    var nr = narrow(), W = hostWidth(), L = nr ? 14 : 168, R = 16, T = 34, ph0 = series[0].ph, vr = viewRange(series.map(function (sr) { return sr.ph; }));
+    var nr = narrow(), W = hostWidth(), R = 18, T = 40, ph0 = series[0].ph, vr = viewRange(series.map(function (sr) { return sr.ph; }));
+    var L = nr ? 14 : Math.max(168, Math.ceil(25 + widest(series.map(function (sr) { return sr.m.label + (sr.m.local ? " (local)" : ""); })) + 16));   // the name column
     var nmax = Math.max.apply(null, series.map(function (sr) { return sr.ph.n; })), f = nmax < 150 ? 4 : nmax < 600 ? 2 : 1;   // fewer problems, wider bins
     var panelH = nr ? 118 : 96, gap = 16, boxH = 22, capH = nr ? 34 : 0, step = panelH + boxH + capH + gap, H = T + series.length * step + 34;
     var xs = function (x) { return L + (Math.min(vr.hi, Math.max(vr.lo, x)) - vr.lo) / (vr.hi - vr.lo) * (W - L - R); };
@@ -891,13 +905,14 @@
     return s + "</svg>" + '<p class="v2hint">Height: the share of the method’s predicted problems in each bin, on one scale for every panel; a bin taller than the scale is drawn broken, with its share beside it. Under each histogram: 5th to 95th percentile (line), middle half (box), median (tick).</p>';
   }
   function distEcdf(series, p, r) {
-    var nr = narrow(), W = hostWidth(), L = 62, T = 34, R = nr ? 16 : 180, B = nr ? 56 + 20 * series.length : 52, H = plotHeight(W) + B;
+    var nr = narrow(), W = hostWidth(), L = 66, T = 40, B = nr ? 60 + 20 * series.length : 58, H = plotHeight(W) + B;
+    var R = nr ? 18 : legendRight(series.map(function (sr) { return sr.m.label + (sr.m.local ? " (local)" : ""); }));
     var vr = viewRange(series.map(function (sr) { return sr.ph; })), all = state.dnorm === "all", low = p.higher === true;   // a problem without a prediction sits at the worse end
     var xs = function (x) { return L + (Math.min(vr.hi, Math.max(vr.lo, x)) - vr.lo) / (vr.hi - vr.lo) * (W - L - R); }, y = function (v) { return T + (1 - v) * (H - T - B); };
     var s = '<svg viewBox="0 0 ' + W + " " + H + '" class="v2chart" role="img" aria-label="' + esc(p.label) + ' cumulative distribution"><text x="' + (nr ? 10 : L) + '" y="18" class="ct">' + esc(nr ? p.short + " @ " + r + ": share at or below" : p.label + " at budget " + r + ": share of " + (all ? "all" : "predicted") + " problems at or below") + "</text>";
     [0, 0.25, 0.5, 0.75, 1].forEach(function (g) { s += '<line x1="' + L + '" y1="' + y(g).toFixed(1) + '" x2="' + (W - R) + '" y2="' + y(g).toFixed(1) + '" class="grid' + (g === 0.5 ? " zero" : "") + '"/><text x="' + (L - 6) + '" y="' + (y(g) + 4).toFixed(1) + '" class="tick" text-anchor="end">' + (100 * g) + "%</text>"; });
     s += xAxisSVG(p, vr, xs, T, H - B, W, L, R);
-    var ly = nr ? H - B + 50 : T + 6, lx = nr ? L : W - R + 10;
+    var ly = nr ? H - B + 50 : T + 6, lx = nr ? L : W - R + LEG_GAP;
     series.forEach(function (sr) { var col = colorOf(sr.m), den = all ? sr.rows : sr.ph.n, cum = all && low ? sr.rows - sr.ph.n : 0, pts = [];
       for (var b = 0; b < sr.ph.nb; b++) { var before = cum; cum += sr.ph.h[b]; if (b < vr.b0) { continue; } if (b > vr.b1) { break; } var x0 = vr.lo + (b - vr.b0) * vr.w; if (!pts.length) { pts.push(xs(x0).toFixed(1) + "," + y(before / den).toFixed(1)); } pts.push(xs(x0 + vr.w).toFixed(1) + "," + y(before / den).toFixed(1), xs(x0 + vr.w).toFixed(1) + "," + y(cum / den).toFixed(1)); }
       s += '<polyline fill="none" stroke="' + col + '" stroke-width="2" points="' + pts.join(" ") + '"><title>' + esc(sr.m.label + ": " + fiveText(p, sr.f) + "; " + sr.ph.n + " predicted of " + sr.rows + " problems") + "</title></polyline>";
@@ -906,7 +921,7 @@
       (all ? " Out of all problems, a method that leaves problems without a prediction " + (low ? "starts above 0 %." : "ends below 100 %.") : "") + "</p>";
   }
   function distCats(series, p, r) {
-    var nr = narrow(), W = hostWidth(), T = 34, R = 16, Lw = nr ? 110 : 160, per = {}, phs = [];
+    var nr = narrow(), W = hostWidth(), T = 40, R = 18, Lw = nr ? 110 : 160, per = {}, phs = [];
     var cats = state.cats.slice().sort(function (a, b) { return CAT[b].laws - CAT[a].laws; });
     cats.forEach(function (c) { series.forEach(function (sr) { if (sr.use.indexOf(c) < 0) { return; } var ph = pooledHist(p.key, sr.m.key, r, [c]); if (!ph) { return; } (per[c] = per[c] || {})[sr.m.key] = ph; phs.push(ph); }); });
     cats = cats.filter(function (c) { return per[c]; });
@@ -1077,7 +1092,8 @@
     return head + rankDiagram(R, lg, p, slot) + sitOut + rankTables(R, lg, p, slot, timed) + rankLadder(R, shown, p, ki, timed);
   }
   function rankDiagram(R, lg, p, slot) {
-    var nr = narrow(), W = hostWidth(), k = lg.k, Lw = nr ? 138 : 190, Rr = nr ? 44 : 56, T = 64, rowH = 30, B = 42, H = T + k * rowH + B;
+    var nr = narrow(), W = hostWidth(), k = lg.k, Rr = nr ? 44 : 56, T = 64, rowH = 30, B = 42, H = T + k * rowH + B;
+    var Lw = nr ? 138 : Math.max(190, Math.ceil(widest(lg.order.map(function (x) { return x.m.label + (x.m.local ? " (local)" : ""); })) + 28));
     var xs = function (v) { return Lw + (v - 1) / (k - 1) * (W - Lw - Rr); }, reject = lg.p < 0.05;
     var title = "Mean rank on " + p.label + " · " + slotLabel(R, slot);
     var s = '<svg viewBox="0 0 ' + W + " " + H + '" class="v2chart v2distwide v2rankchart" role="img" aria-label="' + esc(title) + '"><text x="' + (nr ? 10 : Lw) + '" y="18" class="ct">' + esc(nr ? "Mean rank · " + slotLabel(R, slot) : title) + "</text>";
