@@ -38,6 +38,9 @@ EXPECTED_PROVENANCE = {
     # a worker in its own environment (docs/adapters.md): a third-party method run at the defaults
     # its own CLI ships, exactly as the in-process third-party adapters are
     "subprocess": "upstream_default",
+    # a shipped worker whose configuration its first author published for benchmarking (Operon: his SRBench
+    # 2024/25 submission without its tuning layer), rather than the library's own defaults
+    "subprocess:operon": "author_blessed",
 }
 BANNED = ["skeleton_pool", "skeleton dataset", "skeleton_dataset", "type: fastsrb",
           "benchmark_path", "datasets_per_expression", "noise_level", "support_points"]
@@ -79,7 +82,8 @@ def test_eval_config_uses_catalog_schema_and_resolves(config_path):
         ma = run["model_adapter"]
         assert ds.get("catalog") in VALID_CATALOGS, f"{config_path}: bad catalog {ds.get('catalog')!r}"
         assert ma.get("type") in VALID_ADAPTERS, f"{config_path}: bad adapter {ma.get('type')!r}"
-        expected = "harness_tuned" if in_panels else EXPECTED_PROVENANCE[ma["type"]]
+        key = f"{ma['type']}:{ma.get('worker')}"
+        expected = "harness_tuned" if in_panels else EXPECTED_PROVENANCE.get(key, EXPECTED_PROVENANCE[ma["type"]])
         assert ma.get("config_provenance") == expected, \
             f"{config_path}: config_provenance {ma.get('config_provenance')!r} does not match the " \
             f"policy label {expected!r} for adapter {ma['type']!r}" \
