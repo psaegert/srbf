@@ -210,8 +210,8 @@ model_adapter:
 
 Bingo checks the budget after its initial population and then every 10 generations, so a run
 overshoots it by up to 10 generations. The `evaluations` column records what a fit spent. Bingo
-also stops by itself after 3,500 s (the limit its authors set for SRBench), a guard the ladder does
-not reach.
+also stops by itself after 3,500 s, the limit SRBench 2.0 ran it with, a guard the ladder does not
+reach (the authors' own configuration stops after 350 s).
 
 **Operators.** Bingo searches over the operators it evaluates among those the expressions are
 written in:
@@ -229,9 +229,10 @@ each is written as the function it computes, so that srbf evaluates what Bingo e
 | `sqrt(u)` | `sqrt(abs(u))` | `sqrt(abs(u))` |
 
 **What to know when reading the results:**
-- Bingo's answer is the equation with the lowest training error among its Pareto front and up to
-  100 members of its final population, each refitted after the search. The rule prefers accuracy
-  to simplicity, so an answer often carries terms that fit the training points but not the law.
+- Bingo's answer is the equation with the lowest training error among up to 100 equations, its
+  Pareto front first and then randomly chosen members of its final population, each refitted after
+  the search. The rule prefers accuracy to simplicity, so an answer often carries terms that fit
+  the training points but not the law.
 - A run stops before its budget only when the training error reaches 1e-16. On data it cannot fit
   exactly, noisy data included, it always spends the whole budget.
 - The constant fitting starts from random values between -10,000 and 10,000, so answers can carry

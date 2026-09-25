@@ -11,8 +11,9 @@ same settings as their SRBench 2024/25 submission): population 500, stack size 2
 0.3, mutation 0.45, mean squared error, Levenberg-Marquardt with tolerance 1e-5, the age-fitness EA; everything
 else at the library's defaults (fitness threshold 1e-16, no generation limit). srbf sets only what it sets for
 every method: the operators (the benchmark's operators as far as Bingo has them), the budget (a count of fitness
-evaluations) and the seed. The wall-clock limit is the authors' SRBench value, 3,500 s, a guard (Bingo stops at 97 %
-of it) that the ladder does not reach. See docs/models.md.
+evaluations) and the seed. The authors' own wall-clock limit (350 s) is replaced by a guard of 3,500 s, the limit
+SRBench 2.0 ran Bingo with (Bingo stops at 97 % of it), which the ladder does not reach: the budget is a count. See
+docs/models.md.
 
 ``options`` (from the config's ``model_adapter`` block):
 
@@ -86,7 +87,7 @@ AUTHOR_CONFIG = {
     "clo_alg": "lm",
     "generations": int(1e19),
     "fitness_threshold": 1.0e-16,
-    "max_time": 3500,        # the authors' SRBench value; a guard: the budget is a count
+    "max_time": 3500,        # a guard (SRBench 2.0's limit for Bingo; the authors' own is 350 s): the budget is a count
     "evolutionary_algorithm": "AgeFitnessEA",
     "clo_threshold": 1.0e-5,
     "scale_max_evals": False,
