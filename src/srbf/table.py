@@ -1,8 +1,8 @@
 """One table for a whole evaluation: a row per problem and rung, every per-problem metric.
 
 A result tree is the directory an evaluation writes for one method and one draw: ``<tree>/<catalog>/choices_<rung>.pkl``
-(``niter_``, ``evals_``, ``samples_`` or ``generations_<rung>.pkl`` for a ladder that counts iterations, evaluations,
-sampled expressions or generations), each file possibly split into shards
+(``niter_``, ``evals_`` or ``samples_<rung>.pkl`` for a ladder that counts iterations, evaluations or sampled
+expressions), each file possibly split into shards
 ``<stem>.shard-K-of-N.pkl``. :func:`judge_result_file` turns one file into rows with :func:`srbf.derive_metrics`;
 :func:`build_table` judges any number of trees in parallel and writes the rows as CSV (``srbf table``). The results
 site is built from this table.
@@ -29,7 +29,6 @@ import hashlib
 import math
 import os
 import pickle
-import re
 import time
 import warnings
 from collections.abc import Callable, Iterable, Sequence
@@ -39,12 +38,8 @@ from multiprocessing import TimeoutError as PoolTimeout
 from pathlib import Path
 from typing import Any
 
-#: A result file's name: the rung and, for a shard, its index and count.
-#: A rung's result file is named after the method's budget unit: draws (choices_), iterations (niter_),
-#: evaluations (evals_), sampled expressions (samples_), refiner restarts (restarts_, the oracle) or generations
-#: (generations_).
-RUNG_PREFIXES = ("choices", "niter", "evals", "samples", "restarts", "generations")
-RESULT_FILE = re.compile(r"(?:" + "|".join(RUNG_PREFIXES) + r")_(\d+)(?:\.shard-(\d+)-of-(\d+))?\.pkl$")
+from srbf.rungs import RESULT_FILE, RUNG_PREFIXES  # a result file's name: the rung and, for a shard, its index and count
+
 
 ID_COLUMNS = ["model", "draw", "catalog", "rung", "shard", "row", "sha"]
 RATE_COLUMNS = ["success", "numeric_recovery_val", "numeric_recovery_fit", "numeric_recovery_relative_val",
@@ -262,13 +257,14 @@ def judge_fingerprint(engine_name: str) -> str:
     """Names the judge: the installed srbf source, the simplipy / sympy / numpy versions, the engine, the table version.
 
     The out-of-process workers (``srbf/worker/``) are left out: they run in the methods' own interpreters and the
-    judge never imports them, so a new baseline worker does not re-judge every result file."""
+    judge never imports them, so a new baseline worker does not re-judge every result file. So is the list of rung
+    file names (``srbf/rungs.py``): it decides which files are read, not how a row is judged."""
     import srbf
 
     h = hashlib.sha256()
     root = Path(srbf.__file__).resolve().parent
     for p in sorted(root.rglob("*.py")):
-        if "__pycache__" in p.parts or p.relative_to(root).parts[0] == "worker":
+        if "__pycache__" in p.parts or p.relative_to(root).parts[0] == "worker" or p.relative_to(root).as_posix() == "rungs.py":
             continue
         h.update(str(p.relative_to(root)).encode())
         h.update(p.read_bytes())

@@ -154,6 +154,7 @@ def test_a_new_worker_does_not_change_the_judge(tmp_path, monkeypatch):
     before = judge_fingerprint("acj-5-4-llm")
     (pkg / "worker" / "models" / "another_worker.py").write_text("Y = 2\n")
     (pkg / "worker" / "models" / "one_worker.py").write_text("X = 3\n")
+    (pkg / "rungs.py").write_text("RUNG_PREFIXES = ('choices', 'another_unit')\n")   # a new budget unit
     assert judge_fingerprint("acj-5-4-llm") == before
     (pkg / "result_processing.py").write_text("JUDGE = 2\n")
     assert judge_fingerprint("acj-5-4-llm") != before
