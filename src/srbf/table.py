@@ -1,7 +1,8 @@
 """One table for a whole evaluation: a row per problem and rung, every per-problem metric.
 
 A result tree is the directory an evaluation writes for one method and one draw: ``<tree>/<catalog>/choices_<rung>.pkl``
-(``niter_<rung>.pkl`` for a method whose ladder counts iterations), each file possibly split into shards
+(``niter_``, ``evals_`` or ``samples_<rung>.pkl`` for a ladder that counts iterations, evaluations or sampled
+expressions), each file possibly split into shards
 ``<stem>.shard-K-of-N.pkl``. :func:`judge_result_file` turns one file into rows with :func:`srbf.derive_metrics`;
 :func:`build_table` judges any number of trees in parallel and writes the rows as CSV (``srbf table``). The results
 site is built from this table.
@@ -39,7 +40,10 @@ from pathlib import Path
 from typing import Any
 
 #: A result file's name: the rung and, for a shard, its index and count.
-RESULT_FILE = re.compile(r"(?:choices|niter)_(\d+)(?:\.shard-(\d+)-of-(\d+))?\.pkl$")
+#: A rung's result file is named after the method's budget unit: draws (choices_), iterations (niter_),
+#: evaluations (evals_) or sampled expressions (samples_).
+RUNG_PREFIXES = ("choices", "niter", "evals", "samples")
+RESULT_FILE = re.compile(r"(?:" + "|".join(RUNG_PREFIXES) + r")_(\d+)(?:\.shard-(\d+)-of-(\d+))?\.pkl$")
 
 ID_COLUMNS = ["model", "draw", "catalog", "rung", "shard", "row", "sha"]
 RATE_COLUMNS = ["success", "numeric_recovery_val", "numeric_recovery_fit", "numeric_recovery_relative_val",
@@ -93,7 +97,7 @@ class ResultTree:
 
 def result_files(tree: ResultTree, *, max_rung: int | None = None) -> list[str]:
     """The result files of a tree (every catalog, every rung, whole files and shards)."""
-    files = glob.glob(os.path.join(tree.path, "*", "choices_*.pkl")) + glob.glob(os.path.join(tree.path, "*", "niter_*.pkl"))
+    files = [f for prefix in RUNG_PREFIXES for f in glob.glob(os.path.join(tree.path, "*", f"{prefix}_*.pkl"))]
     files = [f for f in files if RESULT_FILE.search(os.path.basename(f))]
     if max_rung:
         files = [f for f in files if int(RESULT_FILE.search(os.path.basename(f)).group(1)) <= max_rung]  # type: ignore[union-attr]
