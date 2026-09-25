@@ -35,6 +35,9 @@ EXPECTED_PROVENANCE = {
     # upstream whose defaults could apply -- maintainer-assembled, like the brute-force reference
     "lample_charton": "harness_tuned",
     "brute_force": "harness_tuned",
+    # a shipped worker whose configuration its first author published for benchmarking (GP-GOMEA: his SRBench
+    # 2021 base configuration without the harness's hyperparameter grid), rather than the library's own defaults
+    "subprocess:gpgomea": "author_blessed",
     # a worker in its own environment (docs/adapters.md): a third-party method run at the defaults
     # its own CLI ships, exactly as the in-process third-party adapters are
     "subprocess": "upstream_default",

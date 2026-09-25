@@ -11,6 +11,7 @@ block. To enter a method of your own, see [Adding your method](adapters.md).
 | `nesymres` | [NeSymReS](#nesymres) | clone, patch, download weights |
 | `e2e` | [E2E](#e2e) | clone, patch, download weights |
 | `subprocess`, `worker: dso` | [DSR and uDSR\*](#dso) | `scripts/envs/build_dso_env.sh`: a conda environment with Python 3.7 |
+| `subprocess`, `worker: gpgomea` | [GP-GOMEA](#gp-gomea) | `scripts/envs/build_gpgomea_env.sh envs/gpgomea`: a conda environment of its own, compiled from source |
 | `lample_charton`, `brute_force` | [prior sampling and enumeration](#sampling-and-enumeration-baselines) | none |
 | `subprocess` | [any method, in its own environment](adapters.md) | yours |
 
@@ -329,6 +330,99 @@ column, and the expressions and iterations used in `nevals` and `iterations`.
 16,000 expressions, up to about 100 s per problem on the reference machine.
 `configs/evaluation/scaling/dso_udsr_fastsrb.yaml` runs uDSR\* for one iteration, 13,000 expressions: a single
 iteration already takes about that long, because GP-meld fits the constants of thousands of new expressions in it.
+
+## GP-GOMEA
+
+```bash
+scripts/envs/build_gpgomea_env.sh envs/gpgomea     # needs conda or mamba; a few minutes
+```
+
+GP-GOMEA (Virgolin, Alderliesten, Witteveen and Bosman) is genetic programming with gene-pool optimal
+mixing: every tree fills a fixed template, and each generation the method learns which template
+positions belong together and recombines them as blocks, keeping a change only when the tree does
+not get worse. srbf runs the original code (`marcovirgolin/GP-GOMEA`) at commit `6a92cb6`, the
+commit SRBench 2021 ran, through its Python bindings, as `worker: gpgomea` in an environment of its
+own.
+
+The build script creates a conda environment with the toolchain of that time (Python 3.8, Boost
+1.74, Armadillo 9.9, gcc 11.2, scikit-learn 0.24), clones the commit and compiles it. The C++
+source is compiled unchanged. The build system gets four adjustments, each explained in the
+script:
+- the Boost.Python and Boost.NumPy libraries are named for Python 3.8, as SRBench 2021's install
+  script does;
+- the environment's include and library directories are added to the compile and link lines, as
+  SRBench 2021's install script does;
+- the library directory is written into the module's run path, so the module loads without an
+  activated environment;
+- the compiler's sysroot is pinned to glibc 2.17, because the linker of gcc 11.2 cannot read the
+  newer one that conda resolves by default.
+
+The configuration is the one GP-GOMEA's first author committed for running it as a benchmark
+baseline (SRBench 2021), without the hyperparameter grid that SRBench's maintainers searched around it:
+- GP-GOMEA with the linkage-tree FOS, linear scaling and ephemeral random constants;
+- the interleaved multistart scheme off, population 500, initial tree height 4, elitism 1;
+- one thread.
+
+The interleaved multistart scheme is the authors' way to run GP-GOMEA without choosing a population
+size. It is off because the first author turned it off in his benchmark configuration.
+
+```yaml
+model_adapter:
+  type: subprocess
+  worker: gpgomea
+  python: "{{ROOT}}/envs/gpgomea/bin/python"
+  config_provenance: author_blessed
+  simplipy_engine: acj-5-4-llm
+  timeout: 9600
+  options:
+    max_evaluations: 1048576
+```
+
+| key | default | meaning |
+|---|---|---|
+| `options.max_evaluations` | `500000` | fitness evaluations of whole trees, the initial population's included: the budget |
+| `options.seed` | `0` | mixed with a hash of the problem's data into the run's seed |
+| `options.config` | none | settings that replace the configuration's; for side experiments only, which are then `harness_tuned` |
+| `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
+
+GP-GOMEA stops by itself after 7,200 s, a guard the ladder does not reach. The worker records a fit
+that runs 1,800 s past that as the problem's error. Set srbf's `timeout` above both, as above, so
+that srbf does not restart the worker for such a fit.
+
+**Operators.** GP-GOMEA has `+ - *`, `exp sin cos` and the square `(u)^2` directly. It has
+division, logarithm and square root only in protected form, and each is written as the function it
+computes, so that srbf evaluates what GP-GOMEA evaluated:
+
+| GP-GOMEA | computes | written as |
+|---|---|---|
+| `p/(u, v)` | `sign(v) * u / (abs(v) + 1e-6)`, with `sign(0) = 1` | `u/(v + 1e-06)` when `v >= 0` at every support point, `u/(v - 1e-06)` when `v < 0` at every support point, otherwise `u/(v*(1 + 1e-06/abs(v)))` |
+| `plog(u)` | `log(abs(u))`, and 0 where that is not finite | `log(abs(u))`, or `0` when `u` is 0 at every support point |
+| `sqrt(u)` | `sqrt(abs(u))` | `sqrt(abs(u))` |
+| `(u)^2` | `u**2` | `(u)**2` |
+
+On every support point each spelling is GP-GOMEA's function. GP-GOMEA has no node for other
+powers and roots, `abs`, `tan`, or the inverse and hyperbolic functions. It expresses `neg` and
+`inv` through `-` and `p/`.
+
+**What to know when reading the results:**
+- GP-GOMEA returns its model as `a + b * f(x)`, with the intercept and slope fitted by least
+  squares. It prints them with six decimals. The worker computes them again in double precision
+  with GP-GOMEA's own least-squares step, which restores the values the method computed.
+- Its random constants are multiples of 0.001 drawn from ±5 times the largest absolute input, and
+  it does not optimize them.
+- The intercept, the slope and the guards of the protected operators are constants of the
+  prediction, so on a law without such constants the prediction rarely matches the ground truth
+  symbol for symbol. Its numeric recovery is the comparable rate.
+- The budget is checked between generations, so a run overshoots it by up to one generation (about
+  10,000 evaluations at the start of a run). The `evaluations` column records what a fit spent.
+- Every fit runs in a process forked for it, on one thread, and starts the random number
+  generators as a fresh process would. The same data and seed give the same answer.
+
+The worker also stores GP-GOMEA's own printed model in the `model_string` column.
+`configs/evaluation/scaling/gpgomea_fastsrb.yaml` sweeps the evaluations in doublings, from 2^14,
+the first power of two above the cost of one generation, up to about 100 s per problem on the
+reference machine. `configs/evaluation/panels/gpgomea_srbench2021_feynman.yaml` runs the
+configuration that SRBench 2021 published its GP-GOMEA results with, on the Feynman catalogs.
 
 ## Sampling and enumeration baselines
 
