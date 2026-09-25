@@ -10,6 +10,7 @@ block. To enter a method of your own, see [Adding your method](adapters.md).
 | `subprocess`, `worker: operon` | [Operon](#operon) | `pip install pyoperon==0.6.1 scikit-learn`, in an environment of its own |
 | `nesymres` | [NeSymReS](#nesymres) | clone, patch, download weights |
 | `e2e` | [E2E](#e2e) | clone, patch, download weights |
+| `subprocess`, `worker: dso` | [DSR and uDSR\*](#dso) | `scripts/envs/build_dso_env.sh`: a conda environment with Python 3.7 |
 | `lample_charton`, `brute_force` | [prior sampling and enumeration](#sampling-and-enumeration-baselines) | none |
 | `subprocess` | [any method, in its own environment](adapters.md) | yours |
 
@@ -239,6 +240,95 @@ model_adapter:
 | `n_trees_to_refine` | `10` | candidates whose constants are refined |
 | `rescale` | `true` | standardize the inputs, as the model expects |
 | `device` | `cpu` | |
+
+## DSO
+
+```bash
+scripts/envs/build_dso_env.sh envs/dso        # needs conda or mamba, git and a C compiler
+```
+
+DSO (deep symbolic optimization) runs through the [worker protocol](adapters.md) as `worker: dso`, in an
+environment of its own: its release v3.0.0 needs Python 3.6 or 3.7 and TensorFlow 1.14. The script creates that
+environment with conda from pinned package lists (`scripts/envs/dso-conda-linux-64.txt`,
+`scripts/envs/dso-requirements.txt`) and installs DSO from its release commit in editable mode, which DSO requires.
+One worker runs two methods, chosen by `options.arm`:
+
+- **DSR** (`arm: dsr`): deep symbolic regression, an RNN trained with a risk-seeking policy gradient (Petersen et
+  al., ICLR 2021), in the regression configuration DSO ships: batch 1,000, learning rate 0.0005, entropy weight 0.03
+  with a decay of 0.7 along the expression, the soft length and uniform arity priors, at most 64 tokens. The constant
+  token is added, as DSO's authors advise for data with constants.
+- **uDSR\*** (`arm: udsr`): unified deep symbolic regression (Landajuela et al., NeurIPS 2022) as far as it was
+  released.[^udsr] It adds GP-meld, a genetic-programming inner loop seeded with each batch of the RNN (Mundhenk
+  et al., NeurIPS 2021), and a polynomial token whose coefficients are fitted by least squares. The configuration is
+  the uDSR paper's Table 3: priority queue training with learning rate 0.0025, batch and GP population 500, 25 GP
+  generations per iteration, entropy weight 0.03 with decay 0.7, the polynomial token of degree 3 with at most 10
+  terms, and the constant token and the literal 1.
+
+[^udsr]: Public release: DSR, GP-meld and the polynomial token; the paper's AI Feynman step and pre-training were
+    never released.
+
+```yaml
+model_adapter:
+  type: subprocess
+  worker: dso
+  python: "{{ROOT}}/envs/dso/bin/python"
+  config_provenance: author_blessed        # upstream_default for arm: dsr
+  simplipy_engine: acj-5-4-llm
+  timeout: 7200
+  options:
+    arm: udsr
+    n_samples: 13000
+```
+
+| key | default | meaning |
+|---|---|---|
+| `options.arm` | required | `dsr` or `udsr` |
+| `options.n_samples` | `2000000` | expressions the RNN samples and GP-meld breeds, repeats included: the budget |
+| `options.seed` | `0` | mixed with a hash of the problem's data into the run's seed |
+| `options.max_seconds` | `3600` | a wall-clock guard far above every budget of the ladders; when it passes, the best expression so far is returned and `guard_hit` is set |
+| `options.warmup` | `true` | run a small throwaway fit when the worker starts, so that compiling DSO's numba functions is not part of the first problem's time |
+| `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
+
+**Budget.** DSO checks `n_samples` after each iteration: an iteration is 1,000 expressions for DSR and 500 + 25 ×
+500 = 13,000 for uDSR\*, so the ladders count whole iterations. A search stops early once an expression fits the
+data to a normalized mean squared error below 1e-12, which happens only on noiseless data.
+
+**Operators.** DSO searches over the operators it has among those the expressions are written in:
+
+- `+ - * /` and `neg abs inv sin cos tan tanh exp log`;
+- `^` as squares, cubes and fourth powers, and `rootn` as the square root.
+
+It has no `asin acos atan sinh cosh asinh acosh atanh` and no general power or root.
+
+**Patches.** The worker applies three patches to DSO v3.0.0, each the smallest change that restores the released
+method; its docstring gives the details.
+
+- GP-meld evaluates the expressions it breeds. The release scores every bred expression as the RNN sample it came
+  from, which makes GP-meld inert; the patch restores what the GP-meld paper's own release evaluates.
+- The polynomial token is fitted under `neg` and `n4` too. DSO fits it by inverting the operators above it and had
+  no inverse for these two, which stopped the search.
+- A GP-meld copy of an expression shares the primitive set instead of copying it. The search is unchanged
+  expression for expression; the copies took most of an iteration's time.
+
+**What to know when reading the results:**
+
+- The prediction is the expression with the highest reward on the data, the inverse of the normalized root mean
+  squared error; DSO adds no complexity penalty, so predictions can be long.
+- An expression that raises a floating-point error on any data point, underflow included, gets the lowest reward.
+- The polynomial token needs a data point per monomial: `C(d + 3, 3)` for `d` variables. With fewer points it is
+  the constant 1, which the result records as `linear_underdetermined`; at 512 points this happens from 13
+  variables on.
+- The prior that keeps the polynomial token out of `sin cos tan abs` and the even powers binds the RNN only:
+  GP-meld's check of it looks at one of these operators, as in the authors' own code, so GP-meld breeds such
+  expressions.
+- One search runs on one thread, and its result depends only on the problem's data and the seed.
+
+The worker stores the Pareto front of complexity against reward over every expression evaluated in the `front`
+column, and the expressions and iterations used in `nevals` and `iterations`.
+`configs/evaluation/scaling/dso_dsr_fastsrb.yaml` sweeps DSR's budget in doublings of an iteration, from 1,000 to
+16,000 expressions, up to about 100 s per problem on the reference machine.
+`configs/evaluation/scaling/dso_udsr_fastsrb.yaml` runs uDSR\* for one iteration, 13,000 expressions: a single
+iteration already takes about that long, because GP-meld fits the constants of thousands of new expressions in it.
 
 ## Sampling and enumeration baselines
 
