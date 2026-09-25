@@ -165,7 +165,7 @@ and division.
 - One search runs on one thread: more threads make a run irreproducible.
 
 The worker stores the whole Pareto front in the `front` column. `configs/evaluation/scaling/operon_fastsrb.yaml`
-sweeps the evaluations from 2^10 to 2^20.
+sweeps the evaluations in doublings from 2^10 up to about 100 s per problem on the reference machine.
 
 ## NeSymReS
 
