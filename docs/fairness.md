@@ -91,6 +91,9 @@ The configs in the repository are labeled as follows, and a test keeps them that
 - **Operon:** `author_blessed`: the configuration its first author published for running it as a benchmark
   baseline, without its hyperparameter search. Its library defaults differ: one objective and no local
   search, which no benchmark run by its authors has used.
+- **QLattice:** `author_blessed`: the configuration its authors submitted to SRBench, their own loop for 200
+  epochs with models ranked by feyn's `wide_parsimony` criterion. The library's `auto_run` defaults differ: 10
+  epochs and the Bayesian information criterion.
 - **Flash-ANSR, every size:** `author_blessed`. For these entries the method's authors and the
   benchmark's maintainers are the same people, which is exactly what the label discloses. Any
   method's authors get the same slot on the same terms.
