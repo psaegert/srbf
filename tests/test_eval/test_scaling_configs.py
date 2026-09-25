@@ -41,6 +41,8 @@ EXPECTED_PROVENANCE = {
     # a shipped worker whose configuration its first author published for benchmarking (Operon: his SRBench
     # 2024/25 submission without its tuning layer), rather than the library's own defaults
     "subprocess:operon": "author_blessed",
+    # Bingo: the configuration its authors ship for benchmarking and submitted to SRBench (their srbench_interface)
+    "subprocess:bingo": "author_blessed",
 }
 BANNED = ["skeleton_pool", "skeleton dataset", "skeleton_dataset", "type: fastsrb",
           "benchmark_path", "datasets_per_expression", "noise_level", "support_points"]

@@ -8,6 +8,7 @@ block. To enter a method of your own, see [Adding your method](adapters.md).
 | `flash_ansr` | [Flash-ANSR](#flash-ansr) and its prior reference | `flash_ansr install <checkpoint>` |
 | `pysr` | [PySR](#pysr) | `pip install pysr`, in an environment of its own if you like |
 | `subprocess`, `worker: operon` | [Operon](#operon) | `pip install pyoperon==0.6.1 scikit-learn`, in an environment of its own |
+| `subprocess`, `worker: bingo` | [Bingo](#bingo) | `scripts/envs/build_bingo_env.sh`, a conda environment of its own |
 | `nesymres` | [NeSymReS](#nesymres) | clone, patch, download weights |
 | `e2e` | [E2E](#e2e) | clone, patch, download weights |
 | `lample_charton`, `brute_force` | [prior sampling and enumeration](#sampling-and-enumeration-baselines) | none |
@@ -166,6 +167,82 @@ and division.
 
 The worker stores the whole Pareto front in the `front` column. `configs/evaluation/scaling/operon_fastsrb.yaml`
 sweeps the evaluations in doublings from 2^10 up to about 100 s per problem on the reference machine.
+
+## Bingo
+
+```bash
+scripts/envs/build_bingo_env.sh envs/bingo     # needs conda or mamba; a few minutes
+```
+
+Bingo (Randall, Townsend, Hochhalter and Bomarito, NASA) is genetic programming over acyclic
+graphs: each equation is a short stack of commands in which a command can reuse any earlier
+result. It selects by age-fitness Pareto optimization and fits the constants of every equation by
+Levenberg–Marquardt. srbf runs its release `bingo-nasa` 0.5.7 with its C++ extension, as
+`worker: bingo` in an environment of its own. Bingo is released under the Apache License 2.0.
+
+The build script creates a conda environment with MPICH and mpi4py, which the package requires,
+and installs the pinned packages into it. Nothing is compiled.
+
+The configuration is the one Bingo's authors ship for benchmarking and submitted to SRBench:
+- population 500, stack size 24, every equation simplified;
+- crossover probability 0.3, mutation probability 0.45, age-fitness Pareto selection;
+- mean squared error, Levenberg–Marquardt with tolerance 1e-5;
+- no generation limit, and a stop once the training error reaches 1e-16.
+
+```yaml
+model_adapter:
+  type: subprocess
+  worker: bingo
+  python: "{{ROOT}}/envs/bingo/bin/python"
+  config_provenance: author_blessed
+  simplipy_engine: acj-5-4-llm
+  timeout: 7200
+  options:
+    max_evals: 262144
+```
+
+| key | default | meaning |
+|---|---|---|
+| `options.max_evals` | `1000000` | evaluations of an equation's residuals or of their Jacobian, those of the constant fitting included: the budget |
+| `options.seed` | `0` | mixed with a hash of the problem's data into the run's seed |
+| `options.config` | none | settings that replace the configuration's; for side experiments only, which are then `harness_tuned` |
+| `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
+
+Bingo checks the budget after its initial population and then every 10 generations, so a run
+overshoots it by up to 10 generations. The `evaluations` column records what a fit spent. Bingo
+also stops by itself after 3,500 s (the limit its authors set for SRBench), a guard the ladder does
+not reach.
+
+**Operators.** Bingo searches over the operators it evaluates among those the expressions are
+written in:
+- `+ - * / ^` and `abs sin cos sinh cosh exp log`;
+- `rootn` for square roots.
+
+Its C++ backend, which Bingo uses whenever the extension loads, has no `tan`, no inverse
+trigonometric functions and no `tanh`. Bingo has no node for `asinh`, `acosh`, `atanh` or other
+roots. It expresses `neg` and `inv` through `-` and `/`. Two of its operators are protected, and
+each is written as the function it computes, so that srbf evaluates what Bingo evaluated:
+
+| Bingo | computes | written as |
+|---|---|---|
+| `log(u)` | `log(abs(u))` | `log(abs(u))` |
+| `sqrt(u)` | `sqrt(abs(u))` | `sqrt(abs(u))` |
+
+**What to know when reading the results:**
+- Bingo's answer is the equation with the lowest training error among its Pareto front and up to
+  100 members of its final population, each refitted after the search. The rule prefers accuracy
+  to simplicity, so an answer often carries terms that fit the training points but not the law.
+- A run stops before its budget only when the training error reaches 1e-16. On data it cannot fit
+  exactly, noisy data included, it always spends the whole budget.
+- The constant fitting starts from random values between -10,000 and 10,000, so answers can carry
+  constants of that size.
+- An equation is a graph that can reuse a subexpression. The written expression spells out every
+  use.
+- Every fit runs in one process on one thread. The same data and seed give the same answer.
+
+The worker also stores Bingo's own printed equation in the `bingo_string` column and its Pareto
+front in the `front` column. `configs/evaluation/scaling/bingo_fastsrb.yaml` sweeps the
+evaluations in doublings from 2^14 up to about 100 s per problem on the reference machine.
 
 ## NeSymReS
 

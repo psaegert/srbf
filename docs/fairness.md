@@ -91,6 +91,9 @@ The configs in the repository are labeled as follows, and a test keeps them that
 - **Operon:** `author_blessed`: the configuration its first author published for running it as a benchmark
   baseline, without its hyperparameter search. Its library defaults differ: one objective and no local
   search, which no benchmark run by its authors has used.
+- **Bingo:** `author_blessed`: the configuration its authors ship for benchmarking and submitted to
+  SRBench. Its library defaults differ: stack size 32, no simplification, crossover and mutation
+  probability 0.4, and the four arithmetic operators only.
 - **Flash-ANSR, every size:** `author_blessed`. For these entries the method's authors and the
   benchmark's maintainers are the same people, which is exactly what the label discloses. Any
   method's authors get the same slot on the same terms.
