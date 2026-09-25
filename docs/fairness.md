@@ -101,6 +101,8 @@ The configs in the repository are labeled as follows, and a test keeps them that
 - **The prior reference:** `author_blessed`, like the Flash-ANSR entries whose configuration it
   shares. It samples expressions from Flash-ANSR's training prior without a model and passes them
   through the same refinement and ranking.
+- **The oracle:** `author_blessed` on the same grounds. It passes the problem's ground truth through
+  the same refinement and ranking, so it is a ceiling for the fitting stage, not a competitor.
 - **GP-GOMEA:** `author_blessed`: the configuration its first author committed for running it as a
   benchmark baseline (SRBench 2021), without the hyperparameter grid that the benchmark's maintainers
   searched around it. Its library defaults differ: they run the interleaved multistart scheme, which

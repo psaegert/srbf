@@ -124,6 +124,16 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         record["ranking"] = self.ranking_config()
 
         y_fit = sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support
+        if getattr(self.model.generation_config, "method", None) == "oracle":
+            # The oracle's one privilege, in oracle mode only: this problem's ground truth (the law with its
+            # literals spelled, over the columns as x1..xN) becomes the one candidate the refiner fits.
+            # A fresh config of the model's own kind, so srbf needs no newer flash-ansr to run older ones.
+            expression = record.get("expression")
+            if not expression:
+                record["error"] = "The oracle needs the problem's ground truth, and this problem has none."
+                record["prediction_success"] = False
+                return EvaluationResult(record)
+            self.model.generation_config = type(self.model.generation_config)(expression=list(expression))
         complexity_value = self._resolve_complexity(record)
         variable_names = record.get("variable_names")
         x_val = sample.x_validation if sample.x_validation.shape[0] > 0 else None
