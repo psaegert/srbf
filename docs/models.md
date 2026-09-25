@@ -59,7 +59,7 @@ model_adapter:
 |---|---|---|
 | `model_path` | required | the checkpoint directory |
 | `evaluation_config` | required | a mapping, or the path of a YAML file that holds it |
-| `evaluation_config.generation_config` | required | `method` (`softmax_sampling`, or `prior_sampling` for the prior reference) and its `kwargs`; `draws` is the budget |
+| `evaluation_config.generation_config` | required | `method` (`softmax_sampling`, `prior_sampling` for the prior reference or `oracle` for the oracle) and its `kwargs`; `draws` is the budget |
 | `evaluation_config.n_restarts`, `refiner_p0_noise` | required | restarts of the constant fit and the distribution of its starting points |
 | `evaluation_config.refiner_method` | `curve_fit_lm` | the optimizer of the constant fit |
 | `evaluation_config.ranking` | required | how the prediction is chosen among the fitted candidates; see below. A `ranking` block directly under `model_adapter` replaces it |
@@ -86,6 +86,13 @@ The resolved ranking is stored in every result file. Unknown keys in the block a
 candidates are drawn from the training prior that ships beside the checkpoint
 (`catalog_train.yaml`) and then fitted and ranked like any other. It measures what the prior alone
 is worth (`configs/evaluation/scaling/flash-ansr-v25.0-T8-prior_srbf.yaml`).
+
+**The oracle.** With `generation_config.method: oracle` the model is not used either: the one candidate
+is the problem's ground truth, in the model's own emission format (a fittable literal is a
+`<constant>` for the refiner, a pow exponent or root index stays spelled), fitted and ranked like any
+other. Its budget is the refiner's restarts (`configs/evaluation/scaling/flash-ansr-v25.0-T8-oracle_srbf.yaml`,
+1 to 1,024). It is the ceiling of the fitting stage and runs only where a ground truth exists. Its
+symbolic recovery also audits the judge: a miss there is the exact law in another spelling.
 
 ## PySR
 

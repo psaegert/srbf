@@ -41,8 +41,8 @@ from typing import Any
 
 #: A result file's name: the rung and, for a shard, its index and count.
 #: A rung's result file is named after the method's budget unit: draws (choices_), iterations (niter_),
-#: evaluations (evals_) or sampled expressions (samples_).
-RUNG_PREFIXES = ("choices", "niter", "evals", "samples")
+#: evaluations (evals_), sampled expressions (samples_) or refiner restarts (restarts_, the oracle).
+RUNG_PREFIXES = ("choices", "niter", "evals", "samples", "restarts")
 RESULT_FILE = re.compile(r"(?:" + "|".join(RUNG_PREFIXES) + r")_(\d+)(?:\.shard-(\d+)-of-(\d+))?\.pkl$")
 
 ID_COLUMNS = ["model", "draw", "catalog", "rung", "shard", "row", "sha"]
