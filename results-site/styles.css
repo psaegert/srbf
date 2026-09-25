@@ -167,8 +167,8 @@ html[data-theme="dark"] #va {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 1.5rem 1.6rem 1.7rem;
-  margin: .5rem 0 2rem;
+  padding: 2rem 2.2rem 2.2rem;
+  margin: .75rem 0 2.5rem;
 }
 .explorer .loading { color: var(--ink-faint); padding: 5rem 0; text-align: center; }
 
@@ -497,38 +497,38 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
   font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-faint);
 }
 .explorer-v2 p.v2hint, .headline-v2 .v2hlfig figcaption, .plot-caption, .tap-hint, .matrix-legend {
-  font-size: 13px; line-height: 1.5; color: var(--ink-soft); max-width: 88ch; margin: 8px 0 0;
+  font-size: 13px; line-height: 1.55; color: var(--ink-soft); max-width: 88ch; margin: 10px 0 0;
 }
 /* the release's own block: a title and one caption line in the headline's roles, then Protocol and Progress, each
    named in the one label style */
-.explorer-v2 .v2relhead { display: flex; justify-content: space-between; align-items: flex-end; gap: 8px 16px; flex-wrap: wrap; margin: 22px 0 14px; }
+.explorer-v2 .v2relhead { display: flex; justify-content: space-between; align-items: flex-end; gap: 8px 16px; flex-wrap: wrap; margin: 0 0 16px; }
 .explorer-v2 .v2relhead .v2hlsub { margin: 0; }
-.explorer-v2 .v2release { margin: 0 0 14px; font-size: 14px; color: var(--ink-soft); }
+.explorer-v2 .v2release { margin: 0 0 18px; font-size: 14px; color: var(--ink-soft); }
 .explorer-v2 .v2release summary { cursor: pointer; width: max-content; }
 .explorer-v2 .v2release summary:hover, .explorer-v2 .v2release summary:focus-visible { color: var(--accent); }
 .explorer-v2 .v2release ul { margin: 6px 0 0; padding-left: 1.2em; max-width: 88ch; }
 .explorer-v2 .v2release li { margin: 3px 0; }
-.explorer-v2 .v2status { margin: 0 0 14px; }
-.explorer-v2 .v2status h3 { margin: 0 0 6px; }
+.explorer-v2 .v2status { margin: 34px 0 44px; }   /* release, then progress, then the explorer's tabs: each set apart */
+.explorer-v2 .v2status h3 { margin: 0 0 10px; }
 .explorer-v2 .v2updated { font-variant-numeric: tabular-nums; }
 .explorer-v2 .v2ago { white-space: nowrap; }   /* "· 3 hours ago" never breaks inside */
-.explorer-v2 .v2strip { display: flex; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
-.explorer-v2 .v2tile { flex: 1 1 150px; max-width: 260px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 8px 12px; }
+.explorer-v2 .v2strip { display: flex; gap: 12px; flex-wrap: wrap; margin: 10px 0; }
+.explorer-v2 .v2tile { flex: 1 1 132px; max-width: 260px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 10px 14px; }
 .explorer-v2 .v2tile b { display: block; }   /* a name wraps; it is never cut to an ellipsis */
 .explorer-v2 .v2tile span { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .explorer-v2 .v2tile small { color: var(--ink-faint); }
 .explorer-v2 .v2bar { height: 5px; background: var(--line); border-radius: 3px; margin-top: 6px; overflow: hidden; }
 .explorer-v2 .v2bar i { display: block; height: 100%; background: var(--accent); }
-.explorer-v2 .v2tabs { display: flex; gap: 0 22px; flex-wrap: wrap; margin: 14px 0 14px; border-bottom: 1px solid var(--line); }
+.explorer-v2 .v2tabs { display: flex; gap: 0 24px; flex-wrap: wrap; margin: 0 0 26px; border-bottom: 1px solid var(--line); }
 .explorer-v2 .v2tab { border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; color: var(--ink-soft); padding: .5rem .1rem; font: inherit; font-size: .95rem; font-weight: 500; cursor: pointer; }
 .explorer-v2 .v2tab:hover, .explorer-v2 .v2tab:focus-visible { color: var(--ink); border-bottom-color: var(--line); outline: none; }
 .explorer-v2 .v2tab:focus-visible { border-bottom-color: var(--accent); }
 .explorer-v2 .v2tab.active { color: var(--ink); font-weight: 600; border-bottom-color: var(--accent); }
-.explorer-v2 .v2layout { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 16px; align-items: start; }
-.explorer-v2 .v2side { display: grid; gap: 10px; min-width: 0; }
+.explorer-v2 .v2layout { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 26px; align-items: start; }
+.explorer-v2 .v2side { display: grid; gap: 14px; min-width: 0; }
 .explorer-v2 .v2main { min-width: 0; }
-.explorer-v2 .v2panel { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 10px 12px; }
-.explorer-v2 .v2panel h3 { margin: 0 0 6px; }
+.explorer-v2 .v2panel { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 14px 16px; }
+.explorer-v2 .v2panel h3 { margin: 0 0 8px; }
 .explorer-v2 .v2panel h3 .v2hint { text-transform: none; letter-spacing: normal; font-weight: 400; }
 .explorer-v2 .v2panel h4 { font-size: 12px; margin: 8px 0 3px; color: var(--ink-soft); font-weight: 600; }
 .explorer-v2 .v2panel label { display: block; cursor: pointer; }
@@ -567,7 +567,7 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 .explorer-v2 .v2hint { color: var(--ink-faint); font-size: 13px; }
 .explorer-v2 .v2err { color: #c0392b; font-weight: 600; min-height: 1em; margin: 0 0 4px; }
 .explorer-v2 .v2err:empty { display: none; }
-.explorer-v2 .v2charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(520px, 100%), 1fr)); gap: 14px; min-width: 0; }
+.explorer-v2 .v2charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(520px, 100%), 1fr)); gap: 20px; min-width: 0; }
 .explorer-v2 .v2chart { width: 100%; max-width: 100%; height: auto; display: block; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); }
 .explorer-v2 .v2dist { max-width: 760px; }
 .explorer-v2 .ct { font-size: 15px; font-weight: 600; fill: var(--ink); }
@@ -594,7 +594,7 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 /* A plot is a card: its two axes are chosen on it, and it can be removed from it. The last cell of the
    grid is the place a new plot would appear, drawn as an outline with a round plus. */
 .explorer-v2 .v2plot { margin: 0; min-width: 0; display: flex; flex-direction: column; }
-.explorer-v2 .v2plothead { display: flex; align-items: center; gap: 7px; padding: 0 2px 7px; min-width: 0; }
+.explorer-v2 .v2plothead { display: flex; align-items: center; gap: 7px; padding: 0 2px 10px; min-width: 0; }
 .explorer-v2 .v2vs { font-size: 12.5px; color: var(--ink-faint); }
 /* the swap between two metric axes sits where "vs" would: the same quiet grey, a soft rounded outline */
 .explorer-v2 .v2swap { flex: none; font: inherit; font-size: 15px; line-height: 1; color: var(--ink-faint); background: none;
@@ -644,15 +644,15 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 .v2pickitem[disabled]:hover { background: none; }
 
 /* Headline: the two fixed charts above the explorer. Same numbers for every visitor, no controls. */
-.headline-v2 { background: var(--accent-soft); border: 1px solid var(--line); border-radius: var(--r-card); padding: 14px 16px 12px; margin: 0 0 16px; }
+.headline-v2 { background: var(--accent-soft); border: 1px solid var(--line); border-radius: var(--r-card); padding: 20px 22px 18px; margin: 0 0 44px; }
 .headline-v2 .v2hltitle, .explorer-v2 .v2hltitle { font-size: 20px; margin: 0 0 2px; letter-spacing: -.01em; }
-.headline-v2 .v2hlsub, .explorer-v2 .v2hlsub { margin: 0 0 10px; color: var(--ink-soft); font-size: 14px; }
-.headline-v2 .v2hlcharts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(520px, 100%), 1fr)); gap: 14px; min-width: 0; }
+.headline-v2 .v2hlsub, .explorer-v2 .v2hlsub { margin: 0 0 16px; color: var(--ink-soft); font-size: 14px; }
+.headline-v2 .v2hlcharts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(520px, 100%), 1fr)); gap: 20px; min-width: 0; }
 .headline-v2 .v2hlfig { margin: 0; min-width: 0; }
 .headline-v2 .v2chart { box-shadow: var(--shadow); }
 .headline-v2 .ct { font-size: 15px; }
 
-.release-switch { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 0 0 12px; font-size: 14px; }
+.release-switch { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 0 0 18px; font-size: 14px; }
 .release-switch .release-label { margin-right: 4px; }
 .release-switch a { display: inline-block; padding: 4px 11px; border: 1px solid var(--line); border-radius: var(--r-ctl); color: var(--ink); text-decoration: none; background: var(--surface); }
 .release-switch a[aria-current="true"] { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
@@ -669,6 +669,11 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
   .v2pickcols { columns: 1; }
 }
 @media (prefers-reduced-motion: reduce) { .explorer-v2 .v2matrix td { transition: none; } }
+/* phones: the charts take the width, the frames around them step back */
+@media (max-width: 560px) {
+  .panel { padding: 1.5rem 1rem 1.6rem; }
+  .headline-v2 { padding: 14px 12px 12px; }
+}
 
 /* Controls that belong to one display sit on it: which budget a snapshot is taken at, how a distribution is drawn. */
 .explorer-v2 .v2viewbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin: 0 0 12px; padding: 8px 12px;
