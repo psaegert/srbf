@@ -8,6 +8,7 @@ block. To enter a method of your own, see [Adding your method](adapters.md).
 | `flash_ansr` | [Flash-ANSR](#flash-ansr) and its prior reference | `flash_ansr install <checkpoint>` |
 | `pysr` | [PySR](#pysr) | `pip install pysr`, in an environment of its own if you like |
 | `subprocess`, `worker: operon` | [Operon](#operon) | `pip install pyoperon==0.6.1 scikit-learn`, in an environment of its own |
+| `subprocess`, `worker: rilsrols` | [RILS-ROLS](#rils-rols) | `scripts/envs/build_rilsrols_env.sh`, an environment of its own |
 | `nesymres` | [NeSymReS](#nesymres) | clone, patch, download weights |
 | `e2e` | [E2E](#e2e) | clone, patch, download weights |
 | `subprocess`, `worker: dso` | [DSR and uDSR\*](#dso) | `scripts/envs/build_dso_env.sh`: a conda environment with Python 3.7 |
@@ -176,6 +177,85 @@ and division.
 
 The worker stores the whole Pareto front in the `front` column. `configs/evaluation/scaling/operon_fastsrb.yaml`
 sweeps the evaluations in doublings from 2^10 up to about 100 s per problem on the reference machine.
+
+## RILS-ROLS
+
+```bash
+PYTHON=python3.12 scripts/envs/build_rilsrols_env.sh envs/rilsrols     # needs a C++17 compiler; about a minute
+```
+
+RILS-ROLS (Kartelj and Djukanović, Journal of Big Data, 2023) is iterated local search over expression trees. From
+the best expression so far it perturbs the tree, runs a local search from every perturbation, and fits the linear
+coefficients of every candidate by ordinary least squares. It ranks candidates by a product of R², RMSE and size.
+srbf runs release 1.6.7 (`kartelj/rils-rols`, MIT licence), the release its authors submitted to SRBench, as
+`worker: rilsrols` in an environment of its own.
+
+The build script creates a Python 3.12 environment from the pinned packages in
+`scripts/envs/rilsrols-requirements.txt` (numpy 1.26.4 as in SRBench's environment for the method, the others at
+their releases of the submission's date), downloads the source release from PyPI, checks its hash and compiles it.
+RILS-ROLS compiles with `-march=native`, so build the environment on each machine that runs it.
+
+The configuration is the one RILS-ROLS's first author committed for running it as a benchmark baseline (his
+SRBench submission), without the hyperparameter grid that the benchmark's maintainers later searched around it:
+- expressions of at most 50 nodes;
+- the sample size chosen by the method, which on up to 10,000 points takes them all;
+- the size penalty at its default, 0.001.
+
+```yaml
+model_adapter:
+  type: subprocess
+  worker: rilsrols
+  python: "{{ROOT}}/envs/rilsrols/bin/python"
+  config_provenance: author_blessed
+  simplipy_engine: acj-5-4-llm
+  timeout: 4800
+  options:
+    max_fit_calls: 1048576
+```
+
+| key | default | meaning |
+|---|---|---|
+| `options.max_fit_calls` | `1000000` | fitness evaluations of whole expressions, the local search's included: the budget |
+| `options.seed` | `0` | mixed with a hash of the problem's data into the run's seed |
+| `options.config` | none | settings that replace the configuration's; for side experiments only, which are then `harness_tuned` |
+| `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
+
+RILS-ROLS stops by itself after 3,600 s, a guard the ladder does not reach. The worker records a fit that runs
+600 s past that as the problem's error. Set srbf's `timeout` above both, as above, so that srbf does not restart
+the worker for such a fit.
+
+**Operators.** RILS-ROLS's operators are fixed in its code and cannot be chosen: `+ - * /`, `sin cos exp log sqrt`
+and the square, all among the benchmark's operators. It has no `tan`, no inverse or hyperbolic functions, no `abs`
+and no other powers or roots. Its starting constants are -1, 0, 0.5, 1, 2, π and 10; every other constant comes from
+least squares.
+
+**One change to the source.** RILS-ROLS prints its model's constants with six decimals, so that 6.674e-11 reads as
+0 and every constant loses most of its digits. The build script changes that in one place
+(`scripts/envs/patch_rilsrols.py`): the constants of the final model are printed with every digit. RILS-ROLS writes
+a constant within 1e-12 of an integer as that integer, and the change keeps that rule except where the integer is
+0, where it would turn a division by a small constant into a division by zero. The search compares candidates by
+their printed form too, so that printing stays as it is and only the model handed back at the end changes. On the
+same data and seed, the changed and the unchanged build take the same steps and return the same model.
+
+**What to know when reading the results:**
+- The prediction is the method's own answer: its final model after sympy's simplification, with every constant at
+  full precision and in srbf's variable names. RILS-ROLS gives the simplification two seconds and otherwise returns
+  the model as it printed it; a fit whose `fit_time` exceeds the search's own `total_time` by two seconds took that
+  path. When the simplified model holds a function the benchmark does not read, the worker writes the model as
+  printed instead and sets `answer_form` to `unsimplified`. `model_string` keeps the model as RILS-ROLS printed it.
+- RILS-ROLS drops every least-squares coefficient smaller than 1e-12 in magnitude, so on a law whose values are
+  that small it returns a constant.
+- It evaluates without protected operators, as srbf does. The `string_deviation` column records the largest
+  deviation of the written prediction from the method's own values on the support points, relative to the largest
+  of those values.
+- It does not stop early: a fit spends its whole budget, also after it has fit the data exactly. The `fit_calls`
+  column records what a fit spent, a few calls more than the budget.
+- Every fit runs in a process forked for it, on one thread. The same data and seed give the same answer on the same
+  machine.
+
+`configs/evaluation/scaling/rilsrols_fastsrb.yaml` sweeps the fitness evaluations in doublings from 2^6, the first
+power of two above the method's first step (scoring the perturbations of its starting model), up to 2^21, about
+100 s per problem on the reference machine.
 
 ## NeSymReS
 
