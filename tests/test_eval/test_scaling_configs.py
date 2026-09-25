@@ -41,6 +41,9 @@ EXPECTED_PROVENANCE = {
     # a worker in its own environment (docs/adapters.md): a third-party method run at the defaults
     # its own CLI ships, exactly as the in-process third-party adapters are
     "subprocess": "upstream_default",
+    # a shipped worker whose configuration its first author published for benchmarking (Operon: his SRBench
+    # 2024/25 submission without its tuning layer), rather than the library's own defaults
+    "subprocess:operon": "author_blessed",
 }
 BANNED = ["skeleton_pool", "skeleton dataset", "skeleton_dataset", "type: fastsrb",
           "benchmark_path", "datasets_per_expression", "noise_level", "support_points"]
