@@ -8,9 +8,11 @@ block. To enter a method of your own, see [Adding your method](adapters.md).
 | `flash_ansr` | [Flash-ANSR](#flash-ansr) and its prior reference | `flash_ansr install <checkpoint>` |
 | `pysr` | [PySR](#pysr) | `pip install pysr`, in an environment of its own if you like |
 | `subprocess`, `worker: operon` | [Operon](#operon) | `pip install pyoperon==0.6.1 scikit-learn`, in an environment of its own |
-| `subprocess`, `worker: qlattice` | [QLattice](#qlattice) | `scripts/envs/build_qlattice_env.sh`, an environment of its own |
 | `nesymres` | [NeSymReS](#nesymres) | clone, patch, download weights |
 | `e2e` | [E2E](#e2e) | clone, patch, download weights |
+| `subprocess`, `worker: dso` | [DSR and uDSR\*](#dso) | `scripts/envs/build_dso_env.sh`: a conda environment with Python 3.7 |
+| `subprocess`, `worker: gpgomea` | [GP-GOMEA](#gp-gomea) | `scripts/envs/build_gpgomea_env.sh envs/gpgomea`: a conda environment of its own, compiled from source |
+| `subprocess`, `worker: qlattice` | [QLattice](#qlattice) | `scripts/envs/build_qlattice_env.sh envs/qlattice`: a virtual environment with Python 3.12 |
 | `lample_charton`, `brute_force` | [prior sampling and enumeration](#sampling-and-enumeration-baselines) | none |
 | `subprocess` | [any method, in its own environment](adapters.md) | yours |
 
@@ -168,74 +170,6 @@ and division.
 The worker stores the whole Pareto front in the `front` column. `configs/evaluation/scaling/operon_fastsrb.yaml`
 sweeps the evaluations in doublings from 2^10 up to about 100 s per problem on the reference machine.
 
-## QLattice
-
-```bash
-scripts/envs/build_qlattice_env.sh envs/qlattice     # Python 3.12, feyn 3.5.0 and pinned dependencies
-```
-
-QLattice samples models from a probability distribution over expression graphs, fits every sampled model's
-parameters by gradient descent and moves the distribution towards the best models, epoch after epoch. It is
-distributed as the Python package `feyn` (Abzu), whose core is closed source; it runs locally, without a licence key
-or network access. **Licence:** feyn is licensed CC BY-NC-ND 4.0, for research and other non-commercial use. The
-script installs it from PyPI; srbf redistributes none of it.
-
-QLattice runs through the [worker protocol](adapters.md) as `worker: qlattice`, in an environment of its own. The
-configuration is the one QLattice's authors submitted to SRBench:
-- their own epoch loop: sample new models, fit the whole pool, prune it, update the distribution;
-- 200 epochs, at most 10 edges per model;
-- models ranked by feyn's `wide_parsimony` criterion, fitted to the squared error, every input numerical;
-- the prediction is the first model the loop returns, its best by that ranking.
-
-```yaml
-model_adapter:
-  type: subprocess
-  worker: qlattice
-  python: "{{ROOT}}/envs/qlattice/bin/python"
-  config_provenance: author_blessed
-  simplipy_engine: acj-5-4-llm
-  timeout: 7200
-  options:
-    n_epochs: 16
-```
-
-| key | default | meaning |
-|---|---|---|
-| `options.n_epochs` | `200` | epochs of the loop: the budget |
-| `options.seed` | `0` | mixed with a hash of the problem's data into the run's seed |
-| `options.max_time` | `3600` | the authors' wall-clock stop in seconds, SRBench's limit for this method; when it passes, the best models so far are returned and `hit_time_guard` is set |
-| `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
-
-**Budget.** An epoch samples about a thousand new models and refits the whole pool, each model on 20,000 rows
-resampled from the data, so its cost hardly depends on the number of data points.
-
-**Operators.** QLattice searches over the functions it has among the benchmark's operators:
-- `+ *` and `exp log tanh`;
-- `^` as the square, `rootn` as the square root and `inv` as `1/u`;
-- the affine node `w*u + b`, through which it places constants inside a model.
-
-It has no `sin`, `cos` or other trigonometric function, no `abs`, and no general power or root; subtraction and
-negation it expresses through signed weights. Its `gaussian` function, `exp(-2u²)`, is a compound of the
-benchmark's operators and is left out.
-
-**Patches.** The method is unchanged. The authors' loop gets one crash fix: it passes `stypes=None` to feyn's data
-validation, which the version the authors submitted with (3.0.1) accepted and 3.5.0 rejects; the worker passes an
-empty mapping there, which states the same thing, every input numerical.
-
-**What to know when reading the results:**
-- Every input enters through an affine map and the output leaves through one, so a prediction reads
-  `A*f(a1*x1 + c1, ...) + B`. Like Operon's, that shape rarely matches a law symbol for symbol, so its numeric
-  recovery is the comparable rate.
-- A model has at most 10 edges.
-- QLattice's `exp`, `log`, square root, square and `1/u` are protected: the model clips their argument. Where a
-  clip is active at a support or validation point, the prediction writes it out with `abs`, so that the expression
-  computes the model's own prediction; the `protections` column names these functions.
-- One search runs on one thread, and its result depends only on the problem's data and the seed.
-
-The worker stores the other models the method returned in the `diverse` column, and the largest deviation of the
-expression from the model's own predictions in `string_deviation` and `string_deviation_val`.
-`configs/evaluation/scaling/qlattice_fastsrb.yaml` sweeps the epochs in doublings from 1 to 16.
-
 ## NeSymReS
 
 In an environment of its own:
@@ -308,6 +242,256 @@ model_adapter:
 | `n_trees_to_refine` | `10` | candidates whose constants are refined |
 | `rescale` | `true` | standardize the inputs, as the model expects |
 | `device` | `cpu` | |
+
+## DSO
+
+```bash
+scripts/envs/build_dso_env.sh envs/dso        # needs conda or mamba, git and a C compiler
+```
+
+DSO (deep symbolic optimization) runs through the [worker protocol](adapters.md) as `worker: dso`, in an
+environment of its own: its release v3.0.0 needs Python 3.6 or 3.7 and TensorFlow 1.14. The script creates that
+environment with conda from pinned package lists (`scripts/envs/dso-conda-linux-64.txt`,
+`scripts/envs/dso-requirements.txt`) and installs DSO from its release commit in editable mode, which DSO requires.
+One worker runs two methods, chosen by `options.arm`:
+
+- **DSR** (`arm: dsr`): deep symbolic regression, an RNN trained with a risk-seeking policy gradient (Petersen et
+  al., ICLR 2021), in the regression configuration DSO ships: batch 1,000, learning rate 0.0005, entropy weight 0.03
+  with a decay of 0.7 along the expression, the soft length and uniform arity priors, at most 64 tokens. The constant
+  token is added, as DSO's authors advise for data with constants.
+- **uDSR\*** (`arm: udsr`): unified deep symbolic regression (Landajuela et al., NeurIPS 2022) as far as it was
+  released.[^udsr] It adds GP-meld, a genetic-programming inner loop seeded with each batch of the RNN (Mundhenk
+  et al., NeurIPS 2021), and a polynomial token whose coefficients are fitted by least squares. The configuration is
+  the uDSR paper's Table 3: priority queue training with learning rate 0.0025, batch and GP population 500, 25 GP
+  generations per iteration, entropy weight 0.03 with decay 0.7, the polynomial token of degree 3 with at most 10
+  terms, and the constant token and the literal 1.
+
+[^udsr]: Public release: DSR, GP-meld and the polynomial token; the paper's AI Feynman step and pre-training were
+    never released.
+
+```yaml
+model_adapter:
+  type: subprocess
+  worker: dso
+  python: "{{ROOT}}/envs/dso/bin/python"
+  config_provenance: author_blessed        # upstream_default for arm: dsr
+  simplipy_engine: acj-5-4-llm
+  timeout: 7200
+  options:
+    arm: udsr
+    n_samples: 13000
+```
+
+| key | default | meaning |
+|---|---|---|
+| `options.arm` | required | `dsr` or `udsr` |
+| `options.n_samples` | `2000000` | expressions the RNN samples and GP-meld breeds, repeats included: the budget |
+| `options.seed` | `0` | mixed with a hash of the problem's data into the run's seed |
+| `options.max_seconds` | `3600` | a wall-clock guard far above every budget of the ladders; when it passes, the best expression so far is returned and `guard_hit` is set |
+| `options.warmup` | `true` | run a small throwaway fit when the worker starts, so that compiling DSO's numba functions is not part of the first problem's time |
+| `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
+
+**Budget.** DSO checks `n_samples` after each iteration: an iteration is 1,000 expressions for DSR and 500 + 25 ×
+500 = 13,000 for uDSR\*, so the ladders count whole iterations. A search stops early once an expression fits the
+data to a normalized mean squared error below 1e-12, which happens only on noiseless data.
+
+**Operators.** DSO searches over the operators it has among those the expressions are written in:
+
+- `+ - * /` and `neg abs inv sin cos tan tanh exp log`;
+- `^` as squares, cubes and fourth powers, and `rootn` as the square root.
+
+It has no `asin acos atan sinh cosh asinh acosh atanh` and no general power or root.
+
+**Patches.** The worker applies three patches to DSO v3.0.0, each the smallest change that restores the released
+method; its docstring gives the details.
+
+- GP-meld evaluates the expressions it breeds. The release scores every bred expression as the RNN sample it came
+  from, which makes GP-meld inert; the patch restores what the GP-meld paper's own release evaluates.
+- The polynomial token is fitted under `neg` and `n4` too. DSO fits it by inverting the operators above it and had
+  no inverse for these two, which stopped the search.
+- A GP-meld copy of an expression shares the primitive set instead of copying it. The search is unchanged
+  expression for expression; the copies took most of an iteration's time.
+
+**What to know when reading the results:**
+
+- The prediction is the expression with the highest reward on the data, the inverse of the normalized root mean
+  squared error; DSO adds no complexity penalty, so predictions can be long.
+- An expression that raises a floating-point error on any data point, underflow included, gets the lowest reward.
+- The polynomial token needs a data point per monomial: `C(d + 3, 3)` for `d` variables. With fewer points it is
+  the constant 1, which the result records as `linear_underdetermined`; at 512 points this happens from 13
+  variables on.
+- The prior that keeps the polynomial token out of `sin cos tan abs` and the even powers binds the RNN only:
+  GP-meld's check of it looks at one of these operators, as in the authors' own code, so GP-meld breeds such
+  expressions.
+- One search runs on one thread, and its result depends only on the problem's data and the seed.
+
+The worker stores the Pareto front of complexity against reward over every expression evaluated in the `front`
+column, and the expressions and iterations used in `nevals` and `iterations`.
+`configs/evaluation/scaling/dso_dsr_fastsrb.yaml` sweeps DSR's budget in doublings of an iteration, from 1,000 to
+16,000 expressions, up to about 100 s per problem on the reference machine.
+`configs/evaluation/scaling/dso_udsr_fastsrb.yaml` runs uDSR\* for one iteration, 13,000 expressions: a single
+iteration already takes about that long, because GP-meld fits the constants of thousands of new expressions in it.
+
+## GP-GOMEA
+
+```bash
+scripts/envs/build_gpgomea_env.sh envs/gpgomea     # needs conda or mamba; a few minutes
+```
+
+GP-GOMEA (Virgolin, Alderliesten, Witteveen and Bosman) is genetic programming with gene-pool optimal
+mixing: every tree fills a fixed template, and each generation the method learns which template
+positions belong together and recombines them as blocks, keeping a change only when the tree does
+not get worse. srbf runs the original code (`marcovirgolin/GP-GOMEA`) at commit `6a92cb6`, the
+commit SRBench 2021 ran, through its Python bindings, as `worker: gpgomea` in an environment of its
+own.
+
+The build script creates a conda environment with the toolchain of that time (Python 3.8, Boost
+1.74, Armadillo 9.9, gcc 11.2, scikit-learn 0.24), clones the commit and compiles it. The C++
+source is compiled unchanged. The build system gets four adjustments, each explained in the
+script:
+- the Boost.Python and Boost.NumPy libraries are named for Python 3.8, as SRBench 2021's install
+  script does;
+- the environment's include and library directories are added to the compile and link lines, as
+  SRBench 2021's install script does;
+- the library directory is written into the module's run path, so the module loads without an
+  activated environment;
+- the compiler's sysroot is pinned to glibc 2.17, because the linker of gcc 11.2 cannot read the
+  newer one that conda resolves by default.
+
+The configuration is the one GP-GOMEA's first author committed for running it as a benchmark
+baseline (SRBench 2021), without the hyperparameter grid that SRBench's maintainers searched around it:
+- GP-GOMEA with the linkage-tree FOS, linear scaling and ephemeral random constants;
+- the interleaved multistart scheme off, population 500, initial tree height 4, elitism 1;
+- one thread.
+
+The interleaved multistart scheme is the authors' way to run GP-GOMEA without choosing a population
+size. It is off because the first author turned it off in his benchmark configuration.
+
+```yaml
+model_adapter:
+  type: subprocess
+  worker: gpgomea
+  python: "{{ROOT}}/envs/gpgomea/bin/python"
+  config_provenance: author_blessed
+  simplipy_engine: acj-5-4-llm
+  timeout: 9600
+  options:
+    max_evaluations: 1048576
+```
+
+| key | default | meaning |
+|---|---|---|
+| `options.max_evaluations` | `500000` | fitness evaluations of whole trees, the initial population's included: the budget |
+| `options.seed` | `0` | mixed with a hash of the problem's data into the run's seed |
+| `options.config` | none | settings that replace the configuration's; for side experiments only, which are then `harness_tuned` |
+| `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
+
+GP-GOMEA stops by itself after 7,200 s, a guard the ladder does not reach. The worker records a fit
+that runs 1,800 s past that as the problem's error. Set srbf's `timeout` above both, as above, so
+that srbf does not restart the worker for such a fit.
+
+**Operators.** GP-GOMEA has `+ - *`, `exp sin cos` and the square `(u)^2` directly. It has
+division, logarithm and square root only in protected form, and each is written as the function it
+computes, so that srbf evaluates what GP-GOMEA evaluated:
+
+| GP-GOMEA | computes | written as |
+|---|---|---|
+| `p/(u, v)` | `sign(v) * u / (abs(v) + 1e-6)`, with `sign(0) = 1` | `u/(v + 1e-06)` when `v >= 0` at every support point, `u/(v - 1e-06)` when `v < 0` at every support point, otherwise `u/(v*(1 + 1e-06/abs(v)))` |
+| `plog(u)` | `log(abs(u))`, and 0 where that is not finite | `log(abs(u))`, or `0` when `u` is 0 at every support point |
+| `sqrt(u)` | `sqrt(abs(u))` | `sqrt(abs(u))` |
+| `(u)^2` | `u**2` | `(u)**2` |
+
+On every support point each spelling is GP-GOMEA's function. GP-GOMEA has no node for other
+powers and roots, `abs`, `tan`, or the inverse and hyperbolic functions. It expresses `neg` and
+`inv` through `-` and `p/`.
+
+**What to know when reading the results:**
+- GP-GOMEA returns its model as `a + b * f(x)`, with the intercept and slope fitted by least
+  squares. It prints them with six decimals. The worker computes them again in double precision
+  with GP-GOMEA's own least-squares step, which restores the values the method computed.
+- Its random constants are multiples of 0.001 drawn from ±5 times the largest absolute input, and
+  it does not optimize them.
+- The intercept, the slope and the guards of the protected operators are constants of the
+  prediction, so on a law without such constants the prediction rarely matches the ground truth
+  symbol for symbol. Its numeric recovery is the comparable rate.
+- The budget is checked between generations, so a run overshoots it by up to one generation (about
+  10,000 evaluations at the start of a run). The `evaluations` column records what a fit spent.
+- Every fit runs in a process forked for it, on one thread, and starts the random number
+  generators as a fresh process would. The same data and seed give the same answer.
+
+The worker also stores GP-GOMEA's own printed model in the `model_string` column.
+`configs/evaluation/scaling/gpgomea_fastsrb.yaml` sweeps the evaluations in doublings, from 2^14,
+the first power of two above the cost of one generation, up to about 100 s per problem on the
+reference machine. `configs/evaluation/panels/gpgomea_srbench2021_feynman.yaml` runs the
+configuration that SRBench 2021 published its GP-GOMEA results with, on the Feynman catalogs.
+
+## QLattice
+
+```bash
+scripts/envs/build_qlattice_env.sh envs/qlattice     # Python 3.12, feyn 3.5.0 and pinned dependencies
+```
+
+QLattice samples models from a probability distribution over expression graphs, fits every sampled model's
+parameters by gradient descent and moves the distribution towards the best models, epoch after epoch. It is
+distributed as the Python package `feyn` (Abzu), whose core is closed source; it runs locally, without a licence key
+or network access. **Licence:** feyn is licensed CC BY-NC-ND 4.0, for research and other non-commercial use. The
+script installs it from PyPI; srbf redistributes none of it.
+
+QLattice runs through the [worker protocol](adapters.md) as `worker: qlattice`, in an environment of its own. The
+configuration is the one QLattice's authors submitted to SRBench:
+- their own epoch loop: sample new models, fit the whole pool, prune it, update the distribution;
+- 200 epochs, at most 10 edges per model;
+- models ranked by feyn's `wide_parsimony` criterion, fitted to the squared error, every input numerical;
+- the prediction is the first model the loop returns, its best by that ranking.
+
+```yaml
+model_adapter:
+  type: subprocess
+  worker: qlattice
+  python: "{{ROOT}}/envs/qlattice/bin/python"
+  config_provenance: author_blessed
+  simplipy_engine: acj-5-4-llm
+  timeout: 7200
+  options:
+    n_epochs: 16
+```
+
+| key | default | meaning |
+|---|---|---|
+| `options.n_epochs` | `200` | epochs of the loop: the budget |
+| `options.seed` | `0` | mixed with a hash of the problem's data into the run's seed |
+| `options.max_time` | `3600` | the authors' wall-clock stop in seconds, SRBench's limit for this method; when it passes, the best models so far are returned and `hit_time_guard` is set |
+| `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
+
+**Budget.** An epoch samples about a thousand new models and refits the whole pool, each model on 20,000 rows
+resampled from the data, so its cost hardly depends on the number of data points.
+
+**Operators.** QLattice searches over the functions it has among the benchmark's operators:
+- `+ *` and `exp log tanh`;
+- `^` as the square, `rootn` as the square root and `inv` as `1/u`;
+- the affine node `w*u + b`, through which it places constants inside a model.
+
+It has no `sin`, `cos` or other trigonometric function, no `abs`, and no general power or root; subtraction and
+negation it expresses through signed weights. Its `gaussian` function, `exp(-2u²)`, is a compound of the
+benchmark's operators and is left out.
+
+**Patches.** The method is unchanged. The authors' loop gets one crash fix: it passes `stypes=None` to feyn's data
+validation, which the version the authors submitted with (3.0.1) accepted and 3.5.0 rejects; the worker passes an
+empty mapping there, which states the same thing, every input numerical.
+
+**What to know when reading the results:**
+- Every input enters through an affine map and the output leaves through one, so a prediction reads
+  `A*f(a1*x1 + c1, ...) + B`. Like Operon's, that shape rarely matches a law symbol for symbol, so its numeric
+  recovery is the comparable rate.
+- A model has at most 10 edges.
+- QLattice's `exp`, `log`, square root, square and `1/u` are protected: the model clips their argument. Where a
+  clip is active at a support or validation point, the prediction writes it out with `abs`, so that the expression
+  computes the model's own prediction; the `protections` column names these functions.
+- One search runs on one thread, and its result depends only on the problem's data and the seed.
+
+The worker stores the other models the method returned in the `diverse` column, and the largest deviation of the
+expression from the model's own predictions in `string_deviation` and `string_deviation_val`.
+`configs/evaluation/scaling/qlattice_fastsrb.yaml` sweeps the epochs in doublings from 1 to 16.
 
 ## Sampling and enumeration baselines
 

@@ -57,6 +57,10 @@ METHODS = [
      "Each rung pairs a draws count with the iteration count that takes the same time on the reference machine."),
     ("prior", "Flash-ANSR prior", "draws", "#9a9a9a", "reference", "author_blessed", None,
      "Draws skeletons from Flash-ANSR's training prior with no model and no data, then refines and picks them the way Flash-ANSR does: what the prior alone is worth.")]
+# Where two methods share a component at different versions, the release says so (Protocol, "Versions").
+RELEASE_VERSIONS = ("PySR runs PySR 2.3.0 with SymbolicRegression.jl 2.4.0. The hybrid's PySR stage runs PySR 2.4.0 with "
+                    "SymbolicRegression.jl 2.4.1, and 2.4.2 where it is timed on the reference machine. The defaults it relies on "
+                    "are the same in both PySR versions, and the SymbolicRegression.jl releases between them change speed, not results.")
 FLASH_ANSR_SELECTION = ("Fits the constants of every candidate it draws and submits the one with the best two-part code: "
                         "(n/2) log2 FVU plus the description length of the expression in bits.")
 RUNGS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
@@ -114,9 +118,9 @@ METRICS = [
      "Absolute log2 of the token count ratio: 0 when the counts match, 1 at twice or half the length."),
     ("n_constants_ratio", "Constant Count Ratio", "Constants Ratio", "Size Compared to the Ground Truth", "cont", None, "more", "ratio", (-4.0, 4.0, "log2"),
      "Predicted over true constant count, for problems whose ground truth has at least one constant; the median is taken on the log2 scale."),
-    ("n_constants_delta", "Constant Count Difference", "Constants Diff.", "Size Compared to the Ground Truth", "cont", False, "more", "num1", (-16.0, 16.0, None),
+    ("n_constants_delta", "Constant Count Difference", "Constants Diff.", "Size Compared to the Ground Truth", "cont", None, "more", "num1", (-16.0, 16.0, None),
      "Predicted minus true constant count."),
-    ("total_nestedness_delta", "Function Nesting Difference", "Nesting Diff.", "Size Compared to the Ground Truth", "cont", False, "more", "num1", (-8.0, 8.0, None),
+    ("total_nestedness_delta", "Function Nesting Difference", "Nesting Diff.", "Size Compared to the Ground Truth", "cont", None, "more", "num1", (-8.0, 8.0, None),
      "Predicted minus true function nesting."),
     ("f1_score", "Token Overlap, F1", "Token F1", "Similarity to the Ground Truth", "cont", True, "more", "num3", (0.0, 1.0, None),
      "F1 between the sets of distinct tokens of the predicted skeleton and of the simplified ground-truth skeleton. A failed prediction counts 0, the end of the range."),
@@ -213,7 +217,21 @@ PAIRED_KEYS = ["numeric_recovery_val", "symbolic_recovery", "success", "log10_fv
 # per pair x catalog x slot, [n problems, then (wins of the first, wins of the second) per rank key]. A slot is a rung
 # ("64": both methods at that rung) or a time budget ("t3": each method at its largest rung the reference machine
 # timed at or under 3 s per problem). The first key is the primary league.
-RANK_KEYS = ["log10_fvu_val", "mdl_ratio", "expr_length_ratio", "f1_score"]   # R^2 orders the predictions exactly as the FVU does
+# Every metric that says how good a prediction is can rank: the rates (a hit beats a miss), and every continuous metric
+# with a direction or an ideal. Not ranked: R^2, which orders the predictions exactly as the FVU does; the properties of
+# the ground truth, the same for every method; and the scores a method gives its own predictions (log-probability,
+# selection score, Pareto rank), which mean something else for every method.
+RANK_KEYS = ["log10_fvu_val",
+             "numeric_recovery_val", "numeric_recovery_fit", "numeric_recovery_relative_val", "numeric_recovery_relative_fit", "success",
+             "symbolic_recovery", "symbolic_recovery_mask_fittable", "symbolic_recovery_mask_none", "skeleton_match_raw",
+             "log10_fvu_fit",
+             "mdl_ratio", "expr_length_ratio", "expr_length_ratio_abserr", "n_constants_ratio", "n_constants_delta", "total_nestedness_delta",
+             "f1_score", "precision_score", "recall_score", "f1_score_unique_variables", "precision_unique_variables", "recall_unique_variables",
+             "edit_distance", "edit_distance_norm", "zss_edit_distance",
+             "predicted_mdl", "predicted_skeleton_prefix_length", "predicted_n_constants", "predicted_total_nestedness"]
+# The value a comparison with the ground truth ideally takes, for the metrics without a better direction: a ratio is best
+# at 1, a difference at 0.
+IDEAL = {"mdl_ratio": 1.0, "expr_length_ratio": 1.0, "n_constants_ratio": 1.0, "n_constants_delta": 0.0, "total_nestedness_delta": 0.0}
 TIME_BUDGETS = [0.1, 0.3, 1, 3, 10, 30, 100, 300, 1000]
 
 
@@ -225,6 +243,8 @@ def registry_json() -> list[dict[str, Any]]:
             m["hist"] = {"lo": hist[0], "hi": hist[1], "tf": hist[2]}
         if k in WORST:
             m["worst"] = WORST[k]
+        if k in IDEAL:
+            m["ideal"] = IDEAL[k]
         if k in MEDIAN_ONLY:
             m["median_via"] = MEDIAN_ONLY[k]
         if k in EVERY_PROBLEM:
@@ -380,29 +400,45 @@ def budget_key(t: float) -> str:
     return "t" + ("%g" % t)
 
 
-def rank_score(value: float | None, higher: bool | None) -> float:
+# ranks.js: the release's pairwise outcomes, merged with a key-opened overlay's in whichever order the two load. The
+# release's file sets the key list; a file written with another list (an overlay sealed before RANK_KEYS changed) is
+# mapped onto it, whichever loaded first, and a key it lacks is left empty, which the page reads as no outcome.
+RANKS_JS = ("window.RESULTS_V2_RANKS=window.RESULTS_V2_RANKS||{};(function(){var R=window.RESULTS_V2_RANKS,rel=%s,K=%s,MAIN=%s;"
+            "var X=R[rel]=R[rel]||{keys:K,budgets:%s,seconds:%s,at:{},pairs:{}};X.rungs=X.rungs||{};var P=%s;"
+            "var map=function(Q,from,to){var ix=to.map(function(k){return from.indexOf(k);});Object.keys(Q).forEach(function(pk){"
+            "Object.keys(Q[pk]).forEach(function(c){Object.keys(Q[pk][c]).forEach(function(sl){var t=Q[pk][c][sl],u=[t[0]];"
+            "ix.forEach(function(j){u.push(j<0?null:t[1+2*j],j<0?null:t[2+2*j]);});Q[pk][c][sl]=u;});});});};"
+            "if(X.keys.join()!==K.join()){if(MAIN){map(X.pairs,X.keys,K);X.keys=K;}else{map(P,K,X.keys);}}"
+            "Object.assign(X.at,%s);Object.assign(X.pairs,P);Object.assign(X.rungs,%s);})();\n")
+
+
+def rank_score(value: float | None, higher: bool | None, ideal: float | None = None) -> float:
     """Oriented so that larger is better; a problem without a usable value scores -inf (placed last). `higher` None
-    marks a ratio whose ideal is 1: closer to 1 on the log scale is better."""
+    marks a comparison with an ideal value (IDEAL): a ratio is better the closer it is to 1 on the log scale, a
+    difference the closer it is to 0."""
     if value is None or math.isnan(value):
         return -math.inf
     if higher is True:
         return value
     if higher is False:
         return -value
+    if ideal == 0.0:
+        return -abs(value) if math.isfinite(value) else -math.inf
     return -abs(math.log(value)) if value > 0 and math.isfinite(value) else -math.inf
 
 
-def rank_pair_cell(rows_a: dict[Any, dict[str, Any]], rows_b: dict[Any, dict[str, Any]], expected: int | None = None) -> list[int] | None:
+def rank_pair_cell(rows_a: dict[Any, dict[str, Any]], rows_b: dict[Any, dict[str, Any]], expected: int | None = None,
+                   keys: list[str] | None = None) -> list[int] | None:
     rows_a, rows_b = pooled_rows(rows_a, expected)[0], pooled_rows(rows_b, expected)[0]
     common = sorted(set(rows_a) & set(rows_b))
     if not common:
         return None
     out = [len(common)]
-    for k in RANK_KEYS:
-        higher = METRIC_HIGHER[k]
+    for k in RANK_KEYS if keys is None else keys:
+        higher, ideal = METRIC_HIGHER[k], IDEAL.get(k)
         wa = wb = 0
         for i in common:
-            sa, sb = rank_score(rows_a[i][k], higher), rank_score(rows_b[i][k], higher)
+            sa, sb = rank_score(rows_a[i].get(k), higher, ideal), rank_score(rows_b[i].get(k), higher, ideal)
             if sa > sb:
                 wa += 1
             elif sb > sa:
@@ -516,7 +552,7 @@ def main() -> None:
     if os.path.exists(tpath0):
         timing_all = {k: v for k, v in json.load(open(tpath0)).items() if isinstance(v, dict) and not k.startswith("__")}
 
-    def leagues(pairs: list[tuple[str, str]], keys: list[str]) -> dict[str, Any]:
+    def leagues(pairs: list[tuple[str, str]], keys: list[str], rank_keys: list[str]) -> dict[str, Any]:
         """Pairwise rank outcomes for `pairs`, and for every method of `keys` the rung a time budget buys it."""
         rungs_of = {k: {r for (_c, r) in data.get(k, {}) if usable(k, r)} for k in {x for p in pairs for x in p} | set(keys)}
         # a time budget buys a rung the method has FINISHED: every catalog, every problem (the site shows no pooled number
@@ -542,10 +578,10 @@ def main() -> None:
                     rows_a, rows_b = data.get(ka, {}).get((c, ra)), data.get(kb, {}).get((c, rb))
                     if not rows_a or not rows_b:
                         continue
-                    pc = rank_pair_cell(rows_a, rows_b, sizes.get(c))
+                    pc = rank_pair_cell(rows_a, rows_b, sizes.get(c), rank_keys)
                     if pc:
                         out.setdefault(ka + "|" + kb, {}).setdefault(c, {})[slot] = pc
-        return {"keys": RANK_KEYS, "budgets": [budget_key(t) for t in TIME_BUDGETS], "seconds": TIME_BUDGETS,
+        return {"keys": rank_keys, "budgets": [budget_key(t) for t in TIME_BUDGETS], "seconds": TIME_BUDGETS,
                 "at": {k: at[k] for k in keys}, "pairs": out, "rungs": {k: v for k, v in compared.items() if k in out and v}}
 
     def build(keys: list[str], base: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
@@ -576,12 +612,13 @@ def main() -> None:
             t = json.load(open(tpath))
             timing = {k: v for k, v in t.items() if k in keys and isinstance(v, dict)}
             timing_note = t.get("note", "")
+        listed = listed_metrics(cells)
         payload = {"schema": 2, "base": base,
-                   "release": {"id": a.release, "title": a.title or a.release, "notes": a.notes, "generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                   "release": {"id": a.release, "title": a.title or a.release, "notes": a.notes, "versions": RELEASE_VERSIONS, "generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
                                "updated": dt.datetime.now().astimezone().isoformat(timespec="minutes"),   # with its offset: shown in the reader's time zone
                                "scoring": "Every method submits one prediction per problem and chooses it by its own rule; the rule is named next to the method, along with who chose its configuration.",
                                "judge": "One judge for every prediction: the predicted expression and the ground truth are compared in one certified canonical form (SimpliPy acj-5-4-llm, f64), and numeric recovery is float32 precision on 512 held-out points."},
-                   "catalogs": cats, "rungs": RUNGS, "nb": NB, "metrics": listed_metrics(cells), "paired_keys": PAIRED_KEYS, "rank_keys": RANK_KEYS,
+                   "catalogs": cats, "rungs": RUNGS, "nb": NB, "metrics": listed, "paired_keys": PAIRED_KEYS, "rank_keys": [k for k in RANK_KEYS if k in {m["key"] for m in listed}],
                    # budget: what one rung of the ladder buys. "candidates" is a count a generative method draws;
                    # PySR's rungs are search iterations, which have no place on the candidate axis of the site.
                    "methods": [{"key": k, "label": l, "param": p, "budget": p if p in ("iterations", "seconds") else "candidates",
@@ -605,21 +642,20 @@ def main() -> None:
             fh.write("window.RESULTS_V2_PAIRED=window.RESULTS_V2_PAIRED||{};(function(){var R=window.RESULTS_V2_PAIRED;R[%s]=R[%s]||{};Object.assign(R[%s],%s);})();\n" % (
                 rel, rel, rel, json.dumps(paired, separators=(",", ":"))))
         with open(os.path.join(out_dir, "ranks.js"), "w") as fh:   # merged like paired.js: an overlay adds its pairs and its own budget rungs
-            fh.write("window.RESULTS_V2_RANKS=window.RESULTS_V2_RANKS||{};(function(){var R=window.RESULTS_V2_RANKS;R[%s]=R[%s]||{keys:%s,budgets:%s,seconds:%s,at:{},pairs:{}};R[%s].rungs=R[%s].rungs||{};Object.assign(R[%s].at,%s);Object.assign(R[%s].pairs,%s);Object.assign(R[%s].rungs,%s);})();\n" % (
-                rel, rel, json.dumps(ranks["keys"]), json.dumps(ranks["budgets"]), json.dumps(ranks["seconds"]), rel, rel, rel, json.dumps(ranks["at"], separators=(",", ":")),
-                rel, json.dumps(ranks["pairs"], separators=(",", ":")), rel, json.dumps(ranks.get("rungs", {}), separators=(",", ":"))))
+            fh.write(RANKS_JS % (rel, json.dumps(ranks["keys"]), "true" if var == "RESULTS_V2" else "false", json.dumps(ranks["budgets"]), json.dumps(ranks["seconds"]), json.dumps(ranks["pairs"], separators=(",", ":")),
+                                 json.dumps(ranks["at"], separators=(",", ":")), json.dumps(ranks.get("rungs", {}), separators=(",", ":"))))
         with_data = [k for k in payload["cells"] if payload["cells"][k]]
         print(f"{note}: {out_js} ({os.path.getsize(out_js) // 1024} kB), hist/ {len(hists)} files, paired {len(paired)} pairs; methods with data: {with_data}; status {payload['status']}")
 
     payload, hists, paired = build(public, rel_base(out_dir, site_dir))
-    ranks = leagues([(ka, kb) for i, ka in enumerate(public) for kb in public[i + 1:]], public)
+    ranks = leagues([(ka, kb) for i, ka in enumerate(public) for kb in public[i + 1:]], public, payload["rank_keys"])
     write_set(payload, hists, paired, ranks, a.out, out_dir, "RESULTS_V2", f"public release {a.release}")
     if private:
         pdir = os.path.abspath(a.private_dir)
         os.makedirs(pdir, exist_ok=True)
         ppayload, phists, ppaired = build(private, rel_base(pdir, site_dir))
         contrasts([(ka, kb) for ka in private for kb in public], ppaired)   # private-vs-public contrasts stay private
-        pranks = leagues([(ka, kb) for i, ka in enumerate(private) for kb in private[i + 1:]] + [(ka, kb) for ka in private for kb in public], private)
+        pranks = leagues([(ka, kb) for i, ka in enumerate(private) for kb in private[i + 1:]] + [(ka, kb) for ka in private for kb in public], private, payload["rank_keys"])   # the release's keys
         write_set(ppayload, phists, ppaired, pranks, os.path.join(pdir, "results_v2_private.js"), pdir, "RESULTS_V2_PRIVATE", f"private overlay ({len(private)} method(s), never inside the deployed tree)")
 
 

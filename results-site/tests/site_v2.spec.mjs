@@ -519,6 +519,17 @@ test('a chart is drawn at the width it is given', async ({ page }) => {
   expect(Math.abs(Number(viewBox.split(' ')[2]) - box.width)).toBeLessThan(2);   // 1 unit = 1 px: 12 px of label is 12 px
 });
 
+test('a display of one chart is drawn at the width it is shown, not stretched from a grid cell', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const stretch = () => page.evaluate(() => [...document.querySelectorAll('#results-explorer-v2 .v2main svg.v2chart')].map((s) => s.getBoundingClientRect().width / s.viewBox.baseVal.width));
+  for (const view of ['dist', 'dist&dm=ecdf', 'dist&dm=cats', 'dist&dm=ladder', 'dist&dmetric=numeric_recovery_val', 'ranks']) {
+    await page.goto('/?release=2026-09&v=' + view);
+    await expect(page.locator(V2 + ' .v2main svg.v2chart').first()).toBeVisible();
+    // 1 unit = 1 px: drawn at a grid cell's width and stretched to the column, 12 px of label grew to 20 px
+    await expect.poll(async () => { const r = await stretch(); return r.length && r.every((x) => Math.abs(x - 1) < 0.02); }, { message: view }).toBe(true);
+  }
+});
+
 // ---- Distribution: a distribution is what the view shows, in four readings ------------------------------------
 test('the distribution view opens on histograms of a continuous metric', async ({ page }) => {
   const errors = collectErrors(page);
