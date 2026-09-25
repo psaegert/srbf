@@ -1,0 +1,29 @@
+# Operon on FastSRB along its evaluation budget: pyoperon 0.6.1 in its first author's benchmark configuration
+# (see srbf/worker/models/operon_worker.py and docs/models.md), run in an environment of its own:
+#   python -m venv {{ROOT}}/envs/operon && {{ROOT}}/envs/operon/bin/pip install pyoperon==0.6.1 scikit-learn
+run:
+  data_source:
+    catalog: fastsrb
+    sampling:
+      n_support: 512
+      n_validation: 512
+      noise: 0.0
+      problems_per_expression: 1
+  model_adapter:
+    type: subprocess
+    worker: operon
+    python: '{{ROOT}}/envs/operon/bin/python'
+    config_provenance: author_blessed
+    simplipy_engine: acj-5-4-llm
+    timeout: 7200
+    options:
+      max_evaluations: !sweep
+        name: ladder
+        values: [1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576]
+  runner:
+    limit: null
+    save_every: 8
+    resume: true
+    output: !sweep
+      name: ladder
+      values: ['{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0001024.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0002048.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0004096.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0008192.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0016384.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0032768.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0065536.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0131072.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0262144.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0524288.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_1048576.pkl']

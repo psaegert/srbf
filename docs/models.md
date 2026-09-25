@@ -7,6 +7,7 @@ block. To enter a method of your own, see [Adding your method](adapters.md).
 |---|---|---|
 | `flash_ansr` | [Flash-ANSR](#flash-ansr) and its prior reference | `flash_ansr install <checkpoint>` |
 | `pysr` | [PySR](#pysr) | `pip install pysr`, in an environment of its own if you like |
+| `subprocess`, `worker: operon` | [Operon](#operon) | `pip install pyoperon==0.6.1 scikit-learn`, in an environment of its own |
 | `nesymres` | [NeSymReS](#nesymres) | clone, patch, download weights |
 | `e2e` | [E2E](#e2e) | clone, patch, download weights |
 | `lample_charton`, `brute_force` | [prior sampling and enumeration](#sampling-and-enumeration-baselines) | none |
@@ -117,6 +118,54 @@ PySR searches over the operators the expressions are written in: `+ - * / ^`, `r
 operators `neg abs inv sin cos tan asin acos atan sinh cosh tanh asinh acosh atanh exp log`. The
 worker returns PySR's own predictions and stores the whole hall of fame in the `equations` column.
 `configs/evaluation/scaling/pysr_fastsrb.yaml` sweeps the iterations from 1 to 16,384.
+
+## Operon
+
+```bash
+python -m venv envs/operon && envs/operon/bin/pip install pyoperon==0.6.1 scikit-learn
+```
+
+Operon is a genetic-programming method with Levenberg–Marquardt constant fitting on every individual. It runs
+through the [worker protocol](adapters.md) as `worker: operon`, in an environment of its own. The configuration is
+the one Operon's first author published for running it as a benchmark baseline, without its hyperparameter search:
+- NSGA-II on fit (R²) and length;
+- one Levenberg–Marquardt step per individual;
+- population 1,000, length at most 50 and depth at most 10;
+- the final model picked from the Pareto front by minimum description length, with the noise level estimated by a
+  random forest.
+
+```yaml
+model_adapter:
+  type: subprocess
+  worker: operon
+  python: "{{ROOT}}/envs/operon/bin/python"
+  config_provenance: author_blessed
+  simplipy_engine: acj-5-4-llm
+  options:
+    max_evaluations: 1048576
+```
+
+| key | default | meaning |
+|---|---|---|
+| `options.max_evaluations` | `1000000` | evaluations of the model or its derivatives, the local search's included: the budget |
+| `options.seed` | `0` | mixed with a hash of the problem's data into the run's seed |
+| `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
+
+**Operators.** Operon searches over the operators it has among those the expressions are written in:
+- `+ - * / ^` and `abs sin cos tan asin acos atan sinh cosh tanh exp log`;
+- `rootn` for square and cube roots.
+
+It has no node for `asinh`, `acosh`, `atanh` or other roots. It expresses `neg` and `inv` through signed weights
+and division.
+
+**What to know when reading the results:**
+- Operon searches in single precision (float32).
+- It always returns its model as `a * f(x) + b`, with a weight on every variable. On a law without such constants
+  that shape rarely matches the ground truth symbol for symbol, so its numeric recovery is the comparable rate.
+- One search runs on one thread: more threads make a run irreproducible.
+
+The worker stores the whole Pareto front in the `front` column. `configs/evaluation/scaling/operon_fastsrb.yaml`
+sweeps the evaluations from 2^10 to 2^20.
 
 ## NeSymReS
 
