@@ -14,10 +14,12 @@ catalog's full size). Failed problems do not count towards the time: a row with 
 no finite fit_time is left out, and the number of timed rows is kept in __provenance__.
 
   site_timing.py --manifest configs/timing/timing_subset.json --out timing.json \\
-      [--subset KEY=DIR ...] [--suite KEY=DIR ...] [--suite-pattern niter_{rung:05d}.pkl]
+      [--subset KEY=DIR ...] [--suite KEY=DIR ...] [--suite-pattern niter_{rung:05d}.pkl] [--pattern KEY=PATTERN ...]
 
 KEY is the method's key on the site; DIR holds <catalog>/choices_<rung>.pkl (subset) or <catalog>/<suite-pattern>
-(suite). Every rung found in the files is considered; the output lists the complete ones.
+(suite). --pattern names the rung files of one KEY instead: a method whose ladder counts iterations keeps its
+niter_{rung:05d}.pkl files on the subset too. Every rung found in the files is considered; the output lists the
+complete ones.
 """
 from __future__ import annotations
 
@@ -38,8 +40,16 @@ from timing_readout import estimates, load_rung  # noqa: E402
 import numpy as np  # noqa: E402
 
 NOTE = ("Reference machine: one workstation (16 cores / 32 threads, one RTX 4090), one method at a time, on a frozen 262-problem stratified subset; "
-        "each point is the size-weighted pooled mean fit time over the suite's strata. PySR is evaluated on the reference "
-        "machine itself: its points are the mean over the whole suite.")
+        "each point is the size-weighted pooled mean fit time over the suite's strata.")
+
+
+def note(suite_keys: list[str]) -> str:
+    """The time axis's note; a method timed on the whole suite instead of the subset is named in it."""
+    if not suite_keys:
+        return NOTE
+    one = len(suite_keys) == 1
+    return (f"{NOTE} {', '.join(suite_keys)} {'is' if one else 'are'} evaluated on the reference machine itself: "
+            f"{'its' if one else 'their'} points are the mean over the whole suite.")
 
 
 def rungs_in(directory: Path, pattern: str) -> list[int]:
@@ -88,27 +98,31 @@ def suite_rung(directory: Path, catalogs: dict[str, Any], rung: int, pattern: st
 
 
 def build(manifest: dict[str, Any], subset: dict[str, Path], suite: dict[str, Path], suite_pattern: str,
-          subset_pattern: str = "choices_{rung:06d}.pkl") -> dict[str, Any]:
+          subset_pattern: str = "choices_{rung:06d}.pkl", patterns: dict[str, str] | None = None) -> dict[str, Any]:
+    """``patterns`` overrides the rung file name of single keys (a subset ladder that keeps niter_ files, say)."""
     catalogs = manifest["catalogs"]
+    patterns = patterns or {}
     timing: dict[str, Any] = {}
     rows_timed: dict[str, dict[str, list[int]]] = {}
     hung_rows: dict[str, dict[str, int]] = {}
     for key, directory in subset.items():
-        for rung in rungs_in(directory, subset_pattern):
-            cell = subset_rung(directory, catalogs, rung, subset_pattern)
+        pattern = patterns.get(key, subset_pattern)
+        for rung in rungs_in(directory, pattern):
+            cell = subset_rung(directory, catalogs, rung, pattern)
             if cell is None or cell["n"] < int(manifest["total_problems"]) or not math.isfinite(cell["seconds"]):
                 continue
             timing.setdefault(key, {})[str(rung)] = round(cell["seconds"], 4)
             rows_timed.setdefault(key, {})[str(rung)] = [cell["n_ok"], cell["n"]]
     for key, directory in suite.items():
-        for rung in rungs_in(directory, suite_pattern):
-            cell = suite_rung(directory, catalogs, rung, suite_pattern)
+        pattern = patterns.get(key, suite_pattern)
+        for rung in rungs_in(directory, pattern):
+            cell = suite_rung(directory, catalogs, rung, pattern)
             if cell is None:
                 continue
             timing.setdefault(key, {})[str(rung)] = round(cell["seconds"], 4)
             rows_timed.setdefault(key, {})[str(rung)] = [cell["n_ok"], cell["n"]]
             hung_rows.setdefault(key, {})[str(rung)] = cell["hung"]
-    timing["note"] = NOTE
+    timing["note"] = note(list(suite))
     timing["__provenance__"] = {"rule": manifest.get("rule"), "total_problems": manifest.get("total_problems"),
                                 "rows_timed": rows_timed, "hung_rows": hung_rows,
                                 "updated": dt.datetime.now().strftime("%Y-%m-%d %H:%M")}
@@ -131,10 +145,13 @@ def main() -> int:
     ap.add_argument("--subset", action="append", default=None, metavar="KEY=DIR", help="a timing ladder on the frozen subset")
     ap.add_argument("--suite", action="append", default=None, metavar="KEY=DIR", help="a whole-suite evaluation on the reference machine")
     ap.add_argument("--suite-pattern", default="niter_{rung:05d}.pkl", help="file name of a whole-suite rung")
+    ap.add_argument("--pattern", action="append", default=None, metavar="KEY=PATTERN",
+                    help="the rung file name of KEY's directory, e.g. PySR=niter_{rung:05d}.pkl for an iteration ladder on the subset")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     manifest = json.loads(Path(a.manifest).read_text())
-    timing = build(manifest, _pairs(a.subset, "--subset"), _pairs(a.suite, "--suite"), a.suite_pattern)
+    patterns = {k: str(v) for k, v in _pairs(a.pattern, "--pattern").items()}
+    timing = build(manifest, _pairs(a.subset, "--subset"), _pairs(a.suite, "--suite"), a.suite_pattern, patterns=patterns)
     tmp = a.out + ".tmp"
     Path(tmp).write_text(json.dumps(timing, indent=1))
     os.replace(tmp, a.out)

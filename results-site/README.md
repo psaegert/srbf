@@ -73,6 +73,8 @@ python scripts/site_export_v2.py <root> 2026-09 results-site/data/2026-09/result
 ```
 
 The method names in `--tree`, `--subset` and `--suite` are the site's method keys (`METHODS` in the exporter).
+`--pattern KEY=PATTERN` names one method's rung files when they are not `choices_<rung>.pkl`: a ladder that counts
+iterations keeps its `niter_{rung:05d}.pkl` files on the timing subset too.
 `--index-variables` is for the E2E and NeSymReS result files written before srbf renamed their variables at the
 source. The catalog table reads `data/catalog_mu.json` (`scripts/catalog_mu.py`). A cell pools the draws that are
 complete for it. The progress shown per method reads optional unit lists and completion marks in the root

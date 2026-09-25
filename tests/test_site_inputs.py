@@ -53,6 +53,25 @@ def test_a_whole_suite_rung_is_the_mean_over_answered_problems_once_every_file_i
     assert timing["PySR"] == {"1": round((5 * 1.0 + 2 * 4.0) / 7, 4)}
 
 
+def test_a_subset_ladder_may_keep_its_iteration_files(tmp_path: Path) -> None:
+    # PySR's time is measured on the frozen subset like every other method's, in its own niter_ files
+    sub = tmp_path / "pysr"
+    _write(sub, "big", "niter_00001.pkl", [1.0, 3.0])
+    _write(sub, "small", "niter_00001.pkl", [10.0, 10.0])
+    assert "PySR" not in site_timing.build(MANIFEST, {"PySR": sub}, {}, "niter_{rung:05d}.pkl")    # read as choices_ files: none
+    timing = site_timing.build(MANIFEST, {"PySR": sub}, {}, "niter_{rung:05d}.pkl", patterns={"PySR": "niter_{rung:05d}.pkl"})
+    assert timing["PySR"] == {"1": 0.75 * 2 + 0.25 * 10}
+
+
+def test_the_note_names_a_method_timed_on_the_whole_suite_only_when_there_is_one(tmp_path: Path) -> None:
+    suite = tmp_path / "suite"
+    _write(suite, "big", "niter_00001.pkl", [1.0] * 6)
+    _write(suite, "small", "niter_00001.pkl", [1.0] * 2)
+    assert site_timing.build(MANIFEST, {}, {"PySR": suite}, "niter_{rung:05d}.pkl")["note"].endswith(
+        "PySR is evaluated on the reference machine itself: its points are the mean over the whole suite.")
+    assert "whole suite" not in site_timing.build(MANIFEST, {}, {}, "niter_{rung:05d}.pkl")["note"]
+
+
 def test_the_published_subset_is_in_the_repository_and_adds_up() -> None:
     manifest = json.loads((Path(__file__).parents[1] / "configs" / "timing" / "timing_subset.json").read_text())
     cats = manifest["catalogs"]
