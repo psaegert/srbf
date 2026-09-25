@@ -1,0 +1,32 @@
+# DSO's uDSR* on FastSRB at its sample budget, in doublings of one iteration (13,000 expressions: 500 sampled by the RNN,
+# 12,500 bred by GP-meld) up to about 100 s per problem on the reference machine. One iteration already takes about
+# that long, so the ladder has one rung. DSO v3.0.0 in the uDSR paper's Table 3 configuration (see
+# srbf/worker/models/dso_worker.py and docs/models.md), run in an environment of its own:
+#   scripts/envs/build_dso_env.sh {{ROOT}}/envs/dso
+run:
+  data_source:
+    catalog: fastsrb
+    sampling:
+      n_support: 512
+      n_validation: 512
+      noise: 0.0
+      problems_per_expression: 1
+  model_adapter:
+    type: subprocess
+    worker: dso
+    python: '{{ROOT}}/envs/dso/bin/python'
+    config_provenance: author_blessed
+    simplipy_engine: acj-5-4-llm
+    timeout: 7200
+    options:
+      arm: udsr
+      n_samples: !sweep
+        name: ladder
+        values: [13000]
+  runner:
+    limit: null
+    save_every: 8
+    resume: true
+    output: !sweep
+      name: ladder
+      values: ['{{ROOT}}/results/evaluation/scaling/dso-udsr/fastsrb/samples_0013000.pkl']
