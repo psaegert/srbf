@@ -136,3 +136,22 @@ def test_tree_and_index_specs_parse_as_the_command_line_takes_them():
     assert parse_index_bases(["e2e=0", "nesymres=1"]) == {"e2e": 0, "nesymres": 1}
     with pytest.raises(ValueError, match="METHOD=FIRST"):
         parse_index_bases(["e2e"])
+
+
+def test_a_new_worker_does_not_change_the_judge(tmp_path, monkeypatch):
+    """The judge fingerprint names the srbf source the judge runs; the out-of-process workers are not part of it,
+    so adding a baseline worker keeps every cached judgment, while a change to judging code discards them."""
+    import srbf
+    from srbf.table import judge_fingerprint
+    pkg = tmp_path / "srbf"
+    (pkg / "worker" / "models").mkdir(parents=True)
+    (pkg / "__init__.py").write_text("")
+    (pkg / "result_processing.py").write_text("JUDGE = 1\n")
+    (pkg / "worker" / "models" / "one_worker.py").write_text("X = 1\n")
+    monkeypatch.setattr(srbf, "__file__", str(pkg / "__init__.py"))
+    before = judge_fingerprint("acj-5-4-llm")
+    (pkg / "worker" / "models" / "another_worker.py").write_text("Y = 2\n")
+    (pkg / "worker" / "models" / "one_worker.py").write_text("X = 3\n")
+    assert judge_fingerprint("acj-5-4-llm") == before
+    (pkg / "result_processing.py").write_text("JUDGE = 2\n")
+    assert judge_fingerprint("acj-5-4-llm") != before
