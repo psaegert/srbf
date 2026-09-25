@@ -265,14 +265,14 @@ scripts/envs/build_tisr_env.sh envs/tisr     # needs uv, curl and git; downloads
 ```
 
 TiSR (thermodynamics-informed symbolic regression; Martinek, Frotscher, Richter and Herzog) is genetic programming
-in Julia: NSGA-II on islands, the constants of every new expression fitted by Levenberg–Marquardt, and a hall of
-fame, the Pareto front of fit error against complexity. It runs through the [worker protocol](adapters.md) as
+in Julia: NSGA-II on islands, the constants of new expressions fitted by Levenberg–Marquardt, and a hall of fame,
+the Pareto front of fit error against complexity. It runs through the [worker protocol](adapters.md) as
 `worker: tisr` and calls Julia through juliacall. TiSR is licensed under the Apache License 2.0.
 
-The build script creates the environment: Python 3.12 with juliacall, Julia 1.11.5, and TiSR at commit `5b541b3`,
-the commit the FastSRB paper ran, with every Julia package at the version of that paper's lock file
-(`scripts/envs/tisr/Manifest.toml`), all in a Julia depot of the environment's own. The worker points juliacall at
-this Julia and depot and starts it with one thread.
+The build script creates the environment: Python 3.12 with juliacall, Julia 1.12.7, and TiSR at commit `9e628e6` of
+its main branch (January 2026), with every Julia package at the version of the lock file
+(`scripts/envs/tisr/Manifest.toml`), resolved from TiSR's own compatibility bounds, all in a Julia depot of the
+environment's own. The worker points juliacall at this Julia and depot and starts it with one thread.
 
 The configuration is TiSR's own defaults at that commit:
 - 20 islands of 50 expressions, each breeding about 50 new expressions per generation;
@@ -280,11 +280,17 @@ The configuration is TiSR's own defaults at that commit:
 - residuals weighted by 1/|y|, so that the search fits the relative error;
 - constants fitted on half of the islands, by up to 10 Levenberg–Marquardt iterations (Nelder–Mead for one fit in
   ten);
+- an expression seen recently is rejected with probability 0.9;
 - the hall of fame on the weighted squared error and a weighted node count;
 - one thread.
 
-srbf sets the operators, the budget (a number of generations) and the seed. TiSR's own budget is a wall-clock limit
-of 300 s; the worker raises it to a guard that the budgets of the ladder do not reach.
+srbf sets the operators, the budget (a number of generations) and the seed.
+
+**Every run spends its whole budget.** TiSR ends a search at the first of four conditions: the number of
+generations, a wall-clock limit (300 s by default), a user callback, or `q` typed on its input. The worker keeps only
+the number of generations: it raises the wall-clock limit to a guard far above every budget of the ladder, leaves the
+callback at TiSR's default, which never stops, and gives the search no input. A constant fit inside a generation ends
+at TiSR's own iteration limits and convergence test, which end that fit, not the search.
 
 ```yaml
 model_adapter:
@@ -304,7 +310,7 @@ model_adapter:
 | `options.seed` | `0` | mixed with a hash of the problem's data into the run's seed |
 | `options.time_guard` | `3600` | TiSR's wall-clock limit in seconds, a guard; the `hit_time_guard` column marks a run it stopped |
 | `options.warmup` | `true` | run a throwaway fit when the worker starts, so that compiling TiSR is not part of the first problem's time |
-| `options.config`, `options.config_by_problem` | none | TiSR settings that replace its defaults, for every problem or per problem; for side experiments only, which are then `harness_tuned` |
+| `options.config`, `options.config_by_problem` | none | TiSR settings that replace its defaults, for every problem or per problem; for side experiments only, which are then `harness_tuned`; they cannot set a stop |
 | `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
 
 **Operators.** TiSR takes any Julia function as an operator, so it searches over all the operators the expressions
@@ -315,21 +321,21 @@ The worker therefore gives TiSR `asin acos acosh atanh` as functions that return
 evaluates them, so that TiSR drops such an expression as well. `rootn` needs an integer index, which a fitted
 constant rarely is; TiSR writes roots as powers.
 
-**One answer per problem.** TiSR hands its user the hall of fame and has no rule that picks one expression from it;
-every table and file it writes lists the hall of fame ordered by the fit objective. The worker answers with the first
-row of that order: the member with the lowest weighted squared error. The whole hall of fame, with TiSR's measures of
-each member, is stored in the `hall_of_fame` column.
+**No single answer yet.** A TiSR search returns its hall of fame, and TiSR defines no rule that picks one expression
+from it: its README and example sort the hall of fame for the user to inspect, and its export functions order their
+tables by the fit error. How to pick one member is not settled for TiSR in srbf, so the worker returns no expression:
+every problem is recorded as failed with that reason, and carries the whole hall of fame in the `hall_of_fame`
+column, each member written in the benchmark's syntax with every constant at full precision, with TiSR's measures of
+it and with its `string_deviation`, how far the string's values are from TiSR's own. TiSR's results carry no recovery
+rates until a rule is set.
 
 **What to know when reading the results:**
 - The weights 1/|y| make the search fit relative errors. TiSR replaces the infinite weight of a zero target by
   1e100, and such a point dominates the fit.
-- The answer is the most accurate member of the front and so its most complex one. On noiseless data a longer
-  expression can fit as well as the ground truth up to rounding and then is the answer.
-- A run is not reproducible bit for bit: TiSR picks parents by their rank and crowding, and an expression that has
-  not been through a selection yet, as all of an island's first expressions, carries values that were never set.
-  The seed fixes everything else.
-- The worker writes the answer from TiSR's tree with every constant at full precision; the `string_deviation`
-  column records how far the string's values are from TiSR's own.
+- TiSR's runs are not reproducible from the seed: two fits of the same data with the same seed can return different
+  halls of fame. TiSR picks parents by their rank and crowding, and an expression that has not been through a
+  selection yet, as all of an island's first expressions, carries values that TiSR never set. srbf runs TiSR as it
+  is.
 
 `configs/evaluation/scaling/tisr_fastsrb.yaml` sweeps the generations in doublings from 1 to 512, about 100 s per
 problem on the reference machine. `configs/evaluation/panels/tisr_fastsrb2025_fastsrb.yaml` runs the protocol of the

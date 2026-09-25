@@ -1,7 +1,9 @@
 # TiSR on FastSRB along its number of generations, in doublings from 1 (one generation of 20 islands) to 512, about
-# 100 s per problem on the reference machine: TiSR 5b541b3 at its own defaults (see
+# 100 s per problem on the reference machine (provisional): TiSR main 9e628e6 at its own defaults (see
 # srbf/worker/models/tisr_worker.py and docs/models.md), run in an environment of its own:
 #   scripts/envs/build_tisr_env.sh {{ROOT}}/envs/tisr
+# Every run spends its whole budget. TiSR defines no single answer, so the rows carry the hall of fame and no
+# prediction until a selection rule is set.
 run:
   data_source:
     catalog: fastsrb

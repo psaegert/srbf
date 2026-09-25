@@ -1,43 +1,64 @@
-"""The TiSR worker: TiSR (thermodynamics-informed symbolic regression) at its own defaults.
+"""The TiSR worker: TiSR (thermodynamics-informed symbolic regression) at its own defaults, returning its hall of fame.
 
 Runs in the environment ``scripts/envs/build_tisr_env.sh`` builds: TiSR (Martinek, Frotscher, Richter and Herzog;
-github.com/scoop-group/TiSR, Apache-2.0) at commit 5b541b3, the commit the FastSRB paper (arXiv 2508.14481) ran, on Julia
-1.11.5 with that paper's dependency versions, called through juliacall. Imports juliacall and numpy only.
+github.com/scoop-group/TiSR, Apache-2.0) at commit 9e628e6 of its main branch (2026-01-08), on Julia 1.12.7, with the
+Julia packages of the environment's lock file, resolved from TiSR's own compatibility bounds; called through
+juliacall. Imports juliacall and numpy only.
 
-TiSR is an NSGA-II genetic programming search on islands that fits the constants of every new expression by
+TiSR is an NSGA-II genetic programming search on islands that fits the constants of new expressions by
 Levenberg-Marquardt (sometimes Nelder-Mead) and keeps a hall of fame: the Pareto front of fit error against
-complexity. Every setting is TiSR's own default at the pinned commit: 20 islands, population 1,000, maximum
-complexity 30, residuals weighted by 1/|y|, the hall of fame on (weighted squared error, weighted complexity), one
-thread. srbf sets only what it sets for every method:
+complexity. Every setting is TiSR's own default at the pinned commit: 20 islands of 50 expressions, at most 30 nodes,
+residuals weighted by 1/|y|, constants fitted on half of the islands, recently seen expressions rejected with
+probability 0.9, the hall of fame on (weighted squared error, weighted node count), one thread. srbf sets only what it
+sets for every method:
 
 * the operators: the benchmark's 23 (``+ - * / ^ rootn`` and ``neg abs inv sin cos tan asin acos atan sinh cosh
   tanh asinh acosh atanh exp log``). TiSR takes any Julia function as an operator; its evaluator guards log, sqrt,
   division and powers itself and stops the whole search when any other function throws, so the worker gives it
   ``asin acos acosh atanh`` as total functions (NaN outside their domain, as the benchmark evaluates them),
   ``neg`` as ``-x`` and ``rootn`` with the benchmark's semantics (an integer index, NaN otherwise);
-* the budget, a count of generations (``n_gens``), with TiSR's wall-clock limit (``t_lim``) raised to a guard;
+* the budget, a count of generations (``n_gens``);
 * the seed.
 
-Output only: TiSR's progress printing and hall-of-fame plots are off.
+Output only: TiSR's progress printing and hall-of-fame display are off.
 
-One answer per problem: TiSR has no rule that picks one model from its hall of fame; it hands the hall of fame to
-the user, and every table and file it writes lists the hall of fame ordered by the fit objective
-(``convert_to_dict``, ``save_to_csv``, ``save_to_fwf``, ``save_to_excel``: ``sort_by=:ms_processed_e``). The
-worker answers with the first row of that ordering: the hall-of-fame member with the lowest weighted mean squared
-error (the most accurate, and so the most complex, member of the front). The whole hall of fame is stored.
+Every run spends its whole budget. TiSR's generational loop (src/main_loop.jl, "termination criteria") ends at the
+first of four conditions, and the worker leaves only the count:
+
+* ``n_gens`` generations done: the budget.
+* ``t_lim`` seconds passed (TiSR's default 300 s): raised to ``time_guard``, a guard far above every rung of the
+  ladders; ``hit_time_guard`` records a run it ended.
+* ``callback`` returned true: TiSR's default callback never does, and a config cannot set another.
+* the user typed ``q`` on standard input: srbf gives the worker none.
+
+Within a generation each constant fit has its own limits, which end that fit and never the search, all at TiSR's
+defaults: at most 10 Levenberg-Marquardt iterations (50 for Nelder-Mead), converged when 5 iterations improve the fit
+by less than 1e-4 relative (``rel_f_tol_5_iter``), no time limit per fit (``fitting.t_lim`` infinite) and no early
+stopping on held-out data (``early_stop_iter`` 0; a config cannot set it).
+
+One answer per problem: OPEN. TiSR's search returns its hall of fame, its population, its progress and why it stopped
+(src/main_loop.jl: ``return (hall_of_fame, population, prog_dict, stop_msg)``) and defines no single model. Its README
+and example sort the hall of fame for the user to inspect (README: ``TiSR.convert_to_dataframe(hall_of_fame, ops,
+sort_by=:max_are)``; example/example_main.jl: ``sort_by=:mare``), its export functions order their tables by the fit
+objective (src/save_results.jl: ``sort_by=:ms_processed_e``), and its author's benchmark counts a run as a success when
+any hall-of-fame member matches an acceptable form (FastSRB-paper-repo src/tisr.jl and FastSRB example/TiSR.jl: the
+callback's loop over the hall of fame). Until a rule is chosen the worker returns no expression: every problem is
+recorded with the error ``NO_ANSWER`` and carries the whole hall of fame in ``hall_of_fame``, in TiSR's export order
+(lowest ``ms_processed_e`` first), each member with its expression, TiSR's measures and its ``string_deviation``.
+
+TiSR's runs are not reproducible from the seed: two fits of the same data with the same seed can return different
+halls of fame. TiSR picks parents by rank and crowding (src/selection.jl, ``parent_selection``), and an expression
+that has not been through a population selection yet, as all of an island's first ones, carries rank and crowding
+values that were never set (src/individual.jl, ``Individual(node::Node) = new(node)``), so the search reads whatever
+that memory held. TiSR is used as it is; the worker does not patch it.
 
 ``options`` (from the config's ``model_adapter`` block):
 
 * ``generations`` (int, 512): the budget, TiSR's ``n_gens``, the compute axis of the scaling sweeps. A generation
-  breeds, fits and evaluates about 50 new expressions on each of the 20 islands. TiSR's own budget is a wall-clock
-  limit (300 s); the default count is the top of srbf's FastSRB ladder, about 100 s per problem on the reference
-  machine.
-* ``seed`` (int, 0): mixed with a hash of the problem's data into the run's seed, so that two draws of a law (fresh
-  data) get different seeds. A run is still not reproducible bit for bit: TiSR picks parents by rank and crowding,
-  and an expression that has not been through a selection yet (all of an island's first ones) carries values TiSR
-  never set.
-* ``time_guard`` (float, 3,600): TiSR's ``t_lim`` in seconds, a guard far above the ladder's budgets. When it
-  passes, TiSR stops and the answer is its hall of fame at that point; ``hit_time_guard`` records it.
+  breeds, fits and evaluates about 50 new expressions on each of the 20 islands.
+* ``seed`` (int, 0): mixed with a hash of the problem's data into the seed TiSR's random number generator starts
+  from (it does not make a run reproducible, see above).
+* ``time_guard`` (float, 3,600): TiSR's ``t_lim`` in seconds, the guard.
 * ``warmup`` (bool, true): a small throwaway fit in :func:`load`, so that compiling TiSR is no part of the first
   problem's time.
 * ``config`` (dict, none): TiSR settings that replace its defaults, for side experiments only, such as reproducing
@@ -45,18 +66,17 @@ error (the most accurate, and so the most complex, member of the front). The who
   ``binops`` and ``unaops`` (lists of operator names, see ``OPERATORS``), and the sections ``data_split``,
   ``general``, ``measures``, ``selection``, ``fitting``, ``mutation`` and ``grammar``, each a map from a keyword of
   TiSR's ``<section>_params`` to a value. A string value is Julia source (``'[:ms_processed_e, :compl]'``); numbers
-  and booleans keep their YAML type (write ``1800.0`` where TiSR expects a float).
+  and booleans keep their YAML type (write ``1800.0`` where TiSR expects a float). No stop can be set this way.
 * ``config_by_problem`` (dict, none): per-problem values of settings that ``config`` sets (its value holds for the
   problems not listed), keyed by the problem's ``benchmark_eq_id``, numbers or booleans only; for the same side
   experiments. They are arguments of the one compiled constructor, so a problem's own value costs no compilation.
 
-The answer is written from TiSR's expression tree in the benchmark's syntax and the names srbf handed over, every
-constant at full precision (TiSR's own printer rounds to 15 digits). TiSR's own values of the answer on the data
-are compared with the string's (``string_deviation``, relative to the values' scale); srbf evaluates the string.
-``extra`` records the seed, the budget and the generations run, why TiSR stopped, the generation TiSR had reached at
-its progress checkpoints (about every 5 s: ``progress``), the worker's CPU time for the search (``cpu_seconds``; on
-a busy machine it is closer than the wall clock to what an idle one takes), and the hall of fame in TiSR's order,
-each member with its expression and TiSR's measures.
+Each member is written from TiSR's expression tree in the benchmark's syntax and the names srbf handed over, every
+constant at full precision (TiSR's own printer rounds to 15 digits), and its string is evaluated against TiSR's own
+values of the member on the data (``string_deviation``, relative to the values' scale). ``extra`` also records the
+seed, the budget and the generations run, why TiSR stopped, the generation TiSR had reached at its progress
+checkpoints (about every 5 s: ``progress``) and the worker's CPU time for the search (``cpu_seconds``; on a busy
+machine it is closer than the wall clock to what an idle one takes); ``fit_time`` is TiSR's own time for the search.
 """
 import hashlib
 import math
@@ -69,10 +89,14 @@ for _variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
 
 import numpy as np  # noqa: E402
 
-COMMIT = "5b541b390de153def44c548bf4842cc956db672f"
-TREE = "4406e769ba6f6dd2d70f48809e8a1aa13a9073f0"   # the git tree of COMMIT, as the environment's Manifest pins it
+COMMIT = "9e628e68ee0b0e05b3736b3f25321e502ea03d6f"   # TiSR main, 2026-01-08
+TREE = "d7f805458ee067ff63405c655490de0870ac17fe"     # the git tree of COMMIT, as the environment's Manifest pins it
 TISR_UUID = "e1088136-a916-4db6-8e31-3a049800401f"
-JULIA_VERSION = "1.11.5"
+JULIA_VERSION = "1.12.7"
+
+# What every problem records until a rule for picking one hall-of-fame member is chosen (see the module docstring).
+NO_ANSWER = ("TiSR returns a hall of fame and defines no single answer; no selection rule is set, so the whole hall of "
+             "fame is in the hall_of_fame column")
 
 BINARY_OPERATORS = ("+", "-", "*", "/", "^", "rootn")
 UNARY_OPERATORS = ("neg", "abs", "inv", "sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh",
@@ -137,8 +161,8 @@ function _tokens!(out, node)
 end
 
 # One search: the data matrix with y as its last column, TiSR's Options from `make` (with the problem's own values of
-# any per-problem settings), the seed, the loop. The hall of fame comes back in TiSR's own order (convert_to_dict's
-# default: sortperm by :ms_processed_e, which is stable), with TiSR's own values of its first member on the data.
+# any per-problem settings), the seed, the loop. The hall of fame comes back in TiSR's export order (convert_to_dict's
+# default: sortperm by :ms_processed_e, which is stable), each member with TiSR's own values of it on the data.
 function run(X, y, make, n_gens, t_lim, seed, values...)
     data_matr = hcat(Matrix{Float64}(X), Vector{Float64}(y))
     Random.seed!(seed)
@@ -150,10 +174,11 @@ function run(X, y, make, n_gens, t_lim, seed, values...)
     members = Py[]
     for indiv in hall_of_fame[order]
         measures = Dict{String, Float64}(string(name) => Float64(value) for (name, value) in pairs(indiv.measures))
-        push!(members, pydict(Dict("tokens" => pylist(_tokens!(String[], indiv.node)), "measures" => pydict(measures))))
+        values = Float64.(TiSR.eval_equation(indiv.node, data, ops)[1])
+        push!(members, pydict(Dict("tokens" => pylist(_tokens!(String[], indiv.node)), "measures" => pydict(measures),
+                                   "values" => pylist(values))))
     end
-    answer = isempty(order) ? Float64[] : Float64.(TiSR.eval_equation(hall_of_fame[order[1]].node, data, ops)[1])
-    return pydict(Dict{String, Any}("members" => pylist(members), "values" => pylist(answer), "seconds" => seconds,
+    return pydict(Dict{String, Any}("members" => pylist(members), "seconds" => seconds,
                                     "stop" => stop_msg, "generations" => Int(prog_dict["generation"][end]),
                                     "progress" => pylist([pylist(Int.(prog_dict["generation"])),
                                                           pylist(Float64.(prog_dict["time"]))])))
@@ -167,7 +192,9 @@ SECTIONS = {"data_split": "data_split_params", "general": "general_params", "mea
             "grammar": "grammar_params"}
 # What srbf sets in every run and a config cannot replace: the budget, the guard, one thread, no printing.
 SET_BY_WORKER = {"n_gens": "n_gens", "t_lim": "t_lim", "multithreading": "false", "print_progress": "false",
-                 "plot_hall_of_fame": "false", "print_hall_of_fame": "false"}
+                 "show_hall_of_fame": "false"}
+# Settings that could end a search, or a fit, before its budget: left at TiSR's defaults, which never do.
+NO_STOPS = {"general": ("callback",), "fitting": ("early_stop_iter",)}
 
 # The budget if a config gives none (the top of the FastSRB ladder), and the fit a started worker runs once to compile
 # TiSR outside any timing.
@@ -201,6 +228,9 @@ def check_config(config):
         fixed = sorted(set(settings) & set(SET_BY_WORKER)) if section == "general" else []
         if fixed:
             raise ValueError("config.general cannot set %s: the worker sets them (generations, time_guard)" % ", ".join(fixed))
+        stops = sorted(set(settings) & set(NO_STOPS.get(section, ())))
+        if stops:
+            raise ValueError("config.%s cannot set %s: every run spends its whole budget" % (section, ", ".join(stops)))
         for value in settings.values():
             _julia_value(value)
     binops = tuple(config.get("binops", BINARY_OPERATORS))
@@ -435,21 +465,19 @@ def fit(x, y, *, x_val, variables, meta, options, state):
     generations, seconds = (list(part) for part in report["progress"])
     extra["progress"] = {"generation": [int(g) for g in generations], "seconds": [float(t) for t in seconds]}
     if not members:
-        return {"error": "TiSR's hall of fame is empty", "extra": extra}
+        return {"error": "TiSR's hall of fame is empty", "fit_time": float(report["seconds"]), "extra": extra}
 
     hall_of_fame = []
     for member in members:
         entry = {key: float(value) for key, value in member["measures"].items()}
         try:
             entry["expression"] = infix([str(t) for t in member["tokens"]], names, state["binops"], state["unaops"])
+            entry["string_deviation"] = string_deviation(entry["expression"], names, X,
+                                                         np.asarray(list(member["values"]), dtype=np.float64))
         except ValueError as exc:
             entry["expression"] = None
             entry["error"] = str(exc)
         hall_of_fame.append(entry)
     extra["hall_of_fame"] = hall_of_fame
-    expression = hall_of_fame[0]["expression"]
-    if expression is None:
-        return {"error": hall_of_fame[0]["error"], "extra": extra}
-    extra["string_deviation"] = string_deviation(expression, names, X, np.asarray(list(report["values"]), dtype=np.float64))
     # the search itself: TiSR's Options and its loop, not the conversion to Python or the checks above
-    return {"expression": expression, "fit_time": float(report["seconds"]), "extra": extra}
+    return {"error": NO_ANSWER, "fit_time": float(report["seconds"]), "extra": extra}

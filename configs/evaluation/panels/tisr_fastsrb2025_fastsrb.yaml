@@ -9,15 +9,12 @@
 #   - per problem, the largest complexity TiSR may build: 1.5 times the node count of the problem's first
 #     acceptable expression (constants rounded to 5 significant digits, counted with binary operators), under
 #     config_by_problem (max_compl 30, TiSR's default, holds for a problem not listed). This cap is taken from the
-#     ground truth; srbf's own TiSR configs never set one;
-#   - TiSR's time limit at the paper's 1,800 s.
-# The paper's budget is that time limit; the paper also records the generation at which each run succeeded, so here
-# the budget is a count of generations: 300, and 10 as a starved control. The paper checked its hall of fame about
-# every 15 seconds, stopped a run when a member matched one of the problem's acceptable forms and counted it as a
-# success. That check needs the acceptable forms inside the search, so here every run goes its full budget, and every
-# member of the final hall of fame (`hall_of_fame` column) can be judged. (Stopping at the paper's precondition alone,
-# a member that reproduces the test half to a relative error of 1e-8, ends runs whose member is wrong in a term that
-# is negligible on the sampled ranges, which the paper's runs searched past.)
+#     ground truth; srbf's own TiSR configs never set one.
+# Everything else is TiSR's own default at the environment's commit. The paper's budget is a time limit of 1,800 s,
+# and it stopped a run as soon as a hall-of-fame member matched one of the problem's acceptable forms; it also records
+# the generation at which each run succeeded. Here the budget is a count of generations, 300, and 10 as a starved
+# control, and every run spends all of it: nothing stops a run early, and TiSR's time limit is the worker's guard.
+# Every member of the final hall of fame (`hall_of_fame` column) can be judged.
 # The environment as for configs/evaluation/scaling/tisr_fastsrb.yaml.
 run:
   data_source:
@@ -33,12 +30,11 @@ run:
     python: '{{ROOT}}/envs/tisr/bin/python'
     config_provenance: harness_tuned
     simplipy_engine: acj-5-4-llm
-    timeout: 3000
+    timeout: 7200
     options:
       generations: !sweep
         name: gate
         values: [10, 300]
-      time_guard: 1800.0
       config:
         binops: ['+', '-', '*', '/', '^']
         unaops: [neg, exp, log, sqrt, pow2, pow3, sin, cos, tanh]
