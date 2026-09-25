@@ -1,0 +1,68 @@
+# GP-GOMEA in the configuration SRBench 2021 published its ground-truth results with (cavalab/srbench,
+# experiment/methods/tuned/GPGOMEARegressor.py): tree height 6, population 1000, the operators
+# + - * p/ plog sqrt sin cos and 1,000,000 evaluations, on the author's benchmark configuration. The benchmark's
+# maintainers chose these settings (from the grid search around the author's configuration), so the arm is
+# harness_tuned. It checks srbf's GP-GOMEA against SRBench 2021's Feynman numbers (noise 0: 70.9 % of runs with
+# test R^2 > 0.999). One experiment per catalog; the environment as for
+# configs/evaluation/scaling/gpgomea_fastsrb.yaml.
+#
+# One setting differs: the wall-clock limit is 600 s, not SRBench's 28,800 s. On 512 points a run spends its
+# 1,000,000 evaluations in a few minutes unless its population has converged. A converged population spends few
+# evaluations per generation, and SRBench's runs then went on until the limit (often those that had found the law).
+# The shorter limit stops such a run; GP-GOMEA returns its elitist, and the `hit_time_guard` column marks the run.
+# The limit can only shorten a search, so it cannot raise the rate this arm is compared on.
+experiments:
+  feynman:
+    data_source:
+      catalog: feynman
+      sampling:
+        n_support: 512
+        n_validation: 512
+        noise: 0.0
+        problems_per_expression: 1
+    model_adapter:
+      type: subprocess
+      worker: gpgomea
+      python: '{{ROOT}}/envs/gpgomea/bin/python'
+      config_provenance: harness_tuned
+      simplipy_engine: acj-5-4-llm
+      timeout: 3000
+      options:
+        max_evaluations: 1000000
+        config:
+          popsize: 1000
+          initmaxtreeheight: 6
+          functions: '+_-_*_p/_plog_sqrt_sin_cos'
+          time: 600
+    runner:
+      limit: null
+      save_every: 8
+      resume: true
+      output: '{{ROOT}}/results/evaluation/panels/gpgomea_srbench2021/feynman/evals_1000000.pkl'
+  feynman-bonus:
+    data_source:
+      catalog: feynman-bonus
+      sampling:
+        n_support: 512
+        n_validation: 512
+        noise: 0.0
+        problems_per_expression: 1
+    model_adapter:
+      type: subprocess
+      worker: gpgomea
+      python: '{{ROOT}}/envs/gpgomea/bin/python'
+      config_provenance: harness_tuned
+      simplipy_engine: acj-5-4-llm
+      timeout: 3000
+      options:
+        max_evaluations: 1000000
+        config:
+          popsize: 1000
+          initmaxtreeheight: 6
+          functions: '+_-_*_p/_plog_sqrt_sin_cos'
+          time: 600
+    runner:
+      limit: null
+      save_every: 8
+      resume: true
+      output: '{{ROOT}}/results/evaluation/panels/gpgomea_srbench2021/feynman-bonus/evals_1000000.pkl'

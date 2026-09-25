@@ -1,0 +1,31 @@
+# GP-GOMEA on FastSRB along its evaluation budget, in doublings from 2^14 (the first power of two above the cost of
+# one generation) up to about 100 s per problem on the reference machine: GP-GOMEA 6a92cb6 in its first author's
+# benchmark configuration (see srbf/worker/models/gpgomea_worker.py and docs/models.md), run in an environment of
+# its own:
+#   scripts/envs/build_gpgomea_env.sh {{ROOT}}/envs/gpgomea
+run:
+  data_source:
+    catalog: fastsrb
+    sampling:
+      n_support: 512
+      n_validation: 512
+      noise: 0.0
+      problems_per_expression: 1
+  model_adapter:
+    type: subprocess
+    worker: gpgomea
+    python: '{{ROOT}}/envs/gpgomea/bin/python'
+    config_provenance: author_blessed
+    simplipy_engine: acj-5-4-llm
+    timeout: 9600
+    options:
+      max_evaluations: !sweep
+        name: ladder
+        values: [16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304]
+  runner:
+    limit: null
+    save_every: 8
+    resume: true
+    output: !sweep
+      name: ladder
+      values: ['{{ROOT}}/results/evaluation/scaling/gpgomea/fastsrb/evals_0016384.pkl', '{{ROOT}}/results/evaluation/scaling/gpgomea/fastsrb/evals_0032768.pkl', '{{ROOT}}/results/evaluation/scaling/gpgomea/fastsrb/evals_0065536.pkl', '{{ROOT}}/results/evaluation/scaling/gpgomea/fastsrb/evals_0131072.pkl', '{{ROOT}}/results/evaluation/scaling/gpgomea/fastsrb/evals_0262144.pkl', '{{ROOT}}/results/evaluation/scaling/gpgomea/fastsrb/evals_0524288.pkl', '{{ROOT}}/results/evaluation/scaling/gpgomea/fastsrb/evals_1048576.pkl', '{{ROOT}}/results/evaluation/scaling/gpgomea/fastsrb/evals_2097152.pkl', '{{ROOT}}/results/evaluation/scaling/gpgomea/fastsrb/evals_4194304.pkl']

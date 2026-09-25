@@ -519,6 +519,42 @@ test('a chart is drawn at the width it is given', async ({ page }) => {
   expect(Math.abs(Number(viewBox.split(' ')[2]) - box.width)).toBeLessThan(2);   // 1 unit = 1 px: 12 px of label is 12 px
 });
 
+test('a display of one chart is drawn at the width it is shown, not stretched from a grid cell', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const stretch = () => page.evaluate(() => [...document.querySelectorAll('#results-explorer-v2 .v2main svg.v2chart')].map((s) => s.getBoundingClientRect().width / s.viewBox.baseVal.width));
+  for (const view of ['dist', 'dist&dm=ecdf', 'dist&dm=cats', 'dist&dm=ladder', 'dist&dmetric=numeric_recovery_val', 'ranks']) {
+    await page.goto('/?release=2026-09&v=' + view);
+    await expect(page.locator(V2 + ' .v2main svg.v2chart').first()).toBeVisible();
+    // 1 unit = 1 px: drawn at a grid cell's width and stretched to the column, 12 px of label grew to 20 px
+    await expect.poll(async () => { const r = await stretch(); return r.length && r.every((x) => Math.abs(x - 1) < 0.02); }, { message: view }).toBe(true);
+  }
+});
+
+test('a method marked as the ceiling is drawn dashed in the page ink, legend included', async ({ page }) => {
+  // mark the prior as the oracle is marked (dash, ink), in the payload as it is served
+  await page.route('**/data/2026-09/results.js*', async (route) => {
+    const response = await route.fetch();
+    const body = (await response.text()).replace('"key":"prior",', '"key":"prior","dash":true,"ink":true,');
+    await route.fulfill({ response, body });
+  });
+  await page.goto('/?release=2026-09&v=curves&p=rung~numeric_recovery_val');   // the budget axis: the prior has no reference time
+  const chart = page.locator(V2 + ' .v2main svg.v2chart').first();
+  await expect(chart).toBeVisible();
+  const drawn = await chart.evaluate((svg) => {
+    const ink = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
+    const label = [...svg.querySelectorAll('text.leg')].find((t) => t.textContent === 'Flash-ANSR prior');
+    const key = label && label.previousElementSibling;
+    const lines = [...svg.querySelectorAll('polyline')].filter((l) => l.getAttribute('stroke') === ink);
+    return { ink, keyDash: key && key.getAttribute('stroke-dasharray'), keyStroke: key && key.getAttribute('stroke'),
+             dashedLines: lines.filter((l) => l.getAttribute('stroke-dasharray')).length,
+             otherDashed: [...svg.querySelectorAll('polyline[stroke-dasharray]')].filter((l) => l.getAttribute('stroke') !== ink).length };
+  });
+  expect(drawn.keyStroke, 'the legend key takes the page ink').toBe(drawn.ink);
+  expect(drawn.keyDash, 'the legend key is dashed').toBeTruthy();
+  expect(drawn.dashedLines, 'the line is dashed in the ink').toBeGreaterThan(0);
+  expect(drawn.otherDashed, 'no other method is dashed').toBe(0);
+});
+
 // ---- Distribution: a distribution is what the view shows, in four readings ------------------------------------
 test('the distribution view opens on histograms of a continuous metric', async ({ page }) => {
   const errors = collectErrors(page);

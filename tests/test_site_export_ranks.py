@@ -73,3 +73,64 @@ def test_a_metric_that_copies_another_in_every_cell_is_not_listed() -> None:
     assert keys({"a": {"nguyen": {"1": same}, "measured": {"1": apart}}}) == everything - {"numeric_recovery_relative_fit"}
     # nothing published yet: nothing is known to be a copy, so nothing is dropped
     assert keys({}) == everything
+
+
+def test_a_difference_ranks_by_its_distance_from_zero() -> None:
+    """Predicted minus true counts are signed: five constants too few must not beat an exact count."""
+    sx = _exporter()
+    for key in ("n_constants_delta", "total_nestedness_delta"):
+        higher, ideal = sx.METRIC_HIGHER[key], sx.IDEAL[key]
+        assert higher is None and ideal == 0.0
+        assert sx.rank_score(-5.0, higher, ideal) == sx.rank_score(5.0, higher, ideal) < sx.rank_score(0.0, higher, ideal)
+
+
+def test_every_ranked_metric_says_what_is_better() -> None:
+    sx = _exporter()
+    kinds = {m[0]: m for m in sx.METRICS}
+    assert sx.RANK_KEYS[0] == "log10_fvu_val"                              # the primary league
+    assert len(set(sx.RANK_KEYS)) == len(sx.RANK_KEYS)
+    for key in sx.RANK_KEYS:
+        assert key in kinds, key
+        assert sx.METRIC_HIGHER[key] is not None or key in sx.IDEAL, f"{key} has neither a direction nor an ideal"
+        assert key not in sx.EVERY_PROBLEM, f"{key} is a property of the ground truth: every method would tie"
+    assert "r2_val" not in sx.RANK_KEYS and "predicted_log_prob" not in sx.RANK_KEYS
+
+
+def test_an_overlay_written_with_other_rank_keys_maps_onto_the_release_keys(tmp_path: Path) -> None:
+    """ranks.js files merge in whichever order they load; the release's key list wins, the overlay maps onto it."""
+    import json
+    import shutil
+    import subprocess
+
+    import pytest
+    if shutil.which("node") is None:
+        pytest.skip("node is not installed")
+    sx = _exporter()
+
+    def write(name: str, keys: list[str], main: bool, pairs: dict[str, Any]) -> None:
+        (tmp_path / name).write_text(sx.RANKS_JS % ('"r"', json.dumps(keys), "true" if main else "false", '["t1"]', "[1]", json.dumps(pairs), "{}", "{}"))
+
+    write("release.js", ["a", "b", "c"], True, {"x|y": {"cat": {"t1": [10, 6, 3, 2, 1, 5, 4]}}})
+    write("overlay.js", ["a", "c", "d"], False, {"x|z": {"cat": {"t1": [9, 7, 2, 4, 5, 1, 1]}}})
+    probe = ("global.window={};require(process.argv[1]);require(process.argv[2]);"
+             "process.stdout.write(JSON.stringify(window.RESULTS_V2_RANKS.r))")
+    for first, second in (("release.js", "overlay.js"), ("overlay.js", "release.js")):
+        merged = json.loads(subprocess.run(["node", "-e", probe, str(tmp_path / first), str(tmp_path / second)],
+                                           capture_output=True, text=True, check=True).stdout)
+        assert merged["keys"] == ["a", "b", "c"], first
+        assert merged["pairs"]["x|y"]["cat"]["t1"] == [10, 6, 3, 2, 1, 5, 4], first
+        assert merged["pairs"]["x|z"]["cat"]["t1"] == [9, 7, 2, None, None, 4, 5], first
+
+
+def test_the_public_guard_reads_every_method_a_written_ranks_js_names() -> None:
+    """The guard refuses to publish a ranks.js that names a private method; it must parse what the exporter writes."""
+    import json
+    sx = _exporter()
+    spec = importlib.util.spec_from_file_location("public_guard", ROOT / "results-site" / "tests" / "public_guard.py")
+    assert spec is not None and spec.loader is not None
+    guard = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(guard)
+    text = sx.RANKS_JS % ('"r"', json.dumps(["a"]), "true", '["t1"]', "[1]",
+                          json.dumps({"hidden-a|e2e": {"cat": {"t1": [3, 1, 1]}}}), json.dumps({"e2e": {"t1": 4}}),
+                          json.dumps({"hidden-b|e2e": {"t1": [4, 4]}}))
+    assert guard.rank_methods(text) == {"e2e", "hidden-a", "hidden-b"}

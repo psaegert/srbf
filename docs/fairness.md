@@ -87,20 +87,33 @@ read as `harness_tuned`: an unlabeled configuration was chosen by whoever assemb
 
 The configs in the repository are labeled as follows, and a test keeps them that way:
 
+- **DSO:** uDSR\* is `author_blessed`: the configuration its authors published with the method and ran on SRBench
+  (the uDSR paper's Table 3), for the parts the public release has. Its library defaults differ: plain policy
+  gradient instead of priority queue training, and GP-meld off. DSR is `upstream_default`: the regression
+  configuration DSO ships, with the constant token its authors advise for data with constants.
 - **PySR, NeSymReS, E2E:** `upstream_default`.
 - **Operon:** `author_blessed`: the configuration its first author published for running it as a benchmark
   baseline, without its hyperparameter search. Its library defaults differ: one objective and no local
   search, which no benchmark run by its authors has used.
+- **RILS-ROLS:** `author_blessed`: the configuration its first author committed for running it as a
+  benchmark baseline (his SRBench submission), without the hyperparameter grid that the benchmark's
+  maintainers searched around it. It differs from the library's defaults in the sample size, which it
+  lets the method choose; on up to 10,000 points the method takes them all, as the default does.
 - **TiSR:** `upstream_default`: its own defaults at the commit its author's benchmark paper ran. That paper's
-  protocol sets the operators, forbidden nestings, a complexity cap per problem taken from the ground truth and a
-  stop at the first match; it runs as a `harness_tuned` config under `configs/evaluation/panels/`, a check against
-  the paper's numbers.
+  protocol, with its operators and forbidden nestings and a complexity cap per problem taken from the ground truth,
+  runs as a `harness_tuned` config under `configs/evaluation/panels/`, a check against the paper's numbers.
 - **Flash-ANSR, every size:** `author_blessed`. For these entries the method's authors and the
   benchmark's maintainers are the same people, which is exactly what the label discloses. Any
   method's authors get the same slot on the same terms.
 - **The prior reference:** `author_blessed`, like the Flash-ANSR entries whose configuration it
   shares. It samples expressions from Flash-ANSR's training prior without a model and passes them
   through the same refinement and ranking.
+- **The oracle:** `author_blessed` on the same grounds. It passes the problem's ground truth through
+  the same refinement and ranking, so it is a ceiling for the fitting stage, not a competitor.
+- **GP-GOMEA:** `author_blessed`: the configuration its first author committed for running it as a
+  benchmark baseline (SRBench 2021), without the hyperparameter grid that the benchmark's maintainers
+  searched around it. Its library defaults differ: they run the interleaved multistart scheme, which
+  the author turned off for benchmarking, and stop after 60 seconds.
 
 ## Submitting a configuration for your method
 
