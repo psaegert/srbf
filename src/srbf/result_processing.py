@@ -213,6 +213,55 @@ def _mask_every_number(tokens: list[str]) -> list[str] | None:
     return normalize_skeleton(list(tokens))
 
 
+_NAMED_CONSTANTS = frozenset({"np.pi", "np.e", "pi", "e"})
+
+
+def _constant_leaf(token: str) -> bool:
+    """A leaf that names a number: a masked constant, a numeral, or pi / e."""
+    if token == "<constant>" or token in _NAMED_CONSTANTS:
+        return True
+    try:
+        float(token)
+    except ValueError:
+        return False
+    return True
+
+
+def _fold_constant_subtrees(tokens: list[str], arity: Mapping[str, int]) -> list[str]:
+    """Every subtree without a variable that holds a free ``<constant>`` becomes one ``<constant>``.
+
+    A function of free constants is a free constant, so the family of functions the skeleton stands for is unchanged
+    (the fold is sound: it can make two skeletons meet only if they meet as families), and two spellings of one
+    constant factor -- ``rootn(<constant>, <constant>)`` and ``1 / pow(<constant>, <constant>)`` -- become the same
+    ``<constant>``. A subtree of numbers alone is a fixed number and stays as written (the canonical form evaluates
+    it). A prefix that does not parse is returned unchanged."""
+    out: list[str] = []
+
+    def walk(i: int) -> tuple[int, bool, bool, int]:
+        """Parse the subtree at ``i``; returns (end, has_variable, has_free_constant, start in `out`)."""
+        token = tokens[i]
+        start = len(out)
+        out.append(token)
+        n = int(arity.get(token, 0))
+        if n == 0:
+            leaf_constant = _constant_leaf(token)
+            return i + 1, not leaf_constant, token == "<constant>", start
+        j, has_variable, has_free = i + 1, False, False
+        for _ in range(n):
+            j, child_variable, child_free, _start = walk(j)
+            has_variable, has_free = has_variable or child_variable, has_free or child_free
+        if not has_variable and has_free:
+            del out[start:]
+            out.append("<constant>")
+        return j, has_variable, has_free, start
+
+    try:
+        end = walk(0)[0] if tokens else 0
+    except (IndexError, RecursionError):
+        return list(tokens)
+    return out if end == len(tokens) else list(tokens)
+
+
 def _settled(simplify_fn: Callable[[list[str]], list[str] | None], mask_fn: MaskFn, tokens: list[str]) -> list[str]:
     """Mask, simplify, mask again, until the skeleton stands still.
 
@@ -773,12 +822,15 @@ def derive_metrics(
     if convert_fn is None and engine is not None:
         convert_fn = engine.convert_expression
 
-    # The engine's own mask: every number, the named constants pi and e included, becomes <constant>.
+    # The engine's own mask: every number, the named constants pi and e included, becomes <constant>; then every
+    # subtree of free constants is one free constant (`_fold_constant_subtrees`), on both sides alike.
+    arity = dict(operator_arity)
+
     def engine_mask(tokens: list[str], _engine: Any = engine) -> list[str] | None:
-        return list(_engine.mask(list(tokens), 'all', collect=False))
+        return _fold_constant_subtrees(list(_engine.mask(list(tokens), 'all', collect=False)), arity)
 
     def engine_mask_fittable(tokens: list[str], _engine: Any = engine) -> list[str] | None:
-        return list(_engine.mask(list(tokens), 'fittable', collect=False))
+        return _fold_constant_subtrees(list(_engine.mask(list(tokens), 'fittable', collect=False)), arity)
 
     mask_fn: MaskFn | None = engine_mask if engine is not None and hasattr(engine, "mask") else None
     fittable_mask_fn: MaskFn | None = engine_mask_fittable if engine is not None and hasattr(engine, "mask") else None

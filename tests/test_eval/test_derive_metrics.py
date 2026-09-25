@@ -490,3 +490,44 @@ def test_agreement_at_the_stricter_level_is_a_witness_at_the_looser_one():
 def test_the_stricter_levels_need_an_engine():
     scored = derive_metrics(_levels_snapshot(), operator_arity={'+': 2, '*': 2, 'pow': 2})
     assert 'symbolic_recovery' in scored and 'symbolic_recovery_mask_fittable' not in scored and 'symbolic_recovery_mask_none' not in scored
+
+
+def test_a_subtree_of_free_constants_is_one_constant():
+    """A function of free constants is a free constant: after masking, a subtree without a variable that holds a
+    ``<constant>`` becomes one ``<constant>``. A subtree of numbers alone is a fixed number and stays as written."""
+    from simplipy import SimpliPyEngine
+    from srbf.result_processing import _fold_constant_subtrees
+    arity = SimpliPyEngine.load('acj-5-4-llm', install=True).operator_arity
+    fold = lambda tokens: _fold_constant_subtrees(tokens, arity)  # noqa: E731
+    assert fold(['*', '<constant>', '*', 'x1', 'rootn', '<constant>', '<constant>']) == ['*', '<constant>', '*', 'x1', '<constant>']
+    assert fold(['/', 'exp', 'x1', 'inv', 'pow', '<constant>', '<constant>']) == ['/', 'exp', 'x1', '<constant>']
+    assert fold(['*', '<constant>', 'np.pi']) == ['<constant>']
+    assert fold(['pow', 'x1', '/', '1', '2']) == ['pow', 'x1', '/', '1', '2']            # numbers alone: a fixed number
+    assert fold(['pow', 'x1', '<constant>']) == ['pow', 'x1', '<constant>']              # a variable below: no fold
+    assert fold(['+', 'x1']) == ['+', 'x1']                                               # does not parse: unchanged
+
+
+def test_one_constant_factor_in_two_spellings_is_one_structure():
+    """The exact law, refitted: its constant factor written as ``rootn(2 pi, 2)`` in the ground truth and as
+    ``1 / pow(2 pi, 1/2)`` or a folded value in the prediction. Before the fold the masked forms kept the two
+    constant subtrees apart (found by the oracle: 4 of 176 exact fits judged as another structure)."""
+    from simplipy import SimpliPyEngine
+    from symbolic_data.token_ops import normalize_skeleton
+    engine = SimpliPyEngine.load('acj-5-4-llm', install=True)
+    laws = [['/', 'exp', '/', 'neg', 'pow', 'x1', '2', '2', 'rootn', '*', '2', '3.141592653589793', '2'],
+            ['/', 'exp', '/', 'neg', 'pow', '/', 'x2', 'x1', '2', '2', '*', 'rootn', '*', '2', '3.141592653589793', '2', 'x1'],
+            ['/', '*', '*', '25', 'rootn', '2', '2', 'x1', '204'],
+            ['/', 'exp', '/', 'neg', 'pow', 'x1', '2', '2', 'rootn', '*', '2', '3.141592653589793', '2']]
+    predictions = [['/', 'exp', '/', 'neg', 'pow', 'x1', '2', '2', 'pow', '*', '2', 'np.pi', '/', '1', '2'],
+                   ['/', '*', 'exp', '/', 'neg', '*', 'pow', 'x2', '2', 'inv', 'pow', 'x1', '2', '2', 'inv', 'pow', '*', '2',
+                    'np.pi', '/', '1', '2', 'x1'],
+                   ['*', '0.1733104855849381', 'x1'],
+                   ['/', 'exp', '/', 'neg', 'pow', 'x1', '3', '2', 'pow', '*', '2', 'np.pi', '/', '1', '2']]   # x1^3: another law
+    snapshot = {
+        'skeleton': [normalize_skeleton(law) for law in laws], 'ground_truth_prefix': laws,
+        'predicted_expression_prefix': predictions, 'predicted_skeleton_prefix': [normalize_skeleton(p) for p in predictions],
+        'benchmark_eq_id': ['A', 'B', 'C', 'D'], 'placeholder': [False] * 4,
+    }
+    scored = derive_metrics(snapshot, engine=engine)
+    assert list(scored['symbolic_recovery']) == [True, True, True, True]           # the exponent is a number: masked
+    assert list(scored['symbolic_recovery_mask_fittable']) == [True, True, True, False]  # ... but it counts here
