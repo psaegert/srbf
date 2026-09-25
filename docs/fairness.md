@@ -91,6 +91,10 @@ The configs in the repository are labeled as follows, and a test keeps them that
 - **Operon:** `author_blessed`: the configuration its first author published for running it as a benchmark
   baseline, without its hyperparameter search. Its library defaults differ: one objective and no local
   search, which no benchmark run by its authors has used.
+- **TiSR:** `upstream_default`: its own defaults at the commit its author's benchmark paper ran. That paper's
+  protocol sets the operators, forbidden nestings, a complexity cap per problem taken from the ground truth and a
+  stop at the first match; it runs as a `harness_tuned` config under `configs/evaluation/panels/`, a check against
+  the paper's numbers.
 - **Flash-ANSR, every size:** `author_blessed`. For these entries the method's authors and the
   benchmark's maintainers are the same people, which is exactly what the label discloses. Any
   method's authors get the same slot on the same terms.

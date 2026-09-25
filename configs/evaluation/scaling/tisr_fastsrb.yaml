@@ -1,0 +1,30 @@
+# TiSR on FastSRB along its number of generations, in doublings from 1 (one generation of 20 islands) to 512, about
+# 100 s per problem on the reference machine: TiSR 5b541b3 at its own defaults (see
+# srbf/worker/models/tisr_worker.py and docs/models.md), run in an environment of its own:
+#   scripts/envs/build_tisr_env.sh {{ROOT}}/envs/tisr
+run:
+  data_source:
+    catalog: fastsrb
+    sampling:
+      n_support: 512
+      n_validation: 512
+      noise: 0.0
+      problems_per_expression: 1
+  model_adapter:
+    type: subprocess
+    worker: tisr
+    python: '{{ROOT}}/envs/tisr/bin/python'
+    config_provenance: upstream_default
+    simplipy_engine: acj-5-4-llm
+    timeout: 7200
+    options:
+      generations: !sweep
+        name: ladder
+        values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+  runner:
+    limit: null
+    save_every: 8
+    resume: true
+    output: !sweep
+      name: ladder
+      values: ['{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000001.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000002.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000004.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000008.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000016.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000032.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000064.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000128.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000256.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000512.pkl']

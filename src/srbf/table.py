@@ -1,8 +1,8 @@
 """One table for a whole evaluation: a row per problem and rung, every per-problem metric.
 
 A result tree is the directory an evaluation writes for one method and one draw: ``<tree>/<catalog>/choices_<rung>.pkl``
-(``niter_``, ``evals_`` or ``samples_<rung>.pkl`` for a ladder that counts iterations, evaluations or sampled
-expressions), each file possibly split into shards
+(``niter_``, ``evals_``, ``samples_`` or ``generations_<rung>.pkl`` for a ladder that counts iterations, evaluations,
+sampled expressions or generations), each file possibly split into shards
 ``<stem>.shard-K-of-N.pkl``. :func:`judge_result_file` turns one file into rows with :func:`srbf.derive_metrics`;
 :func:`build_table` judges any number of trees in parallel and writes the rows as CSV (``srbf table``). The results
 site is built from this table.
@@ -41,8 +41,8 @@ from typing import Any
 
 #: A result file's name: the rung and, for a shard, its index and count.
 #: A rung's result file is named after the method's budget unit: draws (choices_), iterations (niter_),
-#: evaluations (evals_) or sampled expressions (samples_).
-RUNG_PREFIXES = ("choices", "niter", "evals", "samples")
+#: evaluations (evals_), sampled expressions (samples_) or generations (generations_).
+RUNG_PREFIXES = ("choices", "niter", "evals", "samples", "generations")
 RESULT_FILE = re.compile(r"(?:" + "|".join(RUNG_PREFIXES) + r")_(\d+)(?:\.shard-(\d+)-of-(\d+))?\.pkl$")
 
 ID_COLUMNS = ["model", "draw", "catalog", "rung", "shard", "row", "sha"]

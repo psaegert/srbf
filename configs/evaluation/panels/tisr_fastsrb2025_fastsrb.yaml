@@ -1,0 +1,182 @@
+# TiSR under the protocol of the FastSRB paper (Martinek 2025, arXiv 2508.14481; its repository
+# viktmar/FastSRB-paper-repo, src/tisr.jl), which reports that TiSR rediscovers 69.4 % of runs on the FastSRB problems.
+# The paper's settings replace TiSR's defaults, so the arm is harness_tuned; it checks srbf's TiSR against that
+# claim and is never a headline configuration. What it sets, as the paper's script does:
+#   - 400 points, split by TiSR into halves for fitting and testing (data_split parts [0.5, 0.0, 0.5]);
+#   - the operators + - * / ^ and neg exp log sqrt pow2 pow3 sin cos tanh, with the paper's forbidden nestings;
+#   - the hall of fame and the selection on the node count (compl) instead of the weighted complexity, and the test
+#     measures the paper checks;
+#   - per problem, the largest complexity TiSR may build: 1.5 times the node count of the problem's first
+#     acceptable expression (constants rounded to 5 significant digits, counted with binary operators), under
+#     config_by_problem (max_compl 30, TiSR's default, holds for a problem not listed). This cap is taken from the
+#     ground truth; srbf's own TiSR configs never set one;
+#   - TiSR's time limit at the paper's 1,800 s.
+# The paper's budget is that time limit; the paper also records the generation at which each run succeeded, so here
+# the budget is a count of generations: 300, and 10 as a starved control. The paper checked its hall of fame about
+# every 15 seconds, stopped a run when a member matched one of the problem's acceptable forms and counted it as a
+# success. That check needs the acceptable forms inside the search, so here every run goes its full budget, and every
+# member of the final hall of fame (`hall_of_fame` column) can be judged. (Stopping at the paper's precondition alone,
+# a member that reproduces the test half to a relative error of 1e-8, ends runs whose member is wrong in a term that
+# is negligible on the sampled ranges, which the paper's runs searched past.)
+# The environment as for configs/evaluation/scaling/tisr_fastsrb.yaml.
+run:
+  data_source:
+    catalog: fastsrb
+    sampling:
+      n_support: 400
+      n_validation: 512
+      noise: 0.0
+      problems_per_expression: 1
+  model_adapter:
+    type: subprocess
+    worker: tisr
+    python: '{{ROOT}}/envs/tisr/bin/python'
+    config_provenance: harness_tuned
+    simplipy_engine: acj-5-4-llm
+    timeout: 3000
+    options:
+      generations: !sweep
+        name: gate
+        values: [10, 300]
+      time_guard: 1800.0
+      config:
+        binops: ['+', '-', '*', '/', '^']
+        unaops: [neg, exp, log, sqrt, pow2, pow3, sin, cos, tanh]
+        data_split:
+          parts: '[0.5, 0.0, 0.5]'
+        grammar:
+          max_compl: 30
+          illegal_dict: 'Dict("^" => (lef = (), rig = ("+", "-", "*", "/", "^", "neg", "exp", "log", "sqrt", "pow2", "pow3", "sin", "cos", "tanh", "VAR")), "log" => (lef = ("log", "exp"), rig = ()), "exp" => (lef = ("exp", "log"), rig = ()), "sin" => (lef = ("sin", "cos", "tanh"), rig = ()), "cos" => (lef = ("sin", "cos", "tanh"), rig = ()), "tanh" => (lef = ("sin", "cos", "tanh"), rig = ()))'
+        selection:
+          hall_of_fame_objectives: '[:ms_processed_e, :compl]'
+          selection_objectives: '[:ms_processed_e, :one_minus_abs_spearman, :compl]'
+        measures:
+          additional_measures: 'Dict{Symbol, Function}(:one_minus_abs_spearman => TiSR.get_measure_one_minus_abs_spearman, :mare => TiSR.get_measure_mare, :mare_test => TiSR.get_measure_mare_test, :max_are_test => TiSR.get_measure_max_are_test)'
+      config_by_problem:
+        II.38.3: {grammar: {max_compl: 10}}
+        II.38.14: {grammar: {max_compl: 10}}
+        III.7.38: {grammar: {max_compl: 7}}
+        III.12.43: {grammar: {max_compl: 4}}
+        III.15.27: {grammar: {max_compl: 10}}
+        I.12.1: {grammar: {max_compl: 4}}
+        I.12.4: {grammar: {max_compl: 10}}
+        I.12.5: {grammar: {max_compl: 4}}
+        I.14.3: {grammar: {max_compl: 7}}
+        I.14.4: {grammar: {max_compl: 10}}
+        I.18.12: {grammar: {max_compl: 9}}
+        I.18.14: {grammar: {max_compl: 12}}
+        I.25.13: {grammar: {max_compl: 4}}
+        I.26.2: {grammar: {max_compl: 7}}
+        I.27.6: {grammar: {max_compl: 13}}
+        I.30.5: {grammar: {max_compl: 9}}
+        I.43.16: {grammar: {max_compl: 10}}
+        I.47.23: {grammar: {max_compl: 9}}
+        II.2.42: {grammar: {max_compl: 13}}
+        II.3.24: {grammar: {max_compl: 10}}
+        II.4.23: {grammar: {max_compl: 7}}
+        II.8.31: {grammar: {max_compl: 7}}
+        II.10.9: {grammar: {max_compl: 10}}
+        II.13.17: {grammar: {max_compl: 7}}
+        II.15.4: {grammar: {max_compl: 10}}
+        II.15.5: {grammar: {max_compl: 10}}
+        II.27.16: {grammar: {max_compl: 7}}
+        II.27.18: {grammar: {max_compl: 7}}
+        II.34.11: {grammar: {max_compl: 13}}
+        II.34.29b: {grammar: {max_compl: 10}}
+        I.10.7: {grammar: {max_compl: 15}}
+        I.11.19: {grammar: {max_compl: 16}}
+        I.12.2: {grammar: {max_compl: 13}}
+        I.12.11: {grammar: {max_compl: 15}}
+        I.13.4: {grammar: {max_compl: 22}}
+        I.13.12: {grammar: {max_compl: 21}}
+        I.15.1: {grammar: {max_compl: 18}}
+        I.16.6: {grammar: {max_compl: 16}}
+        I.18.4: {grammar: {max_compl: 16}}
+        I.24.6: {grammar: {max_compl: 22}}
+        I.29.4: {grammar: {max_compl: 4}}
+        I.32.5: {grammar: {max_compl: 13}}
+        I.34.1: {grammar: {max_compl: 12}}
+        I.34.8: {grammar: {max_compl: 10}}
+        I.34.27: {grammar: {max_compl: 4}}
+        I.38.12: {grammar: {max_compl: 10}}
+        I.39.1: {grammar: {max_compl: 7}}
+        I.39.11: {grammar: {max_compl: 10}}
+        I.43.31: {grammar: {max_compl: 7}}
+        I.43.43: {grammar: {max_compl: 13}}
+        I.48.2: {grammar: {max_compl: 18}}
+        II.6.11: {grammar: {max_compl: 15}}
+        II.8.7: {grammar: {max_compl: 10}}
+        II.11.3: {grammar: {max_compl: 19}}
+        II.21.32: {grammar: {max_compl: 16}}
+        II.34.2a: {grammar: {max_compl: 10}}
+        II.34.2: {grammar: {max_compl: 10}}
+        II.34.29a: {grammar: {max_compl: 7}}
+        II.37.1: {grammar: {max_compl: 10}}
+        III.4.32: {grammar: {max_compl: 15}}
+        III.8.54: {grammar: {max_compl: 12}}
+        III.13.18: {grammar: {max_compl: 13}}
+        III.14.14: {grammar: {max_compl: 18}}
+        III.15.12: {grammar: {max_compl: 15}}
+        III.15.14: {grammar: {max_compl: 10}}
+        III.17.37: {grammar: {max_compl: 12}}
+        III.19.51: {grammar: {max_compl: 16}}
+        B8: {grammar: {max_compl: 19}}
+        B18: {grammar: {max_compl: 19}}
+        I.8.14: {grammar: {max_compl: 18}}
+        I.6.2a: {grammar: {max_compl: 13}}
+        I.6.2: {grammar: {max_compl: 22}}
+        I.6.2b: {grammar: {max_compl: 25}}
+        I.9.18: {grammar: {max_compl: 34}}
+        I.15.3t: {grammar: {max_compl: 24}}
+        I.29.16: {grammar: {max_compl: 28}}
+        I.15.3x: {grammar: {max_compl: 21}}
+        I.30.3: {grammar: {max_compl: 25}}
+        I.32.17: {grammar: {max_compl: 34}}
+        I.37.4: {grammar: {max_compl: 19}}
+        I.39.22: {grammar: {max_compl: 10}}
+        I.40.1: {grammar: {max_compl: 15}}
+        I.41.16: {grammar: {max_compl: 21}}
+        I.44.4: {grammar: {max_compl: 15}}
+        I.50.26: {grammar: {max_compl: 22}}
+        I.34.14: {grammar: {max_compl: 24}}
+        II.6.15b: {grammar: {max_compl: 18}}
+        II.6.15a: {grammar: {max_compl: 27}}
+        II.11.17: {grammar: {max_compl: 21}}
+        II.11.20: {grammar: {max_compl: 16}}
+        II.11.27: {grammar: {max_compl: 19}}
+        II.11.28: {grammar: {max_compl: 19}}
+        II.13.23: {grammar: {max_compl: 15}}
+        II.13.34: {grammar: {max_compl: 18}}
+        II.24.17: {grammar: {max_compl: 21}}
+        II.35.18: {grammar: {max_compl: 18}}
+        II.35.21: {grammar: {max_compl: 18}}
+        II.36.38: {grammar: {max_compl: 19}}
+        III.4.33: {grammar: {max_compl: 18}}
+        III.9.52: {grammar: {max_compl: 36}}
+        III.10.19: {grammar: {max_compl: 21}}
+        III.21.20: {grammar: {max_compl: 12}}
+        B1: {grammar: {max_compl: 30}}
+        B2: {grammar: {max_compl: 46}}
+        B3: {grammar: {max_compl: 24}}
+        B4: {grammar: {max_compl: 30}}
+        B5: {grammar: {max_compl: 15}}
+        B6: {grammar: {max_compl: 42}}
+        B7: {grammar: {max_compl: 18}}
+        B9: {grammar: {max_compl: 27}}
+        B10: {grammar: {max_compl: 22}}
+        B11: {grammar: {max_compl: 42}}
+        B12: {grammar: {max_compl: 49}}
+        B13: {grammar: {max_compl: 34}}
+        B14: {grammar: {max_compl: 43}}
+        B15: {grammar: {max_compl: 28}}
+        B16: {grammar: {max_compl: 30}}
+        B17: {grammar: {max_compl: 43}}
+        B19: {grammar: {max_compl: 31}}
+        B20: {grammar: {max_compl: 36}}
+  runner:
+    limit: null
+    save_every: 4
+    resume: true
+    output: !sweep
+      name: gate
+      values: ['{{ROOT}}/results/evaluation/panels/tisr_fastsrb2025/fastsrb/generations_0000010.pkl', '{{ROOT}}/results/evaluation/panels/tisr_fastsrb2025/fastsrb/generations_0000300.pkl']
