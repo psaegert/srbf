@@ -1,0 +1,31 @@
+# DSO's DSR on FastSRB along its sample budget, in doublings of one iteration (1,000 expressions sampled by the RNN)
+# up to about 100 s per problem on the reference machine: DSO v3.0.0 in the regression configuration it ships, with
+# the constant token (see srbf/worker/models/dso_worker.py and docs/models.md), run in an environment of its own:
+#   scripts/envs/build_dso_env.sh {{ROOT}}/envs/dso
+run:
+  data_source:
+    catalog: fastsrb
+    sampling:
+      n_support: 512
+      n_validation: 512
+      noise: 0.0
+      problems_per_expression: 1
+  model_adapter:
+    type: subprocess
+    worker: dso
+    python: '{{ROOT}}/envs/dso/bin/python'
+    config_provenance: upstream_default
+    simplipy_engine: acj-5-4-llm
+    timeout: 7200
+    options:
+      arm: dsr
+      n_samples: !sweep
+        name: ladder
+        values: [1000, 2000, 4000, 8000, 16000]
+  runner:
+    limit: null
+    save_every: 8
+    resume: true
+    output: !sweep
+      name: ladder
+      values: ['{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0001000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0002000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0004000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0008000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0016000.pkl']

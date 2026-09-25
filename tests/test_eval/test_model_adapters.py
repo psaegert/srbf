@@ -1,4 +1,5 @@
 import numpy as np
+from flash_ansr.utils.generation import SoftmaxSamplingConfig
 import pytest
 
 from srbf.core import EvaluationResult, EvaluationSample
@@ -268,6 +269,7 @@ class TestAnswerProvenanceColumns:
 
         class FakeModel:
             numpy_errors = "ignore"
+            generation_config = SoftmaxSamplingConfig()   # FlashANSR always carries one (the real class)
 
             def fit(self, X, y, **kwargs):
                 return FitResult(candidates=[best], ledger=None, generation_time=0.1, refinement_time=0.2,

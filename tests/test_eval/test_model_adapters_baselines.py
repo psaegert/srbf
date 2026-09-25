@@ -1,5 +1,6 @@
 import time
 
+from flash_ansr.utils.generation import SoftmaxSamplingConfig
 import numpy as np
 import pytest
 from simplipy import SimpliPyEngine
@@ -156,6 +157,8 @@ def _toy_sample() -> EvaluationSample:
 
 class _RaisingModel:
     """A model whose fit burns a measurable slice of time and then raises, like NeSymReS on a wide support box."""
+
+    generation_config = SoftmaxSamplingConfig()   # as FlashANSR carries one; the other adapters never read it
 
     def fit(self, *args, **kwargs):
         time.sleep(0.01)

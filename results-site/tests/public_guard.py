@@ -55,19 +55,26 @@ def keys_in_wrapped(text: str, pattern: str) -> set[str] | None:
     return set(json.loads(m.group(1))) if m else None
 
 
-def _object_after(text: str, marker: str) -> dict | None:
-    """The JSON object that follows `marker` (a ranks.js is a chain of Object.assign(target, {...}) calls)."""
-    i = text.find(marker)
-    if i < 0:
-        return None
-    obj, _ = json.JSONDecoder().raw_decode(text, i + len(marker))
-    return obj if isinstance(obj, dict) else None
+def _object_after(text: str, *markers: str) -> dict | None:
+    """The first JSON object that directly follows one of `markers` (a ranks.js hands its objects over as
+    Object.assign(target, {...}) or, for the pairs it may first map onto another key list, as `var P={...}`)."""
+    for marker in markers:
+        i = text.find(marker)
+        while i >= 0:
+            try:
+                obj, _ = json.JSONDecoder().raw_decode(text, i + len(marker))
+            except json.JSONDecodeError:
+                obj = None
+            if isinstance(obj, dict):
+                return obj
+            i = text.find(marker, i + 1)
+    return None
 
 
 def rank_methods(text: str) -> set[str] | None:
     """Every method key a ranks.js names: the methods with a time-budget rung, both sides of every pair, and both
     sides of every record of which rungs a time-limit outcome compared."""
-    at, pairs = _object_after(text, ".at,"), _object_after(text, ".pairs,")
+    at, pairs = _object_after(text, ".at,"), _object_after(text, ".pairs,", "var P=")
     if at is None or pairs is None:
         return None
     rungs = _object_after(text, ".rungs,") or {}
@@ -173,6 +180,11 @@ def selftest() -> list[str]:
     if "hidden-method" not in (rank_methods(ranks) or set()):
         bad.append("selftest: rank_methods missed a method named only in a pair")
     compared = ranks.replace("})();", 'Object.assign(R["t"].rungs,{"other-hidden|e2e":{"t1":[4,4]}});})();')
+    mapped = ('window.RESULTS_V2_RANKS=window.RESULTS_V2_RANKS||{};(function(){var R=window.RESULTS_V2_RANKS,rel="t",K=["a"],MAIN=true;'
+              'var X=R[rel]=R[rel]||{keys:K,at:{},pairs:{}};var P={"mapped-hidden|e2e":{"nguyen":{"4":[12,3,4]}}};'
+              'Object.assign(X.at,{"e2e":{"t1":4}});Object.assign(X.pairs,P);Object.assign(X.rungs,{});})();\n')
+    if "mapped-hidden" not in (rank_methods(mapped) or set()):
+        bad.append("selftest: rank_methods missed a method named in pairs handed over as var P")
     if not {"hidden-method", "other-hidden"} <= (rank_methods(compared) or set()):
         bad.append("selftest: rank_methods missed a method named only in the compared-rungs record")
     probe_payload = {"release": {"scoring": "fine"}, "timing_note": "measured on the forbidden-host", "cells": {"m": "the forbidden-host is numeric bulk"}}

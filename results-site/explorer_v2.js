@@ -76,7 +76,7 @@
     if (!m) { return ""; }
     if (AXIS[m.key]) { return m.desc; }
     return m.desc + (m.kind === "rate" || m.every ? " Defined for every problem." : m.worst !== undefined ? " Counted over every problem unless failed predictions are left out." : " Successful predictions only.") +
-      (m.higher === true ? " Higher is better." : m.higher === false ? " Lower is better." : "");
+      (m.higher === true ? " Higher is better." : m.higher === false ? " Lower is better." : m.ideal !== undefined ? " Closer to " + m.ideal + " is better." : "");
   }
   function mhelp(m) { return help(mdef(m), "What is " + mname(m) + "?"); }
   function axisName(m) { return narrow() ? m.short : mname(m) + (tfOf(m) ? " (log scale)" : ""); }
@@ -112,7 +112,10 @@
   function readCookie() { var m = document.cookie.match(new RegExp("(?:^|; )" + COOKIE + "=([^;]*)")); if (!m) { return {}; } try { return JSON.parse(decodeURIComponent(m[1])) || {}; } catch (e) { return {}; } }
   function writeCookie(obj) { if (!obj || !Object.keys(obj).length) { document.cookie = COOKIE + "=;path=/;max-age=0;SameSite=Lax"; return; } document.cookie = COOKIE + "=" + encodeURIComponent(JSON.stringify(obj)) + ";path=/;max-age=" + (60 * 60 * 24 * 365) + ";SameSite=Lax"; }
   var userColors = readCookie();
-  function colorOf(m) { return userColors[m.key] || m.color; }
+  // A method drawn in the page's ink (the oracle) follows the theme: black on the light page, white on the dark one.
+  function ink() { var v = window.getComputedStyle(document.documentElement).getPropertyValue("--ink"); return (v && v.trim()) || "#000000"; }
+  function colorOf(m) { return userColors[m.key] || (m.ink ? ink() : m.color); }
+  function dashOf(sr) { return sr && sr.dash ? ' stroke-dasharray="7 4"' : ""; }
   function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;"); }
   function term(key, text) { return '<span class="v2term" data-term="' + key + '" role="button" tabindex="0">' + text + "</span>"; }
   function help(text, label) { return '<button type="button" class="v2help" data-help="' + esc(text) + '" aria-label="' + esc(label || "What does this mean?") + '">?</button>'; }
@@ -396,7 +399,7 @@
   // ---- SVG chart: series of points {x, v, lo, hi, hollow, title} on a rung/time x axis -----------------------------
   function coarse() { return !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches); }   // a finger, not a mouse: no keyboard until one is asked for
   function narrow() { return window.innerWidth < 700; }   // the viewport, like the CSS breakpoints: a container reflows, this does not
-  var CHART_MIN = 520, CHART_GAP = 14;   // must match the grid in styles.css (.v2charts, .v2hlcharts)
+  var CHART_MIN = 520, CHART_GAP = 20;   // must match the grid in styles.css (.v2charts, .v2hlcharts)
   function inner(el) {   // the width the grid actually has: clientWidth still counts the padding
     if (!el || !el.clientWidth) { return 0; }
     var cs = window.getComputedStyle(el);
@@ -409,8 +412,23 @@
     return Math.max(300, Math.floor((avail - CHART_GAP * (cols - 1)) / cols));
   }
   function plotHeight(w) { return Math.max(250, Math.min(400, Math.round(w * 0.52))); }
+  // A legend or label column is as wide as its longest name, measured in the chart's own font (.leg, 12 px): a fixed
+  // width cuts a long method name at the chart's edge.
+  var measurer = null;
+  function textWidth(text) {
+    if (!measurer) { measurer = document.createElement("canvas").getContext("2d"); }
+    measurer.font = "12px " + (window.getComputedStyle(root).fontFamily || "sans-serif");
+    return measurer.measureText(text).width;
+  }
+  function widest(labels) { return labels.reduce(function (w, t) { return Math.max(w, textWidth(t)); }, 0); }
+  function legendRight(labels) { return Math.max(160, Math.ceil(LEG_GAP + 26 + widest(labels) + 16)); }   // gap, swatch, name, margin
+  var LEG_GAP = 14;   // between the plot area and its legend
   var chartHost = null, chartCount = 0;   // set while a block renders: its charts are built for THAT container
   function hostWidth() { return chartWidth(chartHost || root.querySelector(".v2main") || root, chartCount); }
+  // A display of one chart (Distribution, Ranks) spans the column up to WIDE_MAX and is drawn at the width it is shown
+  // at: drawn at a grid cell's width and stretched, its text and marks would grow with the window.
+  var WIDE_MAX = 980;   // must match .v2distwide and .v2one in styles.css
+  function wideWidth() { return Math.min(WIDE_MAX, chartWidth(chartHost || root.querySelector(".v2main") || root, 1)); }
   function inBlock(host, count, fn) { chartHost = host; chartCount = count; try { return fn(); } finally { chartHost = null; chartCount = 0; } }
   // ---- the 95 % interval, drawn -----------------------------------------------------------------------------------
   // Every point carries an uncertainty BOX: [xlo, xhi] x [lo, hi] in data units, whatever the axes are. The band is
@@ -453,8 +471,9 @@
     return out;
   }
   function chartSVG(opts) {
-    var nr = narrow(), W = opts.width || hostWidth(), L = 62, T = opts.title ? 34 : 16, R = nr ? 16 : 180, series = opts.series;
-    var B = nr ? 56 + 20 * Math.max(1, series.length) : 52, H = plotHeight(W) + B;
+    var series = opts.series, nr = narrow(), W = opts.width || hostWidth(), L = 66, T = opts.title ? 40 : 18;
+    var R = nr ? 18 : legendRight(series.map(function (sr) { return sr.label; }));
+    var B = nr ? 60 + 20 * Math.max(1, series.length) : 58, H = plotHeight(W) + B;
     // A narrow chart shortens the visible axis label to "(s, ref)"; the calibration is named in full here, so
     // every width -- and every screen reader -- says which clock these seconds came from.
     var aria = (opts.aria || opts.title || "") + (opts.timeAxis && opts.timeSource === "ref" ? ", timed on the reference machine" : "");
@@ -484,12 +503,12 @@
       : (nr ? "candidates / problem" : "candidates per problem (log scale)"));
     s += '<text x="' + ((L + W - R) / 2).toFixed(0) + '" y="' + (H - B + 32) + '" class="tick" text-anchor="middle">' + esc(xlab) + '</text>';
     if (opts.ylabel) { s += '<text transform="translate(14,' + ((T + H - B) / 2).toFixed(0) + ') rotate(-90)" class="tick" text-anchor="middle">' + esc(opts.ylabel) + "</text>"; }
-    var ly = nr ? H - B + 46 : T + 6, lx = nr ? L : W - R + 10;
+    var ly = nr ? H - B + 46 : T + 6, lx = nr ? L : W - R + LEG_GAP;
     series.forEach(function (sr) { var col = sr.color, pts = sr.pts.slice().sort(function (a, b) { return a.x - b.x; }); var cl = function (v) { return Math.min(ymax, Math.max(ymin, v)); };
       s += ciSVG(pts, col, xs, y, function (v) { return v; }, cl);
-      s += '<polyline fill="none" stroke="' + col + '" stroke-width="2" points="' + pts.map(function (p) { return xs(p.x).toFixed(1) + "," + y(cl(p.v)).toFixed(1); }).join(" ") + '"/>';
+      s += '<polyline fill="none" stroke="' + col + '" stroke-width="2"' + dashOf(sr) + ' points="' + pts.map(function (p) { return xs(p.x).toFixed(1) + "," + y(cl(p.v)).toFixed(1); }).join(" ") + '"/>';
       pts.forEach(function (p) { s += '<circle cx="' + xs(p.x).toFixed(1) + '" cy="' + y(cl(p.v)).toFixed(1) + '" r="3.2" fill="' + (p.hollow ? "var(--surface)" : col) + '" stroke="' + col + '" stroke-width="1.5"><title>' + esc(p.title) + '</title></circle>'; });
-      s += '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 20) + '" y2="' + ly + '" stroke="' + col + '" stroke-width="3"/><text x="' + (lx + 26) + '" y="' + (ly + 4) + '" class="leg">' + esc(sr.label) + '</text>'; ly += 20; });
+      s += '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 20) + '" y2="' + ly + '" stroke="' + col + '" stroke-width="3"' + dashOf(sr) + '/><text x="' + (lx + 26) + '" y="' + (ly + 4) + '" class="leg">' + esc(sr.label) + '</text>'; ly += 20; });
     return s + "</svg>";
   }
   // x positions. The budget axis is the method's own ladder. The time axis is seconds per problem, always from
@@ -507,8 +526,9 @@
   // A chart whose x is a metric, not a budget: each method's ladder walks a path through the plane
   // (here: how long its prediction is against how well it fits), so the points keep their rung order.
   function frontSVG(opts) {
-    var nr = narrow(), W = opts.width || hostWidth(), L = 62, T = opts.title ? 34 : 16, R = nr ? 16 : 180;
-    var B = nr ? 56 + 20 * Math.max(1, opts.series.length) : 52, H = plotHeight(W) + B;
+    var nr = narrow(), W = opts.width || hostWidth(), L = 66, T = opts.title ? 40 : 18;
+    var R = nr ? 18 : legendRight(opts.series.map(function (sr) { return sr.label; }));
+    var B = nr ? 60 + 20 * Math.max(1, opts.series.length) : 58, H = plotHeight(W) + B;
     var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="v2chart" role="img" aria-label="' + esc(opts.aria || opts.title) + '">' + (opts.title ? '<text x="' + L + '" y="18" class="ct">' + esc(opts.title) + "</text>" : "");
     if (opts.empty) { return s + '<text x="' + W / 2 + '" y="' + H / 2 + '" class="tick" text-anchor="middle">' + esc(opts.empty) + "</text></svg>"; }
     var xmin = opts.xmin, xmax = opts.xmax, ymin = opts.ymin, ymax = opts.ymax;
@@ -521,13 +541,13 @@
     if (opts.xzero !== undefined && opts.xzero > xmin && opts.xzero < xmax) { s += '<line x1="' + xs(opts.xzero).toFixed(1) + '" y1="' + T + '" x2="' + xs(opts.xzero).toFixed(1) + '" y2="' + (H - B) + '" class="grid zero" stroke-dasharray="4 4"/>'; }
     s += '<text x="' + ((L + W - R) / 2).toFixed(0) + '" y="' + (H - B + 32) + '" class="tick" text-anchor="middle">' + esc(opts.xlabel) + "</text>";
     s += '<text transform="translate(14,' + ((T + H - B) / 2).toFixed(0) + ') rotate(-90)" class="tick" text-anchor="middle">' + esc(opts.ylabel) + "</text>";
-    var ly = nr ? H - B + 46 : T + 6, lx = nr ? L : W - R + 10;
+    var ly = nr ? H - B + 46 : T + 6, lx = nr ? L : W - R + LEG_GAP;
     opts.series.forEach(function (sr) {
       var col = sr.color;
       s += ciSVG(sr.pts, col, xs, y, clx, cly);
-      s += '<polyline fill="none" stroke="' + col + '" stroke-width="1.6" stroke-opacity="0.65" points="' + sr.pts.map(function (p) { return xs(clx(p.x)).toFixed(1) + "," + y(cly(p.v)).toFixed(1); }).join(" ") + '"/>';
+      s += '<polyline fill="none" stroke="' + col + '" stroke-width="1.6" stroke-opacity="0.65"' + dashOf(sr) + ' points="' + sr.pts.map(function (p) { return xs(clx(p.x)).toFixed(1) + "," + y(cly(p.v)).toFixed(1); }).join(" ") + '"/>';
       sr.pts.forEach(function (p) { s += '<circle cx="' + xs(clx(p.x)).toFixed(1) + '" cy="' + y(cly(p.v)).toFixed(1) + '" r="3.2" fill="' + (p.hollow ? "var(--surface)" : col) + '" stroke="' + col + '" stroke-width="1.5"><title>' + esc(p.title) + "</title></circle>"; });
-      s += '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 20) + '" y2="' + ly + '" stroke="' + col + '" stroke-width="3"/><text x="' + (lx + 26) + '" y="' + (ly + 4) + '" class="leg">' + esc(sr.label) + "</text>"; ly += 20;
+      s += '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 20) + '" y2="' + ly + '" stroke="' + col + '" stroke-width="3"' + dashOf(sr) + '/><text x="' + (lx + 26) + '" y="' + (ly + 4) + '" class="leg">' + esc(sr.label) + "</text>"; ly += 20;
     });
     return s + "</svg>";
   }
@@ -548,7 +568,7 @@
         [sx.v, anyCI() ? sx.lo : sx.v, anyCI() ? sx.hi : sx.v].forEach(function (v) { if (isFinite(v)) { xmin = Math.min(xmin, v); xmax = Math.max(xmax, v); } });
         [sy.v, anyCI() ? sy.lo : sy.v, anyCI() ? sy.hi : sy.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
       });
-      if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: pts }); }
+      if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), dash: !!m.dash, pts: pts }); }
     });
     if (title == null) { title = xm.short + " vs " + ym.short; }
     if (pending && !series.length) { return frontSVG({ title: title, aria: aria, series: [], empty: "loading the distributions\u2026" }); }
@@ -586,7 +606,7 @@
         pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, hollow: thin(st), title: title });   // a budget has no interval: the candidate count is exact, and the measured time is within a pixel of its mean (0.4-1.1 px, measured)
         [st.v, anyCI() ? st.lo : st.v, anyCI() ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
         if (state.xaxis === "time") { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); } });
-      if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: pts }); } });
+      if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), dash: !!m.dash, pts: pts }); } });
     if (title == null) { title = metric.label; }   // the statistic is named once per block, not on every chart
     var ylabel = axisName(metric) + (metric.median_via && state.stat === "mean" ? ", median" : "");
     if (pending && !series.length) { return chartSVG({ title: title, aria: aria, series: [], empty: "loading the distribution…" }); }
@@ -607,7 +627,7 @@
   }
   function pickerGroups(axis) {
     var gs = axis === "x" ? [{ title: "budget spent", items: [AXIS.time, AXIS.rung] }] : [];
-    var only = axis === "focus" && state.view === "ranks" ? ((ranksOf() || {}).keys || D.rank_keys || []) : null;   // a ranking needs a continuous metric every method has
+    var only = axis === "focus" && state.view === "ranks" ? ((ranksOf() || {}).keys || D.rank_keys || []) : null;   // the metrics the release ranked on
     MGROUPS.forEach(function (g) {
       var ms = D.metrics.filter(function (m) { return m.group === g && (!only || only.indexOf(m.key) >= 0); });
       if (ms.length) { gs.push({ title: g, items: ms }); }
@@ -747,14 +767,14 @@
     var vals = {}, all = [], pending = false; thinDrawn = false;
     cats.forEach(function (c) { vals[c] = {}; shown.forEach(function (m) { if (!cell(m.key, c, r)) { return; } var st = stat(p, m.key, r, [c]); if (st && st.pending) { pending = true; return; } if (st && isFinite(st.v)) { vals[c][m.key] = st; all.push(st.v); } }); });
     if (pending && !all.length) { return bar + '<p class="v2hint">Loading the distribution…</p>'; }
-    var lo = Math.min.apply(null, all), hi = Math.max.apply(null, all), ideal = tfOf(p) === "log2" ? 0 : 1;
+    var lo = Math.min.apply(null, all), hi = Math.max.apply(null, all), ideal = p.ideal === undefined ? (tfOf(p) === "log2" ? 0 : 1) : tfOf(p) === "log2" ? Math.log2(p.ideal) : p.ideal;
     var score = function (v) { if (!(hi > lo)) { return 0.5; } if (p.higher === null) { var dm = Math.max(Math.abs(lo - ideal), Math.abs(hi - ideal)); return dm ? 1 - Math.abs(v - ideal) / dm : 1; } var t = (v - lo) / (hi - lo); return p.higher ? t : 1 - t; };
     var h = '<div class="v2table-wrap"><table class="v2table v2matrix"><thead><tr><th>catalog</th><th>problems</th>' + shown.map(function (m) { return '<th><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + '</th>'; }).join("") + '</tr></thead><tbody>';
     cats.forEach(function (c) { h += '<tr><td>' + esc(c) + ' <span class="v2hint">' + GROUPS[CAT[c].group] + '</span></td><td>' + CAT[c].laws + '</td>' + shown.map(function (m) { var st = vals[c][m.key]; if (!st) { return '<td class="v2na">' + (cell(m.key, c, r) ? "…" : "") + '</td>'; } var a = 0.06 + 0.5 * score(st.v); return '<td style="background:rgba(' + rgb.join(",") + "," + a.toFixed(2) + ')" title="' + esc(fmt(p, st.lo) + " to " + fmt(p, st.hi) + ", n = " + st.n + (st.share < 1 ? ", " + shareText(st) : "")) + '">' + (thin(st) ? (thinDrawn = true, THIN_MARK) : "") + fmt(p, st.v, st.edge) + '</td>'; }).join("") + '</tr>'; });
     var pooled = shown.map(function (m) { var use = poolCats(m.key, r); var st = use.length ? stat(p, m.key, r, use) : null; return '<td>' + (st && !st.pending ? cellText(st, p) : "") + '</td>'; }).join("");
     h += '<tr class="v2total"><td>all selected ' + help(TERMS.complete, "When is a pooled number shown?") + '</td><td>' + laws(state.cats).toLocaleString() + '</td>' + pooled + '</tr></tbody></table></div>';
     var thinHint = thinDrawn ? '<p class="v2hint v2hollownote">' + term("valid", "\u25cb marks a number that rests on fewer than " + state.valid + " % of the problems") + ".</p>" : "";
-    return bar + missingNote(asked, shown, "any selected catalog at budget " + r) + thinHint + '<p class="v2hint">' + esc(p.label) + " at budget " + r + ", one cell per catalog; darker = better" + (p.higher === null ? " (closer to 1)" : "") + ". " + (p.kind === "cont" ? (statOf(p) === "mean" ? term("mean", "Means") : term("median", "Medians")) + (p.worst !== undefined && state.impute ? " over every problem, a failed prediction counting " + p.worst + "." : " over the predictions that were made.") : term("regime", "Rates over every problem") + ".") + "</p>" + h;
+    return bar + missingNote(asked, shown, "any selected catalog at budget " + r) + thinHint + '<p class="v2hint">' + esc(p.label) + " at budget " + r + ", one cell per catalog; darker = better" + (p.higher === null && p.ideal !== undefined ? " (closer to " + p.ideal + ")" : "") + ". " + (p.kind === "cont" ? (statOf(p) === "mean" ? term("mean", "Means") : term("median", "Medians")) + (p.worst !== undefined && state.impute ? " over every problem, a failed prediction counting " + p.worst + "." : " over the predictions that were made.") : term("regime", "Rates over every problem") + ".") + "</p>" + h;
   }
 
   // ---- controls that live on the display itself -----------------------------------------------------------------
@@ -828,12 +848,12 @@
     return s + '<text x="' + ((L + W - R) / 2).toFixed(0) + '" y="' + (yb + 33) + '" class="tick" text-anchor="middle">' + esc(axisName(p)) + "</text>";
   }
   function renderDistRate(shown, p, r) {   // per-catalog rates: a dot plot with Wilson intervals
-    var present = withAt(shown, r), nr = narrow(), W = hostWidth(), T = 34, R = 16;
+    var present = withAt(shown, r), nr = narrow(), W = wideWidth(), T = 34, R = 16;
     var cats = state.cats.slice().sort(function (a, b) { return CAT[b].laws - CAT[a].laws; }).filter(function (c) { return present.some(function (m) { return cell(m.key, c, r); }); });
     var swap = '<p class="v2hint">A rate is a hit or a miss on every problem, so what varies is the catalog. ' + '<button type="button" class="v2btn" data-set="dmetric:log10_fvu_val">show the distribution of log10 FVU instead</button></p>';
     if (!cats.length) { return swap + '<p class="v2hint">Nothing finished at budget ' + r + " for this selection: step to another budget above.</p>"; }
     var rowH = Math.max(20, 7 * present.length + 8), B1 = 44 + 18 * present.length, Hh = T + cats.length * rowH + B1, Lw = nr ? 110 : 150;
-    var s = '<svg viewBox="0 0 ' + W + " " + Hh + '" class="v2chart v2dist" role="img" aria-label="' + esc(p.label) + ' per catalog"><text x="' + Lw + '" y="18" class="ct">' + esc(p.label) + " per catalog at budget " + r + "</text>";
+    var s = '<svg viewBox="0 0 ' + W + " " + Hh + '" class="v2chart v2dist v2distwide" role="img" aria-label="' + esc(p.label) + ' per catalog"><text x="' + Lw + '" y="18" class="ct">' + esc(p.label) + " per catalog at budget " + r + "</text>";
     var xs = function (v) { return Lw + v * (W - Lw - R); };
     [0, 0.25, 0.5, 0.75, 1].forEach(function (g) { s += '<line x1="' + xs(g) + '" y1="' + T + '" x2="' + xs(g) + '" y2="' + (Hh - B1) + '" class="grid"/><text x="' + xs(g) + '" y="' + (Hh - B1 + 16) + '" class="tick" text-anchor="middle">' + (100 * g) + "%</text>"; });
     cats.forEach(function (c, i) { var yy = T + (i + 0.5) * rowH; s += '<text x="' + (Lw - 8) + '" y="' + (yy + 4) + '" class="tick" text-anchor="end">' + esc(c) + " · " + CAT[c].laws + "</text>";
@@ -863,9 +883,10 @@
     return head + body + '<p class="v2hint">' + (state.dmode === "cats" ? "" : (state.dmode === "ecdf" && state.dnorm === "all" ? "" : (p.worst !== undefined && state.impute ? "Every problem: a failed prediction sits at " + p.worst + "." : "Successful predictions only: a problem without a prediction has no value to place.")) + pooled + " ") + term("median", "Read from 128-bin histograms") + "; values beyond the binned range sit in the outermost bins.</p>" + gone;
   }
   function distHists(series, p, r) {
-    var nr = narrow(), W = hostWidth(), L = nr ? 14 : 168, R = 16, T = 34, ph0 = series[0].ph, vr = viewRange(series.map(function (sr) { return sr.ph; }));
+    var nr = narrow(), W = wideWidth(), R = 18, T = 40, ph0 = series[0].ph, vr = viewRange(series.map(function (sr) { return sr.ph; }));
+    var L = nr ? 14 : Math.max(168, Math.ceil(25 + widest(series.map(function (sr) { return sr.m.label + (sr.m.local ? " (local)" : ""); })) + 16));   // the name column
     var nmax = Math.max.apply(null, series.map(function (sr) { return sr.ph.n; })), f = nmax < 150 ? 4 : nmax < 600 ? 2 : 1;   // fewer problems, wider bins
-    var panelH = nr ? 118 : 96, gap = 16, boxH = 22, capH = nr ? 34 : 0, step = panelH + boxH + capH + gap, H = T + series.length * step + 34;
+    var panelH = nr ? 118 : 80, gap = 16, boxH = 22, capH = nr ? 34 : 0, step = panelH + boxH + capH + gap, H = T + series.length * step + 34;
     var xs = function (x) { return L + (Math.min(vr.hi, Math.max(vr.lo, x)) - vr.lo) / (vr.hi - vr.lo) * (W - L - R); };
     var groups = series.map(function (sr) { var g = []; for (var b = vr.b0; b <= vr.b1; b += f) { var c = 0; for (var j = b; j < Math.min(b + f, vr.b1 + 1); j++) { c += sr.ph.h[j]; } g.push({ b: b, share: c / sr.ph.n, edge: (b === 0 && vr.b0 === 0) || (b + f > ph0.nb - 1 && vr.b1 === ph0.nb - 1) }); } return g; });
     // One scale for every panel, set by the body of the distributions: a lone spike (every problem that fits no better
@@ -891,22 +912,23 @@
     return s + "</svg>" + '<p class="v2hint">Height: the share of the method’s predicted problems in each bin, on one scale for every panel; a bin taller than the scale is drawn broken, with its share beside it. Under each histogram: 5th to 95th percentile (line), middle half (box), median (tick).</p>';
   }
   function distEcdf(series, p, r) {
-    var nr = narrow(), W = hostWidth(), L = 62, T = 34, R = nr ? 16 : 180, B = nr ? 56 + 20 * series.length : 52, H = plotHeight(W) + B;
+    var nr = narrow(), W = wideWidth(), L = 66, T = 40, B = nr ? 60 + 20 * series.length : 58, H = plotHeight(W) + B;
+    var R = nr ? 18 : legendRight(series.map(function (sr) { return sr.m.label + (sr.m.local ? " (local)" : ""); }));
     var vr = viewRange(series.map(function (sr) { return sr.ph; })), all = state.dnorm === "all", low = p.higher === true;   // a problem without a prediction sits at the worse end
     var xs = function (x) { return L + (Math.min(vr.hi, Math.max(vr.lo, x)) - vr.lo) / (vr.hi - vr.lo) * (W - L - R); }, y = function (v) { return T + (1 - v) * (H - T - B); };
-    var s = '<svg viewBox="0 0 ' + W + " " + H + '" class="v2chart" role="img" aria-label="' + esc(p.label) + ' cumulative distribution"><text x="' + (nr ? 10 : L) + '" y="18" class="ct">' + esc(nr ? p.short + " @ " + r + ": share at or below" : p.label + " at budget " + r + ": share of " + (all ? "all" : "predicted") + " problems at or below") + "</text>";
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" class="v2chart v2distwide" role="img" aria-label="' + esc(p.label) + ' cumulative distribution"><text x="' + (nr ? 10 : L) + '" y="18" class="ct">' + esc(nr ? p.short + " @ " + r + ": share at or below" : p.label + " at budget " + r + ": share of " + (all ? "all" : "predicted") + " problems at or below") + "</text>";
     [0, 0.25, 0.5, 0.75, 1].forEach(function (g) { s += '<line x1="' + L + '" y1="' + y(g).toFixed(1) + '" x2="' + (W - R) + '" y2="' + y(g).toFixed(1) + '" class="grid' + (g === 0.5 ? " zero" : "") + '"/><text x="' + (L - 6) + '" y="' + (y(g) + 4).toFixed(1) + '" class="tick" text-anchor="end">' + (100 * g) + "%</text>"; });
     s += xAxisSVG(p, vr, xs, T, H - B, W, L, R);
-    var ly = nr ? H - B + 50 : T + 6, lx = nr ? L : W - R + 10;
+    var ly = nr ? H - B + 50 : T + 6, lx = nr ? L : W - R + LEG_GAP;
     series.forEach(function (sr) { var col = colorOf(sr.m), den = all ? sr.rows : sr.ph.n, cum = all && low ? sr.rows - sr.ph.n : 0, pts = [];
       for (var b = 0; b < sr.ph.nb; b++) { var before = cum; cum += sr.ph.h[b]; if (b < vr.b0) { continue; } if (b > vr.b1) { break; } var x0 = vr.lo + (b - vr.b0) * vr.w; if (!pts.length) { pts.push(xs(x0).toFixed(1) + "," + y(before / den).toFixed(1)); } pts.push(xs(x0 + vr.w).toFixed(1) + "," + y(before / den).toFixed(1), xs(x0 + vr.w).toFixed(1) + "," + y(cum / den).toFixed(1)); }
-      s += '<polyline fill="none" stroke="' + col + '" stroke-width="2" points="' + pts.join(" ") + '"><title>' + esc(sr.m.label + ": " + fiveText(p, sr.f) + "; " + sr.ph.n + " predicted of " + sr.rows + " problems") + "</title></polyline>";
-      s += '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 20) + '" y2="' + ly + '" stroke="' + col + '" stroke-width="3"/><text x="' + (lx + 26) + '" y="' + (ly + 4) + '" class="leg">' + esc(sr.m.label + (sr.m.local ? " (local)" : "")) + "</text>"; ly += 20; });
-    return s + "</svg>" + '<p class="v2hint">' + (p.higher === true ? "Further right is better: a curve that stays low longer holds more of its problems at high values." : p.higher === false ? "Further left is better: a curve that rises early holds more of its problems at low values." : "Closer to 1 is better: a curve that rises steeply around 1 is the tighter one.") +
+      s += '<polyline fill="none" stroke="' + col + '" stroke-width="2"' + dashOf(sr.m) + ' points="' + pts.join(" ") + '"><title>' + esc(sr.m.label + ": " + fiveText(p, sr.f) + "; " + sr.ph.n + " predicted of " + sr.rows + " problems") + "</title></polyline>";
+      s += '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 20) + '" y2="' + ly + '" stroke="' + col + '" stroke-width="3"' + dashOf(sr.m) + '/><text x="' + (lx + 26) + '" y="' + (ly + 4) + '" class="leg">' + esc(sr.m.label + (sr.m.local ? " (local)" : "")) + "</text>"; ly += 20; });
+    return s + "</svg>" + '<p class="v2hint">' + (p.higher === true ? "Further right is better: a curve that stays low longer holds more of its problems at high values." : p.higher === false ? "Further left is better: a curve that rises early holds more of its problems at low values." : p.ideal !== undefined ? "Closer to " + p.ideal + " is better: a curve that rises steeply around " + p.ideal + " is the tighter one." : "") +
       (all ? " Out of all problems, a method that leaves problems without a prediction " + (low ? "starts above 0 %." : "ends below 100 %.") : "") + "</p>";
   }
   function distCats(series, p, r) {
-    var nr = narrow(), W = hostWidth(), T = 34, R = 16, Lw = nr ? 110 : 160, per = {}, phs = [];
+    var nr = narrow(), W = wideWidth(), T = 40, R = 18, Lw = nr ? 110 : 160, per = {}, phs = [];
     var cats = state.cats.slice().sort(function (a, b) { return CAT[b].laws - CAT[a].laws; });
     cats.forEach(function (c) { series.forEach(function (sr) { if (sr.use.indexOf(c) < 0) { return; } var ph = pooledHist(p.key, sr.m.key, r, [c]); if (!ph) { return; } (per[c] = per[c] || {})[sr.m.key] = ph; phs.push(ph); }); });
     cats = cats.filter(function (c) { return per[c]; });
@@ -930,12 +952,12 @@
       D.rungs.forEach(function (r) { var use = poolCats(m.key, r, keys); if (!use.length) { return; } var x = xOf(m.key, r, use, src); if (x === null) { return; } var ph = pooledHist(p.key, m.key, r, use); if (!ph) { return; } var f = five(ph);
         pts.push({ x: x, v: f[2], lo: f[1], hi: f[3], title: m.label + " @ " + r + ": " + fiveText(p, f) + ", n = " + ph.n });
         ymin = Math.min(ymin, f[1]); ymax = Math.max(ymax, f[3]); if (state.xaxis === "time") { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); } });
-      if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: pts }); } });
+      if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), dash: !!m.dash, pts: pts }); } });
     var title = narrow() ? p.short + ": median, middle half" : p.label + ": median and middle half along the ladder", off = offAxis(shown);
     var note = off.length ? '<p class="v2hint">' + esc(off.map(function (m) { return m.label; }).join(", ")) + (off.length > 1 ? " have" : " has") + " no position on this axis: switch the x axis above.</p>" : "";
-    if (!series.length) { return chartSVG({ title: title, aria: title, series: [], empty: "nothing to draw on this axis yet" }) + note; }
+    if (!series.length) { return chartSVG({ title: title, aria: title, series: [], empty: "nothing to draw on this axis yet", width: wideWidth() }) + note; }
     var pad = (ymax - ymin) * 0.08 || 0.1; ymin -= pad; ymax += pad; var tr = state.xaxis === "time" ? timeRange(tmin, tmax) : [0, 0];
-    var svg = withState({ band: true, cross: false }, function () { return chartSVG({ title: title, aria: title, series: series, ymin: ymin, ymax: ymax, ticks: ticksFor(p, ymin, ymax), tick: function (g) { return tickLabel(p, g); }, ylabel: axisName(p), timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: tfOf(p) === "log2" ? 0 : undefined }); });
+    var svg = withState({ band: true, cross: false }, function () { return chartSVG({ title: title, aria: title, width: wideWidth(), series: series, ymin: ymin, ymax: ymax, ticks: ticksFor(p, ymin, ymax), tick: function (g) { return tickLabel(p, g); }, ylabel: axisName(p), timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: tfOf(p) === "log2" ? 0 : undefined }); });
     return '<div class="v2charts v2one">' + svg + "</div>" + '<p class="v2hint">Line: the median of the predicted problems. Band: their middle half (25th to 75th percentile), not a confidence interval. Tap or hover a point for all five percentiles.</p>' + note;
   }
 
@@ -970,7 +992,7 @@
       axisMethods(others).forEach(function (m) { var pts = []; D.rungs.forEach(function (r) { var use = bothDone(m.key, base.key, r); if (!use.length) { return; } var x = xOf(m.key, r, use, src); if (x === null) { return; } var st = pairedStat(p, m.key, base.key, r, use); if (!st || !isFinite(st.v)) { return; }
           pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, title: m.label + " − " + base.label + " @ " + r + ": " + fmtDelta(p, st.v) + " [" + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + "], n = " + st.n + " problems, p = " + fmtP(st.p) });
           [st.v, anyCI() ? st.lo : st.v, anyCI() ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } }); if (state.xaxis === "time") { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); } });
-        if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: pts }); } });
+        if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), dash: !!m.dash, pts: pts }); } });
       var title = "Δ " + mname(p) + " vs " + base.label;
       if (!series.length) { return chartSVG({ title: title, aria: title, series: [], empty: "no matched cells with the baseline yet" }); }
       if (nearRange(ymin, ymax, 0, 0.35)) { ymin = Math.min(ymin, 0); ymax = Math.max(ymax, 0); } var pad = (ymax - ymin) * 0.08 || 0.05; ymin -= pad; ymax += pad;
@@ -1020,7 +1042,7 @@
     // its outcomes against a method that has since moved to another rung are stale: they count as missing.
     var fresh = function (a, b) { var g = R.rungs || {}, e = g[a.m.key + "|" + b.m.key], flip = false; if (!e) { e = g[b.m.key + "|" + a.m.key]; flip = true; }
       var q = e && e[String(slot)]; return !isTimeSlot(slot) || !q || (q[flip ? 1 : 0] === a.r && q[flip ? 0 : 1] === b.r); };
-    var pair = function (a, b, c) { var e = R.pairs[a + "|" + b], flip = false; if (!e) { e = R.pairs[b + "|" + a]; flip = true; } var t = e && e[c] && e[c][String(slot)]; if (!t) { return null; } var wa = t[1 + 2 * ki], wb = t[2 + 2 * ki]; return { n: t[0], wa: flip ? wb : wa, wb: flip ? wa : wb }; };
+    var pair = function (a, b, c) { var e = R.pairs[a + "|" + b], flip = false; if (!e) { e = R.pairs[b + "|" + a]; flip = true; } var t = e && e[c] && e[c][String(slot)]; if (!t) { return null; } var wa = t[1 + 2 * ki], wb = t[2 + 2 * ki]; if (wa == null || wb == null) { return null; } return { n: t[0], wa: flip ? wb : wa, wb: flip ? wa : wb }; };
     var meets = function (x, z, c) { return fresh(x, z) && pair(x.m.key, z.m.key, c); };
     var shared = function (ro) { return state.cats.filter(function (c) { return ro.every(function (x) { return cell(x.m.key, c, x.r); }) && ro.every(function (x, i) { return ro.every(function (z, j) { return j <= i || meets(x, z, c); }); }); }); };
     // Rank the methods that can all be compared with one another here. One without outcomes against another sits out
@@ -1077,7 +1099,8 @@
     return head + rankDiagram(R, lg, p, slot) + sitOut + rankTables(R, lg, p, slot, timed) + rankLadder(R, shown, p, ki, timed);
   }
   function rankDiagram(R, lg, p, slot) {
-    var nr = narrow(), W = hostWidth(), k = lg.k, Lw = nr ? 138 : 190, Rr = nr ? 44 : 56, T = 64, rowH = 30, B = 42, H = T + k * rowH + B;
+    var nr = narrow(), W = wideWidth(), k = lg.k, Rr = nr ? 44 : 56, T = 64, rowH = 30, B = 42, H = T + k * rowH + B;
+    var Lw = nr ? 138 : Math.max(190, Math.ceil(widest(lg.order.map(function (x) { return x.m.label + (x.m.local ? " (local)" : ""); })) + 28));
     var xs = function (v) { return Lw + (v - 1) / (k - 1) * (W - Lw - Rr); }, reject = lg.p < 0.05;
     var title = "Mean rank on " + p.label + " · " + slotLabel(R, slot);
     var s = '<svg viewBox="0 0 ' + W + " " + H + '" class="v2chart v2distwide v2rankchart" role="img" aria-label="' + esc(title) + '"><text x="' + (nr ? 10 : Lw) + '" y="18" class="ct">' + esc(nr ? "Mean rank · " + slotLabel(R, slot) : title) + "</text>";
@@ -1113,10 +1136,10 @@
     slots.forEach(function (slot) { var lg = ranking(R, shown, slot, ki); if (lg.roster.length < 2 || !lg.cats.length) { return; }
       var x = timed ? slotSeconds(R, slot) : +slot; if (timed) { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); }
       lg.roster.forEach(function (e) { (by[e.m.key] = by[e.m.key] || { m: e.m, pts: [] }).pts.push({ x: x, v: e.share, lo: NaN, hi: NaN, hollow: e.capped, title: e.m.label + " at " + slotLabel(R, slot) + ": wins " + (100 * e.share).toFixed(1) + " % of its comparisons, mean rank " + e.rank.toFixed(2) + " of " + lg.k + ", " + lg.n + " problems" }); }); });
-    var series = shown.filter(function (m) { return by[m.key]; }).map(function (m) { return { label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), pts: by[m.key].pts }; });
+    var series = shown.filter(function (m) { return by[m.key]; }).map(function (m) { return { label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), dash: !!m.dash, pts: by[m.key].pts }; });
     if (!series.length) { return ""; }
     var title = narrow() ? "Comparisons won" : "Comparisons won, along " + (timed ? "the time limit" : "the ladder"), rate = { kind: "rate", fmt: "pct", hist: null }, tr = timed ? timeRange(tmin, tmax) : [0, 0];
-    var svg = withState({ band: false, cross: false }, function () { return chartSVG({ title: title, aria: title, series: series, ymin: 0, ymax: 1, ticks: [0, 0.25, 0.5, 0.75, 1], tick: function (g) { return tickLabel(rate, g); }, ylabel: narrow() ? "won" : "comparisons won", timeAxis: timed, timeSource: "budget", tmin: tr[0], tmax: tr[1], zero: 0.5, xlabel: timed ? (narrow() ? "time limit (s, ref)" : "time limit per problem (s, log, reference machine)") : (narrow() ? "budget / problem" : "budget per problem (log scale)") }); });
+    var svg = withState({ band: false, cross: false }, function () { return chartSVG({ title: title, aria: title, width: wideWidth(), series: series, ymin: 0, ymax: 1, ticks: [0, 0.25, 0.5, 0.75, 1], tick: function (g) { return tickLabel(rate, g); }, ylabel: narrow() ? "won" : "comparisons won", timeAxis: timed, timeSource: "budget", tmin: tr[0], tmax: tr[1], zero: 0.5, xlabel: timed ? (narrow() ? "time limit (s, ref)" : "time limit per problem (s, log, reference machine)") : (narrow() ? "budget / problem" : "budget per problem (log scale)") }); });
     return '<h3 class="v2h">Along ' + (timed ? "the time limit" : "the ladder") + '</h3><div class="v2charts v2one">' + svg + "</div>" +
       '<p class="v2hint">' + term("winshare", "Comparisons won") + " is the mean rank on a fixed scale: 100 % beats every other method on every problem, 50 % breaks even." + (timed ? " A hollow marker is a method whose timed ladder ends below the limit." : "") + "</p>";
   }
@@ -1164,7 +1187,7 @@
     var metricList = MGROUPS.map(function (g) { var ms = D.metrics.filter(function (m) { return m.group === g; }); return '<div class="v2mgroup" data-group="' + esc(g) + '"><h4>' + esc(g) + '</h4>' + ms.map(function (m) { return '<div class="v2metric" data-tier="' + m.tier + '" data-key="' + m.key + '"><label><input type="checkbox" data-p="' + m.key + '"> ' + esc(m.label) + '</label> ' + mhelp(m) + '</div>'; }).join("") + "</div>"; }).join("");
     root.innerHTML =
       '<div class="v2relhead"><div><h2 class="v2hltitle">Release ' + esc(rel.id) + (rel.title !== rel.id ? ' · ' + esc(rel.title) : '') + '</h2><p class="v2hlsub">' + stamp + (rel.notes ? ' · ' + esc(rel.notes) : '') + '</p></div><div class="v2row"><button type="button" class="v2btn" data-act="link">copy link to this view</button><span class="v2linkok v2hint" hidden>link copied</span></div></div>' +
-      '<details class="v2release"><summary class="v2kicker">Protocol</summary><ul><li><b>Choosing a prediction.</b> ' + esc(rel.scoring || "") + '</li><li><b>Judging it.</b> ' + esc(rel.judge || "") + '</li><li><b>Data.</b> One problem per ground-truth expression: 512 support points and 512 validation points from the catalog\'s own ranges, no noise; ' + CATS.length + ' catalogs, ' + laws(CATS) + ' problems.</li><li><b>Configurations.</b> ' + term("provenance", "Who chose each method\'s configuration") + ' is shown next to every method.</li><li><b>Time axis.</b> ' + term("time", "Reference-machine timing") + (D.timing_note ? " · " + esc(D.timing_note) : "") + '</li><li><b>Statistics.</b> ' + term("regime", "Two regimes") + ', ' + term("complete", "complete budgets only") + ', ' + term("wilson", "95 % intervals") + '.</li></ul></details>' +
+      '<details class="v2release"><summary class="v2kicker">Protocol</summary><ul><li><b>Choosing a prediction.</b> ' + esc(rel.scoring || "") + '</li><li><b>Judging it.</b> ' + esc(rel.judge || "") + '</li><li><b>Data.</b> One problem per ground-truth expression: 512 support points and 512 validation points from the catalog\'s own ranges, no noise; ' + CATS.length + ' catalogs, ' + laws(CATS) + ' problems.</li><li><b>Configurations.</b> ' + term("provenance", "Who chose each method\'s configuration") + ' is shown next to every method.</li>' + (rel.versions ? '<li><b>Versions.</b> ' + esc(rel.versions) + '</li>' : '') + '<li><b>Time axis.</b> ' + term("time", "Reference-machine timing") + (D.timing_note ? " · " + esc(D.timing_note) : "") + '</li><li><b>Statistics.</b> ' + term("regime", "Two regimes") + ', ' + term("complete", "complete budgets only") + ', ' + term("wilson", "95 % intervals") + '.</li></ul></details>' +
       '<section class="v2status" aria-label="Progress of this release"><h3 class="v2kicker">Progress ' + help(progressHint, "What is counted?") + '</h3><div class="v2strip">' + strip + '</div></section>' +
       '<div class="v2tabs" role="tablist">' + VIEWS.map(function (v) { return '<button type="button" class="v2tab" role="tab" data-view="' + v[0] + '">' + v[1] + '</button>'; }).join("") + '</div>' +
       '<div class="v2layout"><aside class="v2side">' +

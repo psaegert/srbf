@@ -114,10 +114,11 @@ def test_the_cache_serves_a_file_until_it_changes(tmp_path):
 def test_a_ladder_counting_evaluations_or_samples_is_read_like_any_other(tmp_path):
     _write(tmp_path, "toy", "evals_004096.pkl", _snapshot([["+", "x1", "x2"]]))
     _write(tmp_path, "toy", "samples_000512.pkl", _snapshot([["*", "x1", "x2"]]))
+    _write(tmp_path, "toy", "restarts_000008.pkl", _snapshot([["-", "x1", "x2"]]))  # the oracle's restarts
     _write(tmp_path, "toy", "notes_000001.pkl", _snapshot([["+", "x1", "x2"]]))     # not a rung file
     out = str(tmp_path / "t.csv")
     report = build_table([ResultTree("m", 1, str(tmp_path / "tree"))], out, engine=ENGINE, workers=1, log=None)
-    assert report.files == 2 and sorted(_col(_read(out)[1:], "rung")) == ["4096", "512"]
+    assert report.files == 3 and sorted(_col(_read(out)[1:], "rung")) == ["4096", "512", "8"]
 
 
 def test_an_unreadable_file_is_reported_and_left_out(tmp_path):
@@ -136,3 +137,23 @@ def test_tree_and_index_specs_parse_as_the_command_line_takes_them():
     assert parse_index_bases(["e2e=0", "nesymres=1"]) == {"e2e": 0, "nesymres": 1}
     with pytest.raises(ValueError, match="METHOD=FIRST"):
         parse_index_bases(["e2e"])
+
+
+def test_a_new_worker_does_not_change_the_judge(tmp_path, monkeypatch):
+    """The judge fingerprint names the srbf source the judge runs; the out-of-process workers are not part of it,
+    so adding a baseline worker keeps every cached judgment, while a change to judging code discards them."""
+    import srbf
+    from srbf.table import judge_fingerprint
+    pkg = tmp_path / "srbf"
+    (pkg / "worker" / "models").mkdir(parents=True)
+    (pkg / "__init__.py").write_text("")
+    (pkg / "result_processing.py").write_text("JUDGE = 1\n")
+    (pkg / "worker" / "models" / "one_worker.py").write_text("X = 1\n")
+    monkeypatch.setattr(srbf, "__file__", str(pkg / "__init__.py"))
+    before = judge_fingerprint("acj-5-4-llm")
+    (pkg / "worker" / "models" / "another_worker.py").write_text("Y = 2\n")
+    (pkg / "worker" / "models" / "one_worker.py").write_text("X = 3\n")
+    (pkg / "rungs.py").write_text("RUNG_PREFIXES = ('choices', 'another_unit')\n")   # a new budget unit
+    assert judge_fingerprint("acj-5-4-llm") == before
+    (pkg / "result_processing.py").write_text("JUDGE = 2\n")
+    assert judge_fingerprint("acj-5-4-llm") != before
