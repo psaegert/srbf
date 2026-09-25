@@ -41,6 +41,8 @@ EXPECTED_PROVENANCE = {
     # a shipped worker whose configuration its first author published for benchmarking (Operon: his SRBench
     # 2024/25 submission without its tuning layer), rather than the library's own defaults
     "subprocess:operon": "author_blessed",
+    # RILS-ROLS: its first author's SRBench 2.0 submission, without the grid the benchmark's maintainers searched
+    "subprocess:rilsrols": "author_blessed",
 }
 BANNED = ["skeleton_pool", "skeleton dataset", "skeleton_dataset", "type: fastsrb",
           "benchmark_path", "datasets_per_expression", "noise_level", "support_points"]

@@ -167,6 +167,8 @@ def test_a_string_the_method_did_not_compute_shows_in_the_deviation():
     assert w.string_deviation("v1 + 0.5", ["v1"], X, X[:, 0]) == pytest.approx(0.25)
     assert w.string_deviation("log(v1 - 1.5)", ["v1"], X, X[:, 0]) == float("inf")   # NaN where the method has values
     assert w.string_deviation("not python", ["v1"], X, X[:, 0]) is None
+    tiny = 1e-30 * X[:, 0]                                                         # a law whose values are all tiny
+    assert w.string_deviation("2e-30*v1", ["v1"], X, tiny) == pytest.approx(1.0)
 
 
 def test_a_problem_gets_one_seed_from_its_data_and_the_configured_seed(fake_rilsrols):

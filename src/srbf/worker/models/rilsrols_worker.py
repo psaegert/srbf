@@ -19,7 +19,8 @@ docs/models.md.
 
 * ``max_fit_calls`` (int, 1,000,000, the author's value): the budget, the compute axis of the scaling sweeps.
   RILS-ROLS counts one call per fitness evaluation of a whole expression, those of its local search included, and
-  stops at the first check after the budget is spent (one call over it).
+  stops at the first check after the budget is spent (a call or two over it). It has no other stopping rule: a fit
+  spends its whole budget, also after it has fit the data exactly.
 * ``seed`` (int, 0): mixed with a hash of the problem's data into the run's ``random_state``, so a problem's fit is
   reproducible and two draws of a law (fresh data) get different seeds.
 * ``config`` (dict, none): settings that replace the author configuration's. For side experiments only; a config
@@ -27,18 +28,19 @@ docs/models.md.
 
 One patch, applied when the environment is built (``scripts/envs/patch_rilsrols.py``): RILS-ROLS prints the
 constants of its model with six decimals (``std::to_string``), so that 6.674e-11 reads as 0. The patch prints the
-final model's constants with every digit (``%.17g``). The search itself keys candidates by the same printed
-strings, so the patch changes only the string of the final model, not what the search compares.
+final model's constants with every digit (``%.17g``), keeping the method's rule that writes a constant within 1e-12
+of a nonzero integer as that integer. The search itself keys candidates by the same printed strings, so the patch
+changes only the string of the final model, not what the search compares.
 
 The answer is the method's own: the expression its search ends with, as its ``model_string()`` returns it (the
-printed model after sympy's ``simplify`` with ratio 1, which the method gives two seconds and otherwise skips),
-written in the benchmark's syntax with every constant at full precision (``repr`` of the double) and in the
-variable names srbf handed over. When that simplified form holds a function the benchmark's operators cannot
-state, the unsimplified form (what the method returns when it skips simplification) is written instead
-(``answer_form``). RILS-ROLS evaluates without protected operators, so the string computes what the method
-computed; ``extra`` records the largest deviation of the string from the method's own predictions on the support
-points (``string_deviation``), the fitness evaluations used, the method's own model string, and whether the time
-guard stopped the run.
+printed model after sympy's ``simplify`` with ratio 1, which the method gives two seconds and otherwise skips; a
+fit whose ``fit_time`` exceeds the search's ``total_time`` by two seconds took that path), written in the
+benchmark's syntax with every constant at full precision (``repr`` of the double) and in the variable names srbf
+handed over. When that simplified form holds a function the benchmark's operators cannot state, the unsimplified
+form (what the method returns when it skips simplification) is written instead (``answer_form``). RILS-ROLS
+evaluates without protected operators, so the string computes what the method computed; ``extra`` records the
+largest deviation of the string from the method's own predictions on the support points (``string_deviation``),
+the fitness evaluations used, the method's own model string, and whether the time guard stopped the run.
 
 Every fit runs in a child process forked for it: the method's two-second timeout for sympy leaves the thread that
 simplifies running when it passes, the C++ core exits the process on some errors, and its caches grow with the
@@ -147,8 +149,9 @@ _NAMESPACE = {"sqrt": np.sqrt, "exp": np.exp, "log": np.log, "sin": np.sin, "cos
 
 
 def string_deviation(expression, names, X, reference):
-    """The largest deviation of the written expression from RILS-ROLS's own values on X, relative to the values'
-    scale (at least 1), or None when it cannot be evaluated here (a variable name that is no Python identifier)."""
+    """The largest deviation of the written expression from RILS-ROLS's own values on X, relative to the largest of
+    those values (laws of the catalogs reach 1e-30), or None when it cannot be evaluated here (a variable name that is
+    no Python identifier)."""
     try:
         namespace = dict(_NAMESPACE)
         namespace.update({name: X[:, i] for i, name in enumerate(names)})
@@ -159,7 +162,7 @@ def string_deviation(expression, names, X, reference):
         both = np.isfinite(values) & np.isfinite(reference)
         if not np.array_equal(both, np.isfinite(reference)) or not both.any():
             return None if not both.any() else float("inf")
-        scale = max(1.0, float(np.max(np.abs(reference[both]))))
+        scale = float(np.max(np.abs(reference[both]))) or 1.0
         return float(np.max(np.abs(values[both] - reference[both])) / scale)
     except Exception:  # noqa: BLE001 - a diagnostic, never a failure
         return None

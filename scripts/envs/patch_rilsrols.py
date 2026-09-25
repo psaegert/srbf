@@ -8,8 +8,10 @@ so that 6.674e-11 becomes ``0.000000``. The search itself also uses ``to_string`
 candidates and skips perturbations it has already checked, so changing what ``to_string`` prints would change the
 search. The patch therefore adds a flag that only ``get_model_string`` (the final model handed to Python) sets:
 while it is set, a constant is printed with ``%.17g``, which reads back as the same double. The method's own rule
-that prints a constant within 1e-12 of an integer as that integer is kept, at full precision (``std::to_string`` of
-the ``int`` cast overflowed beyond 2^31). Nothing else changes. Used by ``scripts/envs/build_rilsrols_env.sh``.
+that prints a constant within 1e-12 of an integer as that integer is kept where the integer is not 0 (a change of at
+most 1e-12, printed at full precision: ``std::to_string`` of the ``int`` cast overflowed beyond 2^31). A nonzero
+constant within 1e-12 of 0 is printed as it is: the rule printed it as 0, which turned a division by it into a
+division by zero. Nothing else changes. Used by ``scripts/envs/build_rilsrols_env.sh``.
 """
 from __future__ import annotations
 
@@ -34,8 +36,8 @@ EDITS: list[tuple[str, str, str]] = [
     ("rils_rols_cpp/node.h",
      "\t\tcase node_type::CONST:\n\t\t\tif (abs(std::round(const_value) - const_value) < EPS) \n",
      "\t\tcase node_type::CONST:\n"
-     f"\t\t\tif ({FLAG}) {{ char buf[32]; snprintf(buf, sizeof buf, \"%.17g\", "
-     "abs(std::round(const_value) - const_value) < EPS ? std::round(const_value) : const_value); return buf; }\n"
+     f"\t\t\tif ({FLAG}) {{ const double r = std::round(const_value); char buf[32]; snprintf(buf, sizeof buf, "
+     "\"%.17g\", abs(r - const_value) < EPS && r != 0 ? r : const_value); return buf; }\n"
      "\t\t\tif (abs(std::round(const_value) - const_value) < EPS) \n"),
     ("rils_rols_cpp/rils_rols_cpp.cpp",
      "\tstring get_model_string() {\n\t\treturn final_solution->to_string();\n\t}\n",
