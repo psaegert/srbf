@@ -56,7 +56,14 @@ METHODS = [
      "Flash-ANSR T8-20M's top-100 draws seed PySR's populations; PySR's hall of fame joins Flash-ANSR's candidate pool and the two-part code picks. "
      "Each rung pairs a draws count with the iteration count that takes the same time on the reference machine."),
     ("prior", "Flash-ANSR prior", "draws", "#9a9a9a", "reference", "author_blessed", None,
-     "Draws skeletons from Flash-ANSR's training prior with no model and no data, then refines and picks them the way Flash-ANSR does: what the prior alone is worth.")]
+     "Draws skeletons from Flash-ANSR's training prior with no model and no data, then refines and picks them the way Flash-ANSR does: what the prior alone is worth."),
+    # the ceiling: the ground truth itself as the one candidate, fitted by Flash-ANSR's refiner; its rungs are restarts
+    ("oracle", "Oracle", "restarts", "#000000", "reference", "author_blessed", "oracle",
+     "Proposes the ground truth itself, with its fittable constants left open, and fits them the way Flash-ANSR does: "
+     "the ceiling of the fitting stage. Its budget is the refiner's restarts.")]
+# How a method is drawn when its colour alone is not the point: the oracle is the ceiling, a dashed line in the ink colour
+# of the page (black, or white in the dark theme), like the ground truth's own reference line.
+METHOD_STYLE: dict[str, dict[str, bool]] = {"oracle": {"dash": True, "ink": True}}
 # Where two methods share a component at different versions, the release says so (Protocol, "Versions").
 RELEASE_VERSIONS = ("PySR runs PySR 2.3.0 with SymbolicRegression.jl 2.4.0. The hybrid's PySR stage runs PySR 2.4.0 with "
                     "SymbolicRegression.jl 2.4.1, and 2.4.2 where it is timed on the reference machine. The defaults it relies on "
@@ -621,9 +628,9 @@ def main() -> None:
                    "catalogs": cats, "rungs": RUNGS, "nb": NB, "metrics": listed, "paired_keys": PAIRED_KEYS, "rank_keys": [k for k in RANK_KEYS if k in {m["key"] for m in listed}],
                    # budget: what one rung of the ladder buys. "candidates" is a count a generative method draws;
                    # PySR's rungs are search iterations, which have no place on the candidate axis of the site.
-                   "methods": [{"key": k, "label": l, "param": p, "budget": p if p in ("iterations", "seconds") else "candidates",
+                   "methods": [{"key": k, "label": l, "param": p, "budget": p if p in ("iterations", "seconds", "restarts") else "candidates",
                                 "color": col, "group": g, "provenance": prov,
-                                "selection": sel or (FLASH_ANSR_SELECTION if g == "flash-ansr" else "")}
+                                "selection": sel or (FLASH_ANSR_SELECTION if g == "flash-ansr" else ""), **METHOD_STYLE.get(k, {})}
                                for k, l, p, col, g, prov, _, sel in methods],
                    "cells": cells, "status": status, "timing": timing, "timing_note": timing_note}
         return payload, hists, paired

@@ -530,6 +530,31 @@ test('a display of one chart is drawn at the width it is shown, not stretched fr
   }
 });
 
+test('a method marked as the ceiling is drawn dashed in the page ink, legend included', async ({ page }) => {
+  // mark the prior as the oracle is marked (dash, ink), in the payload as it is served
+  await page.route('**/data/2026-09/results.js*', async (route) => {
+    const response = await route.fetch();
+    const body = (await response.text()).replace('"key":"prior",', '"key":"prior","dash":true,"ink":true,');
+    await route.fulfill({ response, body });
+  });
+  await page.goto('/?release=2026-09&v=curves&p=rung~numeric_recovery_val');   // the budget axis: the prior has no reference time
+  const chart = page.locator(V2 + ' .v2main svg.v2chart').first();
+  await expect(chart).toBeVisible();
+  const drawn = await chart.evaluate((svg) => {
+    const ink = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
+    const label = [...svg.querySelectorAll('text.leg')].find((t) => t.textContent === 'Flash-ANSR prior');
+    const key = label && label.previousElementSibling;
+    const lines = [...svg.querySelectorAll('polyline')].filter((l) => l.getAttribute('stroke') === ink);
+    return { ink, keyDash: key && key.getAttribute('stroke-dasharray'), keyStroke: key && key.getAttribute('stroke'),
+             dashedLines: lines.filter((l) => l.getAttribute('stroke-dasharray')).length,
+             otherDashed: [...svg.querySelectorAll('polyline[stroke-dasharray]')].filter((l) => l.getAttribute('stroke') !== ink).length };
+  });
+  expect(drawn.keyStroke, 'the legend key takes the page ink').toBe(drawn.ink);
+  expect(drawn.keyDash, 'the legend key is dashed').toBeTruthy();
+  expect(drawn.dashedLines, 'the line is dashed in the ink').toBeGreaterThan(0);
+  expect(drawn.otherDashed, 'no other method is dashed').toBe(0);
+});
+
 // ---- Distribution: a distribution is what the view shows, in four readings ------------------------------------
 test('the distribution view opens on histograms of a continuous metric', async ({ page }) => {
   const errors = collectErrors(page);
