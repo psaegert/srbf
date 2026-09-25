@@ -258,13 +258,16 @@ def judge_result_file(path: str, *, method: str, draw: int = 1, engine: Any, fir
 
 # ---- the judge's fingerprint and the per-file cache ---------------------------------------------------------------
 def judge_fingerprint(engine_name: str) -> str:
-    """Names the judge: the installed srbf source, the simplipy / sympy / numpy versions, the engine, the table version."""
+    """Names the judge: the installed srbf source, the simplipy / sympy / numpy versions, the engine, the table version.
+
+    The out-of-process workers (``srbf/worker/``) are left out: they run in the methods' own interpreters and the
+    judge never imports them, so a new baseline worker does not re-judge every result file."""
     import srbf
 
     h = hashlib.sha256()
     root = Path(srbf.__file__).resolve().parent
     for p in sorted(root.rglob("*.py")):
-        if "__pycache__" in p.parts:
+        if "__pycache__" in p.parts or p.relative_to(root).parts[0] == "worker":
             continue
         h.update(str(p.relative_to(root)).encode())
         h.update(p.read_bytes())
