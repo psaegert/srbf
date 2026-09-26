@@ -36,7 +36,7 @@ from dataclasses import dataclass
 import multiprocessing
 from multiprocessing import TimeoutError as PoolTimeout
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from srbf.rungs import RESULT_FILE, RUNG_PREFIXES  # a result file's name: the rung and, for a shard, its index and count
 
@@ -164,6 +164,22 @@ def _rename_predictions(snapshot: dict[str, Any], first_index: int | None) -> No
         snapshot[key] = out
 
 
+def _spell_predictions(snapshot: dict[str, Any], operator_arity: Mapping[str, int]) -> None:
+    """Bring the stored predictions into the engine's spelling (:mod:`srbf.spelling`), in place. A file written before
+    the in-process adapters did so carries SymPy's ``sqrt`` and ``Abs``, which the engine can neither price nor judge.
+    Only such predictions are rewritten, into the forms the adapters now store."""
+    from symbolic_data.token_ops import normalize_expression, normalize_skeleton
+
+    from srbf.spelling import SYMPY_ONLY, engine_spelling
+
+    for key, normalize in (("predicted_expression_prefix", normalize_expression), ("predicted_skeleton_prefix", normalize_skeleton)):
+        seq = snapshot.get(key)
+        if seq is None:
+            continue
+        snapshot[key] = [normalize(engine_spelling(prefix, operator_arity))
+                         if prefix is not None and SYMPY_ONLY.intersection(map(str, prefix)) else prefix for prefix in seq]
+
+
 def judge_result_file(path: str, *, method: str, draw: int = 1, engine: Any, first_index: int | None = None) -> list[list[Any]]:
     """The table rows (in :data:`COLUMNS` order) of one result file; an empty list for a file without problems.
 
@@ -187,6 +203,7 @@ def judge_result_file(path: str, *, method: str, draw: int = 1, engine: Any, fir
     catalog = os.path.basename(os.path.dirname(path))
     sha = _model_sha(snap)
     _rename_predictions(snap, first_index)
+    _spell_predictions(snap, engine.operator_arity)
     arity = engine.operator_arity
     s = derive_metrics(snap, engine=engine, mdl_fn=mdl_bits(engine))
 

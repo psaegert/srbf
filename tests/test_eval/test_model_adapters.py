@@ -291,6 +291,9 @@ class TestAnswerProvenanceColumns:
 class _SplitEngine:
     """An engine stub whose reader is just whitespace tokenisation (prefix in, prefix out)."""
 
+    # the real engine always carries its vocabulary; the adapters spell sqrt and Abs by it
+    operator_arity = {"+": 2, "-": 2, "*": 2, "/": 2, "pow": 2, "rootn": 2, "abs": 1, "sin": 1, "cos": 1, "exp": 1, "log": 1}
+
     def infix_to_prefix(self, expression):  # noqa: D401 - simple stub
         return str(expression).split()
 
