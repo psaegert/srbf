@@ -16,9 +16,11 @@
  * retired on 2026-09-26; its links' keys are dropped from the URL and its ?release= opens this page. */
 (function () {
   "use strict";
+  // Two pages mount this script: the home page holds the headline's two fixed charts, the Results page the explorer.
+  // Without the explorer's mount, only the headline is drawn: no controls, and the URL is left alone.
   var root = document.getElementById("results-explorer-v2");
-  if (!root || typeof window.RESULTS_V2 === "undefined") { return; }
-  var headRoot = document.getElementById("results-headline-v2");   // the two fixed charts above the explorer
+  var headRoot = document.getElementById("results-headline-v2");
+  if ((!root && !headRoot) || typeof window.RESULTS_V2 === "undefined") { return; }
   var D = JSON.parse(JSON.stringify(window.RESULTS_V2));
   var REL = D.release.id;
   // another release is on screen (the routing script decided before this file ran): leave the page and its URL alone
@@ -425,18 +427,18 @@
   var measurer = null;
   function textWidth(text) {
     if (!measurer) { measurer = document.createElement("canvas").getContext("2d"); }
-    measurer.font = "12px " + (window.getComputedStyle(root).fontFamily || "sans-serif");
+    measurer.font = "12px " + (window.getComputedStyle(root || headRoot).fontFamily || "sans-serif");
     return measurer.measureText(text).width;
   }
   function widest(labels) { return labels.reduce(function (w, t) { return Math.max(w, textWidth(t)); }, 0); }
   function legendRight(labels) { return Math.max(160, Math.ceil(LEG_GAP + 26 + widest(labels) + 16)); }   // gap, swatch, name, margin
   var LEG_GAP = 14;   // between the plot area and its legend
   var chartHost = null, chartCount = 0;   // set while a block renders: its charts are built for THAT container
-  function hostWidth() { return chartWidth(chartHost || root.querySelector(".v2main") || root, chartCount); }
+  function hostWidth() { return chartWidth(chartHost || (root && root.querySelector(".v2main")) || root || headRoot, chartCount); }
   // A display of one chart (Distribution, Ranks) spans the column up to WIDE_MAX and is drawn at the width it is shown
   // at: drawn at a grid cell's width and stretched, its text and marks would grow with the window.
   var WIDE_MAX = 980;   // must match .v2distwide and .v2one in styles.css
-  function wideWidth() { return Math.min(WIDE_MAX, chartWidth(chartHost || root.querySelector(".v2main") || root, 1)); }
+  function wideWidth() { return Math.min(WIDE_MAX, chartWidth(chartHost || (root && root.querySelector(".v2main")) || root || headRoot, 1)); }
   function inBlock(host, count, fn) { chartHost = host; chartCount = count; try { return fn(); } finally { chartHost = null; chartCount = 0; } }
   // ---- the 95 % interval, drawn -----------------------------------------------------------------------------------
   // Every point carries an uncertainty BOX: [xlo, xhi] x [lo, hi] in data units, whatever the axes are. The band is
@@ -1369,6 +1371,7 @@
   var rt = null;
   function scheduleRender() { clearTimeout(rt); rt = setTimeout(render, 30); }
   function render() {
+    if (!root) { renderHeadline(); return; }   // the home page: the headline alone
     try {
       syncControls();
       var shown = shownMethods(), view = root.querySelector(".v2view");
@@ -1397,8 +1400,10 @@
     if (key === "pnum") { state.pprob = Math.max(0, (parseInt(val, 10) || 1) - 1); return; }
     state[key] = val;
   }
-  shell();
-  root.addEventListener("change", function (e) {
+  // the explorer's controls, where the explorer is mounted
+  var on = root ? root.addEventListener.bind(root) : function () { /* the home page: no controls */ };
+  if (root) { shell(); }
+  on("change", function (e) {
     var t = e.target;
     if (t.dataset.c) { if (t.checked) { state.cats.push(t.dataset.c); } else { state.cats = state.cats.filter(function (c) { return c !== t.dataset.c; }); } }
     else if (t.dataset.m && t.type === "checkbox") { if (t.checked) { state.methods.push(t.dataset.m); } else { state.methods = state.methods.filter(function (c) { return c !== t.dataset.m; }); } }
@@ -1411,8 +1416,8 @@
     else { return; }
     render();
   });
-  root.addEventListener("input", function (e) { var t = e.target; if (t.classList.contains("v2valid")) { state.valid = Math.min(100, Math.max(0, parseInt(t.value, 10) || 0)); syncControls(); scheduleRender(); } else if (t.classList.contains("v2q")) { state.q = t.value; syncControls(); } else if (t.classList.contains("v2swatch")) { userColors[t.dataset.m] = t.value; render(); } });
-  root.addEventListener("click", function (e) {
+  on("input", function (e) { var t = e.target; if (t.classList.contains("v2valid")) { state.valid = Math.min(100, Math.max(0, parseInt(t.value, 10) || 0)); syncControls(); scheduleRender(); } else if (t.classList.contains("v2q")) { state.q = t.value; syncControls(); } else if (t.classList.contains("v2swatch")) { userColors[t.dataset.m] = t.value; render(); } });
+  on("click", function (e) {
     var b = e.target.closest ? e.target.closest("button") : null; if (!b || !root.contains(b) || b.classList.contains("v2help")) { return; }
     if (b.dataset.view) { state.view = b.dataset.view; render(); return; }
     if (b.dataset.set) { var kv = b.dataset.set.split(":"); setState(kv[0], kv.slice(1).join(":")); render(); return; }
@@ -1447,7 +1452,7 @@
   function closeArmed() { if (popArmed) { closePop(); } }
   document.addEventListener("click", function (e) {
     var el = e.target.closest ? e.target.closest(".v2term, .v2help") : null; var open = document.querySelector(".v2pop"); var prev = open && open._anchor; closePop();
-    if (!el || prev === el || !(root.contains(el) || (headRoot && headRoot.contains(el)))) { return; }
+    if (!el || prev === el || !((root && root.contains(el)) || (headRoot && headRoot.contains(el)))) { return; }
     e.preventDefault();
     var pop = document.createElement("div"); pop.className = "v2pop"; var tipText = el.classList.contains("v2help") ? el.dataset.help : TERMS[el.dataset.term]; if (!tipText) { if (window.console) { console.warn("srbf: no text for hint", el.dataset.term); } return; } pop.textContent = tipText; pop._anchor = el; document.body.appendChild(pop);
     var margin = 8; pop.style.maxWidth = Math.min(520, window.innerWidth - 2 * margin) + "px"; var r = el.getBoundingClientRect();
@@ -1506,7 +1511,7 @@
     if (e.target.closest(".v2picker")) { return; }
     var trigger = e.target.closest(".v2pick");
     if (!trigger || trigger === pickerFor) { closePicker(); return; }
-    if (root.contains(trigger)) { openPicker(trigger); }
+    if (root && root.contains(trigger)) { openPicker(trigger); }
   });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") { closePop(); closePicker(); } });
   // Only a change of WIDTH changes the layout. An on-screen keyboard (or a browser bar that slides away) takes
@@ -1522,15 +1527,17 @@
   if (window.ResizeObserver) {
     var lastW = 0;
     var ro = new ResizeObserver(function () { var w = hostWidth(); if (Math.abs(w - lastW) > 8) { lastW = w; scheduleRender(); } });
-    [root.querySelector(".v2main"), headRoot].forEach(function (el) { if (el) { ro.observe(el); } });
+    [root && root.querySelector(".v2main"), headRoot].forEach(function (el) { if (el) { ro.observe(el); } });
   }
   document.addEventListener("scroll", closeArmed, true);
-  root.addEventListener("keydown", function (e) {
+  on("keydown", function (e) {
     if (e.key !== "Enter" || !e.target.classList || !e.target.classList.contains("v2addmkey")) { return; }
     e.preventDefault(); var v = e.target.value.trim(); if (v) { tryKey(v, false); }
   });
   render();
   // a key given earlier in this tab opens the same payload again without asking for it
-  try { var saved = window.sessionStorage.getItem("srbf.k"); if (saved) { tryKey(saved, true); } } catch (e) { /* storage off */ }
-  if (fromUrl) { try { root.scrollIntoView({ block: "start" }); } catch (e) { /* ignore */ } }
+  if (root) {
+    try { var saved = window.sessionStorage.getItem("srbf.k"); if (saved) { tryKey(saved, true); } } catch (e) { /* storage off */ }
+    if (fromUrl) { try { root.scrollIntoView({ block: "start" }); } catch (e) { /* ignore */ } }
+  }
 })();

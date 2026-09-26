@@ -11,9 +11,11 @@ function collectErrors(page) {
   return errors;
 }
 
+// a page is open once its first chart is drawn: the headline's on the home page, the explorer's on the Results page
+const CHART = '#results-headline-v2 svg.v2chart, #results-explorer-v2 svg.v2chart';
 async function open(page, url = '/') {
   await page.goto(url);
-  await expect(page.locator(V2 + ' svg.v2chart').first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator(CHART).first()).toBeVisible({ timeout: 20_000 });
 }
 
 // ---- theme: Auto follows the device; the toggle cycles Auto -> Dark -> Light -> Auto -----------------------------
@@ -44,7 +46,7 @@ test('theme: the toggle forces dark on a light device, persists, and cycles back
   await expect.poll(() => bodyBg(page)).toBe(DARK_BG);
   expect(await page.evaluate(() => localStorage.getItem('srbf_theme'))).toBe('dark');
   await page.reload();                                     // the pre-paint script applies it
-  await expect(page.locator(V2 + ' svg.v2chart').first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator(CHART).first()).toBeVisible({ timeout: 20_000 });
   expect(await bodyBg(page)).toBe(DARK_BG);
   await page.click('#theme-toggle');                       // Dark -> Light
   await expect.poll(() => bodyBg(page)).toBe(LIGHT_BG);
@@ -78,10 +80,11 @@ test('provenance: the prose explains the three labels and discloses the shared a
 // ---- the retired 2026-07 explorer -----------------------------------------------------------------------------------
 
 for (const url of ['/?release=2026-07', '/?view=curves&bench=FastSRB', '/?view=ranks&metric=log10_fvu_val&budget=10']) {
-  test(`a link of the retired 2026-07 explorer opens the current page: ${url}`, async ({ page }) => {
+  test(`a link of the retired 2026-07 explorer opens the current explorer: ${url}`, async ({ page }) => {
     const errors = collectErrors(page);
     await open(page, url);
-    await expect(page.locator('#results-headline-v2 svg.v2chart').first()).toBeVisible();
+    await expect(page).toHaveURL(/\/results\.html\?/);
+    await expect(page.locator(V2 + ' svg.v2chart').first()).toBeVisible();
     for (const k of ['view', 'bench', 'baseline', 'metric', 'budget']) { expect(new URL(page.url()).searchParams.has(k), k).toBe(false); }
     expect(errors).toEqual([]);
   });

@@ -1,7 +1,7 @@
 """The public results site must carry no trace of local-only methods (README.md, "Local-only methods").
 
 Fatal checks, run before the Playwright suite in CI and locally:
-  1. no page (index.html and the pages around it) references a private/ path or index.local.html;
+  1. no page (index.html and the pages around it) references a private/ path or a local page (*.local.html);
   2. every method key in data/*/results.js, data/*/summary.js, data/*/hist/*.js, data/*/paired.js, data/*/ranks.js
      and data/*/pred/ is
      in the public allowlist below
@@ -9,7 +9,7 @@ Fatal checks, run before the Playwright suite in CI and locally:
   3. every release payload carries the complete metric registry (at least the metric floor: the site's first
      release's metrics under their schema-2 keys, and the headline ones) so a regenerated release cannot silently
      lose metrics;
-  4. in CI, results-site/private/ and index.local.html do not exist in the checkout (they are git-ignored; a forced
+  4. in CI, results-site/private/ and the local pages do not exist in the checkout (they are git-ignored; a forced
      add would surface here before anything deploys);
   5. no published payload carries an as-run wall-clock metric. Seconds measured where a unit happened to run are
      not comparable between methods; the only timing this benchmark publishes is the reference-machine ladder in
@@ -210,9 +210,9 @@ def selftest() -> list[str]:
 def main() -> int:
     failures = selftest()
     banned = banned_patterns()
-    for page in sorted(p for p in SITE.glob("*.html") if p.name != "index.local.html"):
+    for page in sorted(p for p in SITE.glob("*.html") if not p.name.endswith(".local.html")):
         html = page.read_text(encoding="utf-8")
-        for needle in ("private/", "index.local"):
+        for needle in ("private/", "index.local", "results.local"):
             if needle in html:
                 failures.append(f"{page.name} mentions {needle!r}")
     for js in sorted((SITE / "data").glob("*/results.js")):
@@ -276,7 +276,7 @@ def main() -> int:
     for sj in sorted((SITE / "data").glob("*/sealed.js")):
         failures.extend(check_sealed(sj.read_text(encoding="utf-8"), str(sj)))
     if os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"):
-        for p in ("private", "index.local.html"):
+        for p in ("private", "index.local.html", "results.local.html"):
             if (SITE / p).exists():
                 failures.append(f"{p} exists in the CI checkout")
     for f in failures:

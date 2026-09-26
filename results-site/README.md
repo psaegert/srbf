@@ -9,8 +9,9 @@ explorer for the benchmark numbers, nothing more.
 
 | File | Purpose |
 |------|---------|
-| `index.html` | The Results page: the intro, the visual abstract, the headline charts, the release's title with one line of progress, and the explorer. A link to one of its former sections (`#about`, `#paired`, `#ranks`, `#metrics`) opens that section's page. |
-| `progress.html`, `guide.html`, `metrics.html`, `ranks.html`, `paired.html`, `privacy.html` | The pages around it, one per topic, each with the same header navigation (Results, Progress, How to read, Metrics; the page itself marked; Ranks and Paired are reached from the explorer's Ranks and Paired displays, whose hints link to them): the progress of every method (finished, in progress budget by budget, scheduled), how to read the results (the protocol, then the topics), the metric definitions (typeset with KaTeX), ranks, paired comparisons, and what the site stores. Written for a first-time reader: every term is defined where it first appears, and the explorer's short hints link here for the longer explanations. |
+| `index.html` | The home page: the intro, the visual abstract and the headline's two fixed charts (drawn by `explorer_v2.js` in its headline-only mode), with a link to the explorer. A link to one of its former sections (`#about`, `#paired`, `#ranks`, `#metrics`) opens that section's page; a link with explorer settings in its query opens `results.html` with the same settings. |
+| `results.html` | The Results page: the explorer, and nothing else (the release's title with one line of progress, then the displays). |
+| `progress.html`, `guide.html`, `metrics.html`, `ranks.html`, `paired.html`, `privacy.html` | The pages around it, one per topic, each with the same header navigation (Results, Progress, How to read, Metrics, the brand leading home; the page itself marked; Ranks and Paired are reached from the explorer's Ranks and Paired displays, whose hints link to them): the progress of every method (finished, in progress budget by budget, scheduled), how to read the results (the protocol, then the topics), the metric definitions (typeset with KaTeX), ranks, paired comparisons, and what the site stores. Written for a first-time reader: every term is defined where it first appears, and the explorer's short hints link here for the longer explanations. |
 | `pages.js` | The Progress page and the guide's protocol, from `data/<release>/summary.js`. |
 | `styles.css` | Standalone styling (light/dark aware), including the prose/metric-card styles for the prose sections. |
 | `theme.js` | The header's theme toggle (Auto / Dark / Light; one `srbf_theme` localStorage entry, set only on an explicit choice). |
@@ -63,14 +64,14 @@ them out of every public channel by construction, not by convention:
 
 - `scripts/site_export_v2.py --private <keys> --private-dir results-site/private/<release>`
   writes those methods to a separate directory (payload, histograms, paired contrasts, including contrasts
-  against public methods). The public payload, `index.html`, `explorer_v2.js` and the
+  against public methods). The public payload, the pages, `explorer_v2.js` and the
   repository carry no reference to them; the exporter refuses a key that is in both lists.
-- `results-site/private/` and `results-site/index.local.html` are git-ignored. `build_local.sh`
-  writes `index.local.html` (the public page plus one script tag that loads the private file) and
+- `results-site/private/` and `results-site/results.local.html` are git-ignored. `build_local.sh`
+  writes `results.local.html` (the public Results page plus one script tag that loads the private file) and
   refuses to run if either path is not ignored. Serve it locally:
-  `cd results-site && python3 -m http.server 8765` then open `/index.local.html`. The explorer marks
+  `cd results-site && python3 -m http.server 8765` then open `/results.local.html`. The explorer marks
   such methods "local only".
-- `tests/public_guard.py` fails the deploy if `index.html` mentions `private/` or `index.local`, if
+- `tests/public_guard.py` fails the deploy if a page mentions `private/` or a local page, if
   any method key in `data/*/results.js`, `data/*/hist/*.js` or `data/*/paired.js` is outside the public
   allowlist in that file, if a release payload lacks any metric of the floor, or if the private
   directory or the local page exists in the CI checkout. It runs before the Playwright suite.
