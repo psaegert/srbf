@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script>
+    // pre-paint: apply a manually chosen theme before the first render (Auto stores nothing)
+    (function () {
+      try {
+        var t = localStorage.getItem("srbf_theme");
+        if (t === "light" || t === "dark") { document.documentElement.setAttribute("data-theme", t); }
+      } catch (e) { /* storage blocked: Auto */ }
+    })();
+  </script>
+  <title>Ranks · srbf</title>
+  <meta name="description" content="How the srbf results rank all methods at once: average places, groups and comparisons won." />
+  <link rel="icon" type="image/svg+xml" href="srbf-icon.svg" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Ranks · srbf" />
+  <meta property="og:description" content="How the srbf results rank all methods at once: average places, groups and comparisons won." />
+  <meta property="og:url" content="https://psaegert.github.io/srbf/ranks.html" />
+  <meta property="og:image" content="https://psaegert.github.io/srbf/srbf-social.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"
+    onload="renderMathInElement(document.body, {delimiters: [{left: '$$', right: '$$', display: true}, {left: '\\(', right: '\\)', display: false}]});"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="./">
+        <img class="brand-icon" src="srbf-icon.svg" alt="srbf" width="26" height="26" />
+        <span class="brand-sub">Symbolic Regression Benchmark Framework</span>
+      </a>
+      <nav class="site-nav" aria-label="Pages">
+        <a href="./">Results</a>
+        <a href="progress.html">Progress</a>
+        <a href="guide.html">How to read</a>
+        <a href="metrics.html">Metrics</a>
+        <a href="ranks.html" aria-current="page">Ranks</a>
+        <a href="paired.html">Paired</a>
+      </nav>
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Theme"></button>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap">
+    <section class="hero page-hero">
+      <h1>Ranks</h1>
+      <p class="lede">
+        Ranks answer another question: how do all methods compare at once? On each problem, the
+        methods are placed 1st, 2nd, and so on by the chosen metric. A method's standing is its
+        average place over the \(K\) problems, \(\bar{r}_j = \frac{1}{K} \sum_{k} r_{jk}\), where each of a problem's two runs counts as a problem of its own.
+      </p>
+    </section>
+
+    <section id="ranks" class="prose">
+
+      <section class="topic">
+        <h3>What a rank measures</h3>
+        <div>
+          <p>
+            Every problem hands out the same places, so easy and hard problems count the same, and a
+            narrow win counts as much as a wide one. Ranks therefore measure how <em>consistently</em>
+            a method is ahead, while the paired comparisons measure <em>by how much</em>. Methods
+            with the same value share the average of the places they occupy.
+            A method without a usable formula for a problem is placed last on
+            it, on every metric.
+          </p>
+        </div>
+      </section>
+
+      <section class="topic">
+        <h3>Groups</h3>
+        <div>
+          <p>
+            Friedman's test first asks whether the average places differ more than they would by
+            chance if all methods were equally good. Groups are drawn only if they do. For \(m\)
+            methods and \(K\) problems, the critical difference (Nemenyi test, 5 % level)
+          </p>
+          $$ \mathrm{CD} = q_{0.05} \sqrt{\frac{m (m + 1)}{6 K}} $$
+          <p>
+            is the smallest gap between two average places that is unlikely to be chance, allowing
+            for the fact that every pair of methods is compared; \(q_{0.05}\) is the 5 % critical
+            value of the studentized range for \(m\) methods, divided by \(\sqrt{2}\). Here \(K\)
+            counts each of a problem's two runs separately. Methods closer than this share a shaded
+            band: the data cannot tell them apart. That does not prove they are equal; with more
+            problems, a difference might show.
+          </p>
+        </div>
+      </section>
+
+      <section class="topic">
+        <h3>Comparisons won</h3>
+        <div>
+          <p>
+            The share of one-on-one comparisons a method wins, with a tie counting as half. It is the
+            average place on a fixed scale, \(w_j = (m - \bar{r}_j) / (m - 1)\): 100 % means a method
+            beats every other method on every problem, and 50 % means it wins as often as it loses.
+            Unlike the average place, it keeps its meaning when the number of methods changes, so it
+            can be followed across budgets even when methods drop in or out.
+          </p>
+        </div>
+      </section>
+
+      <section class="topic">
+        <h3>Same budget or same time</h3>
+        <div>
+          <p>
+            The ranking uses the methods and problem sets you select. Methods are compared either at
+            the same budget number, a rough comparison since their units differ, or at the same time:
+            each method at its largest finished budget that takes at most the chosen number of seconds
+            per problem on our timing workstation. A method that has not been timed yet, or whose
+            smallest budget already takes longer, is left out, and so is one without results on the
+            same problems as the others. A method whose largest budget stays under the time limit is
+            drawn hollow: with more budget, it might move up.
+          </p>
+        </div>
+      </section>
+
+      <section class="topic">
+        <h3>Primary metric</h3>
+        <div>
+          <p>
+            One ranking metric was chosen before the results were read: \(\log_{10}\) FVU on the
+            held-out points. Which time limit or budget to compare at depends on the use case (an answer
+            within a second, or the best answer within minutes), so the page shows the ranking at every
+            setting, and a ranking should be quoted together with its setting. Rankings by any other
+            metric are for browsing, and a label next to the metric says which kind is on screen.
+          </p>
+        </div>
+      </section>
+    </section>
+    </div>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner">
+      <span><span class="brand-mark small">srbf</span> · Symbolic Regression Benchmark Framework</span>
+      <span>
+        Generated by <a href="https://srbf.readthedocs.io/" target="_blank" rel="noopener"><code>srbf.analysis</code></a>
+        · <a href="https://srbf.readthedocs.io/" target="_blank" rel="noopener">Docs</a>
+        · <a href="https://github.com/psaegert/srbf" target="_blank" rel="noopener">GitHub</a>
+        · <a href="https://pypi.org/project/srbf/" target="_blank" rel="noopener">PyPI</a>
+        · <a href="privacy.html">Privacy</a>
+      </span>
+    </div>
+  </footer>
+
+  <script src="theme.js" charset="utf-8"></script>
+</body>
+</html>

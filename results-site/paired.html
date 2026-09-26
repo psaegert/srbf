@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script>
+    // pre-paint: apply a manually chosen theme before the first render (Auto stores nothing)
+    (function () {
+      try {
+        var t = localStorage.getItem("srbf_theme");
+        if (t === "light" || t === "dark") { document.documentElement.setAttribute("data-theme", t); }
+      } catch (e) { /* storage blocked: Auto */ }
+    })();
+  </script>
+  <title>Paired comparisons · srbf</title>
+  <meta name="description" content="How the srbf results compare two methods problem by problem." />
+  <link rel="icon" type="image/svg+xml" href="srbf-icon.svg" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Paired comparisons · srbf" />
+  <meta property="og:description" content="How the srbf results compare two methods problem by problem." />
+  <meta property="og:url" content="https://psaegert.github.io/srbf/paired.html" />
+  <meta property="og:image" content="https://psaegert.github.io/srbf/srbf-social.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"
+    onload="renderMathInElement(document.body, {delimiters: [{left: '$$', right: '$$', display: true}, {left: '\\(', right: '\\)', display: false}]});"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="./">
+        <img class="brand-icon" src="srbf-icon.svg" alt="srbf" width="26" height="26" />
+        <span class="brand-sub">Symbolic Regression Benchmark Framework</span>
+      </a>
+      <nav class="site-nav" aria-label="Pages">
+        <a href="./">Results</a>
+        <a href="progress.html">Progress</a>
+        <a href="guide.html">How to read</a>
+        <a href="metrics.html">Metrics</a>
+        <a href="ranks.html">Ranks</a>
+        <a href="paired.html" aria-current="page">Paired</a>
+      </nav>
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Theme"></button>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap">
+    <section class="hero page-hero">
+      <h1>Paired comparisons</h1>
+      <p class="lede">
+        Every method gets the same problems, so two methods A and B can be compared problem by
+        problem: on each problem \(k\), take A's value minus B's, \(\Delta_k = x_A^{(k)} - x_B^{(k)}\),
+        and look at these differences. This is more sensitive than comparing two averages. Some
+        problems are hard for every method, which widens the interval of each average, but that
+        shared difficulty cancels in the difference. So two intervals can overlap even when one
+        method is better problem after problem.
+      </p>
+    </section>
+
+    <section id="paired" class="prose">
+
+      <section class="topic">
+        <h3>Rates</h3>
+        <div>
+          <p>
+            For a rate, only the problems where the two methods disagree can tell them apart: the
+            \(b\) problems that A recovers and B does not, and the \(c\) problems that B recovers
+            and A does not, out of \(K\) problems. The exact McNemar test gives the probability of an
+            imbalance between \(b\) and \(c\) at least this large if both methods were equally good
+            (the p-value), and the difference of the two rates comes with a 95 % Wald interval:
+          </p>
+          $$
+            p = \min\!\Big\{1,\; 2\, P\big[\operatorname{Bin}(b + c, \tfrac{1}{2}) \le \min(b, c)\big]\Big\},
+            \qquad
+            \hat{\Delta} = \frac{b - c}{K} \;\pm\; \frac{z}{K} \sqrt{b + c - \frac{(b - c)^2}{K}} .
+          $$
+        </div>
+      </section>
+
+      <section class="topic">
+        <h3>Continuous metrics</h3>
+        <div>
+          <p>
+            For the other metrics, the view takes the problems where both methods have a finite
+            value: an exact fit counts at the floor of log10 FVU, and a formula that blows up is left
+            out. It reports the mean
+            difference \(\bar{\Delta}\) with its 95 % interval, and the problems where the method is
+            better or worse than the other on the metric's own terms (for a ratio: closer to 1). An
+            exact sign test asks whether one method is better on more problems than chance would give;
+            it can disagree with the interval of the mean, because a few large differences move the
+            mean. Ratios are compared on a log scale and shown as factors: \(\times\, 0.5\) means half.
+            Each comparison pairs the two methods on the same problem in the same run, so both had
+            exactly the same data. Every run that both methods have finished counts, so a problem
+            usually counts twice.
+          </p>
+        </div>
+      </section>
+    </section>
+    </div>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner">
+      <span><span class="brand-mark small">srbf</span> · Symbolic Regression Benchmark Framework</span>
+      <span>
+        Generated by <a href="https://srbf.readthedocs.io/" target="_blank" rel="noopener"><code>srbf.analysis</code></a>
+        · <a href="https://srbf.readthedocs.io/" target="_blank" rel="noopener">Docs</a>
+        · <a href="https://github.com/psaegert/srbf" target="_blank" rel="noopener">GitHub</a>
+        · <a href="https://pypi.org/project/srbf/" target="_blank" rel="noopener">PyPI</a>
+        · <a href="privacy.html">Privacy</a>
+      </span>
+    </div>
+  </footer>
+
+  <script src="theme.js" charset="utf-8"></script>
+</body>
+</html>

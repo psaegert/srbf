@@ -372,10 +372,6 @@ test('a long plot title wraps onto more lines; no title is cut to an ellipsis', 
   await page.goto(url);
   await expect(page.locator(V2 + ' .v2plothead .v2picklab')).toHaveCount(4);
   for (const l of await read()) { expect(l.nowrap, l.text).toBe(false); expect(l.clipped, l.text).toBe(false); }
-  // the method tiles follow the same rule
-  const tiles = await page.locator(V2 + ' .v2tile b').evaluateAll((els) => els.map((el) => getComputedStyle(el).whiteSpace === 'nowrap' || el.scrollWidth > el.clientWidth + 1));
-  expect(tiles.length).toBeGreaterThan(0);
-  expect(tiles.filter(Boolean)).toEqual([]);
   // narrow: the long names take a second line instead of an ellipsis
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(url);
@@ -886,8 +882,8 @@ test('the page names itself once: the bar carries the name, the title says what 
   await expect(page.locator('main h1')).toHaveText('Benchmark results');
 });
 
-test('the prose explains the page from scratch', async ({ page }) => {
-  await page.goto('/');
+test('the guide explains the results from scratch', async ({ page }) => {
+  await page.goto('/guide.html');
   for (const h of ['Problems', 'Checking a prediction', 'Budgets and time', 'Why some points are missing', 'Problems without a usable formula', 'Intervals']) {
     await expect(page.locator('#about h3', { hasText: new RegExp('^' + h + '$') })).toBeVisible();
   }
@@ -1213,7 +1209,7 @@ test('the axis swap trades the two metrics of a plot; a budget plot keeps its pl
   expect(errors).toEqual([]);
 });
 
-test('the release has one home: a title and its update time in the headline roles, then Protocol and Progress', async ({ page }) => {
+test('the release has one home: a title and its update time in the headline roles, then one line of progress', async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto('/?release=2026-09&v=curves');
   const head = page.locator(V2 + ' .v2relhead');
@@ -1235,56 +1231,21 @@ test('the release has one home: a title and its update time in the headline role
   }
   await expect(page.locator(V2 + ' .v2updated')).toHaveCount(1);                  // one place for the time
   await expect(page.locator(V2)).not.toContainText(/(?<!machine-)generated|benchmark release/i); // the release head above names the release
-  // Protocol and Progress are named in the one label style
-  const status = page.locator(V2 + ' section.v2status');
-  await expect(status.locator('h3')).toHaveText(/^Progress/);
-  await expect(status.locator('h3 .v2help')).toHaveCount(1);                      // what is counted, on a ?
-  await expect(page.locator(V2 + ' details.v2release > summary')).toHaveText('Protocol');
-  expect(await style(V2 + ' details.v2release > summary')).toBe(await style(V2 + ' section.v2status h3'));
-  // every method with a status lives in the Progress block: a tile while in progress, a name on the Finished line once
-  // done; none counts more finished than planned
-  const tiles = await page.locator(V2 + ' .v2tile').count(), chips = await status.locator('.v2done .v2chip').count();
-  await expect(status.locator('.v2tile')).toHaveCount(tiles);
-  const withStatus = await page.evaluate(() => { const D = window.RESULTS_V2; return D.methods.filter((m) => D.status[m.key]).length; });
-  expect(tiles + chips).toBe(withStatus);
-  const over = await page.evaluate(() => Object.values(window.RESULTS_V2.status).filter((s) => s[1] != null && s[0] > s[1]).length);
-  expect(over).toBe(0);
-  // a tile: Results and Times, each a count and one block per budget of the method
-  const shape = await page.evaluate(() => {
-    const D = window.RESULTS_V2, out = [];
-    document.querySelectorAll('#results-explorer-v2 .v2status .v2tile').forEach((t) => {
-      const m = D.methods.find((x) => x.key === t.dataset.m);
-      const rows = [...t.querySelectorAll('.v2segs')].map((r) => r.children.length), nums = [...t.querySelectorAll('.v2pnum')].map((n) => n.textContent);
-      const timed = (m.budgets || []).filter((b) => (D.timing[m.key] || {})[String(b)] != null).length;
-      out.push({ key: m.key, rows, nums, labels: [...t.querySelectorAll('.v2plab')].map((l) => l.textContent), budgets: (m.budgets || []).length, timed,
-                 perKnown: Object.keys((D.progress || {})[m.key] || {}).length > 0 });
-    });
-    return out;
-  });
-  expect(shape.length).toBe(tiles);
-  for (const t of shape) {
-    expect(t.labels, t.key).toEqual(['Results', 'Times']);
-    expect(t.rows, t.key).toEqual([t.perKnown ? t.budgets : 1, t.budgets]);          // data without per-budget counts: one bar
-    expect(t.nums[0], t.key).toMatch(/^\d+ \/ (\d+|\?)$/);
-    expect(t.nums[1], t.key).toBe(t.timed + ' / ' + t.budgets);
+  // then one line of progress: the counts the exporter decided, and the way to the Progress page
+  const line = page.locator(V2 + ' .v2progline');
+  const summary = await page.evaluate(() => window.RESULTS_V2.summary);
+  if (summary) {
+    await expect(line).toHaveCount(1);
+    await expect(line.locator('.v2kicker')).toHaveText('Progress');
+    for (const [n, word] of [[summary.finished.length, 'finished'], [summary.in_progress.length, 'in progress'], [summary.scheduled.length, 'scheduled']]) {
+      if (n) { await expect(line).toContainText(n + ' ' + word); } else { await expect(line).not.toContainText(word); }
+    }
+    await expect(line.locator('a')).toHaveAttribute('href', 'progress.html');
+  } else {
+    await expect(line).toHaveCount(0);                                              // data without a summary: no line
   }
-  expect(errors).toEqual([]);
-});
-
-test('a method with every result and every time in moves to the Finished line', async ({ page }) => {
-  const errors = collectErrors(page);
-  // fixture: the first method with a plan and a timing entry for each of its budgets, its runs all finished
-  await page.addInitScript(() => { let r; Object.defineProperty(window, 'RESULTS_V2', { configurable: true, get() { return r; }, set(v) {
-    const m = v.methods.find((x) => v.status[x.key] && x.budgets && x.budgets.every((b) => (v.timing[x.key] || {})[String(b)] != null));
-    if (m) { window.__finished = m.key; v.status[m.key] = [v.status[m.key][1], v.status[m.key][1]]; const per = (v.progress || {})[m.key] || {}; Object.keys(per).forEach((b) => { per[b] = [per[b][1], per[b][1]]; }); }
-    r = v; } }); });
-  await page.goto('/?release=2026-09&v=curves');
-  const key = await page.evaluate(() => window.__finished);
-  test.skip(!key, 'no method has every budget timed in this data');
-  const status = page.locator(V2 + ' section.v2status');
-  await expect(status.locator('.v2done .v2lab')).toHaveText('Finished');
-  await expect(status.locator(`.v2done .v2chip[data-m="${key}"]`)).toHaveCount(1);
-  await expect(status.locator(`.v2tile[data-m="${key}"]`)).toHaveCount(0);           // no tile of its own any more
+  await expect(page.locator(V2 + ' .v2tile')).toHaveCount(0);                       // the details live on the Progress page
+  await expect(page.locator(V2 + ' details.v2release')).toHaveCount(0);             // the protocol lives on the guide
   expect(errors).toEqual([]);
 });
 

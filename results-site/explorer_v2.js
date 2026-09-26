@@ -22,7 +22,7 @@
   var D = JSON.parse(JSON.stringify(window.RESULTS_V2));
   var REL = D.release.id;
   // another release is on screen (the routing script decided before this file ran): leave the page and its URL alone
-  D.status = D.status || {}; D.progress = D.progress || {}; D.timing = D.timing || {};
+  D.status = D.status || {}; D.timing = D.timing || {};
   var SOURCES = [{ base: D.base, local: false }];
   // An overlay adds methods to the release: the same schema, merged into the tables every view reads. A local build
   // supplies one as a plain script and serves its lazy files from a base of its own (results-site/README.md,
@@ -34,7 +34,7 @@
     (P.methods || []).forEach(function (m) {
       if (!D.methods.some(function (x) { return x.key === m.key; })) { D.methods.push(Object.assign({}, m, { local: !!withBase, overlay: true })); added.push(m.key); }
     });
-    Object.assign(D.cells, P.cells || {}); Object.assign(D.status, P.status || {}); Object.assign(D.progress, P.progress || {}); Object.assign(D.timing, P.timing || {});
+    Object.assign(D.cells, P.cells || {}); Object.assign(D.status, P.status || {}); Object.assign(D.timing, P.timing || {});
     if (withBase && P.base) { SOURCES.push({ base: P.base, local: true }); }
     return added;
   }
@@ -89,7 +89,7 @@
     harness_tuned: "Settings: chosen by the benchmark's maintainers."
   };
   var TERMS = {
-    complete: "Each point is one method at one budget. Each method is run over its own range of budgets, and some runs are still in progress. A point appears only once the method has results for all the problem sets you selected (in the headline charts: all 29), so every point covers the same problems. On some problem sets only one of the two runs may be finished yet, so the number of runs behind a point can differ between methods. \u201cHow to read the results\u201d below explains why, and how to see partial results by selecting fewer problem sets.",
+    complete: "Each point is one method at one budget. Each method is run over its own range of budgets, and some runs are still in progress. A point appears only once the method has results for all the problem sets you selected (in the headline charts: all 29), so every point covers the same problems. On some problem sets only one of the two runs may be finished yet, so the number of runs behind a point can differ between methods. The page \u201cHow to read the results\u201d explains why, and how to see partial results by selecting fewer problem sets.",
     wilson: "The 95 % interval shows how precisely a value is known, given how much the results vary from problem to problem. It treats the problems as a random sample of similar problems, and each of a problem's two runs as a separate problem. Bands shade the interval around each point and between neighbouring points; crosses draw it as bars through each point. You can show either, both or neither.",
     median: "The median is read from a histogram with 128 bins, so it is accurate to the width of one bin (for log10 FVU, about 0.16).",
     mean: "The mean averages over the problems where the value is finite. log10 FVU stops at -15.65, the precision of a 64-bit float, so an exact fit counts there like any other fit. A formula that blows up has an infinite value: the mean leaves it out, while the median counts it as the worst. The tooltip of each point shows how many values it averages.",
@@ -1016,7 +1016,7 @@
     others.forEach(function (m) { rows += '<tr><td><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + '</td>' + plots.map(function (p) { var use = bothDone(m.key, base.key, r); var st = use.length ? pairedStat(p, m.key, base.key, r, use) : null; if (!st) { return '<td class="v2na">–</td><td class="v2na">–</td><td class="v2na">–</td>'; } var sig = st.p !== null && st.p < 0.05; return '<td' + (sig ? ' class="v2sig"' : "") + '>' + fmtDelta(p, st.v) + ' <span class="v2ci-txt">[' + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + ']</span></td><td>' + fmtP(st.p) + '</td><td class="v2hint">' + st.wins.toLocaleString() + " / " + st.losses.toLocaleString() + " of " + st.n.toLocaleString() + '</td>'; }).join("") + '</tr>'; });
     var anyRow = others.some(function (m) { return plots.some(function (p) { var use = bothDone(m.key, base.key, r); return use.length && pairedStat(p, m.key, base.key, r, use); }); });
     var table = '<h3 class="v2h">At one budget</h3><div class="v2viewbar">' + rungStepper(shown, true) + "</div>" + (anyRow ? "" : '<p class="v2hint">No method has ' + term("complete", "finished all selected problem sets") + " at budget " + r + " together with the baseline yet. Choose another budget above, or select fewer problem sets.</p>") + '<div class="v2table-wrap"><table class="v2table"><thead><tr><th>method − ' + esc(base.label) + ', budget ' + r + '</th>' + plots.map(function (p) { return '<th colspan="3">' + esc(mname(p)) + " " + mhelp(p) + '</th>'; }).join("") + '</tr><tr><th></th>' + plots.map(function () { return '<th>Δ [95 %]</th><th>p</th><th>better / worse</th>'; }).join("") + '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
-      '<p class="v2hint">\u0394: the method\u2019s value minus the baseline\u2019s, with its 95 % interval; pp are percentage points, and ratios are compared as factors (\u00d7 0.5 means half). p: the probability of a difference at least this large if both methods were equally good; for rates it comes from ' + term("mcnemar", "the McNemar test") + ', for other metrics from ' + term("signtest", "a sign test on the better and worse counts") + ', not from \u0394. Bold means below 0.05. Better / worse: on how many problems the method does better or worse than the baseline on that metric; for a ratio, only these counts say which is closer to 1. Choose the baseline above. <a href="#paired">How paired comparisons work</a></p>';
+      '<p class="v2hint">\u0394: the method\u2019s value minus the baseline\u2019s, with its 95 % interval; pp are percentage points, and ratios are compared as factors (\u00d7 0.5 means half). p: the probability of a difference at least this large if both methods were equally good; for rates it comes from ' + term("mcnemar", "the McNemar test") + ', for other metrics from ' + term("signtest", "a sign test on the better and worse counts") + ', not from \u0394. Bold means below 0.05. Better / worse: on how many problems the method does better or worse than the baseline on that metric; for a ratio, only these counts say which is closer to 1. Choose the baseline above. <a href="paired.html">How paired comparisons work</a></p>';
     return ctl + '<div class="v2charts">' + charts.join("") + "</div>" + table;
   }
 
@@ -1228,7 +1228,7 @@
     return s + "</svg>" + '<p class="v2hint">' + k + " methods, each placed against the others on " + lg.n.toLocaleString() + " problem runs (each problem is run twice, and each run counts) from " + lg.cats.length + " problem sets; " + term("worstrank", "how places are given") + ". " +
       (reject ? (lg.cliques.length ? "Methods joined by a shaded band are closer than the " + term("cd", "critical difference") + ": the data cannot tell them apart." : "Every gap is larger than the " + term("cd", "critical difference") + ", so no difference in average place is likely to be chance.")
         : "<b>" + term("friedman", "The places do not differ more than chance would make them") + " (p = " + lg.p.toFixed(3) + "), so no groups are drawn.</b>") +
-      (lg.order.some(function (x) { return x.capped; }) ? " A hollow dot marks a method whose largest budget stays below the time limit; with more budget it might move up." : "") + ' <a href="#ranks">How ranks work</a></p>';
+      (lg.order.some(function (x) { return x.capped; }) ? " A hollow dot marks a method whose largest budget stays below the time limit; with more budget it might move up." : "") + ' <a href="ranks.html">How ranks work</a></p>';
   }
   function rankTables(R, lg, p, slot, timed) {
     var k = lg.k, ord = lg.order, idx = ord.map(function (x) { return lg.roster.indexOf(x); });
@@ -1279,47 +1279,17 @@
     if (view === "ranks" && state.xaxis === "time" && anyTime()) { delete u.rung; }
     return u;
   }
-  // ---- progress: results and times, one block per budget ---------------------------------------------------------
-  // A method is finished once every planned run has its results and every budget its measured time; it then shrinks
-  // to a name on one line. A method in progress keeps a tile: a row of blocks for its results (each block fills with
-  // the finished share of that budget's runs) and one for its times (a block fills once the budget is timed).
-  function progressOf(m) {
-    var st = D.status[m.key], per = D.progress[m.key] || {}, tm = D.timing[m.key] || {};
-    var budgets = (m.budgets || Object.keys(per).map(Number)).slice().sort(function (a, b) { return a - b; });
-    var timed = budgets.filter(function (b) { return tm[String(b)] != null; }).length;
-    return { d: st[0], t: st[1], budgets: budgets, per: per, tm: tm, timed: timed,
-             finished: st[1] != null && st[0] >= st[1] && budgets.length > 0 && timed === budgets.length };
-  }
-  function progressTile(m, p) {
-    var name = esc(m.label) + (m.local ? " (local)" : ""), n = p.budgets.length;
-    // data without the per-budget counts (an export older than them): the results row is one bar of the total
-    var perKnown = Object.keys(p.per).length > 0;
-    var runs = perKnown ? p.budgets.map(function (b) {
-      var c = p.per[String(b)] || [0, null], share = c[1] ? Math.min(1, c[0] / c[1]) : 0;
-      return '<i class="v2seg" title="Budget ' + b.toLocaleString() + ": " + c[0] + " of " + (c[1] == null ? "?" : c[1]) + ' runs finished"><i style="width:' + (100 * share).toFixed(1) + '%"></i></i>';
-    }).join("") : '<i class="v2seg" title="' + p.d + " of " + (p.t == null ? "?" : p.t) + ' runs finished"><i style="width:' + (p.t ? 100 * Math.min(1, p.d / p.t) : 0).toFixed(1) + '%"></i></i>';
-    var times = p.budgets.map(function (b) {
-      var s = p.tm[String(b)];
-      return '<i class="v2seg" title="Budget ' + b.toLocaleString() + ": " + (s != null ? roundNum(s) + " s per problem" : "time not measured yet") + '"><i style="width:' + (s != null ? 100 : 0) + '%"></i></i>';
-    }).join("");
-    return '<div class="v2tile" data-m="' + esc(m.key) + '" style="--n:' + n + '"><b><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + name + '</b>' +
-      '<span class="v2plab">Results</span><span class="v2segs" aria-hidden="true"' + (perKnown ? "" : ' style="--n:1"') + '>' + runs + '</span><span class="v2pnum">' + p.d + '<small> / ' + (p.t == null ? "?" : p.t) + '</small></span>' +
-      '<span class="v2plab">Times</span><span class="v2segs" aria-hidden="true">' + times + '</span><span class="v2pnum">' + p.timed + '<small> / ' + n + '</small></span>' +
-      '<span class="v2paxis" aria-hidden="true"><span>' + (n ? p.budgets[0].toLocaleString() : "") + '</span><span>' + (n > 1 ? p.budgets[n - 1].toLocaleString() : "") + '</span></span></div>';
-  }
-  function progressStrip() {
-    var shown = D.methods.filter(function (m) { return D.status[m.key]; }), done = [], tiles = [];
-    shown.forEach(function (m) {
-      var p = progressOf(m);
-      if (p.finished) { done.push('<span class="v2chip" data-m="' + esc(m.key) + '" title="' + esc(m.label + ": both runs on every problem set and a measured time, at every budget from " + p.budgets[0].toLocaleString() + " to " + p.budgets[p.budgets.length - 1].toLocaleString() + ".") + '"><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + (m.local ? " (local)" : "") + '</span>'); }
-      else { tiles.push(progressTile(m, p)); }
-    });
-    return (done.length ? '<div class="v2done"><span class="v2lab">Finished</span>' + done.join("") + '</div>' : "") +
-      (tiles.length ? '<div class="v2strip">' + tiles.join("") + '</div>' : "");
+  // One line under the release's title: how many methods are finished, in progress and scheduled. The Progress page
+  // (progress.html, pages.js) shows each method budget by budget; the counts are the exporter's (progress_summary).
+  function progressLine() {
+    var s = D.summary;
+    if (!s) { return ""; }
+    var parts = [[s.finished.length, "finished"], [s.in_progress.length, "in progress"], [s.scheduled.length, "scheduled"]]
+      .filter(function (p) { return p[0] > 0; }).map(function (p) { return p[0] + " " + p[1]; });
+    return '<p class="v2progline"><span class="v2kicker">Progress</span> ' + parts.join(" · ") + ' · <a href="progress.html">details by method and budget</a></p>';
   }
   function shell() {
     var rel = D.release;
-    var strip = progressStrip();
     // When the release was last refreshed: stored with its offset, shown in the reader's own time zone, with how long ago
     var stamp = (function () {
       var t = rel.updated ? new Date(rel.updated) : null;
@@ -1329,14 +1299,12 @@
       if (mins < 1) { ago = "just now"; } else if (mins < 60) { ago = mins + (mins === 1 ? " minute" : " minutes") + " ago"; } else if (mins < 48 * 60) { var h = Math.round(mins / 60); ago = h + (h === 1 ? " hour" : " hours") + " ago"; } else { ago = Math.round(mins / 1440) + " days ago"; }
       return '<time class="v2updated" datetime="' + esc(rel.updated) + '">Updated ' + esc(abs) + ' <span class="v2ago">· ' + ago + '</span></time>';
     })();
-    var progressHint = "How much of each method's evaluation is done. Each small block is one budget, from the smallest on the left to the largest on the right. Results: every problem set is run twice at each budget. One count is one of these runs, counted once every problem in it has a result. A block fills up as its runs finish. Times: a block fills once the time per problem at that budget has been measured on our timing workstation. A budget appears in the plots once every problem set has one finished run at that budget. It appears on the time axis once its time is measured. A method with all results and all times in is listed as finished.";
     var catList = CATS.map(function (c) { var m = CAT[c]; return '<label title="' + esc(GROUPS[m.group] + (m.mu ? " · typical formula length " + m.mu[1] + " bits (middle half: " + m.mu[0] + " to " + m.mu[2] + ")" : "")) + '"><input type="checkbox" data-c="' + c + '"> ' + esc(c) + ' <span class="v2hint">' + m.laws + '</span></label>'; }).join("");
     var methList = D.methods.filter(withData).map(function (m) { return '<div class="v2meth"><label><input type="checkbox" data-m="' + m.key + '"><input type="color" class="v2swatch" data-m="' + m.key + '" value="' + colorOf(m) + '" title="Colour for ' + esc(m.label) + '"><span class="v2mname">' + esc(m.label) + '</span></label>' + (m.local ? ' <span class="v2tag v2tag-local">local only</span>' : "") + ' <span class="v2hint">' + esc(m.param) + '</span>' + (m.selection ? " " + help(m.selection, "How does " + m.label + " choose its prediction?") : "") + ' <span class="v2tag" title="' + esc(PROV_NOTE[m.provenance] || "") + '">' + esc(PROV[m.provenance] || m.provenance || "") + '</span><button type="button" class="v2reset" data-m="' + m.key + '" title="Reset colour to default" hidden>↺</button></div>'; }).join("") || '<span class="v2hint">no method has finished a budget yet</span>';
     var metricList = MGROUPS.map(function (g) { var ms = D.metrics.filter(function (m) { return m.group === g; }); return '<div class="v2mgroup" data-group="' + esc(g) + '"><h4>' + esc(g) + '</h4>' + ms.map(function (m) { return '<div class="v2metric" data-tier="' + m.tier + '" data-key="' + m.key + '"><label><input type="checkbox" data-p="' + m.key + '"> ' + esc(m.label) + '</label> ' + mhelp(m) + '</div>'; }).join("") + "</div>"; }).join("");
     root.innerHTML =
       '<div class="v2relhead"><div><h2 class="v2hltitle">Release ' + esc(rel.id) + (rel.title !== rel.id ? ' · ' + esc(rel.title) : '') + '</h2><p class="v2hlsub">' + stamp + (rel.notes ? ' · ' + esc(rel.notes) : '') + '</p></div><div class="v2row"><button type="button" class="v2btn" data-act="link">copy link to this view</button><span class="v2linkok v2hint" hidden>link copied</span></div></div>' +
-      '<details class="v2release"><summary class="v2kicker">Protocol</summary><ul><li><b>Choosing a prediction.</b> ' + esc(rel.scoring || "") + '</li><li><b>Judging it.</b> ' + esc(rel.judge || "") + '</li><li><b>Problems.</b> Each problem is one known formula, with 512 data points given to the method and 512 held-out points used only to check the formula it returns. The points are sampled from the ranges the problem set specifies, without noise. Every method is run twice on each problem, with new points each time. ' + CATS.length + ' problem sets, ' + laws(CATS).toLocaleString() + ' problems.</li><li><b>Settings.</b> ' + term("provenance", "Who chose each method\'s settings") + ' is shown next to its name.</li>' + (rel.versions ? '<li><b>Versions.</b> ' + esc(rel.versions) + '</li>' : '') + '<li><b>Time.</b> Seconds per problem. ' + (D.timing_note ? esc(D.timing_note) + " " : "") + term("time", "Why only these times?") + '</li><li><b>Statistics.</b> ' + term("regime", "How problems without a usable formula count") + ', ' + term("complete", "why some points are missing") + ', ' + term("wilson", "what the 95 % intervals mean") + '.</li></ul></details>' +
-      '<section class="v2status" aria-label="Progress of this release"><h3 class="v2kicker">Progress ' + help(progressHint, "What is counted?") + '</h3>' + strip + '</section>' +
+      progressLine() +
       '<div class="v2tabs" role="tablist">' + VIEWS.map(function (v) { return '<button type="button" class="v2tab" role="tab" data-view="' + v[0] + '">' + v[1] + '</button>'; }).join("") + '</div>' +
       '<div class="v2layout"><aside class="v2side">' +
       // 1. what this display shows. Every row declares the views it belongs to; the rest stay out of the way.

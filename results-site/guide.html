@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script>
+    // pre-paint: apply a manually chosen theme before the first render (Auto stores nothing)
+    (function () {
+      try {
+        var t = localStorage.getItem("srbf_theme");
+        if (t === "light" || t === "dark") { document.documentElement.setAttribute("data-theme", t); }
+      } catch (e) { /* storage blocked: Auto */ }
+    })();
+  </script>
+  <title>How to read the results · srbf</title>
+  <meta name="description" content="How the srbf results are made and read: the problems, how a prediction is checked, budgets and time, missing points, intervals, and who chose each method's settings." />
+  <link rel="icon" type="image/svg+xml" href="srbf-icon.svg" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="How to read the results · srbf" />
+  <meta property="og:description" content="How the srbf results are made and read: the problems, how a prediction is checked, budgets and time, missing points, intervals, and who chose each method's settings." />
+  <meta property="og:url" content="https://psaegert.github.io/srbf/guide.html" />
+  <meta property="og:image" content="https://psaegert.github.io/srbf/srbf-social.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"
+    onload="renderMathInElement(document.body, {delimiters: [{left: '$$', right: '$$', display: true}, {left: '\\(', right: '\\)', display: false}]});"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="./">
+        <img class="brand-icon" src="srbf-icon.svg" alt="srbf" width="26" height="26" />
+        <span class="brand-sub">Symbolic Regression Benchmark Framework</span>
+      </a>
+      <nav class="site-nav" aria-label="Pages">
+        <a href="./">Results</a>
+        <a href="progress.html">Progress</a>
+        <a href="guide.html" aria-current="page">How to read</a>
+        <a href="metrics.html">Metrics</a>
+        <a href="ranks.html">Ranks</a>
+        <a href="paired.html">Paired</a>
+      </nav>
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Theme"></button>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap">
+    <section class="hero page-hero">
+      <h1>How to read the results</h1>
+      <p class="lede">
+        Every method gets the same problems, with data sampled the same way, and every prediction is
+        checked the same way.
+      </p>
+    </section>
+
+    <section id="about" class="prose">
+
+      <section class="topic" id="protocol">
+        <h3>Protocol</h3>
+        <div>
+          <ul class="protocol">
+            <li><b>Choosing a prediction.</b> <span data-fill="scoring"></span></li>
+            <li><b>Judging it.</b> <span data-fill="judge"></span></li>
+            <li><b>Problems.</b> Each problem is one known formula, with 512 data points given to the method and 512
+              held-out points used only to check the formula it returns. The points are sampled from the ranges the
+              problem set specifies, without noise. Every method is run twice on each problem, with new points each
+              time. <span data-fill="counts"></span></li>
+            <li><b>Settings.</b> Who chose each method's settings is shown next to its name in the <a href="./">explorer</a>
+              (<a href="#settings">what the labels mean</a>).</li>
+            <li data-optional><b>Versions.</b> <span data-fill="versions"></span></li>
+            <li><b>Time.</b> Seconds per problem. <span data-fill="timing_note"></span>
+              (<a href="#time">budgets and time</a>)</li>
+            <li><b>Statistics.</b> <a href="#unusable">How problems without a usable formula count</a>,
+              <a href="#missing">why some points are missing</a>, <a href="#intervals">what the 95 % intervals mean</a>.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="topic" id="problems">
+        <h3>Problems</h3>
+        <div>
+          <p>
+            Each problem is one known formula, the ground truth, taken from one of 29 published problem
+            sets, 6,660 problems in total. For each problem, 512 input points are sampled from the
+            ranges its problem set specifies, and the formula's values there are computed without
+            noise. These are the given points (the support set), the only data the method sees. 512
+            further points are sampled the same way and kept back: the held-out points (the
+            validation set), used only to check the formula the method returns. The
+            <a href="https://srbf.readthedocs.io/en/latest/benchmarks/#the-srbf-suite" target="_blank" rel="noopener">documentation</a> lists
+            every problem set with its source. The largest, erbench-syneq (machine-generated formulas),
+            holds 5,301 of the 6,660 problems, so an average over all problems mostly reflects it; the
+            Problem sets tab of the explorer shows each set on its own.
+          </p>
+          <p>
+            Every method is run twice on every problem, each time with newly sampled points. The
+            curves and tables average over both runs.
+          </p>
+        </div>
+      </section>
+
+      <section class="topic" id="decontamination">
+        <h3>Keeping the problems out of training data</h3>
+        <div>
+          <p>
+            The neural methods here learn from machine-generated formulas before they see a problem. If
+            a benchmark formula were among them, a method could recall it instead of finding it. The
+            problem sets come from <a href="https://github.com/psaegert/symbolic-data" target="_blank"
+            rel="noopener">symbolic-data</a>, a companion package that writes every formula in one
+            standard form. A training-data generator built on it can therefore exclude every benchmark
+            formula, also when it is written with other variable names or other constant values, and
+            srbf can check afterwards, problem by problem, that the exclusion covers the benchmark
+            (<a href="https://srbf.readthedocs.io/en/latest/fairness/#verifying-decontamination"
+            target="_blank" rel="noopener">srbf decontamination</a>). Removing test data from
+            training data like this is called decontamination.
+          </p>
+          <p>
+            Flash-ANSR's training data is generated this way, with all 29 problem sets excluded. E2E and
+            NeSymReS were trained by their authors on data of their own, which this benchmark cannot
+            check. Like their training formulas, the formulas of erbench-syneq, the largest problem set,
+            are machine-generated; the Problem sets tab of the explorer shows how the methods fare on
+            each set.
+          </p>
+        </div>
+      </section>
+
+      <section class="topic" id="checking">
+        <h3>Checking a prediction</h3>
+        <div>
+          <p>
+            Every method is allowed to return one formula per problem, its prediction. How it picks that formula
+            is up to the method; in the explorer, the <code>?</code> after a method's name describes
+            its rule.
+          </p>
+          <p>
+            Every prediction is then checked in two ways. Numerically: does it reproduce the
+            held-out points? Symbolically: is it the same formula as the ground truth? For the
+            symbolic check, the variables of both formulas are named by their input column, and both are rewritten into
+            a standard form by SimpliPy, a simplification library, and then compared symbol by
+            symbol; depending on the metric, their numbers are ignored or not (see
+            <a href="metrics.html">Metrics</a>). The check is strict: two formulas that always give the
+            same values, but that SimpliPy does not bring into the same form, count as different.
+          </p>
+        </div>
+      </section>
+
+      <section class="topic" id="time">
+        <h3>Budgets and time</h3>
+        <div>
+          <p>
+            Most methods find better formulas when they may search longer. Each method is therefore
+            run at a series of budgets, powers of two: 1, 2, 4, 8 and so on (the Flash-ANSR models skip
+            32,768 and end at 65,536). The budget
+            is counted in the method's own unit: the number of candidate formulas it may generate
+            (Flash-ANSR, E2E), its beam width (NeSymReS: how many partial formulas its search keeps),
+            or its number of search iterations (PySR). Each method runs over its own range of budgets;
+            the explorer says which budgets a method runs at wherever one is missing.
+          </p>
+          <p>
+            Because these units differ, the page also shows what each budget costs: the seconds per
+            problem, measured for every method on the same workstation (16 CPU cores, one RTX 4090
+            GPU), one method at a time, on a fixed sample of 262 problems. Only these times are
+            shown. Most results are computed on a shared compute cluster, where the time a job takes
+            depends on the machine it lands on, so those times cannot be compared. Each problem set's
+            average time counts in proportion to its number of problems among the 6,660, and problems
+            without a usable formula are not timed. A method that has not been timed yet can only be
+            drawn against its budget. Candidate counts and beam widths share the budget axis of the
+            curves; PySR's iterations do not fit on it, so PySR's curves are drawn against time. Tables
+            and the same-budget ranking list PySR by its number of iterations.
+          </p>
+        </div>
+      </section>
+
+      <section class="topic" id="missing">
+        <h3>Why some points are missing</h3>
+        <div>
+          <p>
+            The runs are still in progress, so results arrive over time, one problem set and budget
+            at a time, and each method runs over its own range of budgets. A point, a table value or a rank is shown only once the method has results for
+            every problem set you selected, at that budget. Then every value covers the same problems.
+            A problem set counts as done once one of its two runs is complete, so the number of runs
+            behind a value can differ between methods while the second runs finish.
+          </p>
+          <p>
+            The reason is that problem sets differ a lot in difficulty and size: the largest,
+            erbench-syneq, holds 5,301 of the 6,660 problems. An average over whichever problem sets
+            happen to be finished would mostly show which ones are done, not how good the method is.
+            To see partial results, select fewer problem sets in the explorer: a point appears as
+            soon as the selected ones are finished. The <a href="progress.html">Progress</a> page
+            shows how far each method has come, in results and in measured times, budget by budget.
+          </p>
+        </div>
+      </section>
+
+      <section class="topic" id="unusable">
+        <h3>Problems without a usable formula</h3>
+        <div>
+          <p>
+            Sometimes a method returns no usable formula for a problem: it crashes, or returns
+            something that cannot be evaluated. How such a problem counts depends on the metric. In a
+            rate, such as Numeric Recovery, it counts as a miss. In the overlap metrics (Token Overlap
+            and Variable Overlap), which range from 0 to 1, it counts as 0, the worst value; the
+            explorer can leave such problems out instead.
+          </p>
+          <p>
+            All other metrics, such as the fit error or the formula's length, are measured only on the
+            problems where the method returned a usable formula; most of them have no worst value,
+            since a formula can always be worse. A method that fails on the hard problems then looks better
+            than it is, because only its easier problems are measured. The explorer therefore draws a
+            point hollow when it is based on fewer than 90 % of the problems; you can move this
+            threshold.
+          </p>
+        </div>
+      </section>
+
+      <section class="topic" id="intervals">
+        <h3>Intervals</h3>
+        <div>
+          <p>
+            Every value comes with a 95 % interval. It shows how precisely the value is known, given how
+            much the results vary from problem to problem: it treats the problems as a random sample of
+            similar problems, and each of a problem's two runs as a separate problem. For a mean it is a
+            t-interval, for a median an interval from order statistics, and for a rate \(\hat{p}\) over
+            \(K\) problem runs the Wilson score interval
+          </p>
+          $$
+            \frac{\hat{p} + \frac{z^2}{2K} \;\pm\; z \sqrt{\frac{\hat{p}(1 - \hat{p})}{K} + \frac{z^2}{4K^2}}}
+                 {1 + \frac{z^2}{K}},
+            \qquad z = 1.96 .
+          $$
+        </div>
+      </section>
+
+      <section class="topic" id="settings">
+        <h3>Who chose each method's settings</h3>
+        <div>
+          <p>
+            The people who run this benchmark also develop one of the methods, Flash-ANSR. The first
+            question to ask of such a benchmark is: who chose each method's settings? Every method
+            therefore carries a label that answers it, shown next to its name in the explorer. The
+            labels are part of the written <a href="https://srbf.readthedocs.io/en/latest/fairness/"
+            target="_blank" rel="noopener">fairness policy</a>.
+          </p>
+          <ul>
+            <li><strong>Upstream defaults</strong> (PySR, NeSymReS, E2E): the settings the method's own
+              release ships with, not tuned in either direction.</li>
+            <li><strong>Author-blessed</strong> (the Flash-ANSR models, the
+              combination with PySR and the random-guessing reference): the settings were chosen
+              by the method's authors. Here they are also the benchmark's authors, and this label says
+              so. The authors of any other method can submit their own settings the same way.</li>
+            <li><strong>Maintainer-chosen</strong>:
+              settings chosen by the benchmark's maintainers, for a method that has no release and no
+              outside author of its own.</li>
+          </ul>
+        </div>
+      </section>
+    </section>
+    </div>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner">
+      <span><span class="brand-mark small">srbf</span> · Symbolic Regression Benchmark Framework</span>
+      <span>
+        Generated by <a href="https://srbf.readthedocs.io/" target="_blank" rel="noopener"><code>srbf.analysis</code></a>
+        · <a href="https://srbf.readthedocs.io/" target="_blank" rel="noopener">Docs</a>
+        · <a href="https://github.com/psaegert/srbf" target="_blank" rel="noopener">GitHub</a>
+        · <a href="https://pypi.org/project/srbf/" target="_blank" rel="noopener">PyPI</a>
+        · <a href="privacy.html">Privacy</a>
+      </span>
+    </div>
+  </footer>
+
+  <script src="data/2026-09/summary.js" charset="utf-8"></script>
+  <script src="theme.js" charset="utf-8"></script>
+  <script src="pages.js" charset="utf-8"></script>
+</body>
+</html>

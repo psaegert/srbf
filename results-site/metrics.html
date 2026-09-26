@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script>
+    // pre-paint: apply a manually chosen theme before the first render (Auto stores nothing)
+    (function () {
+      try {
+        var t = localStorage.getItem("srbf_theme");
+        if (t === "light" || t === "dark") { document.documentElement.setAttribute("data-theme", t); }
+      } catch (e) { /* storage blocked: Auto */ }
+    })();
+  </script>
+  <title>Metrics · srbf</title>
+  <meta name="description" content="Every measure in the srbf results, defined." />
+  <link rel="icon" type="image/svg+xml" href="srbf-icon.svg" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Metrics · srbf" />
+  <meta property="og:description" content="Every measure in the srbf results, defined." />
+  <meta property="og:url" content="https://psaegert.github.io/srbf/metrics.html" />
+  <meta property="og:image" content="https://psaegert.github.io/srbf/srbf-social.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"
+    onload="renderMathInElement(document.body, {delimiters: [{left: '$$', right: '$$', display: true}, {left: '\\(', right: '\\)', display: false}]});"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="./">
+        <img class="brand-icon" src="srbf-icon.svg" alt="srbf" width="26" height="26" />
+        <span class="brand-sub">Symbolic Regression Benchmark Framework</span>
+      </a>
+      <nav class="site-nav" aria-label="Pages">
+        <a href="./">Results</a>
+        <a href="progress.html">Progress</a>
+        <a href="guide.html">How to read</a>
+        <a href="metrics.html" aria-current="page">Metrics</a>
+        <a href="ranks.html">Ranks</a>
+        <a href="paired.html">Paired</a>
+      </nav>
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Theme"></button>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap">
+    <section class="hero page-hero">
+      <h1>Metrics</h1>
+      <p class="lede">
+        This page defines every measure in the results. A problem consists of a ground-truth formula
+        \(f\), a <em>support set</em> \((X, y)\) of \(N\) given points that the method sees, and a
+        separate <em>validation set</em> \((X_{\mathrm{val}}, y_{\mathrm{val}})\) of \(N\) held-out
+        points that it never sees; here \(N = 512\). The method returns a formula \(\hat{f}\), and
+        \(\hat{y}\) and \(\hat{y}_{\mathrm{val}}\) are its values on the two sets. \(K\) is the number
+        of problem runs (each problem is run twice). Some metrics compare <em>skeletons</em>: a skeleton is a formula with every number
+        replaced by the same placeholder, written as a sequence of symbols with each operator before
+        its arguments, so \(2.1 \sin(x) + 3\) becomes <code>+ * c sin x c</code>, with c for the
+        placeholder. \(\tau\) is
+        the ground truth's skeleton, \(\hat{\tau}\) the prediction's, and \(|\cdot|\) a skeleton's number
+        of symbols. The definitions follow the
+        <a href="https://arxiv.org/abs/2602.08885" target="_blank" rel="noopener">Flash-ANSR
+        paper</a>; in the <a href="./">explorer</a>, every metric has a short definition behind its <code>?</code>.
+      </p>
+    </section>
+
+    <section id="metrics" class="prose">
+
+      <section class="topic">
+        <h3>Fit to the data</h3>
+        <div>
+        <p>
+          The fit metrics build on the <strong>fraction of variance unexplained</strong> (FVU): the
+          squared error of the formula, divided by how much the true values vary around their average,
+        </p>
+        $$
+          \operatorname{FVU}(y, \hat{y}) \;=\;
+          \frac{\sum_{i=1}^{N} (y_i - \hat{y}_i)^2}{\sum_{i=1}^{N} (y_i - \bar{y})^2},
+          \qquad \bar{y} = \tfrac{1}{N} \textstyle\sum_{i=1}^{N} y_i .
+        $$
+        <p>
+          An FVU of 0 is a perfect fit, 1 is no better than always predicting the average, and values
+          above 1 are worse than that. Because it divides by the variation of the true values, the FVU
+          does not depend on the units or the scale of the problem. A formula that returns infinite or
+          undefined values on the points has an FVU of \(\infty\).
+        </p>
+
+        <article class="metric">
+          <h4>Numeric Recovery, Validation (vNRR) <span class="dir up">higher is better</span></h4>
+          $$
+            \mathrm{vNRR} \;=\; \frac{1}{K} \sum_{k=1}^{K}
+            \mathbb{1}\!\left[ \operatorname{FVU}\!\big(y_{\mathrm{val}}^{(k)},
+            \hat{y}_{\mathrm{val}}^{(k)}\big) \le \varepsilon_{32} \right],
+            \qquad \varepsilon_{32} = 2^{-23} \approx 1.19 \times 10^{-7}
+          $$
+          <p>
+            The share of problems where the predicted formula reproduces the held-out points almost
+            exactly: its FVU is at most \(\varepsilon_{32}\), the precision of a 32-bit floating-point
+            number. Since the FVU is a squared error, this allows a typical (root-mean-square) error of
+            at most \(\sqrt{\varepsilon_{32}} \approx 0.035\,\%\) of the true values' standard
+            deviation. It is the accuracy metric of the headline charts, and it is deliberately strict:
+            a close fit that misses the threshold does not count. A problem without a usable formula
+            counts as a miss.
+          </p>
+        </article>
+
+        <article class="metric">
+          <h4>Numeric Recovery, Support (fNRR) <span class="dir up">higher is better</span></h4>
+          <p>
+            The same test on the given points,
+            \(\mathbb{1}[\operatorname{FVU}(y, \hat{y}) \le \varepsilon_{32}]\). When fNRR is higher
+            than vNRR, some formulas fit the given points but not the held-out ones: they fit the data
+            without being the ground truth.
+          </p>
+        </article>
+
+        <article class="metric">
+          <h4>log<sub>10</sub> FVU, Validation / Support <span class="dir down">lower is better</span></h4>
+          $$
+            \log_{10} \operatorname{FVU}\big(y_{\mathrm{val}}, \hat{y}_{\mathrm{val}}\big)
+            \quad\text{and}\quad
+            \log_{10} \operatorname{FVU}\big(y, \hat{y}\big)
+          $$
+          <p>
+            How close the fit is, on a log scale, including the close fits that Numeric Recovery does
+            not count. \(-2\) means 1 % of the variation is left unexplained, and \(-7\) is about the
+            Numeric Recovery threshold. It is measured only on problems where the method returned a
+            usable formula. The scale stops at \(\log_{10} \varepsilon_{64} \approx -15.65\), the
+            precision of a 64-bit float (\(\varepsilon_{64} = 2^{-52}\)): below it, the unexplained
+            variance is smaller than about one rounding unit of the variance it is divided by, so the
+            value is rounding noise, and the same formula written two ways lands anywhere from \(-16\)
+            to \(-320\), or at \(-\infty\) when the arithmetic agrees bit for bit. On the floor these
+            are one value, and an exact fit counts in the mean like any other fit. A formula that blows
+            up gives \(+\infty\): the median counts it as the worst, the mean leaves it out. The
+            Flash-ANSR paper leaves every numerically perfect fit
+            (\(\operatorname{FVU} \le \varepsilon_{32}\)) out of its log FVU summaries, so its values
+            are not directly comparable to the ones here.
+          </p>
+        </article>
+
+        <article class="metric">
+          <h4>R², Validation / Support <span class="dir up">higher is better</span></h4>
+          <p>
+            \(1 - \operatorname{FVU}\) on either set of points: 1 is a perfect fit, 0 is no better
+            than always predicting the average, and there is no lower limit. A single formula that
+            blows up could decide the average of a whole problem set, so \(R^2\) is summarized by its
+            median, whichever statistic you choose for the other metrics.
+          </p>
+        </article>
+
+        <article class="metric">
+          <h4>Successful Prediction Rate <span class="dir up">higher is better</span></h4>
+          <p>
+            The share of problems for which the method returned a usable formula at all: it was
+            produced and read, and its numbers were fitted, without an error. Where this share drops,
+            the rates count the failures as misses, and the other metrics are measured on fewer
+            problems (the tooltip of each point says on how many).
+          </p>
+        </article>
+        </div>
+      </section>
+
+      <section class="topic">
+        <h3>Comparison with the ground truth</h3>
+        <div>
+        <p>
+          These metrics compare the prediction with the ground truth. The prediction is first written
+          in the ground truth's variable names, and both are simplified into the same standard form by
+          SimpliPy, a simplification library, so the values are comparable across methods.
+        </p>
+
+        <article class="metric">
+          <h4>Symbolic Recovery (SRRs, SRRe, SRRa) <span class="dir up">higher is better</span></h4>
+          $$
+            \mathrm{SRR}_{\mathrm{s}} \;=\; \frac{1}{K} \sum_{k=1}^{K}
+            \mathbb{1}\!\left[ \mathcal{S}\big(\hat{f}^{(k)}\big) = \mathcal{S}\big(f^{(k)}\big) \right]
+          $$
+          <p>
+            Here \(\mathcal{S}(\cdot)\) is the standard form SimpliPy gives a formula, with its numbers
+            masked (replaced by a placeholder). A prediction counts when its standard form is identical
+            to the ground truth's, or when it is written exactly like the ground truth. So a sum in a
+            different order still counts, and a formula of another shape does not, however well it
+            fits. The comparison is strict: two formulas that always give the same values, but that
+            SimpliPy does not bring into the same form, count as different. A problem without a usable
+            formula counts as a miss.
+          </p>
+          <p>
+            The comparison is made at three levels of masking. <em>Structure</em> (SRRs) masks every
+            number, exponents included, so \(x^2\) and \(x^3\) have the same
+            structure. <em>Structure + Exponents</em> (SRRe) masks only the constants a method fits
+            (coefficients, added terms, constants inside functions): exponents and root indices must be
+            the ground truth's, and an exponent of 1.9999 is a miss. <em>Structure + All Numbers</em>
+            (SRRa) is an SRRe match whose formula, with its fitted numbers, also passes Numeric
+            Recovery on the held-out points. So each level is stricter than the one before, and a match at a stricter
+            level is also a match at the looser ones.
+          </p>
+        </article>
+
+        <article class="metric">
+          <h4>Raw Symbolic Recovery (SRRr) <span class="dir up">higher is better</span></h4>
+          $$
+            \mathrm{SRR}_{\mathrm{r}} \;=\; \frac{1}{K} \sum_{k=1}^{K}
+            \mathbb{1}\!\left[ \hat{\tau}^{(k)} = \tau^{(k)} \right]
+          $$
+          <p>
+            The two skeletons are equal symbol by symbol, as written, without simplifying first. This
+            is the strictest comparison of how a formula is written, and like SRRs it ignores every
+            number: a formula that is mathematically the same
+            but written differently, such as \(x \cdot x\) for \(x^2\) or a sum in another order, is a
+            miss. The Flash-ANSR paper's Symbolic Recovery Rate simplifies both sides first, like SRRs.
+          </p>
+        </article>
+
+        <article class="metric">
+          <h4>Token Overlap: F1 / Precision / Recall <span class="dir up">higher is better</span></h4>
+          $$
+            P = \frac{|\mathcal{T}(\hat{\tau}) \cap \mathcal{T}(\tau)|}{|\mathcal{T}(\hat{\tau})|},
+            \qquad
+            R = \frac{|\mathcal{T}(\hat{\tau}) \cap \mathcal{T}(\tau)|}{|\mathcal{T}(\tau)|},
+            \qquad
+            F_1 = \frac{2PR}{P + R}
+          $$
+          <p>
+            \(\mathcal{T}(\cdot)\) is the set of different symbols a skeleton uses. These metrics ask
+            whether the prediction uses the right operators, variables and constants at all.
+            Precision falls when the prediction uses symbols the ground truth does not; recall falls
+            when it leaves out symbols the ground truth needs. They ignore order and repetition, so
+            they compare the symbols used, not the structure. \(F_1\) is 0 when both \(P\) and \(R\)
+            are 0. All three lie between 0 and 1, so they have a worst value: a problem without a
+            usable formula counts as 0, unless you choose to leave such problems out.
+          </p>
+        </article>
+
+        <article class="metric">
+          <h4>Variable Overlap: F1 / Precision / Recall <span class="dir up">higher is better</span></h4>
+          <p>
+            The same three quantities over the sets of input variables that the prediction and the
+            ground truth use: precision falls when a prediction uses a variable the ground truth does
+            not, recall when it leaves out one the ground truth needs. A problem without a usable
+            formula counts as 0.
+          </p>
+        </article>
+
+        <article class="metric">
+          <h4>Levenshtein Edit Distance (Tokens), Normalized <span class="dir down">lower is better</span></h4>
+          $$
+            d_{\mathrm{edit}}(\hat{\tau}, \tau) \;=\;
+            \frac{\operatorname{Levenshtein}(\hat{\tau}, \tau)}{\max(|\hat{\tau}|, |\tau|)}
+            \;\in\; [0, 1]
+          $$
+          <p>
+            The Levenshtein distance is the smallest number of symbols that must be inserted, deleted
+            or replaced to turn one skeleton into the other. Divided by the length of the longer
+            skeleton, 0 means identical and 1 means every symbol differs. Unlike the overlaps, it
+            depends on the order and the number of the symbols.
+          </p>
+        </article>
+
+        <article class="metric">
+          <h4>Tree Edit Distance (Zhang-Shasha) <span class="dir down">lower is better</span></h4>
+          <p>
+            A formula can be drawn as a tree: each operator is a node, and its arguments are its
+            children. The tree edit distance (Zhang-Shasha algorithm) is the smallest total cost of
+            inserting, deleting and renaming nodes to turn the prediction's tree into the ground
+            truth's. Each step costs the number of characters it changes in a node's name: deleting
+            <code>sin</code> costs 3, renaming <code>sin</code> to <code>tan</code> costs 2, and
+            inserting a placeholder, whose name <code>&lt;constant&gt;</code> has 10 characters, costs 10. So the value is a cost in
+            characters, not a count of nodes, and it has no upper limit.
+          </p>
+        </article>
+        </div>
+      </section>
+
+      <section class="topic">
+        <h3>Length of the formula</h3>
+        <div>
+
+        <article class="metric">
+          <h4>MDL Ratio (Prediction / Ground Truth) <span class="dir one">1 is ideal</span></h4>
+          $$ \frac{L(\hat{f})}{L(f)} $$
+          <p>
+            The length \(L\) of the prediction in bits, divided by the ground truth's. The length in
+            bits (the description length, as in the minimum description length principle, MDL) is
+            the number of bits needed to write the formula down: SimpliPy counts bits for every
+            operator and variable, and for the digits every number needs, on the simplified formula.
+            Unlike a count of symbols, it charges a long number more than a short one. 1 means as
+            long as the ground truth. Means are taken on a \(\log_2\) scale, so a formula twice as
+            long and one half as long cancel. Flash-ANSR picks its prediction with this same length
+            measure (see its selection score below), so this metric measures a quantity Flash-ANSR
+            optimizes.
+          </p>
+        </article>
+
+        <article class="metric">
+          <h4>Token Count Ratio (Prediction / Ground Truth) <span class="dir one">1 is ideal</span></h4>
+          $$
+            \rho \;=\; \frac{|\hat{\tau}|}{|\tau|}
+          $$
+          <p>
+            The number of symbols in the prediction's skeleton divided by the number in the ground
+            truth's. 1 means the same length. Above 1, the prediction is longer than needed, often
+            because extra terms and constants let it bend toward the data; below 1, it is too short to
+            be the ground truth. Means are taken on a \(\log_2\) scale.
+          </p>
+        </article>
+
+        <article class="metric">
+          <h4>Token Count Mismatch (|log<sub>2</sub> Ratio|) <span class="dir down">lower is better</span></h4>
+          $$
+            \left| \log_2 \rho \right| \;=\; \left| \log_2 \tfrac{|\hat{\tau}|}{|\tau|} \right|
+          $$
+          <p>
+            How far the Token Count Ratio is from 1, counted in doublings: twice and half the true
+            length both give 1, and 0 means the same length. Unlike the ratio, too long and too short
+            do not cancel in an average.
+          </p>
+        </article>
+
+        <article class="metric">
+          <h4>Token Count of the Prediction / of the Ground Truth <span class="dir down">lower is more concise</span></h4>
+          <p>
+            The lengths \(|\hat{\tau}|\) and \(|\tau|\) behind the ratio, in symbols. The ground
+            truth's length is the same for every method; the prediction's shows how long a method's
+            formulas are, and how that changes with its budget.
+          </p>
+        </article>
+
+        <article class="metric">
+          <h4>Constant Count Ratio / Difference (Prediction vs Ground Truth) <span class="dir one">1 / 0 is ideal</span></h4>
+          $$
+            \frac{c(\hat{\tau})}{c(\tau)}
+            \qquad\text{and}\qquad
+            c(\hat{\tau}) - c(\tau),
+          $$
+          <p>
+            where \(c(\cdot)\) counts the constants (the fitted numbers) in a skeleton. A positive
+            difference means the prediction has more constants than the ground truth: extra free
+            numbers that let a formula of the wrong shape bend toward the data. The ratio is only
+            defined when the ground truth has at least one constant; the difference always is.
+          </p>
+        </article>
+
+        <article class="metric">
+          <h4>Function Nesting Difference (Prediction − Ground Truth) <span class="dir one">0 is ideal</span></h4>
+          <p>
+            Function nesting counts how deeply functions of one argument sit directly inside each
+            other: a chain of \(m\) such functions adds \(m - 1\), and separate chains add up. So
+            \(\sin(\log(x))\) counts 1, \(\sin(\log(\operatorname{arccosh}(x)))\) counts 2, and
+            \(\sin(x) + \log(x)\) counts 0. Deep chains such as \(\exp(\sin(\exp(x)))\) are rare in
+            natural laws and hard to interpret. The value shown is the prediction's nesting minus the
+            ground truth's, so 0 means equally nested. The Flash-ANSR paper reports the prediction's
+            own nesting instead.
+          </p>
+        </article>
+        </div>
+      </section>
+
+      <section class="topic">
+        <h3>Method internals (Flash-ANSR only)</h3>
+        <div>
+
+        <article class="metric">
+          <h4>Log-Probability of the Prediction <span class="dir up">higher is better</span></h4>
+          <p>
+            How probable the chosen formula was under the Flash-ANSR model itself, given the data:
+            \(\log p(\hat{\tau} \mid X, y)\), summed over the symbols of the skeleton. Because it adds
+            up over the symbols, longer formulas have lower values. Only the Flash-ANSR models report
+            it.
+          </p>
+        </article>
+
+        <article class="metric">
+          <h4>Selection Score and Pareto Rank <span class="dir down">lower is better</span></h4>
+          $$ S(\hat{f}) \;=\; \tfrac{N}{2} \log_2 \operatorname{FVU}(y, \hat{y}) \;+\; L(\hat{f}) $$
+          <p>
+            The score by which Flash-ANSR chooses its prediction, a two-part code in bits: the bits
+            needed to describe the remaining errors on the \(N\) given points, relative to always
+            predicting their average (negative for a good fit), plus the formula's length in bits. The Pareto rank says where the chosen formula stands among Flash-ANSR's candidates
+            when they are compared by error and length together: 0 means no other candidate is both
+            more accurate and shorter. Only the Flash-ANSR entries report these two.
+          </p>
+        </article>
+        </div>
+      </section>
+
+      <section class="topic">
+        <h3>Time</h3>
+        <div>
+
+        <article class="metric">
+          <h4>Time per Problem (s) <span class="dir down">lower is better</span></h4>
+          <p>
+            Seconds to solve one problem, from receiving the data to returning the prediction. Each
+            method's budgets are timed on the same workstation (16 CPU cores, one RTX 4090 GPU),
+            one method at a time, on a fixed sample of 262 problems. The time averages over the
+            problems where the method returned a usable formula; the failures are counted where they
+            belong, as misses in the rates. Time is an axis of the explorer, not a metric in its menu:
+            a method appears on it once it has been timed.
+          </p>
+        </article>
+        </div>
+      </section>
+    </section>
+    </div>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner">
+      <span><span class="brand-mark small">srbf</span> · Symbolic Regression Benchmark Framework</span>
+      <span>
+        Generated by <a href="https://srbf.readthedocs.io/" target="_blank" rel="noopener"><code>srbf.analysis</code></a>
+        · <a href="https://srbf.readthedocs.io/" target="_blank" rel="noopener">Docs</a>
+        · <a href="https://github.com/psaegert/srbf" target="_blank" rel="noopener">GitHub</a>
+        · <a href="https://pypi.org/project/srbf/" target="_blank" rel="noopener">PyPI</a>
+        · <a href="privacy.html">Privacy</a>
+      </span>
+    </div>
+  </footer>
+
+  <script src="theme.js" charset="utf-8"></script>
+</body>
+</html>
