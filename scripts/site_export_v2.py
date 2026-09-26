@@ -32,7 +32,7 @@ import math
 import os
 import sys
 from collections import defaultdict
-from typing import Any
+from typing import Any, Mapping
 import numpy as np
 
 # ---- registries -------------------------------------------------------------------------------------------------
@@ -305,6 +305,98 @@ def load_rows(root: str) -> dict[str, dict[tuple[str, int], Rows]]:
                     vals[k] = fnum(r.get(k))
                 data[r["model"]][(r["catalog"], int(r["rung"]))][(int(r.get("draw") or 1), int(r["row"]))] = vals
     return data
+
+
+# ---- the formulas themselves: the Predictions view ----------------------------------------------------------------
+# One file per method x problem set x budget x run x block of PRED_BLOCK problems, written only once that run of the
+# cell is complete: a finished file never changes, so the repository grows by each formula once. The ground truth has
+# its own files per problem set and block.
+PRED_BLOCK = 500
+PRED_NUMERIC, PRED_SYMBOLIC = 1, 2   # the flags stored with a prediction
+
+
+def round_prefix(expr: str) -> str:
+    """A prefix expression with every number at 4 significant digits (integers as written): what the page shows."""
+    out = []
+    for t in expr.split():
+        if t.lstrip("-").isdigit():
+            out.append(t)
+            continue
+        try:
+            v = float(t)
+        except ValueError:
+            out.append(t)
+            continue
+        out.append(f"{v:.4g}" if math.isfinite(v) else t)
+    return " ".join(out)
+
+
+Expressions = dict[tuple[str, str, int, int], dict[int, list[Any] | None]]
+
+
+def load_expressions(root: str, keys: list[str]) -> tuple[Expressions, dict[str, dict[int, str]]]:
+    """(pred, truth): pred[(method, catalog, rung, draw)][row] = [expression, flags] for the methods in `keys`, and
+    truth[catalog][row] = the ground truth's expression. Both are empty when the rows carry no expressions (a table
+    written before `srbf table` stored them)."""
+    pred: Expressions = defaultdict(dict)
+    truth: dict[str, dict[int, str]] = defaultdict(dict)
+    want = set(keys)
+    files = sorted(set(glob.glob(os.path.join(root, "rows_full_*.csv")) + glob.glob(os.path.join(root, "*_rows_full.csv"))))
+    for path in files:
+        with open(path) as fh:
+            rd = csv.reader(fh)
+            head = next(rd, [])
+            if "predicted_expression" not in head:
+                continue
+            names = ("model", "draw", "catalog", "rung", "row", "success", "numeric_recovery_val", "symbolic_recovery",
+                     "predicted_expression", "ground_truth_expression")
+            at = {k: head.index(k) for k in names}
+            for r in rd:
+                cat, row = r[at["catalog"]], int(r[at["row"]])
+                gt = r[at["ground_truth_expression"]]
+                if gt and row not in truth[cat]:
+                    truth[cat][row] = round_prefix(gt)
+                if r[at["model"]] not in want:
+                    continue
+                expr = r[at["predicted_expression"]] if r[at["success"]] in ("1", "1.0") else ""
+                numeric, symbolic = r[at["numeric_recovery_val"]] in ("1", "1.0"), r[at["symbolic_recovery"]] in ("1", "1.0")
+                flags = (PRED_NUMERIC if numeric else 0) | (PRED_SYMBOLIC if symbolic else 0)
+                key = (r[at["model"]], cat, int(r[at["rung"]]), int(r[at["draw"]] or 1))
+                pred[key][row] = [round_prefix(expr), flags] if expr else None
+    return pred, truth
+
+
+def write_predictions(out_dir: str, rel: str, pred: Expressions, truth: dict[str, dict[int, str]],
+                      sizes: dict[str, int]) -> dict[str, dict[str, list[int]]]:
+    """Write the Predictions view's files next to the release; returns the index the page reads:
+    {method: {"catalog|rung": [the runs whose files exist]}}. A run still in progress is left out."""
+    def put(path: str, key: str, obj: Any) -> None:
+        text = "window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R[%s]=R[%s]||{};R[%s][%s]=%s;})();\n" % (
+            json.dumps(rel), json.dumps(rel), json.dumps(rel), json.dumps(key), json.dumps(obj, separators=(",", ":")))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if os.path.exists(path) and open(path).read() == text:
+            return
+        with open(path, "w") as fh:
+            fh.write(text)
+
+    def blocks(rows: Mapping[int, Any]) -> dict[int, dict[str, Any]]:
+        out: dict[int, dict[str, Any]] = defaultdict(dict)
+        for i in sorted(rows):
+            out[i // PRED_BLOCK][str(i)] = rows[i]
+        return out
+
+    index: dict[str, dict[str, list[int]]] = defaultdict(dict)
+    for (m, c, r, d), got in sorted(pred.items()):
+        if c not in sizes or len(got) < sizes[c]:
+            continue
+        index[m].setdefault(f"{c}|{r}", []).append(d)
+        for b, chunk in blocks(got).items():
+            put(os.path.join(out_dir, "pred", m, c, f"{r}.{d}.{b}.js"), f"{m}|{c}|{r}|{d}|{b}", chunk)
+    for c, formulas in sorted(truth.items()):
+        if c in sizes:
+            for b, chunk in blocks(formulas).items():
+                put(os.path.join(out_dir, "pred", "truth", f"{c}.{b}.js"), f"truth|{c}|{b}", chunk)
+    return dict(index)
 
 
 def by_draw(rows: dict[Any, dict[str, Any]]) -> dict[int, dict[int, dict[str, Any]]]:
@@ -680,6 +772,10 @@ def main() -> None:
         print(f"{note}: {out_js} ({os.path.getsize(out_js) // 1024} kB), hist/ {len(hists)} files, paired {len(paired)} pairs; methods with data: {with_data}; status {payload['status']}")
 
     payload, hists, paired = build(public, rel_base(out_dir, site_dir))
+    pred, truth = load_expressions(a.root, public)
+    pred = {k: v for k, v in pred.items() if usable(k[0], k[2])}   # the budgets the release publishes, and no others
+    payload["pred"] = write_predictions(out_dir, a.release, pred, truth, sizes)
+    payload["pred_block"] = PRED_BLOCK
     ranks = leagues([(ka, kb) for i, ka in enumerate(public) for kb in public[i + 1:]], public, payload["rank_keys"])
     write_set(payload, hists, paired, ranks, a.out, out_dir, "RESULTS_V2", f"public release {a.release}")
     if private:

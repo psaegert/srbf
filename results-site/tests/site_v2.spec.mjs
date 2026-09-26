@@ -1260,7 +1260,7 @@ test('every text of the 2026-09 explorer uses the reader\'s words', async ({ pag
   test.setTimeout(120_000);
   const urls = ['v=curves&x=time', 'v=curves&x=rung', 'v=table&rows=rungs', 'v=table&rows=cats', 'v=matrix',
     'v=dist&dm=log10_fvu_val&dv=hist', 'v=dist&dm=log10_fvu_val&dv=ecdf', 'v=dist&dm=log10_fvu_val&dv=cats',
-    'v=dist&dm=log10_fvu_val&dv=rungs', 'v=dist&dm=numeric_recovery_val&dv=cats', 'v=ranks&x=rung&r=16', 'v=ranks&x=time', 'v=paired'];
+    'v=dist&dm=log10_fvu_val&dv=rungs', 'v=dist&dm=numeric_recovery_val&dv=cats', 'v=ranks&x=rung&r=16', 'v=ranks&x=time', 'v=paired', 'v=preds'];
   const found = [];
   for (const u of urls) {
     await page.goto('/?release=2026-09&' + u);
@@ -1281,4 +1281,47 @@ test('every text of the 2026-09 explorer uses the reader\'s words', async ({ pag
     }
   }
   expect([...new Set(found)]).toEqual([]);
+});
+
+// ---- Predictions: the formulas themselves ---------------------------------------------------------------------------
+test('the predictions view shows one problem: its true formula, and one row per method with its formula', async ({ page }) => {
+  const errors = collectErrors(page);
+  const wrap = (key, obj) => `window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"][${JSON.stringify(key)}]=${JSON.stringify(obj)};})();`;
+  const truth = {}, preds = {};
+  for (let i = 0; i < 100; i++) { truth[String(i)] = '* x1 x2'; preds[String(i)] = ['+ x1 1.5', 0]; }
+  preds['0'] = ['* x1 x2', 3];           // recovered, numerically and in structure
+  preds['1'] = null;                     // no usable formula
+  preds['2'] = ['sqrt x1 x2', 0];        // a token outside the vocabulary: shown as written, never an error
+  await page.route('**/data/2026-09/results.js', async (route) => {
+    const res = await route.fetch();
+    await route.fulfill({ response: res, body: (await res.text()) + ';(function(){var D=window.RESULTS_V2;D.pred={"T8-20M":{"feynman|16":[1]}};D.pred_block=500;})();' });
+  });
+  await page.route('**/pred/truth/feynman.0.js', (route) => route.fulfill({ contentType: 'text/javascript', body: wrap('truth|feynman|0', truth) }));
+  await page.route('**/pred/T8-20M/feynman/16.1.0.js', (route) => route.fulfill({ contentType: 'text/javascript', body: wrap('T8-20M|feynman|16|1|0', preds) }));
+  await page.goto('/?release=2026-09&v=preds&ps=feynman&r=16&pr=1&pn=1&m=T8-20M,prior');
+  const rows = page.locator(V2 + ' .v2predtable tbody tr');
+  await expect(rows).toHaveCount(2, { timeout: 15000 });                                   // one row per shown method
+  await expect(page.locator(V2 + ' .v2predtruth .katex')).toHaveCount(1);                  // the true formula, typeset
+  await expect(rows.nth(0).locator('td.v2predf .katex')).toHaveCount(1);                   // the method's formula, typeset
+  await expect(rows.nth(0).locator('.v2predmark')).toHaveText(['numeric', 'structure']);
+  await expect(rows.nth(1)).toContainText(/not finished yet|not run at budget 16/);         // a method without this run says so
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="next problem"]').click();
+  await expect(rows.nth(0).locator('td.v2predf')).toHaveText('no usable formula');
+  expect(page.url()).toContain('pn=2');
+  await page.locator(V2 + ' .v2predprob').fill('3');
+  await page.locator(V2 + ' .v2predprob').press('Enter');
+  await expect(rows.nth(0).locator('td.v2predf code')).toHaveText('sqrt x1 x2');
+  await expect(page.locator(V2 + ' .v2predof')).toHaveText('of 100');
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+  expect(errors).toEqual([]);
+});
+
+test('without published formulas the predictions view says so', async ({ page }) => {
+  await page.route('**/data/2026-09/results.js', async (route) => {
+    const res = await route.fetch();
+    await route.fulfill({ response: res, body: (await res.text()) + ';(function(){var D=window.RESULTS_V2;D.pred={};})();' });
+  });
+  await page.goto('/?release=2026-09&v=preds');
+  await expect(page.locator(V2 + ' .v2view')).toContainText('The formulas are not published in this release yet.');
 });

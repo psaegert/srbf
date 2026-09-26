@@ -126,7 +126,7 @@
   var DEFAULTS = function () {
     return { view: "curves", cats: CATS.slice(), methods: D.methods.filter(withData).map(function (m) { return m.key; }),
       plots: D.metrics.filter(function (m) { return m.tier === "main"; }).map(function (m) { return { x: defaultAxis(), y: m.key }; }),
-      focus: "numeric_recovery_val", stat: "mean", band: true, cross: false, xaxis: anyTime() ? "time" : "rung", rung: 64, base: null, tier: "main", q: "", rows: "rungs",
+      focus: "numeric_recovery_val", stat: "mean", band: true, cross: false, xaxis: anyTime() ? "time" : "rung", rung: 64, base: null, tier: "main", q: "", rows: "rungs", pset: null, prun: 1, pprob: 0,
       // the Distribution view reads a continuous metric by default (a rate has no distribution over problems), the Ranks
       // view the primary ranking metric; each display remembers its own
       dmetric: "log10_fvu_val", dmode: "hist", dnorm: "ok", rmetric: (D.rank_keys || ["log10_fvu_val"])[0], tbudget: null,
@@ -163,7 +163,12 @@
     if (q.has("ok")) { state.valid = parseInt(q.get("ok"), 10); any = true; }
     if (q.has("imp")) { state.impute = q.get("imp") !== "0"; any = true; }
     if (q.has("tier")) { state.tier = q.get("tier") === "all" ? "all" : "main"; }
-    if (["curves", "table", "matrix", "dist", "ranks", "paired"].indexOf(state.view) < 0) { state.view = "curves"; }
+    if (q.has("ps") && CAT[q.get("ps")]) { state.pset = q.get("ps"); any = true; }
+    if (q.has("pr")) { state.prun = q.get("pr") === "2" ? 2 : 1; any = true; }
+    if (q.has("pn")) { state.pprob = Math.max(0, (parseInt(q.get("pn"), 10) || 1) - 1); any = true; }
+    if (["curves", "table", "matrix", "dist", "ranks", "paired", "preds"].indexOf(state.view) < 0) { state.view = "curves"; }
+    if (state.prun !== 2) { state.prun = 1; }
+    state.pprob = Math.max(0, state.pprob | 0);
     if (["hist", "ecdf", "cats", "rungs"].indexOf(state.dmode) < 0) { state.dmode = "hist"; }
     if (!METRIC[state.dmetric]) { state.dmetric = "log10_fvu_val"; }
     if (!METRIC[state.rmetric]) { state.rmetric = (D.rank_keys || ["log10_fvu_val"])[0]; }
@@ -199,7 +204,8 @@
     q.set("release", REL); q.set("v", state.view); q.set("c", catsParam()); q.set("m", sharedMethods().join(",")); q.set("p", state.plots.map(plotKey).join(","));
     q.set("f", state.focus); q.set("s", state.stat); q.delete("pool"); q.delete("thin"); q.set("band", state.band ? "1" : "0"); q.set("cross", state.cross ? "1" : "0");
     q.set("x", state.xaxis); q.set("r", String(state.rung)); if (state.base) { q.set("b", state.base); } q.set("rows", state.rows); q.set("ok", String(state.valid)); q.set("imp", state.impute ? "1" : "0");
-    ["dm", "dv", "dn", "rm", "t"].forEach(function (k) { q.delete(k); });   // a link carries only what its display reads
+    ["dm", "dv", "dn", "rm", "t", "ps", "pr", "pn", "pp"].forEach(function (k) { q.delete(k); });   // a link carries only what its display reads
+    if (state.view === "preds") { if (state.pset) { q.set("ps", state.pset); } q.set("pr", String(state.prun)); q.set("pn", String(state.pprob + 1)); }
     if (state.view === "dist") { q.set("dm", state.dmetric); q.set("dv", state.dmode); q.set("dn", state.dnorm); }
     if (state.view === "ranks") { q.set("rm", state.rmetric); if (state.tbudget) { q.set("t", state.tbudget); } }
     try { window.history.replaceState(null, "", "?" + q.toString() + window.location.hash); } catch (e) { /* file:// */ }
@@ -1013,6 +1019,99 @@
     return ctl + '<div class="v2charts">' + charts.join("") + "</div>" + table;
   }
 
+  // ---- Predictions: the formulas themselves ------------------------------------------------------------------------
+  // The formula each method returned for each problem, as the judge read it (the ground truth's variable names, the
+  // engine's spelling), next to the ground truth, typeset with the page's KaTeX. The release ships one file per method
+  // x problem set x budget x finished run x block of problems (D.pred indexes them), loaded as a page needs them.
+  var PRED_ARITY = { "+": 2, "-": 2, "*": 2, "/": 2, pow: 2, rootn: 2, abs: 1, acos: 1, acosh: 1, asin: 1, asinh: 1, atan: 1, atanh: 1,
+    cos: 1, cosh: 1, exp: 1, inv: 1, log: 1, neg: 1, sin: 1, sinh: 1, tan: 1, tanh: 1 };
+  var PRED_FN = { sin: "\\sin", cos: "\\cos", tan: "\\tan", sinh: "\\sinh", cosh: "\\cosh", tanh: "\\tanh", asin: "\\arcsin", acos: "\\arccos",
+    atan: "\\arctan", asinh: "\\operatorname{arsinh}", acosh: "\\operatorname{arcosh}", atanh: "\\operatorname{artanh}", log: "\\log" };
+  function prefixTree(tokens) {   // a prefix expression as a tree; a token outside the vocabulary is a leaf
+    var i = 0;
+    function node() { var t = tokens[i++]; if (t === undefined) { throw new Error("incomplete"); } var kids = []; for (var k = 0; k < (PRED_ARITY[t] || 0); k++) { kids.push(node()); } return { t: t, k: kids }; }
+    var top = node(); return i === tokens.length ? top : null;
+  }
+  // p is how tightly a piece binds: 1 a sum or a leading minus, 2 a product, 5 a function call, 9 an atom
+  function leafTex(t) {
+    if (t === "np.pi" || t === "pi") { return { s: "\\pi", p: 9 }; }
+    if (t === "np.e" || t === "E") { return { s: "e", p: 9 }; }
+    if (t === "<constant>") { return { s: "c", p: 9 }; }
+    var v = /^x_?(\d+)$/.exec(t); if (v) { return { s: "x_{" + v[1] + "}", p: 9 }; }
+    if (/^-?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(t)) {
+      var neg = t.charAt(0) === "-", body = neg ? t.slice(1) : t, e = /^(.*)e([-+]?\d+)$/i.exec(body);
+      return { s: (neg ? "-" : "") + (e ? e[1] + " \\cdot 10^{" + parseInt(e[2], 10) + "}" : body), p: neg ? 1 : e ? 2 : 9, num: true };
+    }
+    return { s: "\\mathrm{" + t.replace(/[^A-Za-z0-9.]/g, "") + "}", p: 9 };
+  }
+  function texOf(n) {
+    var a = n.k[0] && texOf(n.k[0]), b = n.k[1] && texOf(n.k[1]);
+    var par = function (x, min) { return x.p < min ? { s: "\\left(" + x.s + "\\right)", p: 9, num: x.num } : x; };
+    switch (n.t) {
+      case "+": return { s: a.s + (b.s.charAt(0) === "-" ? " - " + b.s.slice(1) : " + " + b.s), p: 1 };
+      case "-": return { s: a.s + " - " + par(b, 2).s, p: 1 };
+      case "*": { var l = a.num ? a : par(a, 2), r = par(b, 2), s2 = l.s + (l.num && !r.num ? " \\, " : " \\cdot ") + r.s; return { s: s2, p: s2.charAt(0) === "-" ? 1 : 2 }; }
+      case "/": return { s: "\\frac{" + a.s + "}{" + b.s + "}", p: 9 };
+      case "pow": return { s: par(a, 9).s + "^{" + b.s + "}", p: 9 };
+      case "rootn": return { s: (b.s === "2" ? "\\sqrt{" : "\\sqrt[" + b.s + "]{") + a.s + "}", p: 9 };
+      case "neg": return { s: "-" + par(a, 2).s, p: 1 };
+      case "inv": return { s: "\\frac{1}{" + a.s + "}", p: 9 };
+      case "abs": return { s: "\\left|" + a.s + "\\right|", p: 9 };
+      case "exp": return { s: "e^{" + a.s + "}", p: 9 };
+      default: return PRED_FN[n.t] && a ? { s: PRED_FN[n.t] + "\\left(" + a.s + "\\right)", p: 5 } : leafTex(n.t);
+    }
+  }
+  function typeset(expr) {   // KaTeX when the page has it and the expression parses; the prefix as written otherwise
+    var t = null;
+    try { var tree = prefixTree(String(expr).split(" ")); t = tree ? texOf(tree).s : null; } catch (e) { t = null; }
+    if (t !== null && window.katex) { try { return window.katex.renderToString("\\displaystyle " + t, { throwOnError: false }); } catch (e) { /* as written */ } }
+    return "<code>" + esc(expr) + "</code>";
+  }
+  function predMarks(f) {
+    return (f & 1 ? '<span class="v2tag v2predmark" title="Numeric Recovery: reproduces the held-out points almost exactly">numeric</span>' : "") +
+      (f & 2 ? '<span class="v2tag v2predmark" title="Symbolic Recovery: Structure: the same form as the true formula once numbers are ignored">structure</span>' : "");
+  }
+  function renderPreds(shown) {   // one problem at a time: the true formula, then one row per method
+    var P = D.pred || {}, B = D.pred_block || 500;
+    if (!Object.keys(P).length) { return '<p class="v2hint">The formulas are not published in this release yet.</p>'; }
+    var sets = state.cats.slice().sort();
+    if (!sets.length) { return '<p class="v2hint">Select a problem set in the side panel.</p>'; }
+    if (sets.indexOf(state.pset) < 0) { state.pset = sets.indexOf("feynman") >= 0 ? "feynman" : sets[0]; }
+    var c = state.pset, run = state.prun, n = CAT[c].laws;
+    var budgets = D.rungs.filter(function (r) { return shown.some(function (m) { return (P[m.key] || {})[c + "|" + r]; }); });
+    if (budgets.length && budgets.indexOf(state.rung) < 0) { state.rung = budgets[budgets.length - 1]; }
+    var r = state.rung;
+    state.pprob = Math.min(n - 1, Math.max(0, state.pprob));
+    var i = state.pprob, blk = Math.floor(i / B);
+    var have = shown.filter(function (m) { return ((P[m.key] || {})[c + "|" + r] || []).indexOf(run) >= 0; });
+    var files = ["pred/truth/" + c + "." + blk + ".js"].concat(have.map(function (m) { return "pred/" + m.key + "/" + c + "/" + r + "." + run + "." + blk + ".js"; }));
+    var pending = files.filter(function (f) { return !ready(f); });
+    pending.forEach(function (f) { ensure(f, render); });
+    var R = (window.RESULTS_V2_PRED || {})[REL] || {};
+    var get = function (key) { var got = R[key + "|" + blk]; return got ? got[String(i)] : undefined; };
+    var wait = pending.length ? "\u2026" : "";
+    var probBtn = function (to, glyph, word) { return '<button type="button" class="v2stepbtn" ' + (to === null ? "disabled" : 'data-set="pprob:' + to + '"') + ' aria-label="' + word + ' problem">' + glyph + "</button>"; };
+    var bar = '<div class="v2viewbar"><span class="v2segwrap"><span class="v2lab">problem set</span><select class="v2stepsel" data-state="pset" aria-label="problem set">' +
+      sets.map(function (x) { return '<option value="' + esc(x) + '"' + (x === c ? " selected" : "") + ">" + esc(x) + "</option>"; }).join("") + "</select></span>" +
+      '<span class="v2segwrap"><span class="v2lab">problem</span><span class="v2step">' + probBtn(i > 0 ? i - 1 : null, "◀", "previous") +
+      '<input type="number" class="v2predprob" data-state="pnum" min="1" max="' + n + '" value="' + (i + 1) + '" aria-label="problem number">' +
+      '<span class="v2hint v2predof">of ' + n + "</span>" + probBtn(i < n - 1 ? i + 1 : null, "▶", "next") + "</span></span>" +
+      stepper("rung", r, budgets, function (x) { return String(x); }, "budget " + help(TERMS.rungs, "What is a budget?"), "budget per problem") +
+      seg("prun", String(run), [["1", "run 1"], ["2", "run 2"]], "run " + help(TERMS.draw1, "What is a run?"), "which run") + "</div>";
+    var gt = get("truth|" + c);
+    var rows = shown.map(function (m) {
+      var why = have.indexOf(m) >= 0 ? "" : notRun(m, r) ? "not run at budget " + r : "run " + run + " not finished yet";
+      var v = why ? undefined : get(m.key + "|" + c + "|" + r + "|" + run);
+      var formula = why ? '<span class="v2predna">' + why + "</span>" : v === undefined ? wait : v === null ? '<span class="v2predna">no usable formula</span>' : typeset(v[0]);
+      return '<tr><th><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + '</th><td class="v2predmarks">' + (v ? predMarks(v[1]) : "") + '</td><td class="v2predf">' + formula + "</td></tr>";
+    }).join("");
+    return bar + '<p class="v2hint">The formula each method returned for one problem of ' + esc(c) + ", at budget " + r + ", run " + run +
+      ". Step through the problems with \u25c0 \u25b6 or type a number. Numbers are rounded to 4 significant digits, and variables are named by their input column (x\u2081 is the first). " +
+      "The column \u201crecovered\u201d says whether the formula passes Numeric Recovery (numeric) and Symbolic Recovery: Structure (structure). The problem sets to choose from are the ones selected in the side panel.</p>" +
+      '<div class="v2predtruth"><span class="v2lab">true formula</span><span class="v2predtruthf">' + (gt === undefined ? wait : typeset(gt)) + "</span></div>" +
+      '<div class="v2table-wrap"><table class="v2table v2predtable"><thead><tr><th>method</th><th>recovered</th><th>its formula</th></tr></thead><tbody>' + rows + "</tbody></table></div>";
+  }
+
   // ---- Ranks -----------------------------------------------------------------------------------------------------
   // Within every problem the methods are placed 1st, 2nd, ... on one continuous metric; a method without a usable answer
   // is placed last, ties share a place. The release ships PAIRWISE outcomes per catalog (ranks.js), and a mean rank
@@ -1154,7 +1253,7 @@
   }
 
   // ---- shell -----------------------------------------------------------------------------------------------------
-  var VIEWS = [["curves", "Curves"], ["table", "Tables"], ["matrix", "Problem sets"], ["dist", "Distribution"], ["ranks", "Ranks"], ["paired", "Paired differences"]];
+  var VIEWS = [["curves", "Curves"], ["table", "Tables"], ["matrix", "Problem sets"], ["dist", "Distribution"], ["ranks", "Ranks"], ["paired", "Paired differences"], ["preds", "Predictions"]];
   // the metric a single-metric display shows: each of them keeps its own
   function focusKey() { return state.view === "dist" ? "dmetric" : state.view === "ranks" ? "rmetric" : "focus"; }
   // Each display carries its own controls. A control that cannot change what is on screen is not shown, and a
@@ -1166,9 +1265,10 @@
     matrix: { stat: 1, valid: 1 },
     dist: {},
     ranks: {},
-    paired: { plots: 1, base: 1, ci: 1, xaxis: 1 }
+    paired: { plots: 1, base: 1, ci: 1, xaxis: 1 },
+    preds: {}
   };
-  function shownMetricKeys(view) { return view === "matrix" ? [state.focus] : view === "dist" ? [state.dmetric] : view === "ranks" ? [] : plotAxes(); }
+  function shownMetricKeys(view) { return view === "matrix" ? [state.focus] : view === "dist" ? [state.dmetric] : view === "ranks" || view === "preds" ? [] : plotAxes(); }
   function usesFor(view) {
     var u = {}, src = USES[view] || {};
     Object.keys(src).forEach(function (k) { u[k] = src[k]; });
@@ -1270,20 +1370,24 @@
         (state.view === "matrix" ? [METRIC[state.focus]] : D.metrics.filter(function (m) { return plotAxes().indexOf(m.key) >= 0; })).forEach(function (m) { if (needsHist(m)) { ensureHists(m); } });
       }
       renderHeadline();
-      view.innerHTML = state.view === "table" ? renderTable(shown) : state.view === "matrix" ? renderMatrix(shown) : state.view === "dist" ? renderDist(shown) : state.view === "ranks" ? renderRanks(shown) : state.view === "paired" ? renderPaired(shown) : renderCurves(shown);
+      view.innerHTML = state.view === "table" ? renderTable(shown) : state.view === "matrix" ? renderMatrix(shown) : state.view === "dist" ? renderDist(shown) : state.view === "ranks" ? renderRanks(shown) : state.view === "paired" ? renderPaired(shown) : state.view === "preds" ? renderPreds(shown) : renderCurves(shown);
       // A redraw replaces the button an open menu hangs on (a histogram that arrives, a container that settles).
       // The menu moves to the button's successor; it closes only when the control itself is gone.
       if (pickerFor && !document.body.contains(pickerFor)) { var again = samePick(pickerFor); if (again) { pickerFor = again; again.setAttribute("aria-expanded", "true"); placePicker(again); } else { closePicker(); } }
       root.querySelector(".v2err").textContent = ""; save();
-    } catch (e) { root.querySelector(".v2err").textContent = "The explorer hit an error while drawing: " + (e && e.message ? e.message : e) + ". Reload the page, or press “all” under Catalogs to reset the selection."; if (window.console) { console.error(e); } }
+    } catch (e) { root.querySelector(".v2err").textContent = "The explorer hit an error while drawing: " + (e && e.message ? e.message : e) + ". Reload the page, or press “all” under Problem sets to reset the selection."; if (window.console) { console.error(e); } }
   }
 
   // ---- events ----------------------------------------------------------------------------------------------------
-  var SETTABLE = { rung: 1, dmode: 1, dnorm: 1, dmetric: 1, xaxis: 1, tbudget: 1 };
+  var SETTABLE = { rung: 1, dmode: 1, dnorm: 1, dmetric: 1, xaxis: 1, tbudget: 1, pset: 1, prun: 1, pprob: 1, pnum: 1 };
   function setState(key, val) {
     if (!SETTABLE[key]) { return; }
     if (key === "rung") { var r = parseInt(val, 10); if (D.rungs.indexOf(r) >= 0) { state.rung = r; } return; }
     if (key === "dmetric" && !METRIC[val]) { return; }
+    if (key === "pset") { if (CAT[val]) { state.pset = val; state.pprob = 0; } return; }
+    if (key === "prun") { state.prun = val === "2" ? 2 : 1; return; }
+    if (key === "pprob") { state.pprob = Math.max(0, parseInt(val, 10) || 0); return; }
+    if (key === "pnum") { state.pprob = Math.max(0, (parseInt(val, 10) || 1) - 1); return; }
     state[key] = val;
   }
   shell();

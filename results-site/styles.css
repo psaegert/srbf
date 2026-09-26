@@ -435,3 +435,17 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 .explorer-v2 .v2table th[colspan] { text-align: left; padding-left: 14px; }
 .explorer-v2 .v2table td:first-child, .explorer-v2 .v2table th:first-child { position: sticky; left: 0; z-index: 1; background: var(--surface); padding-left: 14px; box-shadow: 1px 0 0 var(--line); }
 .explorer-v2 .v2table td:last-child, .explorer-v2 .v2table th:last-child { padding-right: 14px; }
+
+/* Predictions: one problem at a time, the true formula above one row per method; a long formula scrolls in its cell */
+.explorer-v2 .v2predtruth { display: flex; align-items: baseline; gap: 12px; margin: 12px 0 14px; flex-wrap: wrap; }
+.explorer-v2 .v2predtruthf { font-size: 1.15em; overflow-x: auto; max-width: 100%; }
+.explorer-v2 .v2predtable td, .explorer-v2 .v2predtable thead th { text-align: left; vertical-align: middle; }
+.explorer-v2 .v2predtable td { padding-top: 10px; padding-bottom: 10px; }
+.explorer-v2 .v2predtable td.v2predf { max-width: 60em; overflow-x: auto; }
+.explorer-v2 .v2predtable .katex { font-size: 1em; white-space: nowrap; }
+.explorer-v2 .v2predtable code { font-size: 12px; white-space: normal; word-break: break-all; }
+.explorer-v2 .v2predna { color: var(--ink-faint); font-size: 12px; }
+.explorer-v2 .v2predmark { margin-right: 4px; font-size: 10.5px; }
+.explorer-v2 .v2predtable td.v2predmarks { white-space: nowrap; width: 1%; }
+.explorer-v2 .v2predprob { width: 5.5em; margin: 0 4px; }
+.explorer-v2 .v2predof { padding-right: 6px; white-space: nowrap; }

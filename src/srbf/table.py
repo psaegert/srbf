@@ -53,8 +53,11 @@ ANALYSIS_COLUMNS = ["log10_fvu_val", "log10_fvu_fit", "r2_val", "r2_fit", "mdl_r
                     "recall_unique_variables", "predicted_log_prob", "predicted_score", "predicted_pareto_rank",
                     "fit_time", "generation_time"]
 GROUND_TRUTH_COLUMNS = ["skeleton_length", "ground_truth_mdl", "n_constants", "total_nestedness", "n_variables", "n_support"]
+#: The expressions themselves, as the judge read them: prefix tokens joined by spaces, numbers at full precision. The
+#: prediction is in the ground truth's variable names and the engine's spelling; empty when the method gave none.
+EXPRESSION_COLUMNS = ["predicted_expression", "ground_truth_expression"]
 #: The table's columns, in order.
-COLUMNS = ID_COLUMNS + RATE_COLUMNS + ANALYSIS_COLUMNS + GROUND_TRUTH_COLUMNS
+COLUMNS = ID_COLUMNS + RATE_COLUMNS + ANALYSIS_COLUMNS + GROUND_TRUTH_COLUMNS + EXPRESSION_COLUMNS
 #: Bumped whenever a row's content changes without a change to srbf's source (it is part of the cache key).
 TABLE_VERSION = 1
 
@@ -237,6 +240,9 @@ def judge_result_file(path: str, *, method: str, draw: int = 1, engine: Any, fir
         r["total_nestedness"] = _number(got("total_nestedness", i))
         r["n_variables"] = _number(got("n_variables", i))
         r["n_support"] = _number(raw("n_support", i))
+        pe, ge = raw("predicted_expression_prefix", i), raw("ground_truth_prefix", i)
+        r["predicted_expression"] = " ".join(map(str, pe)) if (ok and pe is not None) else ""
+        r["ground_truth_expression"] = " ".join(map(str, ge)) if ge is not None else ""
         r["fit_time"] = _mean_time(raw("fit_time", i))
         r["generation_time"] = _mean_time(raw("generation_time", i))
         for k in ANALYSIS_COLUMNS:
