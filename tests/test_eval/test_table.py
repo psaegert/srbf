@@ -111,14 +111,15 @@ def test_the_cache_serves_a_file_until_it_changes(tmp_path):
     assert sum(int(r[COLUMNS.index("symbolic_recovery")]) for r in _read(out)[1:]) == 1
 
 
-def test_a_ladder_counting_evaluations_or_samples_is_read_like_any_other(tmp_path):
+def test_a_ladder_counting_evaluations_samples_or_generations_is_read_like_any_other(tmp_path):
     _write(tmp_path, "toy", "evals_004096.pkl", _snapshot([["+", "x1", "x2"]]))
     _write(tmp_path, "toy", "samples_000512.pkl", _snapshot([["*", "x1", "x2"]]))
     _write(tmp_path, "toy", "restarts_000008.pkl", _snapshot([["-", "x1", "x2"]]))  # the oracle's restarts
+    _write(tmp_path, "toy", "generations_000064.pkl", _snapshot([["-", "x1", "x2"]]))
     _write(tmp_path, "toy", "notes_000001.pkl", _snapshot([["+", "x1", "x2"]]))     # not a rung file
     out = str(tmp_path / "t.csv")
     report = build_table([ResultTree("m", 1, str(tmp_path / "tree"))], out, engine=ENGINE, workers=1, log=None)
-    assert report.files == 3 and sorted(_col(_read(out)[1:], "rung")) == ["4096", "512", "8"]
+    assert report.files == 4 and sorted(_col(_read(out)[1:], "rung")) == ["4096", "512", "64", "8"]
 
 
 def test_an_unreadable_file_is_reported_and_left_out(tmp_path):

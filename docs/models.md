@@ -9,6 +9,7 @@ block. To enter a method of your own, see [Adding your method](adapters.md).
 | `pysr` | [PySR](#pysr) | `pip install pysr`, in an environment of its own if you like |
 | `subprocess`, `worker: operon` | [Operon](#operon) | `pip install pyoperon==0.6.1 scikit-learn`, in an environment of its own |
 | `subprocess`, `worker: rilsrols` | [RILS-ROLS](#rils-rols) | `scripts/envs/build_rilsrols_env.sh`, an environment of its own |
+| `subprocess`, `worker: tisr` | [TiSR](#tisr) | `scripts/envs/build_tisr_env.sh envs/tisr`: Julia and TiSR in an environment of their own |
 | `nesymres` | [NeSymReS](#nesymres) | clone, patch, download weights |
 | `e2e` | [E2E](#e2e) | clone, patch, download weights |
 | `subprocess`, `worker: dso` | [DSR and uDSR\*](#dso) | `scripts/envs/build_dso_env.sh`: a conda environment with Python 3.7 |
@@ -256,6 +257,90 @@ same data and seed, the changed and the unchanged build take the same steps and 
 `configs/evaluation/scaling/rilsrols_fastsrb.yaml` sweeps the fitness evaluations in doublings from 2^6, the first
 power of two above the method's first step (scoring the perturbations of its starting model), up to 2^21, about
 100 s per problem on the reference machine.
+
+## TiSR
+
+```bash
+scripts/envs/build_tisr_env.sh envs/tisr     # needs uv, curl and git; downloads Julia and compiles TiSR
+```
+
+TiSR (thermodynamics-informed symbolic regression; Martinek, Frotscher, Richter and Herzog) is genetic programming
+in Julia: NSGA-II on islands, the constants of new expressions fitted by Levenberg–Marquardt, and a hall of fame,
+the Pareto front of fit error against complexity. It runs through the [worker protocol](adapters.md) as
+`worker: tisr` and calls Julia through juliacall. TiSR is licensed under the Apache License 2.0.
+
+The build script creates the environment: Python 3.12 with juliacall, Julia 1.12.7, and TiSR at commit `9e628e6` of
+its main branch (January 2026), with every Julia package at the version of the lock file
+(`scripts/envs/tisr/Manifest.toml`), resolved from TiSR's own compatibility bounds, all in a Julia depot of the
+environment's own. The worker points juliacall at this Julia and depot and starts it with one thread.
+
+The configuration is TiSR's own defaults at that commit:
+- 20 islands of 50 expressions, each breeding about 50 new expressions per generation;
+- expressions of at most 30 nodes;
+- residuals weighted by 1/|y|, so that the search fits the relative error;
+- constants fitted on half of the islands, by up to 10 Levenberg–Marquardt iterations (Nelder–Mead for one fit in
+  ten);
+- an expression seen recently is rejected with probability 0.9;
+- the hall of fame on the weighted squared error and a weighted node count;
+- one thread.
+
+srbf sets the operators, the budget (a number of generations) and the seed.
+
+**Every run spends its whole budget.** TiSR ends a search at the first of four conditions: the number of
+generations, a wall-clock limit (300 s by default), a user callback, or `q` typed on its input. The worker keeps only
+the number of generations: it raises the wall-clock limit to a guard far above every budget of the ladder, leaves the
+callback at TiSR's default, which never stops, and gives the search no input. A constant fit inside a generation ends
+at TiSR's own iteration limits and convergence test, which end that fit, not the search.
+
+```yaml
+model_adapter:
+  type: subprocess
+  worker: tisr
+  python: "{{ROOT}}/envs/tisr/bin/python"
+  config_provenance: upstream_default
+  simplipy_engine: acj-5-4-llm
+  timeout: 7200
+  options:
+    generations: 64
+```
+
+| key | default | meaning |
+|---|---|---|
+| `options.generations` | `512` | TiSR's number of generations: the budget |
+| `options.seed` | `0` | mixed with a hash of the problem's data into the run's seed |
+| `options.time_guard` | `3600` | TiSR's wall-clock limit in seconds, a guard; the `hit_time_guard` column marks a run it stopped |
+| `options.warmup` | `true` | run a throwaway fit when the worker starts, so that compiling TiSR is not part of the first problem's time |
+| `options.config`, `options.config_by_problem` | none | TiSR settings that replace its defaults, for every problem or per problem; for side experiments only, which are then `harness_tuned`; they cannot set a stop |
+| `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
+
+**Operators.** TiSR takes any Julia function as an operator, so it searches over all the operators the expressions
+are written in: `+ - * / ^ rootn` and `neg abs inv sin cos tan asin acos atan sinh cosh tanh asinh acosh atanh exp
+log`. Its evaluator refuses a logarithm of a number that is not positive, a division by zero and a power of a
+negative base before computing them, and drops the expression; any other function that fails stops the whole search.
+The worker therefore gives TiSR `asin acos acosh atanh` as functions that return NaN outside their domain, as srbf
+evaluates them, so that TiSR drops such an expression as well. `rootn` needs an integer index, which a fitted
+constant rarely is; TiSR writes roots as powers.
+
+**No single answer yet.** A TiSR search returns its hall of fame, and TiSR defines no rule that picks one expression
+from it: its README and example sort the hall of fame for the user to inspect, and its export functions order their
+tables by the fit error. How to pick one member is not settled for TiSR in srbf, so the worker returns no expression:
+every problem is recorded as failed with that reason, and carries the whole hall of fame in the `hall_of_fame`
+column, each member written in the benchmark's syntax with every constant at full precision, with TiSR's measures of
+it and with its `string_deviation`, how far the string's values are from TiSR's own. TiSR's results carry no recovery
+rates until a rule is set.
+
+**What to know when reading the results:**
+- The weights 1/|y| make the search fit relative errors. TiSR replaces the infinite weight of a zero target by
+  1e100, and such a point dominates the fit.
+- TiSR's runs are not reproducible from the seed: two fits of the same data with the same seed can return different
+  halls of fame. TiSR picks parents by their rank and crowding, and an expression that has not been through a
+  selection yet, as all of an island's first expressions, carries values that TiSR never set. srbf runs TiSR as it
+  is.
+
+`configs/evaluation/scaling/tisr_fastsrb.yaml` sweeps the generations in doublings from 1 to 512, about 100 s per
+problem on the reference machine. `configs/evaluation/panels/tisr_fastsrb2025_fastsrb.yaml` runs the protocol of the
+FastSRB paper, whose complexity cap per problem is taken from the ground truth, as a check against that paper's
+numbers.
 
 ## NeSymReS
 

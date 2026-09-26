@@ -99,6 +99,10 @@ The configs in the repository are labeled as follows, and a test keeps them that
   benchmark baseline (his SRBench submission), without the hyperparameter grid that the benchmark's
   maintainers searched around it. It differs from the library's defaults in the sample size, which it
   lets the method choose; on up to 10,000 points the method takes them all, as the default does.
+- **TiSR:** `upstream_default`: its own defaults at the pinned commit of its main branch. The protocol of its
+  author's benchmark paper, with its operators and forbidden nestings and a complexity cap per problem taken from the
+  ground truth, runs as a `harness_tuned` config under `configs/evaluation/panels/`, a check against the paper's
+  numbers.
 - **Flash-ANSR, every size:** `author_blessed`. For these entries the method's authors and the
   benchmark's maintainers are the same people, which is exactly what the label discloses. Any
   method's authors get the same slot on the same terms.
