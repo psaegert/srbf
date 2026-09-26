@@ -11,12 +11,12 @@ function collectErrors(page) {
   return errors;
 }
 
-// the header names the pages; Docs, GitHub and PyPI have one place, the footer of every page
-const NAV = [['./', 'Results'], ['progress.html', 'Progress'], ['guide.html', 'How to read'], ['metrics.html', 'Metrics'],
-  ['ranks.html', 'Ranks'], ['paired.html', 'Paired']];
+// the header names the pages; Docs, GitHub and PyPI have one place, the footer of every page. The Ranks and Paired
+// pages explain two of the explorer's displays and are reached from those displays (owner 2026-09-26), not the header.
+const NAV = [['./', 'Results'], ['progress.html', 'Progress'], ['guide.html', 'How to read'], ['metrics.html', 'Metrics']];
 const FOOTER = ['https://srbf.readthedocs.io/', 'https://github.com/psaegert/srbf', 'https://pypi.org/project/srbf/', 'privacy.html'];
 const PAGES = [['/', 'Results'], ['/progress.html', 'Progress'], ['/guide.html', 'How to read'], ['/metrics.html', 'Metrics'],
-  ['/ranks.html', 'Ranks'], ['/paired.html', 'Paired'], ['/privacy.html', null]];
+  ['/ranks.html', null], ['/paired.html', null], ['/privacy.html', null]];
 
 for (const [url, current] of PAGES) {
   test(`${url}: the one navigation, this page marked in it, one title, nothing wider than the screen`, async ({ page }) => {
@@ -34,13 +34,23 @@ for (const [url, current] of PAGES) {
 }
 
 test('every page the navigation names is there', async ({ page, request }) => {
-  for (const [href] of NAV.filter(([h]) => !h.startsWith('http'))) {
+  for (const [href] of NAV) {
     expect((await request.get('/' + href.replace('./', ''))).status(), href).toBe(200);
   }
   await page.goto('/metrics.html');
   await page.waitForLoadState('networkidle');
   expect(await page.locator('main .katex').count()).toBeGreaterThan(20);        // the definitions are typeset
 });
+
+for (const [view, target] of [['ranks', 'ranks.html'], ['paired', 'paired.html']]) {
+  test(`the ${view} display links to ${target}, the page that explains it`, async ({ page, request }) => {
+    const errors = collectErrors(page);
+    await page.goto('/?release=2026-09&v=' + view);
+    await expect(page.locator(`#results-explorer-v2 .v2main a[href="${target}"]`).first()).toBeVisible({ timeout: 20_000 });
+    expect((await request.get('/' + target)).status()).toBe(200);
+    expect(errors).toEqual([]);
+  });
+}
 
 for (const [hash, target] of [['#about', 'guide.html'], ['#paired', 'paired.html'], ['#ranks', 'ranks.html'], ['#metrics', 'metrics.html']]) {
   test(`a link to the former section ${hash} opens ${target}`, async ({ page }) => {
