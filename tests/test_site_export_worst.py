@@ -105,3 +105,16 @@ def test_a_property_of_one_expression_is_not_grouped_with_the_comparisons():
     assert alone == {"predicted_mdl", "ground_truth_mdl", "predicted_skeleton_prefix_length", "skeleton_length", "predicted_n_constants",
                      "n_constants", "predicted_total_nestedness", "total_nestedness", "n_variables"}
     assert {k for k, m in registry.items() if m.get("every")} == export.EVERY_PROBLEM
+
+
+def test_paired_wins_and_losses_count_better_and_worse_not_higher_and_lower():
+    """The paired table's wins and losses are read as better / worse. For an error (lower is better) that is the
+    opposite of the difference's sign, and for a ratio it is the distance from the ideal 1, which the sign cannot say."""
+    a = {0: _row(success=1.0, log10_fvu_val=-6.0, mdl_ratio=1.1), 1: _row(success=1.0, log10_fvu_val=-2.0, mdl_ratio=0.5)}
+    b = {0: _row(success=1.0, log10_fvu_val=-3.0, mdl_ratio=2.0), 1: _row(success=1.0, log10_fvu_val=-1.0, mdl_ratio=1.5)}
+    paired = export.paired_cell(a, b)["m"]
+    n, total, _, better, worse = paired["log10_fvu_val"]
+    assert n == 2 and math.isclose(total, -3.0 - 1.0)                      # a's values are lower ...
+    assert (better, worse) == (2, 0)                                       # ... which is better for an error
+    n, _, _, better, worse = paired["mdl_ratio"]
+    assert n == 2 and (better, worse) == (1, 1)                            # 1.1 beats 2.0; 0.5 loses to 1.5 (|log 0.5| > |log 1.5|)

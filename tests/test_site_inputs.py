@@ -68,8 +68,8 @@ def test_the_note_names_a_method_timed_on_the_whole_suite_only_when_there_is_one
     _write(suite, "big", "niter_00001.pkl", [1.0] * 6)
     _write(suite, "small", "niter_00001.pkl", [1.0] * 2)
     assert site_timing.build(MANIFEST, {}, {"PySR": suite}, "niter_{rung:05d}.pkl")["note"].endswith(
-        "PySR is evaluated on the reference machine itself: its points are the mean over the whole suite.")
-    assert "whole suite" not in site_timing.build(MANIFEST, {}, {}, "niter_{rung:05d}.pkl")["note"]
+        "PySR was run on all problems on this workstation, so its points average over all problems, not over the sample.")
+    assert "run on all problems" not in site_timing.build(MANIFEST, {}, {}, "niter_{rung:05d}.pkl")["note"]
 
 
 def test_the_published_subset_is_in_the_repository_and_adds_up() -> None:

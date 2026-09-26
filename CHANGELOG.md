@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **The results site's paired wins and losses count better and worse.** `scripts/site_export_v2.py` counted a
+  problem as a win when the method's value was higher than the baseline's; for an error (log10 FVU) that is a loss,
+  and for a ratio whose ideal is 1 the sign says nothing. They are now oriented by the metric's own terms (lower
+  error, ratio closer to 1), the same rule the ranks use, and the sign test reads them.
 - **The shards of one unit no longer race on the candidate store's manifest.** Every shard of a unit writes the
   manifest of the unit's store directory; the temp file they renamed had one shared name, so two shards renaming
   at once ended one of them with `FileNotFoundError` after hours of work. The temp name now carries the writer's
@@ -59,6 +63,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   method without a ladder when it stood next to one with a ladder.
 
 ### Changed
+- **The results site is written for a first-time reader.** Every hint, popover, metric definition, method note and
+  protocol text, and the prose below the explorer, say what they mean in plain words ("problem set", "budget",
+  "run"; no pipeline vocabulary), with the longer explanations moved to a from-scratch "How to read the results"
+  section. The Numeric Recovery threshold is described as what it is (FVU at most 2^-23: a typical error of at most
+  0.035 % of the values' spread). A method missing at a budget is said to be not run there, or not finished yet;
+  the export carries each method's planned budgets for that. `copy_lint.py` and a rendered-text test in the site
+  suite keep the pipeline's words out.
 - **A worker is handed the problem and nothing of the ground truth.** `meta` carries the problem's identifiers and
   sampling parameters (`benchmark_eq_id`, `eval_row_index`, `n_support`, `noise_level`, the variable
   names); the ground truth's skeleton, expression, constants and complexity stay on srbf's side.
@@ -95,6 +106,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exists; every example parses; and the site builds with broken links as errors.
 
 ### Removed
+- The results site's 2026-07 (paper) release: its explorer, data and prose. Its links open the current page.
 - The scaling configs of the `v25.0-T7` checkpoints; the `v25.0-T8` configs are the reference.
 
 ## [0.20.3] - 2026-09-19
