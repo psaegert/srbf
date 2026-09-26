@@ -247,13 +247,21 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 .explorer-v2 .v2status h3 { margin: 0 0 10px; }
 .explorer-v2 .v2updated { font-variant-numeric: tabular-nums; }
 .explorer-v2 .v2ago { white-space: nowrap; }   /* "· 3 hours ago" never breaks inside */
-.explorer-v2 .v2strip { display: flex; gap: 12px; flex-wrap: wrap; margin: 10px 0; }
-.explorer-v2 .v2tile { flex: 1 1 132px; max-width: 260px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 10px 14px; }
-.explorer-v2 .v2tile b { display: block; }   /* a name wraps; it is never cut to an ellipsis */
-.explorer-v2 .v2tile span { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.explorer-v2 .v2tile small { color: var(--ink-faint); }
-.explorer-v2 .v2bar { height: 5px; background: var(--line); border-radius: 3px; margin-top: 6px; overflow: hidden; }
-.explorer-v2 .v2bar i { display: block; height: 100%; background: var(--accent); }
+.explorer-v2 .v2strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 12px; margin: 10px 0; }   /* equal tiles, row after row */
+/* a method in progress: its name, then two rows of blocks (results, times) with their counts, one block per budget;
+   one grid, so both rows' blocks line up whatever the counts are */
+.explorer-v2 .v2tile { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 10px 14px 8px; }
+.explorer-v2 .v2tile b { grid-column: 1 / -1; display: block; margin-bottom: 2px; }   /* a name wraps; it is never cut to an ellipsis */
+.explorer-v2 .v2plab { font-size: 12px; color: var(--ink-soft); }
+.explorer-v2 .v2pnum { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.explorer-v2 .v2pnum small { font-size: 12px; font-weight: 400; color: var(--ink-faint); }
+.explorer-v2 .v2segs { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 2px; }
+.explorer-v2 .v2seg { display: block; height: 9px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.explorer-v2 .v2seg i { display: block; height: 100%; background: var(--accent); }
+.explorer-v2 .v2paxis { grid-column: 2; display: flex; justify-content: space-between; margin-top: -3px; font-size: 11px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+/* the finished methods: names on one line */
+.explorer-v2 .v2done { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 10px 0 14px; }
+.explorer-v2 .v2chip { display: inline-flex; align-items: center; font-size: 13.5px; color: var(--ink); }
 .explorer-v2 .v2tabs { display: flex; gap: 0 24px; flex-wrap: wrap; margin: 0 0 26px; border-bottom: 1px solid var(--line); }
 .explorer-v2 .v2tab { border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; color: var(--ink-soft); padding: .5rem .1rem; font: inherit; font-size: .95rem; font-weight: 500; cursor: pointer; }
 .explorer-v2 .v2tab:hover, .explorer-v2 .v2tab:focus-visible { color: var(--ink); border-bottom-color: var(--line); outline: none; }

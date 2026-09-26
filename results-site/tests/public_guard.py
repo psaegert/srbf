@@ -136,11 +136,11 @@ def check_no_as_run_time(path: Path) -> list[str]:
 
 
 def payload_texts(node: Any, path: str = "") -> list[tuple[str, str]]:
-    """Every string value of a payload with its path, the numeric bulk aside (cells, status, timing hold no prose)."""
+    """Every string value of a payload with its path, the numeric bulk aside (cells, status, progress, timing hold no prose)."""
     if isinstance(node, str):
         return [(path, node)]
     if isinstance(node, dict):
-        return [t for k, v in node.items() if not (path == "" and k in ("cells", "data", "status", "timing")) for t in payload_texts(v, f"{path}/{k}")]
+        return [t for k, v in node.items() if not (path == "" and k in ("cells", "data", "status", "progress", "timing")) for t in payload_texts(v, f"{path}/{k}")]
     if isinstance(node, list):
         return [t for i, v in enumerate(node) for t in payload_texts(v, f"{path}[{i}]")]
     return []
@@ -207,7 +207,7 @@ def main() -> int:
         if not payload:
             failures.append(f"{js}: not a RESULTS_V2 payload")
             continue
-        keys = {mm["key"] for mm in payload.get("methods", [])} | set(payload.get("cells", payload.get("data", {}))) | set(payload.get("status", {})) | set(payload.get("timing", {}))
+        keys = {mm["key"] for mm in payload.get("methods", [])} | set(payload.get("cells", payload.get("data", {}))) | set(payload.get("status", {})) | set(payload.get("progress", {})) | set(payload.get("timing", {}))
         extra = sorted(keys - PUBLIC_METHODS)
         if extra:
             failures.append(f"{js}: non-public method keys {extra}")

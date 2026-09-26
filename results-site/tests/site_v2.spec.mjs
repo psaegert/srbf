@@ -1241,13 +1241,50 @@ test('the release has one home: a title and its update time in the headline role
   await expect(status.locator('h3 .v2help')).toHaveCount(1);                      // what is counted, on a ?
   await expect(page.locator(V2 + ' details.v2release > summary')).toHaveText('Protocol');
   expect(await style(V2 + ' details.v2release > summary')).toBe(await style(V2 + ' section.v2status h3'));
-  // every method tile lives in the Progress block, and none counts more finished than planned
-  const tiles = await page.locator(V2 + ' .v2tile').count();
-  expect(tiles).toBeGreaterThan(0);
+  // every method with a status lives in the Progress block: a tile while in progress, a name on the Finished line once
+  // done; none counts more finished than planned
+  const tiles = await page.locator(V2 + ' .v2tile').count(), chips = await status.locator('.v2done .v2chip').count();
   await expect(status.locator('.v2tile')).toHaveCount(tiles);
-  await expect(status.locator('.v2tile').first()).toContainText(/\d+ \/ \d+$/);                 // finished / planned
+  const withStatus = await page.evaluate(() => { const D = window.RESULTS_V2; return D.methods.filter((m) => D.status[m.key]).length; });
+  expect(tiles + chips).toBe(withStatus);
   const over = await page.evaluate(() => Object.values(window.RESULTS_V2.status).filter((s) => s[1] != null && s[0] > s[1]).length);
   expect(over).toBe(0);
+  // a tile: Results and Times, each a count and one block per budget of the method
+  const shape = await page.evaluate(() => {
+    const D = window.RESULTS_V2, out = [];
+    document.querySelectorAll('#results-explorer-v2 .v2status .v2tile').forEach((t) => {
+      const m = D.methods.find((x) => x.key === t.dataset.m);
+      const rows = [...t.querySelectorAll('.v2segs')].map((r) => r.children.length), nums = [...t.querySelectorAll('.v2pnum')].map((n) => n.textContent);
+      const timed = (m.budgets || []).filter((b) => (D.timing[m.key] || {})[String(b)] != null).length;
+      out.push({ key: m.key, rows, nums, labels: [...t.querySelectorAll('.v2plab')].map((l) => l.textContent), budgets: (m.budgets || []).length, timed,
+                 perKnown: Object.keys((D.progress || {})[m.key] || {}).length > 0 });
+    });
+    return out;
+  });
+  expect(shape.length).toBe(tiles);
+  for (const t of shape) {
+    expect(t.labels, t.key).toEqual(['Results', 'Times']);
+    expect(t.rows, t.key).toEqual([t.perKnown ? t.budgets : 1, t.budgets]);          // data without per-budget counts: one bar
+    expect(t.nums[0], t.key).toMatch(/^\d+ \/ (\d+|\?)$/);
+    expect(t.nums[1], t.key).toBe(t.timed + ' / ' + t.budgets);
+  }
+  expect(errors).toEqual([]);
+});
+
+test('a method with every result and every time in moves to the Finished line', async ({ page }) => {
+  const errors = collectErrors(page);
+  // fixture: the first method with a plan and a timing entry for each of its budgets, its runs all finished
+  await page.addInitScript(() => { let r; Object.defineProperty(window, 'RESULTS_V2', { configurable: true, get() { return r; }, set(v) {
+    const m = v.methods.find((x) => v.status[x.key] && x.budgets && x.budgets.every((b) => (v.timing[x.key] || {})[String(b)] != null));
+    if (m) { window.__finished = m.key; v.status[m.key] = [v.status[m.key][1], v.status[m.key][1]]; const per = (v.progress || {})[m.key] || {}; Object.keys(per).forEach((b) => { per[b] = [per[b][1], per[b][1]]; }); }
+    r = v; } }); });
+  await page.goto('/?release=2026-09&v=curves');
+  const key = await page.evaluate(() => window.__finished);
+  test.skip(!key, 'no method has every budget timed in this data');
+  const status = page.locator(V2 + ' section.v2status');
+  await expect(status.locator('.v2done .v2lab')).toHaveText('Finished');
+  await expect(status.locator(`.v2done .v2chip[data-m="${key}"]`)).toHaveCount(1);
+  await expect(status.locator(`.v2tile[data-m="${key}"]`)).toHaveCount(0);           // no tile of its own any more
   expect(errors).toEqual([]);
 });
 

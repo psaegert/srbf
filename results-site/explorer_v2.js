@@ -22,6 +22,7 @@
   var D = JSON.parse(JSON.stringify(window.RESULTS_V2));
   var REL = D.release.id;
   // another release is on screen (the routing script decided before this file ran): leave the page and its URL alone
+  D.status = D.status || {}; D.progress = D.progress || {}; D.timing = D.timing || {};
   var SOURCES = [{ base: D.base, local: false }];
   // An overlay adds methods to the release: the same schema, merged into the tables every view reads. A local build
   // supplies one as a plain script and serves its lazy files from a base of its own (results-site/README.md,
@@ -33,7 +34,7 @@
     (P.methods || []).forEach(function (m) {
       if (!D.methods.some(function (x) { return x.key === m.key; })) { D.methods.push(Object.assign({}, m, { local: !!withBase, overlay: true })); added.push(m.key); }
     });
-    Object.assign(D.cells, P.cells || {}); Object.assign(D.status, P.status || {}); Object.assign(D.timing, P.timing || {});
+    Object.assign(D.cells, P.cells || {}); Object.assign(D.status, P.status || {}); Object.assign(D.progress, P.progress || {}); Object.assign(D.timing, P.timing || {});
     if (withBase && P.base) { SOURCES.push({ base: P.base, local: true }); }
     return added;
   }
@@ -1278,9 +1279,47 @@
     if (view === "ranks" && state.xaxis === "time" && anyTime()) { delete u.rung; }
     return u;
   }
+  // ---- progress: results and times, one block per budget ---------------------------------------------------------
+  // A method is finished once every planned run has its results and every budget its measured time; it then shrinks
+  // to a name on one line. A method in progress keeps a tile: a row of blocks for its results (each block fills with
+  // the finished share of that budget's runs) and one for its times (a block fills once the budget is timed).
+  function progressOf(m) {
+    var st = D.status[m.key], per = D.progress[m.key] || {}, tm = D.timing[m.key] || {};
+    var budgets = (m.budgets || Object.keys(per).map(Number)).slice().sort(function (a, b) { return a - b; });
+    var timed = budgets.filter(function (b) { return tm[String(b)] != null; }).length;
+    return { d: st[0], t: st[1], budgets: budgets, per: per, tm: tm, timed: timed,
+             finished: st[1] != null && st[0] >= st[1] && budgets.length > 0 && timed === budgets.length };
+  }
+  function progressTile(m, p) {
+    var name = esc(m.label) + (m.local ? " (local)" : ""), n = p.budgets.length;
+    // data without the per-budget counts (an export older than them): the results row is one bar of the total
+    var perKnown = Object.keys(p.per).length > 0;
+    var runs = perKnown ? p.budgets.map(function (b) {
+      var c = p.per[String(b)] || [0, null], share = c[1] ? Math.min(1, c[0] / c[1]) : 0;
+      return '<i class="v2seg" title="Budget ' + b.toLocaleString() + ": " + c[0] + " of " + (c[1] == null ? "?" : c[1]) + ' runs finished"><i style="width:' + (100 * share).toFixed(1) + '%"></i></i>';
+    }).join("") : '<i class="v2seg" title="' + p.d + " of " + (p.t == null ? "?" : p.t) + ' runs finished"><i style="width:' + (p.t ? 100 * Math.min(1, p.d / p.t) : 0).toFixed(1) + '%"></i></i>';
+    var times = p.budgets.map(function (b) {
+      var s = p.tm[String(b)];
+      return '<i class="v2seg" title="Budget ' + b.toLocaleString() + ": " + (s != null ? roundNum(s) + " s per problem" : "time not measured yet") + '"><i style="width:' + (s != null ? 100 : 0) + '%"></i></i>';
+    }).join("");
+    return '<div class="v2tile" data-m="' + esc(m.key) + '" style="--n:' + n + '"><b><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + name + '</b>' +
+      '<span class="v2plab">Results</span><span class="v2segs" aria-hidden="true"' + (perKnown ? "" : ' style="--n:1"') + '>' + runs + '</span><span class="v2pnum">' + p.d + '<small> / ' + (p.t == null ? "?" : p.t) + '</small></span>' +
+      '<span class="v2plab">Times</span><span class="v2segs" aria-hidden="true">' + times + '</span><span class="v2pnum">' + p.timed + '<small> / ' + n + '</small></span>' +
+      '<span class="v2paxis" aria-hidden="true"><span>' + (n ? p.budgets[0].toLocaleString() : "") + '</span><span>' + (n > 1 ? p.budgets[n - 1].toLocaleString() : "") + '</span></span></div>';
+  }
+  function progressStrip() {
+    var shown = D.methods.filter(function (m) { return D.status[m.key]; }), done = [], tiles = [];
+    shown.forEach(function (m) {
+      var p = progressOf(m);
+      if (p.finished) { done.push('<span class="v2chip" data-m="' + esc(m.key) + '" title="' + esc(m.label + ": both runs on every problem set and a measured time, at every budget from " + p.budgets[0].toLocaleString() + " to " + p.budgets[p.budgets.length - 1].toLocaleString() + ".") + '"><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + (m.local ? " (local)" : "") + '</span>'); }
+      else { tiles.push(progressTile(m, p)); }
+    });
+    return (done.length ? '<div class="v2done"><span class="v2lab">Finished</span>' + done.join("") + '</div>' : "") +
+      (tiles.length ? '<div class="v2strip">' + tiles.join("") + '</div>' : "");
+  }
   function shell() {
     var rel = D.release;
-    var strip = D.methods.filter(function (m) { return D.status[m.key]; }).map(function (m) { var d = D.status[m.key][0], t = D.status[m.key][1]; return '<div class="v2tile" title="' + esc(m.label) + '"><b><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + (m.local ? " (local)" : "") + '</b><span>' + d + '<small> / ' + (t == null ? "?" : t) + '</small></span><div class="v2bar"><i style="width:' + (t ? 100 * d / t : 0) + '%"></i></div></div>'; }).join("");
+    var strip = progressStrip();
     // When the release was last refreshed: stored with its offset, shown in the reader's own time zone, with how long ago
     var stamp = (function () {
       var t = rel.updated ? new Date(rel.updated) : null;
@@ -1290,14 +1329,14 @@
       if (mins < 1) { ago = "just now"; } else if (mins < 60) { ago = mins + (mins === 1 ? " minute" : " minutes") + " ago"; } else if (mins < 48 * 60) { var h = Math.round(mins / 60); ago = h + (h === 1 ? " hour" : " hours") + " ago"; } else { ago = Math.round(mins / 1440) + " days ago"; }
       return '<time class="v2updated" datetime="' + esc(rel.updated) + '">Updated ' + esc(abs) + ' <span class="v2ago">· ' + ago + '</span></time>';
     })();
-    var progressHint = "How much of each method's evaluation is done. Every method is run twice on every problem set, at each of its budgets. One count is one problem set at one budget in one run; it is counted once every problem in it has a result. A budget appears in the plots once every problem set is done at that budget, in at least one of the two runs.";
+    var progressHint = "How much of each method's evaluation is done. Each small block is one budget, from the smallest on the left to the largest on the right. Results: every problem set is run twice at each budget. One count is one of these runs, counted once every problem in it has a result. A block fills up as its runs finish. Times: a block fills once the time per problem at that budget has been measured on our timing workstation. A budget appears in the plots once every problem set has one finished run at that budget. It appears on the time axis once its time is measured. A method with all results and all times in is listed as finished.";
     var catList = CATS.map(function (c) { var m = CAT[c]; return '<label title="' + esc(GROUPS[m.group] + (m.mu ? " · typical formula length " + m.mu[1] + " bits (middle half: " + m.mu[0] + " to " + m.mu[2] + ")" : "")) + '"><input type="checkbox" data-c="' + c + '"> ' + esc(c) + ' <span class="v2hint">' + m.laws + '</span></label>'; }).join("");
     var methList = D.methods.filter(withData).map(function (m) { return '<div class="v2meth"><label><input type="checkbox" data-m="' + m.key + '"><input type="color" class="v2swatch" data-m="' + m.key + '" value="' + colorOf(m) + '" title="Colour for ' + esc(m.label) + '"><span class="v2mname">' + esc(m.label) + '</span></label>' + (m.local ? ' <span class="v2tag v2tag-local">local only</span>' : "") + ' <span class="v2hint">' + esc(m.param) + '</span>' + (m.selection ? " " + help(m.selection, "How does " + m.label + " choose its prediction?") : "") + ' <span class="v2tag" title="' + esc(PROV_NOTE[m.provenance] || "") + '">' + esc(PROV[m.provenance] || m.provenance || "") + '</span><button type="button" class="v2reset" data-m="' + m.key + '" title="Reset colour to default" hidden>↺</button></div>'; }).join("") || '<span class="v2hint">no method has finished a budget yet</span>';
     var metricList = MGROUPS.map(function (g) { var ms = D.metrics.filter(function (m) { return m.group === g; }); return '<div class="v2mgroup" data-group="' + esc(g) + '"><h4>' + esc(g) + '</h4>' + ms.map(function (m) { return '<div class="v2metric" data-tier="' + m.tier + '" data-key="' + m.key + '"><label><input type="checkbox" data-p="' + m.key + '"> ' + esc(m.label) + '</label> ' + mhelp(m) + '</div>'; }).join("") + "</div>"; }).join("");
     root.innerHTML =
       '<div class="v2relhead"><div><h2 class="v2hltitle">Release ' + esc(rel.id) + (rel.title !== rel.id ? ' · ' + esc(rel.title) : '') + '</h2><p class="v2hlsub">' + stamp + (rel.notes ? ' · ' + esc(rel.notes) : '') + '</p></div><div class="v2row"><button type="button" class="v2btn" data-act="link">copy link to this view</button><span class="v2linkok v2hint" hidden>link copied</span></div></div>' +
       '<details class="v2release"><summary class="v2kicker">Protocol</summary><ul><li><b>Choosing a prediction.</b> ' + esc(rel.scoring || "") + '</li><li><b>Judging it.</b> ' + esc(rel.judge || "") + '</li><li><b>Problems.</b> Each problem is one known formula, with 512 data points given to the method and 512 held-out points used only to check the formula it returns. The points are sampled from the ranges the problem set specifies, without noise. Every method is run twice on each problem, with new points each time. ' + CATS.length + ' problem sets, ' + laws(CATS).toLocaleString() + ' problems.</li><li><b>Settings.</b> ' + term("provenance", "Who chose each method\'s settings") + ' is shown next to its name.</li>' + (rel.versions ? '<li><b>Versions.</b> ' + esc(rel.versions) + '</li>' : '') + '<li><b>Time.</b> Seconds per problem. ' + (D.timing_note ? esc(D.timing_note) + " " : "") + term("time", "Why only these times?") + '</li><li><b>Statistics.</b> ' + term("regime", "How problems without a usable formula count") + ', ' + term("complete", "why some points are missing") + ', ' + term("wilson", "what the 95 % intervals mean") + '.</li></ul></details>' +
-      '<section class="v2status" aria-label="Progress of this release"><h3 class="v2kicker">Progress ' + help(progressHint, "What is counted?") + '</h3><div class="v2strip">' + strip + '</div></section>' +
+      '<section class="v2status" aria-label="Progress of this release"><h3 class="v2kicker">Progress ' + help(progressHint, "What is counted?") + '</h3>' + strip + '</section>' +
       '<div class="v2tabs" role="tablist">' + VIEWS.map(function (v) { return '<button type="button" class="v2tab" role="tab" data-view="' + v[0] + '">' + v[1] + '</button>'; }).join("") + '</div>' +
       '<div class="v2layout"><aside class="v2side">' +
       // 1. what this display shows. Every row declares the views it belongs to; the rest stay out of the way.

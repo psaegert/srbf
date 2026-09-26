@@ -59,6 +59,9 @@ def test_progress_counts_finished_catalog_rungs_per_draw_against_the_plan(tmp_pa
             ("a", 2): _draw(1, set(), n=4)}
     assert export.status_of(rows, {"a": 4}, plan) == [2, 3]
     assert export.status_of(rows, {"a": 4}, None) == [2, None]                  # no plan: no total, never a guess
+    assert export.progress_of(rows, {"a": 4}, plan) == {"1": [1, 2], "2": [1, 1]}   # per budget: draw 2 of rung 1 is open
+    assert export.progress_of(rows, {"a": 4}, None) == {"1": [1, None], "2": [1, None]}
+    assert export.progress_of({}, {"a": 4}, plan) == {"1": [0, 2], "2": [0, 1]}    # a planned budget without data is shown
     assert export.planned_cells(str(tmp_path / "none"), "hyb", lambda r: True) is None
 
 
