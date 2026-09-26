@@ -101,7 +101,11 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
 
 /* hero */
 .hero { padding: 2.6rem 0 1.5rem; }
-.page-hero { padding-bottom: 1.8rem; }   /* a page's title and lede, then its topics */
+.page-hero { padding-bottom: 1.8rem; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* the home page's way to the explorer, under the headline's charts */
+.explore-cta { margin: 28px 0 0; font-size: 1.05rem; color: var(--ink-soft); }
+.explore-cta a { font-weight: 600; }   /* a page's title and lede, then its topics */
 .topic .protocol li { margin-bottom: .6rem; }
 .hero h1 { margin: 0 0 .7rem; font-size: clamp(1.7rem, 4vw, 2.4rem); font-weight: 800; letter-spacing: -.03em; text-wrap: balance; }
 .lede { margin: 0; max-width: 46rem; color: var(--ink-soft); font-size: 1.05rem; }

@@ -47,6 +47,7 @@ results-site/tests/package-lock.json
 !results-site/data/
 results-site/private/
 results-site/index.local.html
+results-site/results.local.html
 
 # a method's virtual environment, created next to its tracked requirements.txt
 /envs/*/bin

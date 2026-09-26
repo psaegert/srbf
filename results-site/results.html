@@ -12,20 +12,24 @@
       } catch (e) { /* storage blocked: Auto */ }
     })();
   </script>
-  <title>Progress · srbf</title>
-  <meta name="description" content="How far each method's evaluation has come: results and measured times, budget by budget, and the methods scheduled next." />
+  <title>Results · srbf</title>
+  <meta name="description" content="Every result of srbf, the Symbolic Regression Benchmark Framework: every metric, problem set, budget and time, method by method." />
   <link rel="icon" type="image/svg+xml" href="srbf-icon.svg" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="Progress · srbf" />
-  <meta property="og:description" content="How far each method's evaluation has come: results and measured times, budget by budget, and the methods scheduled next." />
-  <meta property="og:url" content="https://psaegert.github.io/srbf/progress.html" />
+  <meta property="og:title" content="Results · srbf" />
+  <meta property="og:description" content="Every result of srbf, the Symbolic Regression Benchmark Framework: every metric, problem set, budget and time, method by method." />
+  <meta property="og:url" content="https://psaegert.github.io/srbf/results.html" />
   <meta property="og:image" content="https://psaegert.github.io/srbf/srbf-social.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"
+    onload="renderMathInElement(document.body, {delimiters: [{left: '$$', right: '$$', display: true}, {left: '\\(', right: '\\)', display: false}]});"></script>
 </head>
 <body>
   <header class="site-header">
@@ -35,8 +39,8 @@
         <span class="brand-sub">Symbolic Regression Benchmark Framework</span>
       </a>
       <nav class="site-nav" aria-label="Pages">
-        <a href="results.html">Results</a>
-        <a href="progress.html" aria-current="page">Progress</a>
+        <a href="results.html" aria-current="page">Results</a>
+        <a href="progress.html">Progress</a>
         <a href="guide.html">How to read</a>
         <a href="metrics.html">Metrics</a>
       </nav>
@@ -45,42 +49,12 @@
   </header>
 
   <main>
-    <div class="wrap">
-    <section class="hero page-hero">
-      <h1>Progress</h1>
-      <p class="lede">
-        How far each method's evaluation has come, in results and in measured times, budget by budget.
-        <span id="progress-updated"></span>
-      </p>
-    </section>
-
-    <section class="prose">
-      <div id="progress-root" class="explorer-v2 progress-page">
-        <p class="loading">Loading the progress…</p>
+    <div class="wrap-wide">
+    <section class="panel">
+      <h1 class="sr-only">Results explorer</h1>
+      <div id="results-explorer-v2" class="explorer-v2">
+        <div class="loading">Loading the results explorer…</div>
       </div>
-
-      <section class="topic" id="counted">
-        <h3>What is counted</h3>
-        <div>
-          <p>
-            Each small block is one budget, from the smallest on the left to the largest on the right.
-          </p>
-          <p>
-            <strong>Results.</strong> Every problem set is run twice at each budget. A run counts once every problem
-            in it has a result, and a block fills up as its runs finish. The count is the finished runs out of all
-            planned runs.
-          </p>
-          <p>
-            <strong>Times.</strong> A block fills once the time per problem at that budget has been measured on our
-            timing workstation. The count is the measured budgets out of all budgets.
-          </p>
-          <p>
-            A budget appears in the explorer's plots once every problem set has one finished run at that budget. It
-            appears on the time axis once its time is measured. A method with all results and all times in is listed
-            as finished. A scheduled method can already be run by srbf but has no results here yet.
-          </p>
-        </div>
-      </section>
     </section>
     </div>
 
@@ -99,8 +73,8 @@
     </div>
   </footer>
 
-  <script src="data/2026-09/summary.js" charset="utf-8"></script>
+  <script src="data/2026-09/results.js" charset="utf-8"></script>
   <script src="theme.js" charset="utf-8"></script>
-  <script src="pages.js" charset="utf-8"></script>
+  <script src="explorer_v2.js" charset="utf-8"></script>
 </body>
 </html>
