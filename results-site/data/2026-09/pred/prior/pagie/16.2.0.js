@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["prior|pagie|16|2|0"]={"0":["/ * -5e-05 tan x1 cos * 1.302 x1",0]};})();

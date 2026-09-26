@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-20M-pysr|koza|512|2|0"]={"0":["atan asinh + x1 sinh * 0.782 atan / * -15 pow x1 3 7",0],"1":["* pow x1 2 pow - pow x1 2 1 2",1]};})();

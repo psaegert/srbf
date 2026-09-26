@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["prior|physo-astro|4|2|0"]={"0":["+ * 0.08 x1 / sin neg * x1 - abs x1 1.4 pow x1 1.88",0],"1":["+ atan neg x1 / pow x1 1.8 0.0826",0]};})();

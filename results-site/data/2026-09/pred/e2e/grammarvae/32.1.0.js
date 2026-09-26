@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["e2e|grammarvae|32|1|0"]={"0":["+ + + * 1 x1 * - * -1.242e-08 x1 0.03417 - * 0.004544 x1 0.0003794 * 1 cos + + * 0.08304 x1 * 0.01082 pow - * 9.616 x1 0.3992 2 80.11 0.3333",1]};})();

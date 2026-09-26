@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-3M|nonic|2048|2|0"]={"0":["+ x1 * pow x1 2 abs / * 1.88 + * 1.12 x1 pow x1 2 rootn - x1 1.12 3",0]};})();

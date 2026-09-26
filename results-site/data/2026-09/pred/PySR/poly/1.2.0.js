@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|poly|1|2|0"]={"0":["+ x3 x6",0],"1":["* atan x2 0.5951",0],"2":["* + x1 0.1248 - exp x1 -1.025",0],"3":["inv sinh + x1 cosh x2",0],"4":["pow + x1 cosh + + cosh x7 + x7 x1 cosh -0.0878 -0.6732",0],"5":["tanh sin neg exp x1",0]};})();

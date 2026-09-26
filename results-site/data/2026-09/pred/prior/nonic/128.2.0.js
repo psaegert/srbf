@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["prior|nonic|128|2|0"]={"0":["* pow x1 5 pow acosh / * -17 - - tanh x1 / * 15 x1 13 / rootn x1 3 x1 8 4",0]};})();

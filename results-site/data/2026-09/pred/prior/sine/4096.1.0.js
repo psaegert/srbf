@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["prior|sine|4096|1|0"]={"0":["tanh - + tan + x1 1.968 / * 73 pow rootn x1 3 2 pow x1 2 13",0]};})();

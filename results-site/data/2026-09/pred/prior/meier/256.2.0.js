@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["prior|meier|256|2|0"]={"0":["* -0.54 * pow x1 3 * inv atan + x1 x2 inv sin x2",0],"1":["/ -13000000000 - cosh / * 170 * x2 - - + * 41.04 x1 cos x1 x2 50 x1 1",0]};})();

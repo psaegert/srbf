@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["prior|meier|64|2|0"]={"0":["/ * 0.0017 * x2 inv * x1 * cosh x1 + x1 abs / 0.5422 sin x1 x1",0],"1":["+ x1 / + * 5600000 x1 + cos x2 inv pow x1 2 x2",0]};})();

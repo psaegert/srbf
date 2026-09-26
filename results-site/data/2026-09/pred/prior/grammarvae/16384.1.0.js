@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["prior|grammarvae|16384|1|0"]={"0":["+ sin pow x1 2 / * x1 + * 0.057 x1 tanh x1 atan x1",0]};})();

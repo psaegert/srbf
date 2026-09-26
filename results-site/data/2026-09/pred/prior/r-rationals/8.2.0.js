@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["prior|r-rationals|8|2|0"]={"0":["/ + pow x1 3 pow x1 5 tan x1",0],"1":["/ 3 4",0],"2":["atan - * 0.14 * x1 + x1 / * 5 pow x1 2 3 0.02",0],"3":["5",0],"4":["log + rootn 20 3 2",0],"5":["- * x1 sin x1 / * 0.05 inv + x1 + pow x1 2 8 x1",0]};})();

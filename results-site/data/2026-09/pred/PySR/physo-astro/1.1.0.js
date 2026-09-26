@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|physo-astro|1|1|0"]={"0":["abs tan sinh sinh cos atan + sinh x1 pow x1 1.746",0],"1":["abs + - - - -1.547 x1 asinh abs sinh x1 2.576 + sinh x1 / - - - -1.244 pow x1 2.61 x1 x1 -0.2532",0]};})();

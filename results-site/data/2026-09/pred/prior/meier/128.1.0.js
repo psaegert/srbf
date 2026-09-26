@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["prior|meier|128|1|0"]={"0":["1",0],"1":["/ * x1 - - x2 / * x1 * + x1 / 1 4 * - x2 * 0.05 * x1 acos x2 inv rootn 1e-11 3 x2 4000 x2",0]};})();

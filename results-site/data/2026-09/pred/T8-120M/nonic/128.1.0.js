@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-120M|nonic|128|1|0"]={"0":["+ asin x1 * pow x1 4 + * 3.4 x1 3.8",0]};})();

@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-20M|koza|16384|1|0"]={"0":["+ x1 sin * 1.158 * asin x1 * asinh x1 sin * -1.708 x1",0],"1":["+ pow x1 2 * pow x1 3 - tanh * 0.79 * pow x1 2 atanh x1 * 2 x1",0]};})();

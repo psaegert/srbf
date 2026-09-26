@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-120M|meier|8|1|0"]={"0":["* x1 * pow x2 2 * asin x1 * inv atan 2.55 inv + x1 x2",0],"1":["/ * pow x1 5 tanh x2 pow x2 4",1]};})();

@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-3M|sine|8192|2|0"]={"0":["- - + pow x1 0.8 0.7 x1 cos + x1 + pow x1 2.008 7.6",0]};})();

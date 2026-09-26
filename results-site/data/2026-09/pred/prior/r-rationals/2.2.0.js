@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["prior|r-rationals|2|2|0"]={"0":["2",0],"1":["/ * 2 * x1 atanh x1 3",0],"2":["/ x1 - - inv x1 x1 / pow x1 4 - x1 inv x1",0],"3":["* 2 rootn 3 2",0],"4":["/ pow x1 2 neg + x1 / cosh x1 - - x1 inv pow x1 5 pow x1 2",0],"5":null};})();

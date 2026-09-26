@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|nonic|32|2|0"]={"0":["- + * + + tan x1 atan x1 - * + tan - x1 -0.1467 x1 - x1 0.1567 0.1344 - * abs tan x1 x1 -0.06493 x1 -0.03512",0]};})();

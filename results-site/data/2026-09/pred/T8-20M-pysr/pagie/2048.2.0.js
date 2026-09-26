@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-20M-pysr|pagie|2048|2|0"]={"0":["- - 1.996 inv cosh * 2 asinh * -0.71 pow x1 2 inv cosh * x2 - 1.935 / * 5 inv cosh / * 5 x2 3 3",0]};})();

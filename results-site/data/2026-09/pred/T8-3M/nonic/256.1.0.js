@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-3M|nonic|256|1|0"]={"0":["+ asin neg x1 sinh / x1 - 0.511 / * 2 x1 11",0]};})();

@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-20M|nonic|4096|2|0"]={"0":["+ x1 * x1 sinh neg * - acos pow x1 2 * 20 x1 + * 0.068 x1 0.0727",0]};})();

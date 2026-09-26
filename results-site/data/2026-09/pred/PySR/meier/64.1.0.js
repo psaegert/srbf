@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|meier|64|1|0"]={"0":["/ * + * x2 * x1 x1 3.167e-07 + / -8.89e-09 + x1 -0.5965 x2 + x1 x2",1],"1":["/ * x1 x1 / / x2 x1 * + * cos * / / x1 2.094e-08 1.213 x1 -5.337e-06 / x1 x2 / x1 x2",1]};})();

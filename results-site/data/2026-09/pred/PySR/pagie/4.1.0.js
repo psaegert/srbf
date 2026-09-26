@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|pagie|4|1|0"]={"0":["acosh cosh * atan cosh sinh * asinh abs cosh abs asinh x1 atan sinh abs sinh x1 asinh atan cosh * x2 x2",0]};})();

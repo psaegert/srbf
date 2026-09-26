@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|koza|64|1|0"]={"0":["asinh asinh asinh asinh asin asin asin asin * x1 * * cos tan x1 cos * x1 -0.7367 cos * x1 -1.579",0],"1":["/ tanh tanh tanh * - asinh asinh x1 sin x1 -6.007 sinh tan tan x1",0]};})();

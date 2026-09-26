@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-120M|meier|4|1|0"]={"0":["/ * pow x1 2 pow x2 2 + x1 x2",3],"1":["/ * pow x1 4 atanh * x1 pow x2 2 pow x2 5",1]};})();

@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|sine|16|1|0"]={"0":["sinh sinh sin + / sin x1 2.151 asinh sinh + sin / * x1 x1 / / + * x1 x1 sin x1 x1 x1 x1",0]};})();

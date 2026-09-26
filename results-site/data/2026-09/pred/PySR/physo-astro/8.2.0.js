@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|physo-astro|8|2|0"]={"0":["/ atan / 0.6048 atan x1 * sinh x1 1.192",0],"1":["+ + pow + x1 1.119 3.034 * + pow + x1 0.8719 3.067 -0.2705 0.3721 -0.4614",0]};})();

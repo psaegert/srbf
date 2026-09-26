@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-20M|grammarvae|8|2|0"]={"0":["+ x1 + / x1 cosh pow x1 2 / cos x1 asinh pow * 8.883e-25 pow x1 2 / -1 2",0]};})();

@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|pagie|8|1|0"]={"0":["asinh + -0.08733 cosh log pow / pow pow 0.4313 1.778 tanh x2 + pow 0.4375 tanh tanh tanh tanh x2 tanh x2 tanh x1",0]};})();

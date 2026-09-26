@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["prior|r-rationals|1|1|0"]={"0":null,"1":["/ neg * x1 + inv pow x1 2 300000 pow - cosh x1 600 2",0],"2":["+ inv x1 / pow x1 15 pow cos x1 3",0],"3":["+ sinh neg x1 * x1 + inv + x1 + inv x1 pow x1 2 330",0],"4":null,"5":null};})();

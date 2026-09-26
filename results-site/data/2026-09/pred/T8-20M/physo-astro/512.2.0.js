@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-20M|physo-astro|512|2|0"]={"0":["/ exp neg log x1 pow + * 0.6145 x1 0.8547 2",1],"1":["+ * 1.65 x1 + inv / -3 / * -2.679 * pow x1 2.72 asinh x1 pow / x1 + x1 0.962 3.733 / 1 3",1]};})();

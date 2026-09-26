@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|physo-astro|256|1|0"]={"0":["inv pow + * * pow x1 0.9693 pow 1.445 asinh * x1 pow 1.101 pow asinh pow x1 x1 0.9662 x1 / x1 1.359 1.005",1],"1":["+ * 4.534 x1 + 1.149 * * x1 x1 + * x1 1.511 4.534",1]};})();

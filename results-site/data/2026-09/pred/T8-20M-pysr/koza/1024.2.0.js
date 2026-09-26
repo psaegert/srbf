@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-20M-pysr|koza|1024|2|0"]={"0":["sinh sinh sin sinh sin sin - tanh sinh sinh x1 * 4.115 * pow x1 2 - tanh sinh x1 * 0.517 sinh x1",1],"1":["- * 0.91 * x1 tanh x1 pow tanh / * 19 pow x1 2 15 2.274",0]};})();

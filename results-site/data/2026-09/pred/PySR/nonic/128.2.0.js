@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|nonic|128|2|0"]={"0":["+ x1 * + * * tan x1 exp x1 * 1.232 tan sin * 0.7938 tan x1 sin tan tan * sin x1 0.9671 * x1 0.9751",0]};})();

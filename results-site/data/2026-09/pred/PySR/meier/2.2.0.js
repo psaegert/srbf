@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|meier|2|2|0"]={"0":["* x1 / atan atan tanh sin sin x1 + x2 x1",0],"1":["* inv * * / 0.03347 x1 0.0002786 x2 - 0.4904 x1",0]};})();

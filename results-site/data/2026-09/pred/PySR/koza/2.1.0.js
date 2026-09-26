@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|koza|2|1|0"]={"0":["asin atanh atanh sinh * / / sin / / / x1 0.8326 0.5967 0.5967 -0.3552 -1.782 0.1667",0],"1":["asin atanh tan abs + atan x1 asin / x1 -1.44",0]};})();

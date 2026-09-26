@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["prior|nonic|32|1|0"]={"0":["- / * pow x1 2 - + x1 atan / -100000000000000 x1 1 - x1 1.15 0.1",0]};})();

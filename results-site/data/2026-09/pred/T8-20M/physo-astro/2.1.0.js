@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-20M|physo-astro|2|1|0"]={"0":["/ inv pow + * np.pi x1 / + x1 pow x1 / 25 4 cosh x1 / 6 13 x1",0],"1":["- + x1 tanh * 40000000 x1 * x1 - log / x1 6 * x1 + x1 6.84",0]};})();

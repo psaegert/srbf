@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|physo-astro|4|1|0"]={"0":["/ abs abs sinh sinh inv exp atan / exp log sinh atan abs x1 1.061 sinh abs x1",0],"1":["abs / - x1 -2.416 atan inv / - -1.621 x1 inv / x1 0.7929",0]};})();

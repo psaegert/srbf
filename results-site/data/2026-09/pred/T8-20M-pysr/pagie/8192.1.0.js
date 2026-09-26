@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-20M-pysr|pagie|8192|1|0"]={"0":["* 0.639 + atan pow abs x1 3.277 atan pow abs x2 3.274",0]};})();
