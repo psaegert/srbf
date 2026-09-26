@@ -555,6 +555,22 @@ test('a method marked as the ceiling is drawn dashed in the page ink, legend inc
   expect(drawn.otherDashed, 'no other method is dashed').toBe(0);
 });
 
+test('a headline chart keeps its title and its y label off the frame', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto('/?release=2026-09');
+  await expect(page.locator('.headline-v2 svg.v2chart').first()).toBeVisible();
+  const gaps = await page.evaluate(() => [...document.querySelectorAll('.headline-v2 svg.v2chart')].map((svg) => {
+    const box = svg.getBoundingClientRect(), title = svg.querySelector('text.ct').getBoundingClientRect();
+    const ylabel = [...svg.querySelectorAll('text')].find((t) => (t.getAttribute('transform') || '').includes('rotate(-90)'));
+    return { top: title.top - box.top, left: ylabel ? ylabel.getBoundingClientRect().left - box.left : null };
+  }));
+  expect(gaps.length).toBe(2);
+  for (const g of gaps) {
+    expect(g.top, 'room above the title').toBeGreaterThanOrEqual(12);
+    expect(g.left, 'room left of the y label').toBeGreaterThanOrEqual(8);
+  }
+});
+
 // ---- Distribution: a distribution is what the view shows, in four readings ------------------------------------
 test('the distribution view opens on histograms of a continuous metric', async ({ page }) => {
   const errors = collectErrors(page);
