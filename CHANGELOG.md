@@ -100,6 +100,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `scripts/run_timing_ladder.py` measures on any machine; `--host NAME` restricts it to one.
 
 ### Added
+- **`srbf table` stores the expressions it judged:** `predicted_expression` (in the ground truth's variable names and
+  the engine's spelling) and `ground_truth_expression`, as prefix tokens at full precision.
+- **The results site's Predictions view:** one problem at a time, the true formula and every method's formula, typeset,
+  with whether each recovered it. `scripts/site_export_v2.py` writes one file per method, problem set, budget,
+  finished run and block of 500 problems; a finished file never changes.
 - **`srbf status -c CONFIG`**: how far every run of a config is (`done`, `started`, `not started`, with the
   row counts), without loading a model; the exit code is 0 when every run is done.
   `Benchmark.runs_from_config(..., build_adapter=False)` is the same from Python.
