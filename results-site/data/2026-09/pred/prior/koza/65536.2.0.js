@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["prior|koza|65536|2|0"]={"0":["* 0.323 - sinh * 3.044 x1 * 10.45 pow x1 3",0],"1":["/ * pow x1 2 pow - pow x1 2 1.024 2 cosh pow x1 2",0]};})();

@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|nonic|512|2|0"]={"0":["* + * x1 * cosh tan * * x1 0.9238 tanh * x1 + tan * x1 1.227 0.7683 exp * x1 1.071 -0.004017 cosh x1",0]};})();

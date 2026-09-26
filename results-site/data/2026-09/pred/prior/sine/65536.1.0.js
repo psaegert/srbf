@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["prior|sine|65536|1|0"]={"0":["- - 1.1 / x1 3 / * 3 cos / * 13 * pow x1 0.27 - x1 / 13 3 2 4",0]};})();

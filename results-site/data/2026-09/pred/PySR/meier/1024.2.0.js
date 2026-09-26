@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|meier|1024|2|0"]={"0":["* x1 * x2 / + * - / -1.139e-08 abs + x1 x2 -3.122e-07 tan tan + x1 -0.1827 x2 / + x1 x2 x1",1],"1":["/ + sinh - sinh + + abs + x2 x2 asin x1 -1.553 0.2817 - sinh log abs + sinh x1 0.9769 / asinh inv x1 x2 x2",0]};})();

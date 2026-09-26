@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|meier|512|2|0"]={"0":["* * * x1 + cos * - -4.15 * sin - 1.269 x2 inv + x2 x1 0.0002859 neg / x2 + x2 x1 x2 x2",0],"1":["/ * * * - - * x1 inv x2 2.624e-06 / -1.67e-06 x1 inv x2 * x1 * x1 x1 - x1 * x2 -3.157e-06 x2",1]};})();
