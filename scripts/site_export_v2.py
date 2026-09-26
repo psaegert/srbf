@@ -753,7 +753,7 @@ def main() -> None:
         payload = {"schema": 2, "base": base,
                    "release": {"id": a.release, "title": a.title or a.release, "notes": a.notes, "versions": RELEASE_VERSIONS, "generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
                                "updated": dt.datetime.now().astimezone().isoformat(timespec="minutes"),   # with its offset: shown in the reader's time zone
-                               "scoring": "Every method returns one formula per problem, its prediction, and picks it by its own rule. The ? after a method's name describes that rule; the label beside it says who chose the method's settings.",
+                               "scoring": "Every method is allowed to return one formula per problem, its prediction, and picks it by its own rule. The ? after a method's name describes that rule; the label beside it says who chose the method's settings.",
                                "judge": "Every prediction is checked the same way against the true formula. Numeric Recovery: it reproduces the 512 held-out points almost exactly (FVU at most 2^-23: a typical error of at most 0.035 % of the true values' spread). Symbolic Recovery: once both formulas are simplified into a standard form, they are identical when their numbers are ignored (so x^2 matches x^3; stricter versions also check exponents and all numbers)."},
                    "catalogs": cats, "rungs": RUNGS, "nb": NB, "metrics": listed, "paired_keys": PAIRED_KEYS, "rank_keys": [k for k in RANK_KEYS if k in {m["key"] for m in listed}],
                    # budget: what one rung of the ladder buys. "candidates" is a count a generative method draws;
