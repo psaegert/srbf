@@ -1,8 +1,9 @@
 """The public results site must carry no trace of local-only methods (README.md, "Local-only methods").
 
 Fatal checks, run before the Playwright suite in CI and locally:
-  1. index.html references neither a private/ path nor index.local.html;
-  2. every method key in data/*/results.js, data/*/hist/*.js, data/*/paired.js, data/*/ranks.js and data/*/pred/ is
+  1. no page (index.html and the pages around it) references a private/ path or index.local.html;
+  2. every method key in data/*/results.js, data/*/summary.js, data/*/hist/*.js, data/*/paired.js, data/*/ranks.js
+     and data/*/pred/ is
      in the public allowlist below
      (the list names PUBLIC methods only; a private method's key must never appear here);
   3. every release payload carries the complete metric registry (at least the metric floor: the site's first
@@ -146,6 +147,15 @@ def payload_texts(node: Any, path: str = "") -> list[tuple[str, str]]:
     return []
 
 
+def method_keys(payload: Any) -> set[str]:
+    """Every method key a release payload or its summary names: its methods, their cells, status, progress and times,
+    and the finished and in-progress lists of the progress summary (a scheduled method is named by its label only)."""
+    summary = payload.get("summary") or {}
+    return ({mm["key"] for mm in payload.get("methods", [])} | set(payload.get("cells", payload.get("data", {})))
+            | set(payload.get("status", {})) | set(payload.get("progress", {})) | set(payload.get("timing", {}))
+            | set(summary.get("finished", [])) | set(summary.get("in_progress", [])))
+
+
 def check_payload_texts(payload: Any, name: str, banned: dict[str, str]) -> list[str]:
     out = []
     for path, text in payload_texts(payload):
@@ -188,6 +198,8 @@ def selftest() -> list[str]:
         bad.append("selftest: rank_methods missed a method named in pairs handed over as var P")
     if not {"hidden-method", "other-hidden"} <= (rank_methods(compared) or set()):
         bad.append("selftest: rank_methods missed a method named only in the compared-rungs record")
+    if not {"hidden-a", "hidden-b"} <= method_keys({"summary": {"finished": ["hidden-a"], "in_progress": ["hidden-b"], "scheduled": []}}):
+        bad.append("selftest: method_keys missed a method named only in the progress summary")
     probe_payload = {"release": {"scoring": "fine"}, "timing_note": "measured on the forbidden-host", "cells": {"m": "the forbidden-host is numeric bulk"}}
     hits = check_payload_texts(probe_payload, "selftest", {r"forbidden-host": "selftest"})
     if len(hits) != 1 or "/timing_note" not in hits[0]:
@@ -198,19 +210,29 @@ def selftest() -> list[str]:
 def main() -> int:
     failures = selftest()
     banned = banned_patterns()
-    index = (SITE / "index.html").read_text(encoding="utf-8")
-    for needle in ("private/", "index.local"):
-        if needle in index:
-            failures.append(f"index.html mentions {needle!r}")
+    for page in sorted(p for p in SITE.glob("*.html") if p.name != "index.local.html"):
+        html = page.read_text(encoding="utf-8")
+        for needle in ("private/", "index.local"):
+            if needle in html:
+                failures.append(f"{page.name} mentions {needle!r}")
     for js in sorted((SITE / "data").glob("*/results.js")):
         payload = payload_of(js.read_text(encoding="utf-8"), "RESULTS_V2")
         if not payload:
             failures.append(f"{js}: not a RESULTS_V2 payload")
             continue
-        keys = {mm["key"] for mm in payload.get("methods", [])} | set(payload.get("cells", payload.get("data", {}))) | set(payload.get("status", {})) | set(payload.get("progress", {})) | set(payload.get("timing", {}))
-        extra = sorted(keys - PUBLIC_METHODS)
+        extra = sorted(method_keys(payload) - PUBLIC_METHODS)
         if extra:
             failures.append(f"{js}: non-public method keys {extra}")
+        sj = js.parent / "summary.js"   # the Progress page's and the guide's few kB
+        if sj.exists():
+            summary = payload_of(sj.read_text(encoding="utf-8"), "RESULTS_V2_SUMMARY")
+            if not summary:
+                failures.append(f"{sj}: not a RESULTS_V2_SUMMARY payload")
+            else:
+                extra = sorted(method_keys(summary) - PUBLIC_METHODS)
+                if extra:
+                    failures.append(f"{sj}: non-public method keys {extra}")
+                failures.extend(check_payload_texts(summary, str(sj.relative_to(SITE)), banned))
         failures.extend(check_payload_texts(payload, str(js.relative_to(SITE)), banned))
         have = {m["key"] for m in payload.get("metrics", [])}
         missing = sorted(REQUIRED_METRICS - have)

@@ -73,6 +73,22 @@ METHODS = [
 # How a method is drawn when its colour alone is not the point: the oracle is the ceiling, a dashed line in the ink colour
 # of the page (black, or white in the dark theme), like the ground truth's own reference line.
 METHOD_STYLE: dict[str, dict[str, bool]] = {"oracle": {"dash": True, "ink": True}}
+# Scheduled (owner 2026-09-26): methods whose srbf worker is merged but which the release does not carry yet, shown on
+# the Progress page as one line of names, a sentence each on hover. A method leaves the line once the release carries
+# it (its key among the published methods), so each key here is the one the method will have in METHODS. Only the
+# label and the sentence are published.
+SCHEDULED = [
+    ("operon", "Operon", "An evolutionary search over formulas that fits the numbers in each candidate as it goes."),
+    ("gpgomea", "GP-GOMEA", "An evolutionary search that learns which parts of formulas belong together and recombines "
+     "them as whole units."),
+    ("dsr", "DSR", "Deep Symbolic Regression: a neural network that learns on the problem itself, by trial and error, to "
+     "write formulas that fit better."),
+    ("udsr", "uDSR*", "Unified Deep Symbolic Regression as publicly released: DSR combined with an evolutionary search and "
+     "polynomial fitting. The asterisk: the paper's version also uses a pre-trained network and a step from AI Feynman, "
+     "which were never released."),
+    ("rilsrols", "RILS-ROLS", "A local search over formulas that fits their numbers by ordinary least squares."),
+    ("oracle", "Oracle", "A reference, not a method: it is given the true formula with its numbers blanked out and only "
+     "fits the numbers, the way Flash-ANSR does. It shows the best result that fitting alone can reach.")]
 # Where two methods share a component at different versions, the release says so (Protocol, "Versions").
 RELEASE_VERSIONS = ("PySR: version 2.3.0, with SymbolicRegression.jl 2.4.0. The PySR part of Flash-ANSR T8-20M + PySR: PySR 2.4.0, "
                     "with SymbolicRegression.jl 2.4.1 (2.4.2 on our timing workstation). The settings it uses have the same defaults "
@@ -614,6 +630,35 @@ def progress_of(rows_by_cell: dict[tuple[str, int], Any], sizes: dict[str, int],
     return {str(r): [sum(1 for x in done if x[2] == r), sum(1 for x in plan if x[2] == r) if plan is not None else None] for r in rungs}
 
 
+def progress_summary(methods: list[dict[str, Any]], status: dict[str, list[int | None]], timing: dict[str, Any]) -> dict[str, Any]:
+    """Which methods are finished, in progress and scheduled: the one rule the Results page's progress line and the
+    Progress page both show. Finished: every planned run has its results and every budget of the plan a measured time.
+    In progress: every other published method. Scheduled: SCHEDULED's methods the release does not carry yet."""
+    finished: list[str] = []
+    in_progress: list[str] = []
+    for m in methods:
+        st, budgets, timed = status.get(m["key"]), m.get("budgets") or [], timing.get(m["key"]) or {}
+        if st is None:
+            continue
+        done = st[1] is not None and (st[0] or 0) >= st[1] and bool(budgets) and all(str(b) in timed for b in budgets)
+        (finished if done else in_progress).append(m["key"])
+    carried = {m["key"] for m in methods}
+    return {"finished": finished, "in_progress": in_progress,
+            "scheduled": [{"label": label, "note": note} for key, label, note in SCHEDULED if key not in carried]}
+
+
+def summary_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """The few kB the Progress page and the guide need (the protocol texts, the progress, the times per budget), so
+    neither loads the release's full data."""
+    keep = ("key", "label", "color", "budgets", "dash", "ink")
+    return {"release": {k: payload["release"].get(k) for k in ("id", "updated", "generated", "scoring", "judge", "versions")},
+            "timing_note": payload.get("timing_note", ""),
+            "problem_sets": len(payload["catalogs"]), "problems": sum(c["laws"] for c in payload["catalogs"]),
+            "methods": [{k: m[k] for k in keep if k in m} for m in payload["methods"]],
+            "status": payload["status"], "progress": payload["progress"], "timing": payload["timing"],
+            "summary": payload["summary"]}
+
+
 def catalog_meta(sizes_path: str | None, present: dict[str, int]) -> list[dict[str, Any]]:
     groups = {c: g for g, cs in CATALOG_GROUPS.items() for c in cs}
     per = json.load(open(sizes_path)).get("per_catalog", {}) if sizes_path and os.path.exists(sizes_path) else {}
@@ -750,6 +795,7 @@ def main() -> None:
             timing = {k: v for k, v in t.items() if k in keys and isinstance(v, dict)}
             timing_note = t.get("note", "")
         listed = listed_metrics(cells)
+        payload: dict[str, Any]
         payload = {"schema": 2, "base": base,
                    "release": {"id": a.release, "title": a.title or a.release, "notes": a.notes, "versions": RELEASE_VERSIONS, "generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
                                "updated": dt.datetime.now().astimezone().isoformat(timespec="minutes"),   # with its offset: shown in the reader's time zone
@@ -765,6 +811,7 @@ def main() -> None:
                                 "budgets": sorted({r for _, _, r in plan}) if (plan := plans.get(k)) else None, **METHOD_STYLE.get(k, {})}
                                for k, l, p, col, g, prov, _, sel in methods],
                    "cells": cells, "status": status, "progress": progress, "timing": timing, "timing_note": timing_note}
+        payload["summary"] = progress_summary(payload["methods"], status, timing)
         return payload, hists, paired
 
     def write_set(payload: dict[str, Any], hists: dict[str, Any], paired: dict[str, Any], ranks: dict[str, Any], out_js: str, out_dir: str, var: str, note: str) -> None:
@@ -793,6 +840,8 @@ def main() -> None:
     payload["pred_block"] = PRED_BLOCK
     ranks = leagues([(ka, kb) for i, ka in enumerate(public) for kb in public[i + 1:]], public, payload["rank_keys"])
     write_set(payload, hists, paired, ranks, a.out, out_dir, "RESULTS_V2", f"public release {a.release}")
+    with open(os.path.join(out_dir, "summary.js"), "w") as fh:   # the Progress page and the guide read this, not results.js
+        fh.write("window.RESULTS_V2_SUMMARY = " + json.dumps(summary_payload(payload), separators=(",", ":")) + ";\n")
     if private:
         pdir = os.path.abspath(a.private_dir)
         os.makedirs(pdir, exist_ok=True)

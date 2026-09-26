@@ -64,13 +64,14 @@ test('theme: the visual abstract follows the manual override', async ({ page }) 
 // ---- prose ----------------------------------------------------------------------------------------------------------
 
 test('provenance: the prose explains the three labels and discloses the shared authors', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/guide.html');
   const about = page.locator('#about');
   await expect(about).toContainText("Who chose each method's settings");
   await expect(about).toContainText('Upstream defaults');
   await expect(about).toContainText('Author-blessed');
   await expect(about).toContainText('Maintainer-chosen');
   await expect(about).toContainText("Here they are also the benchmark's authors");
+  await page.goto('/');
   await expect(page.locator('.hero')).toContainText('The people who run this benchmark also develop Flash-ANSR');
 });
 

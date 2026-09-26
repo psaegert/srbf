@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Copy lint for the results site: banned patterns in VIEWER-FACING text.
 
-Two surfaces: the full prose of index.html and the string literals of explorer_v2.js (comments are internal and
-exempt); the reader's vocabulary (BANNED_V2) is also checked on the page's text and on the reader-facing texts the
-exporter writes into the data. Every entry here is a fixed bug that must not return: extend the list whenever a new
+The surfaces: the full source of every page (index.html and the pages around it) and the string literals of
+explorer_v2.js and pages.js (comments are internal and exempt); the reader's vocabulary (BANNED_V2) is also checked on
+every page's text and on the reader-facing texts the exporter writes into the data. Every entry here is a fixed bug that must not return: extend the list whenever a new
 wording bug is fixed.
 """
 import ast
@@ -132,7 +132,7 @@ def data_texts() -> str:
     method notes and budget units, the release's protocol texts and the time axis's note."""
     scripts = SITE.parent / "scripts"
     out: list[str] = []
-    for name, targets in (("site_export_v2.py", {"METRICS", "METHODS", "PARAM_LABEL", "RELEASE_VERSIONS", "FLASH_ANSR_SELECTION"}),
+    for name, targets in (("site_export_v2.py", {"METRICS", "METHODS", "PARAM_LABEL", "RELEASE_VERSIONS", "FLASH_ANSR_SELECTION", "SCHEDULED"}),
                           ("site_timing.py", {"NOTE"})):
         tree = ast.parse((scripts / name).read_text(encoding="utf-8"))
         for node in ast.walk(tree):
@@ -147,13 +147,20 @@ def data_texts() -> str:
     return "\n".join(out)
 
 
+def pages() -> list[Path]:
+    """Every page of the site: the Results page and the pages around it (the local-only copy is not published)."""
+    return sorted(p for p in SITE.glob("*.html") if p.name != "index.local.html")
+
+
 def main() -> int:
     failures = []
-    surfaces = {
-        "index.html": (SITE / "index.html").read_text(encoding="utf-8"),
-        "explorer_v2.js (strings)": "\n".join(js_strings((SITE / "explorer_v2.js").read_text(encoding="utf-8"))),
-    }
-    current = {"index.html (text)": page_text(surfaces["index.html"]), "release data texts": data_texts()}
+    surfaces = {p.name: p.read_text(encoding="utf-8") for p in pages()}
+    assert "index.html" in surfaces and len(surfaces) >= 2, "the site's pages"
+    html_names = list(surfaces)
+    for js in ("explorer_v2.js", "pages.js"):
+        surfaces[f"{js} (strings)"] = "\n".join(js_strings((SITE / js).read_text(encoding="utf-8")))
+    current = {f"{n} (text)": page_text(surfaces[n]) for n in html_names}
+    current["release data texts"] = data_texts()
     for pattern, why in BANNED_V2.items():
         for name, text in current.items():
             for match in re.finditer(pattern, text, flags=re.IGNORECASE):
@@ -168,8 +175,7 @@ def main() -> int:
                 snippet = text[max(0, match.start() - 40):match.end() + 40].replace("\n", " ")
                 failures.append(f"{name}: /{pattern}/ ({why})\n    …{snippet}…")
     # em-dash budget: AI prose overuses them; colons, semicolons and structure read better.
-    for name, text, budget in [("index.html", surfaces["index.html"], 0),
-                               ("explorer_v2.js (strings)", surfaces["explorer_v2.js (strings)"], 0)]:
+    for name, text, budget in [(n, t, 0) for n, t in surfaces.items()]:
         count = text.count("—") + text.count("&mdash;")
         if count > budget:
             failures.append(f"{name}: {count} em-dashes (budget {budget}) — rewrite with "
