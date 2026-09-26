@@ -12,7 +12,7 @@ license-files = ["LICEN[CS]E*", "THIRD_PARTY_LICENSES*"]
 
 dependencies = [
     "scipy>=1.9",        # paired statistics: Wilcoxon signed-rank (zero_method pinned in reporting)
-    "flash-ansr>=0.18,<0.19",  # one-way dependency: FlashANSR.infer(), the CandidateLedger join, the ranking modes resolved through resolve_ranking
+    "flash-ansr>=0.18,<0.20",  # one-way dependency: FlashANSR.infer(), the CandidateLedger join, the ranking modes resolved through resolve_ranking
     "simplipy>=0.14.6,<0.15", # direct: baselines and the mu dialect; the line the reference checkpoint is qualified against
     "symbolic-data>=0.18,<0.19", # direct: catalog / ProblemSource data layer (CatalogSource wraps it), normalize_* (token_ops), the holdout family key the decontamination probes use
     "numpy>=1.24",
@@ -34,6 +34,8 @@ baselines = [
 ]
 # srbf.analysis figures (leaderboard/scaling/per-benchmark/distribution -> the results page).
 analysis = ["matplotlib>=3.5"]
+# the flash_ansr_hybrid adapter: flash-ansr's hybrid with its PySR stage
+hybrid = ["flash-ansr[pysr]>=0.19,<0.20"]
 dev = ["pre-commit", "pytest", "pytest-cov", "mypy", "flake8", "srbf[baselines]", "srbf[analysis]"]
 
 [project.scripts]

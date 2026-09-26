@@ -96,6 +96,29 @@ other. Its budget is the refiner's restarts (`configs/evaluation/scaling/flash-a
 judge is strict for the oracle as for every method: where the refitted law comes back in another form,
 a constant factor or a root spelled differently, that is another structure.
 
+## Flash-ANSR + PySR
+
+The adapter type `flash_ansr_hybrid` evaluates flash-ansr's hybrid (`flash_ansr.hybrid`, flash-ansr >= 0.19,
+`pip install srbf[hybrid]`): Flash-ANSR draws and fits candidates, its best `k_seeds` seed PySR's
+populations, PySR's hall of fame is priced the way Flash-ANSR prices its own candidates, and Flash-ANSR's
+ranking picks the prediction from the combined pool.
+
+```yaml
+model_adapter:
+  type: flash_ansr_hybrid
+  flash_ansr: {type: flash_ansr, model_path: "{{ROOT}}/models/flash-ansr-v25.0-T8-20M", ...}   # a full flash_ansr block
+  hybrid:
+    rungs: [[512, 16], [1024, 64], [2048, 256], [4096, 512], [8192, 1024]]   # (draws, PySR iterations) per budget
+    k_seeds: 100
+    snapshot_dir: "{{ROOT}}/snapshots/hybrid"   # one generation pass per problem serves every budget of the ladder
+  pysr: {warmup: true}
+```
+
+The budget is a pair: Flash-ANSR's draws and PySR's iterations, paired so that both stages take the same time on
+the reference machine (r* = 0.5; `flash_ansr.hybrid.R_STAR_LADDER`); the axis is labelled by the draws. The hybrid
+can also run by the clock (`hybrid: {budget_s: T, ratio: r}`: Flash-ANSR gets (1 - r) T of wall time, PySR the
+rest), which is how the ratio was chosen.
+
 ## PySR
 
 ```bash

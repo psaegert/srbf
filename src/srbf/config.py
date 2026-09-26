@@ -28,6 +28,7 @@ from srbf.model_adapters import (
     BruteForceAdapter,
     E2EAdapter,
     FlashANSRAdapter,
+    FlashANSRHybridAdapter,
     LampleChartonAdapter,
     NeSymReSAdapter,
 )
@@ -559,8 +560,37 @@ def _resolve_catalog_ref(config: Mapping[str, Any], *, adapter_name: str) -> str
     return dict(catalog)
 
 
+def _build_flash_ansr_hybrid_adapter(config: Mapping[str, Any]) -> FlashANSRHybridAdapter:
+    """Flash-ANSR seeding PySR (flash-ansr >= 0.19, ``pip install srbf[hybrid]``). Blocks: ``flash_ansr:`` (a full
+    flash_ansr adapter block: the model, its refinement and ranking settings, the device), ``hybrid:`` (the fields of
+    flash-ansr's ``HybridConfig`` -- by work ``draws`` / ``niterations`` / ``rungs``, or by the clock ``budget_s`` /
+    ``ratio`` / ``ratios``, and ``k_seeds`` -- plus ``snapshot_dir``, the per-problem generation cache) and optionally
+    ``pysr:`` (its ``PySRSettings``: ``maxsize``, ``parsimony``, ``model_selection``, ``warmup``, further
+    ``PySRRegressor`` kwargs)."""
+    flash_cfg = config.get("flash_ansr")
+    hybrid = config.get("hybrid")
+    pysr_cfg = config.get("pysr") or {}
+    if not isinstance(flash_cfg, Mapping) or not isinstance(hybrid, Mapping) or not isinstance(pysr_cfg, Mapping):
+        raise ValueError("flash_ansr_hybrid needs 'flash_ansr' and 'hybrid' mappings (and an optional 'pysr' mapping)")
+    try:
+        from flash_ansr.hybrid import HybridConfig, HybridRegressor
+    except ImportError as exc:  # pragma: no cover - environment dependent
+        raise ImportError("the flash_ansr_hybrid adapter needs flash-ansr >= 0.19 with PySR: pip install srbf[hybrid]") from exc
+    options = dict(hybrid)
+    snapshot_dir = options.pop("snapshot_dir", None)
+    flash = _build_flash_ansr_adapter(flash_cfg)
+    # The emission format is a sampling policy read from the flash_ansr block (flash-ansr 0.17); the adapter does not
+    # keep it, so take it from the same place the flash_ansr builder does.
+    options.setdefault("emission", str(flash_cfg.get("emission", "fittable")))
+    regressor = HybridRegressor(
+        flash.model, HybridConfig.from_mapping({**options, "pysr": dict(pysr_cfg)}),
+        snapshot_dir=substitute_root_path(str(snapshot_dir)) if snapshot_dir else None)
+    return FlashANSRHybridAdapter(flash, regressor)
+
+
 _ADAPTER_REGISTRY: dict[str, AdapterBuilder] = {
     "flash_ansr": _build_flash_ansr_adapter,
+    "flash_ansr_hybrid": _build_flash_ansr_hybrid_adapter,
     "pysr": _build_pysr_adapter,
     "subprocess": _build_subprocess_adapter,
     "nesymres": _build_nesymres_adapter,

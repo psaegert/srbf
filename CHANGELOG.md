@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **The `flash_ansr_hybrid` adapter type is built in again.** The hybrid method moved into flash-ansr 0.19
+  (`flash_ansr.hybrid`); srbf's adapter hands it each problem through its evaluation path (`HybridRegressor.solve`)
+  and records the answer like every adapter. Configs that named the private plugin (`hybrid_adapter:build`) use
+  `type: flash_ansr_hybrid`. `pip install srbf[hybrid]` brings flash-ansr with PySR; flash-ansr 0.19 is allowed.
+
 ### Fixed
 - **E2E's and NeSymReS's square roots and absolute values are read.** Both baselines print through SymPy, which
   spells `sqrt(u)` and `Abs(u)`; the engine spells `rootn(u, 2)` and `abs(u)` and kept the unknown names as bare
