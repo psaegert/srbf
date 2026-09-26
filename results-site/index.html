@@ -303,10 +303,11 @@
         <h3>Intervals</h3>
         <div>
           <p>
-            Every value comes with a 95 % interval: the range it would likely fall in if the problems
-            had been a different sample of the same kind. For a mean it is a t-interval, for a median
-            an interval from order statistics, and for a rate \(\hat{p}\) over \(K\) problems the
-            Wilson score interval
+            Every value comes with a 95 % interval. It shows how precisely the value is known, given how
+            much the results vary from problem to problem: it treats the problems as a random sample of
+            similar problems, and each of a problem's two runs as a separate problem. For a mean it is a
+            t-interval, for a median an interval from order statistics, and for a rate \(\hat{p}\) over
+            \(K\) problem runs the Wilson score interval
           </p>
           $$
             \frac{\hat{p} + \frac{z^2}{2K} \;\pm\; z \sqrt{\frac{\hat{p}(1 - \hat{p})}{K} + \frac{z^2}{4K^2}}}
