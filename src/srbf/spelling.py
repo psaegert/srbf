@@ -18,6 +18,14 @@ SYMPY_ONLY = frozenset(TOKEN_SPELLINGS) | {"sqrt"}
 
 
 def engine_spelling(prefix: Sequence[str], operator_arity: Mapping[str, int]) -> list[str]:
-    """``prefix`` with SymPy's spellings replaced by the engine's: ``Abs u`` -> ``abs u``, ``sqrt u`` -> ``rootn u 2``."""
+    """``prefix`` with SymPy's spellings replaced by the engine's: ``Abs u`` -> ``abs u``, ``sqrt u`` -> ``rootn u 2``.
+
+    A prediction that also carries a function outside the vocabulary (SymPy's ``conjugate``, say) cannot be walked, so
+    its square roots stay as written: it stays unreadable, as it was, and never fails the file it is judged in."""
     out = [TOKEN_SPELLINGS.get(str(t), str(t)) for t in prefix]
-    return desugar_sqrt(out, dict(operator_arity)) if "sqrt" in out else out
+    if "sqrt" not in out:
+        return out
+    try:
+        return desugar_sqrt(out, dict(operator_arity))
+    except ValueError:
+        return out

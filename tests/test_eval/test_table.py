@@ -175,3 +175,12 @@ def test_sympy_spellings_in_a_stored_prediction_are_read_the_engine_way(tmp_path
     rows = judge_result_file(path, method="m", engine=engine)
     assert _col(rows, "predicted_mdl") != ["", ""] and "" not in _col(rows, "predicted_mdl")   # priced
     assert _col(rows, "symbolic_recovery") == [1, 1]
+
+
+def test_a_prediction_the_spelling_cannot_walk_stays_as_written_and_the_file_is_judged(tmp_path, engine):
+    """SymPy's conjugate is outside the engine's vocabulary: the walk that rewrites sqrt cannot place its argument.
+    Such a prediction stays as written (unreadable, as before); the other problems of the file are judged."""
+    snap = _snapshot([["+", "x1", "x2"], ["sqrt", "conjugate", "x1"]])
+    path = _write(tmp_path, "toy", "choices_000001.pkl", snap)
+    rows = judge_result_file(path, method="m", engine=engine)
+    assert len(rows) == 2 and _col(rows, "symbolic_recovery")[0] == 1

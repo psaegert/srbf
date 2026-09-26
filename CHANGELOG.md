@@ -12,7 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tokens, so such a prediction had no description length and could never match its ground truth: 29,289 of E2E's
   139,348 usable predictions (21 %) and 917 of NeSymReS's. The in-process adapters now store the engine's spelling
   (`srbf.spelling.engine_spelling`, as the subprocess adapter already did), and `srbf table` rewrites the files
-  written before. The judge's fingerprint changes, so the table re-judges its cache.
+  written before. The judge's fingerprint changes, so the table re-judges its cache. A prediction that also carries a
+  function outside the vocabulary (SymPy's `conjugate`) keeps its square roots as written instead of failing the whole
+  file: the first re-judge lost three E2E files that way.
 - **The results site's paired wins and losses count better and worse.** `scripts/site_export_v2.py` counted a
   problem as a win when the method's value was higher than the baseline's; for an error (log10 FVU) that is a loss,
   and for a ratio whose ideal is 1 the sign says nothing. They are now oriented by the metric's own terms (lower
