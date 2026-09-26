@@ -17,6 +17,7 @@ from symbolic_data.token_ops import normalize_expression, normalize_skeleton
 # it is an optional `[baselines]` extra, not a core runtime dependency.
 
 from srbf.core import EvaluationModelAdapter, EvaluationResult, EvaluationSample
+from srbf.spelling import engine_spelling
 from srbf.variable_renaming import (
     E2E_FIRST_INDEX, NESYMRES_FIRST_INDEX, rename_variable_tokens, rename_variables_in_infix, skeleton_variable_names)
 from srbf.candidate_store import CandidateStoreWriter
@@ -558,6 +559,7 @@ class E2EAdapter(EvaluationModelAdapter):
             record["predicted_expression"] = predicted_expression
             predicted_prefix = self.simplipy_engine.read_infix(predicted_expression)  # engine grammar, not the raw reader tokens
             predicted_prefix = rename_variable_tokens(predicted_prefix, names, first_index=E2E_FIRST_INDEX)
+            predicted_prefix = engine_spelling(predicted_prefix, self.simplipy_engine.operator_arity)   # sqrt -> rootn(u, 2)
             record["predicted_expression_prefix"] = normalize_expression(predicted_prefix)
             record["predicted_skeleton_prefix"] = normalize_skeleton(predicted_prefix)
 
@@ -657,6 +659,7 @@ class NeSymReSAdapter(EvaluationModelAdapter):
             record["predicted_expression"] = predicted_expression
             predicted_prefix = self.simplipy_engine.read_infix(predicted_expression)  # engine grammar, not the raw reader tokens
             predicted_prefix = rename_variable_tokens(predicted_prefix, names, first_index=NESYMRES_FIRST_INDEX)
+            predicted_prefix = engine_spelling(predicted_prefix, self.simplipy_engine.operator_arity)   # Abs -> abs, sqrt -> rootn(u, 2)
             record["predicted_expression_prefix"] = normalize_expression(predicted_prefix)
             record["predicted_skeleton_prefix"] = normalize_skeleton(predicted_prefix)
         except Exception as exc:  # pragma: no cover - parse errors

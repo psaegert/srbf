@@ -2,11 +2,12 @@
 
 Fatal checks, run before the Playwright suite in CI and locally:
   1. index.html references neither a private/ path nor index.local.html;
-  2. every method key in data/*/results.js, data/*/hist/*.js, data/*/paired.js and data/*/ranks.js is in the public
-     allowlist below
+  2. every method key in data/*/results.js, data/*/hist/*.js, data/*/paired.js, data/*/ranks.js and data/*/pred/ is
+     in the public allowlist below
      (the list names PUBLIC methods only; a private method's key must never appear here);
-  3. every release payload carries the complete metric registry (at least the 2026-07 site's metrics, under their
-     schema-2 keys) so a regenerated release cannot silently lose metrics;
+  3. every release payload carries the complete metric registry (at least the metric floor: the site's first
+     release's metrics under their schema-2 keys, and the headline ones) so a regenerated release cannot silently
+     lose metrics;
   4. in CI, results-site/private/ and index.local.html do not exist in the checkout (they are git-ignored; a forced
      add would surface here before anything deploys);
   5. no published payload carries an as-run wall-clock metric. Seconds measured where a unit happened to run are
@@ -17,7 +18,7 @@ Fatal checks, run before the Playwright suite in CI and locally:
      The checker is run against a deliberately bad envelope on every invocation, so it cannot pass vacuously;
   7. no text a reader can see in a release payload (the protocol texts, the timing note, the labels and
      descriptions of metrics, methods and catalogs) matches a banned pattern. The page lint reads index.html and the
-     explorers' strings; a payload is written by the exporter from files outside this repository, so it is read here,
+     explorer's strings; a payload is written by the exporter from files outside this repository, so it is read here,
      where a release is checked before it is published. The patterns are copy_lint's, the maintainer's local ones
      included (results-site/private/banned_patterns.json, git-ignored and absent in CI).
 """
@@ -32,7 +33,7 @@ from typing import Any
 
 SITE = Path(__file__).resolve().parents[1]
 PUBLIC_METHODS = {"e2e", "nesymres-100M", "PySR", "T8-3M", "T8-20M", "T8-120M", "T8-20M-pysr", "prior"}
-# the 2026-07 site's 21 metrics under the schema-2 keys (symbolic_recovery there = skeleton_match_raw here,
+# the metric floor: the site's first release's 21 metrics under the schema-2 keys (symbolic_recovery there = skeleton_match_raw here,
 # prediction_success_rate = success), plus the release's own headline metrics
 REQUIRED_METRICS = {
     "numeric_recovery_val", "expr_length_ratio", "log10_fvu_val", "log10_fvu_fit", "numeric_recovery_fit", "success",
@@ -232,6 +233,14 @@ def main() -> int:
                 extra = sorted({k for pair in ks for k in pair.split("|")} - PUBLIC_METHODS)
                 if extra:
                     failures.append(f"{pj}: non-public method keys {extra}")
+        pd = js.parent / "pred"   # the Predictions view's files: one directory per method, and the ground truth
+        if pd.is_dir():
+            extra = sorted(d.name for d in pd.iterdir() if d.is_dir() and d.name != "truth" and d.name not in PUBLIC_METHODS)
+            if extra:
+                failures.append(f"{pd}: non-public method keys {extra}")
+        extra = sorted(set(payload.get("pred") or {}) - PUBLIC_METHODS)
+        if extra:
+            failures.append(f"{js}: non-public method keys in the predictions index {extra}")
         rj = js.parent / "ranks.js"
         if rj.exists():
             named = rank_methods(rj.read_text(encoding="utf-8"))

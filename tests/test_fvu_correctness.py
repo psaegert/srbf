@@ -17,7 +17,7 @@ import math
 import numpy as np
 import pytest
 
-from srbf.metrics.numeric import fvu, is_perfect_fit, log10_fvu, safe_divide
+from srbf.metrics.numeric import LOG10_FVU_FLOOR, fvu, is_perfect_fit, log10_fvu, safe_divide
 from flash_ansr import scoring
 from flash_ansr.scoring import compute_fvu, score_from_fvu
 
@@ -243,7 +243,11 @@ class TestInputContract:
 
     def test_log10_fvu_specials(self):
         y = np.array([1.0, 2.0, 3.0])
-        assert log10_fvu(y, y) == -np.inf            # perfect -> -inf
+        assert fvu(y, y) == 0.0
+        assert log10_fvu(y, y) == LOG10_FVU_FLOOR    # perfect -> the float64 floor, not -inf
+        assert LOG10_FVU_FLOOR == pytest.approx(math.log10(2.0 ** -52))
+        assert log10_fvu(y, y * (1 + 1e-15)) == LOG10_FVU_FLOOR   # rounding noise below the floor -> the floor
+        assert log10_fvu(y, y + 1e-6) > LOG10_FVU_FLOOR           # a real, tiny error stays resolved
         assert log10_fvu(y, np.full_like(y, 2.0)) == pytest.approx(0.0)  # fvu=1 -> 0
         assert log10_fvu(None, y) == np.inf          # invalid -> +inf (log10(inf))
 

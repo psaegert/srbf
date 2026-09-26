@@ -36,7 +36,7 @@ from dataclasses import dataclass
 import multiprocessing
 from multiprocessing import TimeoutError as PoolTimeout
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from srbf.rungs import RESULT_FILE, RUNG_PREFIXES  # a result file's name: the rung and, for a shard, its index and count
 
@@ -53,8 +53,11 @@ ANALYSIS_COLUMNS = ["log10_fvu_val", "log10_fvu_fit", "r2_val", "r2_fit", "mdl_r
                     "recall_unique_variables", "predicted_log_prob", "predicted_score", "predicted_pareto_rank",
                     "fit_time", "generation_time"]
 GROUND_TRUTH_COLUMNS = ["skeleton_length", "ground_truth_mdl", "n_constants", "total_nestedness", "n_variables", "n_support"]
+#: The expressions themselves, as the judge read them: prefix tokens joined by spaces, numbers at full precision. The
+#: prediction is in the ground truth's variable names and the engine's spelling; empty when the method gave none.
+EXPRESSION_COLUMNS = ["predicted_expression", "ground_truth_expression"]
 #: The table's columns, in order.
-COLUMNS = ID_COLUMNS + RATE_COLUMNS + ANALYSIS_COLUMNS + GROUND_TRUTH_COLUMNS
+COLUMNS = ID_COLUMNS + RATE_COLUMNS + ANALYSIS_COLUMNS + GROUND_TRUTH_COLUMNS + EXPRESSION_COLUMNS
 #: Bumped whenever a row's content changes without a change to srbf's source (it is part of the cache key).
 TABLE_VERSION = 1
 
@@ -164,6 +167,22 @@ def _rename_predictions(snapshot: dict[str, Any], first_index: int | None) -> No
         snapshot[key] = out
 
 
+def _spell_predictions(snapshot: dict[str, Any], operator_arity: Mapping[str, int]) -> None:
+    """Bring the stored predictions into the engine's spelling (:mod:`srbf.spelling`), in place. A file written before
+    the in-process adapters did so carries SymPy's ``sqrt`` and ``Abs``, which the engine can neither price nor judge.
+    Only such predictions are rewritten, into the forms the adapters now store."""
+    from symbolic_data.token_ops import normalize_expression, normalize_skeleton
+
+    from srbf.spelling import SYMPY_ONLY, engine_spelling
+
+    for key, normalize in (("predicted_expression_prefix", normalize_expression), ("predicted_skeleton_prefix", normalize_skeleton)):
+        seq = snapshot.get(key)
+        if seq is None:
+            continue
+        snapshot[key] = [normalize(engine_spelling(prefix, operator_arity))
+                         if prefix is not None and SYMPY_ONLY.intersection(map(str, prefix)) else prefix for prefix in seq]
+
+
 def judge_result_file(path: str, *, method: str, draw: int = 1, engine: Any, first_index: int | None = None) -> list[list[Any]]:
     """The table rows (in :data:`COLUMNS` order) of one result file; an empty list for a file without problems.
 
@@ -187,6 +206,7 @@ def judge_result_file(path: str, *, method: str, draw: int = 1, engine: Any, fir
     catalog = os.path.basename(os.path.dirname(path))
     sha = _model_sha(snap)
     _rename_predictions(snap, first_index)
+    _spell_predictions(snap, engine.operator_arity)
     arity = engine.operator_arity
     s = derive_metrics(snap, engine=engine, mdl_fn=mdl_bits(engine))
 
@@ -220,6 +240,9 @@ def judge_result_file(path: str, *, method: str, draw: int = 1, engine: Any, fir
         r["total_nestedness"] = _number(got("total_nestedness", i))
         r["n_variables"] = _number(got("n_variables", i))
         r["n_support"] = _number(raw("n_support", i))
+        pe, ge = raw("predicted_expression_prefix", i), raw("ground_truth_prefix", i)
+        r["predicted_expression"] = " ".join(map(str, pe)) if (ok and pe is not None) else ""
+        r["ground_truth_expression"] = " ".join(map(str, ge)) if ge is not None else ""
         r["fit_time"] = _mean_time(raw("fit_time", i))
         r["generation_time"] = _mean_time(raw("generation_time", i))
         for k in ANALYSIS_COLUMNS:

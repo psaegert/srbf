@@ -10,8 +10,9 @@ Reads the per-problem judged rows of a campaign root (rows_full_<name>.csv or <n
                                  worst-value metric were filled in for failed predictions; status; timing.
   <out dir>/hist/<metric>.js     per-metric histograms of the same cells (pooled medians and the distribution view),
                                  loaded by the page on demand.
-  <out dir>/paired.js            draw-1 paired contrasts per method pair x catalog x rung: 2x2 tables for the rate
-                                 metrics (exact McNemar on the client), [n, sum d, sum d^2, wins, losses] for the
+  <out dir>/paired.js            paired contrasts (a problem with itself within a draw, over the draws complete on both
+                                 sides) per method pair x catalog x rung: 2x2 tables for the rate
+                                 metrics (exact McNemar on the client), [n, sum d, sum d^2, better, worse] for the
                                  continuous ones; a worst-value metric also as "<key>@answered", over the problems both
                                  methods have a prediction for.
 
@@ -31,7 +32,7 @@ import math
 import os
 import sys
 from collections import defaultdict
-from typing import Any
+from typing import Any, Mapping
 import numpy as np
 
 # ---- registries -------------------------------------------------------------------------------------------------
@@ -42,34 +43,49 @@ METHODS = [
     # checkpoints (E2E model1.pt: embedder 6.2 M + encoder 12.6 M + decoder 74.6 M = 93.5 M; NeSymReS 100M.ckpt: 26.4 M --
     # the "100M" of that file name is the 100 million equations it was trained on, not its size)
     ("e2e", "E2E 93M", "candidates per bag", "#2f6fd0", "baseline", "upstream_default", "e2e",
-     "Refines its decoded trees with BFGS and submits the one with the lowest error on the data it was given."),
+     "A neural network generates candidate formulas from the data. E2E fits the numbers in each with the BFGS optimizer "
+     "and returns the one with the smallest error on the 512 given points."),
     ("nesymres-100M", "NeSymReS 26M", "beam width", "#e8842a", "baseline", "upstream_default", "nesymres",
-     "Beam search, then BFGS on the constants; submits the beam candidate that fits the data best."),
+     "A neural network generates candidate formulas from the data with beam search (it keeps the most probable partial formulas at every step). "
+     "NeSymReS fits the numbers in each with the BFGS optimizer and returns the one that fits the 512 given points best."),
     ("PySR", "PySR", "iterations", "#d62728", "baseline", "upstream_default", "pysr",
-     "Evolutionary search; submits the pick of its own hall of fame, its own accuracy-versus-complexity rule."),
+     "PySR evolves a population of formulas, as a genetic algorithm does. It keeps the best formula of every length found "
+     "so far and returns the one its own rule picks from these, a rule that weighs error against length."),
     ("T8-3M", "Flash-ANSR T8-3M", "draws", "#8fcf8a", "flash-ansr", "author_blessed", None, None),
     ("T8-20M", "Flash-ANSR T8-20M", "draws", "#3e9b4a", "flash-ansr", "author_blessed", None, None),
     ("T8-120M", "Flash-ANSR T8-120M", "draws", "#1b5e20", "flash-ansr", "author_blessed", None, None),
     # the hybrid: a rung is a pair (D draws, I iterations) chosen so that both halves take the same time on the reference
     # machine; the ladder is labelled by its draws
     ("T8-20M-pysr", "Flash-ANSR T8-20M + PySR", "draws", "#7b1fa2", "hybrid", "author_blessed", "hybrid",
-     "Flash-ANSR T8-20M's top-100 draws seed PySR's populations; PySR's hall of fame joins Flash-ANSR's candidate pool and the two-part code picks. "
-     "Each rung pairs a draws count with the iteration count that takes the same time on the reference machine."),
+     "Flash-ANSR T8-20M generates candidate formulas, and up to 100 of those with the best Flash-ANSR score become PySR's starting population. "
+     "PySR's best formulas then join Flash-ANSR's candidates, and Flash-ANSR's rule picks one. At a budget of B, Flash-ANSR generates B "
+     "candidates and PySR runs as many iterations as take the same time on our timing workstation, so each budget costs about twice "
+     "what Flash-ANSR alone spends at it."),
     ("prior", "Flash-ANSR prior", "draws", "#9a9a9a", "reference", "author_blessed", None,
-     "Draws skeletons from Flash-ANSR's training prior with no model and no data, then refines and picks them the way Flash-ANSR does: what the prior alone is worth."),
+     "Draws random formulas of the kind Flash-ANSR was trained on, without looking at the data, then fits their constants and "
+     "picks one with Flash-ANSR's rule. It shows what guessing plus fitting and selection achieves, and so how much Flash-ANSR "
+     "gains by reading the data."),
     # the ceiling: the ground truth itself as the one candidate, fitted by Flash-ANSR's refiner; its rungs are restarts
     ("oracle", "Oracle", "restarts", "#000000", "reference", "author_blessed", "oracle",
-     "Proposes the ground truth itself, with its fittable constants left open, and fits them the way Flash-ANSR does: "
-     "the ceiling of the fitting stage. Its budget is the refiner's restarts.")]
+     "Is given the true formula with its constants blanked out (exponents are kept) and only has to fit the constants, "
+     "the way Flash-ANSR does. It shows the best result that fitting alone can reach. Its budget is the number of fitting "
+     "attempts, each from new random starting values.")]
 # How a method is drawn when its colour alone is not the point: the oracle is the ceiling, a dashed line in the ink colour
 # of the page (black, or white in the dark theme), like the ground truth's own reference line.
 METHOD_STYLE: dict[str, dict[str, bool]] = {"oracle": {"dash": True, "ink": True}}
 # Where two methods share a component at different versions, the release says so (Protocol, "Versions").
-RELEASE_VERSIONS = ("PySR runs PySR 2.3.0 with SymbolicRegression.jl 2.4.0. The hybrid's PySR stage runs PySR 2.4.0 with "
-                    "SymbolicRegression.jl 2.4.1, and 2.4.2 where it is timed on the reference machine. The defaults it relies on "
-                    "are the same in both PySR versions, and the SymbolicRegression.jl releases between them change speed, not results.")
-FLASH_ANSR_SELECTION = ("Fits the constants of every candidate it draws and submits the one with the best two-part code: "
-                        "(n/2) log2 FVU plus the description length of the expression in bits.")
+RELEASE_VERSIONS = ("PySR: version 2.3.0, with SymbolicRegression.jl 2.4.0. The PySR part of Flash-ANSR T8-20M + PySR: PySR 2.4.0, "
+                    "with SymbolicRegression.jl 2.4.1 (2.4.2 on our timing workstation). The settings it uses have the same defaults "
+                    "in both PySR versions, and the SymbolicRegression.jl versions in between change speed, not results. "
+                    "Simplification: SimpliPy (a formula-simplification library), with its rule set acj-5-4-llm.")
+FLASH_ANSR_SELECTION = ("A neural network generates candidate formulas from the data. Flash-ANSR fits the numbers in each and "
+                        "returns the one that best balances error and length: the smallest (n/2) log2 FVU plus the formula's length "
+                        "in bits, where n is the number of given points and FVU is the share of their variation the formula leaves "
+                        "unexplained.")
+# How each budget unit reads next to the method's name.
+PARAM_LABEL = {"candidates per bag": "budget: candidate formulas", "beam width": "budget: beam width",
+               "iterations": "budget: search iterations", "draws": "budget: candidate formulas",
+               "restarts": "budget: fitting attempts"}
 RUNGS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
 E2E_DEFAULT_MAX_RUNG = 256   # E2E is reported at its default settings only
 CATALOG_GROUPS = {
@@ -90,89 +106,89 @@ NB = 128
 METRICS = [
     # ---- was the problem solved? rates over every problem ----
     ("numeric_recovery_val", "Numeric Recovery, Validation", "vNRR", "Numeric Recovery", "rate", True, "main", "pct", None,
-     "Share of problems whose prediction reproduces the validation targets to float32 precision: FVU on the validation split at or below 2^-23. A failed prediction is a miss. Abbreviated vNRR."),
+     "The share of problems where the predicted formula reproduces the 512 held-out points, which the method never saw, almost exactly: its FVU on those points is at most 2^-23 (about 1.2e-7, the precision of a 32-bit float), where FVU, the fraction of variance unexplained, is the mean squared error divided by the variance of the true values. So its typical error is at most 0.035 % of the true values' standard deviation. Short name: vNRR (v for validation, the held-out points)."),
     ("numeric_recovery_fit", "Numeric Recovery, Support", "fNRR", "Numeric Recovery", "rate", True, "more", "pct", None,
-     "The float32-precision indicator on the support points the method was fitted on. fNRR above vNRR means fitting without generalizing. Abbreviated fNRR."),
+     "The same test on the 512 points the method was given (the support points, which it fits). When fNRR is higher than vNRR, some formulas fit the given points but not the held-out ones. Short name: fNRR (f for fit)."),
     ("numeric_recovery_relative_val", "Fits as Well as the Ground Truth, Validation", "GT-Level vNRR", "Numeric Recovery", "rate", True, "more", "pct", None,
-     "Share of problems whose prediction fits the validation targets at least as well as the ground-truth expression itself does: FVU at or below the ground truth's own FVU on the same targets, and never below the float32 bar. It differs from numeric recovery only where the targets are measurements that the accepted expression does not reproduce exactly."),
+     "The share of problems where the predicted formula fits the held-out points at least as well as the true formula does: its FVU is at most the true formula's, and the bar is never stricter than Numeric Recovery's. It differs from Numeric Recovery only where the data are measurements that the true formula does not reproduce exactly."),
     ("numeric_recovery_relative_fit", "Fits as Well as the Ground Truth, Support", "GT-Level fNRR", "Numeric Recovery", "rate", True, "more", "pct", None,
-     "The same criterion on the support points: FVU at or below the ground truth's own FVU there, and never below the float32 bar."),
+     "The same test on the 512 given points."),
     ("success", "Successful Prediction Rate", "Success", "Numeric Recovery", "rate", True, "more", "pct", None,
-     "Share of problems for which the method returned any evaluable expression at all: decoding, parsing, compiling and constant fitting completed."),
+     "The share of problems where the method returned a formula that could be evaluated at all: it was produced and parsed, and its numbers were fitted, without an error."),
     ("symbolic_recovery", "Symbolic Recovery: Structure", "SRRs", "Symbolic Recovery", "rate", True, "main", "pct", None,
-     "Share of problems whose predicted expression has the same certified canonical form (SimpliPy, f64) as the ground truth once every number is masked: structurally the same expression, whatever its constants and exponents. Abbreviated SRRs."),
+     "The share of problems where the predicted formula has the same form as the true formula once every number in both is ignored, exponents included: 2.1 sin(x) matches 5 sin(x), and x^2 also matches x^3. Both formulas are first simplified into a standard form (with SimpliPy), so x + y also matches y + x. Short name: SRRs (s for structure)."),
     ("symbolic_recovery_mask_fittable", "Symbolic Recovery: Structure + Exponents", "SRRe", "Symbolic Recovery", "rate", True, "more", "pct", None,
-     "Symbolic recovery with only the fittable constants masked: the numbers of the structure, exponents and root indices, have to be the ground truth's as well. x^2 and x^3 differ here, and an exponent left at 1.9999 is a miss. Abbreviated SRRe."),
+     "Like SRRs, but only the constants a method fits (coefficients, added terms, constants inside functions) are ignored. Exponents and root indices must match exactly: x^2 and x^3 differ, and an exponent of 1.9999 where the true formula has 2 is a miss. Short name: SRRe (e for exponents)."),
     ("symbolic_recovery_mask_none", "Symbolic Recovery: Structure + All Numbers", "SRRa", "Symbolic Recovery", "rate", True, "more", "pct", None,
-     "Symbolic recovery with nothing masked: the structure and its exponents are the ground truth's, and the fitted constants reproduce it to float32 precision on the validation points. The expression itself was found. Abbreviated SRRa."),
+     "An SRRe match whose formula, with its fitted numbers, also passes Numeric Recovery on the held-out points: the formula itself was found. Short name: SRRa (a for all numbers)."),
     ("skeleton_match_raw", "Raw Symbolic Recovery", "SRRr", "Symbolic Recovery", "rate", True, "more", "pct", None,
-     "Symbolic recovery without simplification: the predicted skeleton equals the ground-truth skeleton token for token as both were written, every number masked. A re-ordered sum or x*x for x^2 is a miss here. This is the 2026-07 site's symbolic recovery, kept for comparability. Abbreviated SRRr."),
+     "Like SRRs, but without simplifying first: the predicted formula must be written exactly like the true one, symbol by symbol, with every number ignored. x*x instead of x^2, or a sum in a different order, is a miss. It is the strictest about how a formula is written, and like SRRs it ignores all numbers. Short name: SRRr (r for raw)."),
     # ---- how good is the fit? the predictions that were made ----
     ("log10_fvu_val", "log10 FVU, Validation", "log10 FVU Val", "Fit Error", "cont", False, "main", "num2", (-17.0, 3.0, None),
-     "Fraction of variance unexplained on the validation split, log10. -inf is a perfect fit and counts in the median; the mean is over finite values only."),
+     "How much of the variation in the 512 held-out points the formula leaves unexplained (FVU: the mean squared error divided by the variance of the true values), on a log10 scale. 0 is no better than always predicting the average, -2 leaves 1 % unexplained, -7 leaves 0.00001 %. The scale stops at -15.65, the precision of a 64-bit float: an exact fit counts there. A formula that blows up has no finite value: the median counts it as worst, the mean leaves it out."),
     ("log10_fvu_fit", "log10 FVU, Support", "log10 FVU Fit", "Fit Error", "cont", False, "more", "num2", (-17.0, 3.0, None),
-     "Fraction of variance unexplained on the support points, log10."),
+     "The same on the 512 given points."),
     ("r2_val", "R², Validation", "R² Val", "Fit Error", "cont", True, "more", "num3", (-1.0, 1.0, None),
-     "1 - FVU on the validation points: 1 is a perfect fit, 0 is as good as predicting the mean, and there is no lower bound. One diverging prediction would decide a mean, so the median is shown whichever statistic is chosen."),
+     "1 - FVU on the held-out points: 1 is a perfect fit, 0 is no better than always predicting the average, and there is no lower limit. A single formula that blows up could decide an average, so the median is shown whichever statistic you choose."),
     ("r2_fit", "R², Support", "R² Fit", "Fit Error", "cont", True, "more", "num3", (-1.0, 1.0, None),
-     "1 - FVU on the support points, without a lower bound; the median is shown whichever statistic is chosen."),
+     "The same on the 512 given points. The median is shown whichever statistic you choose."),
     # ---- comparisons of the prediction with the ground truth ----
     ("mdl_ratio", "MDL Ratio", "MDL Ratio", "Size Compared to the Ground Truth", "cont", None, "main", "ratio", (-4.0, 4.0, "log2"),
-     "Description length of the prediction over the ground truth's, both priced in the certified f64 canon (SimpliPy mu). 1 = as long as the ground truth; the median is taken on the log2 scale."),
+     "The length of the predicted formula in bits divided by the length of the true formula. Length in bits (MDL, minimum description length) is how many bits it takes to write the formula down, including the digits of its numbers, measured by SimpliPy after simplification. 1 means as long as the true formula, 2 twice as long. Means are taken on a log scale, so ×2 and ×0.5 cancel. Flash-ANSR picks its prediction with this same length measure."),
     ("expr_length_ratio", "Token Count Ratio", "Token Ratio", "Size Compared to the Ground Truth", "cont", None, "main", "ratio", (-4.0, 4.0, "log2"),
-     "Prefix-token count of the predicted skeleton over the simplified ground truth's. 1 = same length; the median is taken on the log2 scale."),
+     "The number of symbols in the predicted formula divided by the number in the simplified true formula; every operator, variable and number counts as one symbol. 1 means the same length. Means are taken on a log scale, so ×2 and ×0.5 cancel."),
     ("expr_length_ratio_abserr", "Token Count Mismatch", "|log2 Ratio|", "Size Compared to the Ground Truth", "cont", False, "more", "num2", (0.0, 4.0, None),
-     "Absolute log2 of the token count ratio: 0 when the counts match, 1 at twice or half the length."),
+     "How far the Token Count Ratio is from 1, in doublings: 0 when both formulas have the same number of symbols, 1 when one has twice as many as the other."),
     ("n_constants_ratio", "Constant Count Ratio", "Constants Ratio", "Size Compared to the Ground Truth", "cont", None, "more", "ratio", (-4.0, 4.0, "log2"),
-     "Predicted over true constant count, for problems whose ground truth has at least one constant; the median is taken on the log2 scale."),
+     "The number of constants (fitted numbers) in the predicted formula divided by the number in the true formula, for problems whose true formula has at least one constant. Means are taken on a log scale, so ×2 and ×0.5 cancel."),
     ("n_constants_delta", "Constant Count Difference", "Constants Diff.", "Size Compared to the Ground Truth", "cont", None, "more", "num1", (-16.0, 16.0, None),
-     "Predicted minus true constant count."),
+     "The number of constants in the predicted formula minus the number in the true formula."),
     ("total_nestedness_delta", "Function Nesting Difference", "Nesting Diff.", "Size Compared to the Ground Truth", "cont", None, "more", "num1", (-8.0, 8.0, None),
-     "Predicted minus true function nesting."),
+     "The function nesting of the predicted formula minus that of the true formula (see Function Nesting of the Prediction)."),
     ("f1_score", "Token Overlap, F1", "Token F1", "Similarity to the Ground Truth", "cont", True, "more", "num3", (0.0, 1.0, None),
-     "F1 between the sets of distinct tokens of the predicted skeleton and of the simplified ground-truth skeleton. A failed prediction counts 0, the end of the range."),
+     "How well the symbols of the two formulas overlap, ignoring order and repeats, with every number counted as the same placeholder symbol. F1 combines Precision and Recall below (their harmonic mean); 1 means both formulas use exactly the same symbols."),
     ("precision_score", "Token Overlap, Precision", "Token Precision", "Similarity to the Ground Truth", "cont", True, "more", "num3", (0.0, 1.0, None),
-     "Share of the prediction's distinct tokens that occur in the ground-truth skeleton. A failed prediction counts 0: the precision of an empty prediction is 0 by definition."),
+     "The share of the distinct symbols in the predicted formula that also occur in the simplified true formula."),
     ("recall_score", "Token Overlap, Recall", "Token Recall", "Similarity to the Ground Truth", "cont", True, "more", "num3", (0.0, 1.0, None),
-     "Share of the ground truth's distinct tokens that occur in the prediction. A failed prediction counts 0."),
+     "The share of the distinct symbols in the simplified true formula that also occur in the predicted formula."),
     ("f1_score_unique_variables", "Variable Overlap, F1", "Variables F1", "Similarity to the Ground Truth", "cont", True, "more", "num3", (0.0, 1.0, None),
-     "F1 between the sets of input variables the prediction and the ground truth use. A failed prediction counts 0."),
+     "The same as Token Overlap, F1, for the input variables alone: 1 means both formulas use exactly the same variables."),
     ("precision_unique_variables", "Variable Overlap, Precision", "Variables Prec.", "Similarity to the Ground Truth", "cont", True, "more", "num3", (0.0, 1.0, None),
-     "Share of the prediction's variables that the ground truth uses. A failed prediction counts 0."),
+     "The share of the variables in the predicted formula that the true formula also uses."),
     ("recall_unique_variables", "Variable Overlap, Recall", "Variables Recall", "Similarity to the Ground Truth", "cont", True, "more", "num3", (0.0, 1.0, None),
-     "Share of the ground truth's variables that the prediction uses. A failed prediction counts 0."),
+     "The share of the variables in the true formula that the predicted formula also uses."),
     ("edit_distance", "Levenshtein Edit Distance", "Levenshtein", "Similarity to the Ground Truth", "cont", False, "more", "num1", (0.0, 64.0, None),
-     "Levenshtein distance between the two prefix token sequences: the number of token insertions, deletions and substitutions that turn one into the other."),
+     "How many symbols must be inserted, deleted or replaced to turn the predicted formula into the simplified true formula (Levenshtein distance). Both are written as sequences of symbols with each operator before its arguments, and every number as the same placeholder."),
     ("edit_distance_norm", "Levenshtein Edit Distance, Normalized", "Levenshtein Norm.", "Similarity to the Ground Truth", "cont", False, "more", "num3", (0.0, 1.0, None),
-     "Levenshtein distance between the prefix token sequences over the longer length, in [0, 1]."),
+     "The Levenshtein distance divided by the number of symbols in the longer formula: 0 means identical, 1 means every symbol differs."),
     ("zss_edit_distance", "Tree Edit Distance", "Tree Edit Dist.", "Similarity to the Ground Truth", "cont", False, "more", "num1", (0.0, 128.0, None),
-     "Zhang-Shasha tree edit distance between the two expression trees."),
+     "The cost of turning the predicted formula's tree into the simplified true formula's tree by inserting, deleting or renaming nodes (Zhang-Shasha tree edit distance). In such a tree each operator is a node, and its arguments are its children. The cost follows the spelling of the node names: each step costs the number of characters it changes, so deleting sin costs 3 and renaming sin to tan costs 2."),
     # ---- properties of ONE expression, the prediction or the ground truth: no comparison ----
     ("predicted_mdl", "MDL of the Prediction", "Prediction MDL", "Expression Properties", "cont", False, "more", "num1", (0.0, 256.0, None),
-     "Description length of the predicted expression in bits (SimpliPy mu, f64 canon)."),
+     "The length of the predicted formula in bits: how many bits it takes to write the formula down (MDL, minimum description length), measured by SimpliPy after simplification."),
     ("ground_truth_mdl", "MDL of the Ground Truth", "GT MDL", "Expression Properties", "cont", None, "more", "num1", (0.0, 256.0, None),
-     "Description length of the ground-truth expression in bits (SimpliPy mu, f64 canon): a property of the catalog, the same for every method."),
+     "The length of the true formula in bits, measured the same way."),
     ("predicted_skeleton_prefix_length", "Token Count of the Prediction", "Prediction Tokens", "Expression Properties", "cont", False, "more", "num1", (0.0, 64.0, None),
-     "Prefix-token count of the predicted skeleton."),
+     "The number of symbols in the predicted formula; every operator, variable and number counts as one."),
     ("skeleton_length", "Token Count of the Ground Truth", "GT Tokens", "Expression Properties", "cont", None, "more", "num1", (0.0, 64.0, None),
-     "Prefix-token count of the simplified ground truth: a property of the catalog, the same for every method."),
+     "The number of symbols in the simplified true formula."),
     ("predicted_n_constants", "Constant Count of the Prediction", "Prediction Constants", "Expression Properties", "cont", False, "more", "num1", (0.0, 32.0, None),
-     "Number of fitted constants in the predicted skeleton."),
+     "How many constants the method fitted in its formula."),
     ("n_constants", "Constant Count of the Ground Truth", "GT Constants", "Expression Properties", "cont", None, "more", "num1", (0.0, 32.0, None),
-     "Number of constants in the ground-truth skeleton."),
+     "How many constants the true formula has."),
     ("predicted_total_nestedness", "Function Nesting of the Prediction", "Prediction Nesting", "Expression Properties", "cont", False, "more", "num1", (0.0, 16.0, None),
-     "Excess depth of directly nested unary functions in the prediction, summed over maximal chains: sin(log(x)) counts 1."),
+     "How deeply functions sit directly inside each other in the predicted formula: sin(x) counts 0, sin(log(x)) counts 1, sin(log(exp(x))) counts 2, and separate chains add up."),
     ("total_nestedness", "Function Nesting of the Ground Truth", "GT Nesting", "Expression Properties", "cont", None, "more", "num1", (0.0, 16.0, None),
-     "Excess depth of directly nested unary functions in the ground truth."),
+     "The same for the true formula."),
     ("n_variables", "Variable Count of the Ground Truth", "GT Variables", "Expression Properties", "cont", None, "more", "num1", (0.0, 16.0, None),
-     "Number of input variables the ground truth uses."),
+     "How many input variables the true formula uses."),
     # ---- what the method reports about its own choice ----
     ("predicted_log_prob", "Log-Probability of the Prediction", "Log-Prob", "Method Internals", "cont", True, "more", "num1", (-64.0, 0.0, None),
-     "Log-probability of the selected candidate's token sequence under the model's decoder. Sampling methods only."),
+     "How probable the chosen formula was under the Flash-ANSR model itself, given the data: the logarithm of the probability of its sequence of symbols. Longer formulas have lower values. Only the Flash-ANSR models report it."),
     ("predicted_score", "Selection Score", "Score", "Method Internals", "cont", False, "more", "num1", (-2048.0, 512.0, None),
-     "The ranking score of the selected candidate as the method computed it (Flash-ANSR: the two-part code, lower is better). Only comparable within one method."),
+     "The score by which Flash-ANSR chose its formula: the error-plus-length score described under its name, in bits; lower is better. Only the Flash-ANSR entries report it."),
     ("predicted_pareto_rank", "Pareto Rank of the Prediction", "Pareto Rank", "Method Internals", "cont", False, "more", "num1", (0.0, 64.0, None),
-     "Rank of the selected candidate on the method's FVU / length front (0 = on the front).")]
+     "Where the chosen formula stands among Flash-ANSR's candidates when they are compared by error and length together. 0 means no other candidate is both more accurate and shorter. 1 means that holds once the candidates at 0 are set aside, and so on. Only the Flash-ANSR entries report it.")]
 # A metric that repeats another in EVERY published cell says nothing of its own, so the menu does not list it (its
 # numbers stay in the cells). Recovery relative to the ground truth is numeric recovery wherever the targets are
 # computed from the ground truth (reference FVU = 0); it is a metric of its own only once a catalog of measured data is in.
@@ -291,6 +307,98 @@ def load_rows(root: str) -> dict[str, dict[tuple[str, int], Rows]]:
     return data
 
 
+# ---- the formulas themselves: the Predictions view ----------------------------------------------------------------
+# One file per method x problem set x budget x run x block of PRED_BLOCK problems, written only once that run of the
+# cell is complete: a finished file never changes, so the repository grows by each formula once. The ground truth has
+# its own files per problem set and block.
+PRED_BLOCK = 500
+PRED_NUMERIC, PRED_SYMBOLIC = 1, 2   # the flags stored with a prediction
+
+
+def round_prefix(expr: str) -> str:
+    """A prefix expression with every number at 4 significant digits (integers as written): what the page shows."""
+    out = []
+    for t in expr.split():
+        if t.lstrip("-").isdigit():
+            out.append(t)
+            continue
+        try:
+            v = float(t)
+        except ValueError:
+            out.append(t)
+            continue
+        out.append(f"{v:.4g}" if math.isfinite(v) else t)
+    return " ".join(out)
+
+
+Expressions = dict[tuple[str, str, int, int], dict[int, list[Any] | None]]
+
+
+def load_expressions(root: str, keys: list[str]) -> tuple[Expressions, dict[str, dict[int, str]]]:
+    """(pred, truth): pred[(method, catalog, rung, draw)][row] = [expression, flags] for the methods in `keys`, and
+    truth[catalog][row] = the ground truth's expression. Both are empty when the rows carry no expressions (a table
+    written before `srbf table` stored them)."""
+    pred: Expressions = defaultdict(dict)
+    truth: dict[str, dict[int, str]] = defaultdict(dict)
+    want = set(keys)
+    files = sorted(set(glob.glob(os.path.join(root, "rows_full_*.csv")) + glob.glob(os.path.join(root, "*_rows_full.csv"))))
+    for path in files:
+        with open(path) as fh:
+            rd = csv.reader(fh)
+            head = next(rd, [])
+            if "predicted_expression" not in head:
+                continue
+            names = ("model", "draw", "catalog", "rung", "row", "success", "numeric_recovery_val", "symbolic_recovery",
+                     "predicted_expression", "ground_truth_expression")
+            at = {k: head.index(k) for k in names}
+            for r in rd:
+                cat, row = r[at["catalog"]], int(r[at["row"]])
+                gt = r[at["ground_truth_expression"]]
+                if gt and row not in truth[cat]:
+                    truth[cat][row] = round_prefix(gt)
+                if r[at["model"]] not in want:
+                    continue
+                expr = r[at["predicted_expression"]] if r[at["success"]] in ("1", "1.0") else ""
+                numeric, symbolic = r[at["numeric_recovery_val"]] in ("1", "1.0"), r[at["symbolic_recovery"]] in ("1", "1.0")
+                flags = (PRED_NUMERIC if numeric else 0) | (PRED_SYMBOLIC if symbolic else 0)
+                key = (r[at["model"]], cat, int(r[at["rung"]]), int(r[at["draw"]] or 1))
+                pred[key][row] = [round_prefix(expr), flags] if expr else None
+    return pred, truth
+
+
+def write_predictions(out_dir: str, rel: str, pred: Expressions, truth: dict[str, dict[int, str]],
+                      sizes: dict[str, int]) -> dict[str, dict[str, list[int]]]:
+    """Write the Predictions view's files next to the release; returns the index the page reads:
+    {method: {"catalog|rung": [the runs whose files exist]}}. A run still in progress is left out."""
+    def put(path: str, key: str, obj: Any) -> None:
+        text = "window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R[%s]=R[%s]||{};R[%s][%s]=%s;})();\n" % (
+            json.dumps(rel), json.dumps(rel), json.dumps(rel), json.dumps(key), json.dumps(obj, separators=(",", ":")))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if os.path.exists(path) and open(path).read() == text:
+            return
+        with open(path, "w") as fh:
+            fh.write(text)
+
+    def blocks(rows: Mapping[int, Any]) -> dict[int, dict[str, Any]]:
+        out: dict[int, dict[str, Any]] = defaultdict(dict)
+        for i in sorted(rows):
+            out[i // PRED_BLOCK][str(i)] = rows[i]
+        return out
+
+    index: dict[str, dict[str, list[int]]] = defaultdict(dict)
+    for (m, c, r, d), got in sorted(pred.items()):
+        if c not in sizes or len(got) < sizes[c]:
+            continue
+        index[m].setdefault(f"{c}|{r}", []).append(d)
+        for b, chunk in blocks(got).items():
+            put(os.path.join(out_dir, "pred", m, c, f"{r}.{d}.{b}.js"), f"{m}|{c}|{r}|{d}|{b}", chunk)
+    for c, formulas in sorted(truth.items()):
+        if c in sizes:
+            for b, chunk in blocks(formulas).items():
+                put(os.path.join(out_dir, "pred", "truth", f"{c}.{b}.js"), f"truth|{c}|{b}", chunk)
+    return dict(index)
+
+
 def by_draw(rows: dict[Any, dict[str, Any]]) -> dict[int, dict[int, dict[str, Any]]]:
     """Rows keyed by (draw, row) split per draw; a bare row key counts as draw 1."""
     out: dict[int, dict[int, dict[str, Any]]] = defaultdict(dict)
@@ -392,14 +500,20 @@ def paired_cell(rows_a: dict[Any, dict[str, Any]], rows_b: dict[Any, dict[str, A
         else:
             tf = HIST_SPECS[k][2] if k in HIST_SPECS else None
             for name, laws in ((k, common),) + (((k + ANSWERED, [i for i in common if rows_a[i]["success"] and rows_b[i]["success"]]),) if k in WORST else ()):
-                ds = []
+                # d is the first method's value minus the second's; the wins and losses count where the first is BETTER
+                # or WORSE on the metric's own terms (rank_score: lower is better for an error, closer to the ideal
+                # for a ratio), which the sign of d alone does not say
+                ds, better, worse = [], 0, 0
+                higher, ideal = METRIC_HIGHER[k], IDEAL.get(k)
                 for i in laws:
                     va, vb = transform(rows_a[i][k], tf), transform(rows_b[i][k], tf)
                     if va is None or vb is None or not (math.isfinite(va) and math.isfinite(vb)):
                         continue
                     ds.append(va - vb)
+                    sa, sb = rank_score(rows_a[i][k], higher, ideal), rank_score(rows_b[i][k], higher, ideal)
+                    better, worse = better + (sa > sb), worse + (sb > sa)
                 d = np.asarray(ds, float)
-                out[name] = [int(d.size), float(d.sum()) if d.size else 0.0, float((d * d).sum()) if d.size else 0.0, int((d > 0).sum()), int((d < 0).sum())]
+                out[name] = [int(d.size), float(d.sum()) if d.size else 0.0, float((d * d).sum()) if d.size else 0.0, int(better), int(worse)]
     return {"n": len(common), "m": out}
 
 
@@ -596,6 +710,7 @@ def main() -> None:
         cells: dict[str, Any] = {}
         hists: dict[str, Any] = {k: {} for k in HIST_SPECS}
         status: dict[str, Any] = {}
+        plans: dict[str, set[tuple[int, str, int]] | None] = {}
         for key, label, param, color, group, prov, ukey, _sel in methods:
             cells[key] = {}
             for (c, r), rows in sorted(data.get(key, {}).items()):
@@ -607,8 +722,8 @@ def main() -> None:
                     h = hist_of([transform(x[hk], tf) for x in pool.values()], lo, hi)
                     if h is not None:
                         hists[hk].setdefault(key, {}).setdefault(c, {})[str(r)] = h
-            status[key] = status_of({cr: rows for cr, rows in data.get(key, {}).items() if usable(key, cr[1])}, sizes,
-                                    planned_cells(a.root, ukey, lambda r, k=key: usable(k, r)))
+            plans[key] = planned_cells(a.root, ukey, lambda r, k=key: usable(k, r))
+            status[key] = status_of({cr: rows for cr, rows in data.get(key, {}).items() if usable(key, cr[1])}, sizes, plans[key])
         paired: dict[str, Any] = {}
         mkeys = [m[0] for m in methods]
         contrasts([(ka, kb) for i, ka in enumerate(mkeys) for kb in mkeys[i + 1:]], paired)
@@ -623,14 +738,16 @@ def main() -> None:
         payload = {"schema": 2, "base": base,
                    "release": {"id": a.release, "title": a.title or a.release, "notes": a.notes, "versions": RELEASE_VERSIONS, "generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
                                "updated": dt.datetime.now().astimezone().isoformat(timespec="minutes"),   # with its offset: shown in the reader's time zone
-                               "scoring": "Every method submits one prediction per problem and chooses it by its own rule; the rule is named next to the method, along with who chose its configuration.",
-                               "judge": "One judge for every prediction: the predicted expression and the ground truth are compared in one certified canonical form (SimpliPy acj-5-4-llm, f64), and numeric recovery is float32 precision on 512 held-out points."},
+                               "scoring": "Every method returns one formula per problem, its prediction, and picks it by its own rule. The ? after a method's name describes that rule; the label beside it says who chose the method's settings.",
+                               "judge": "Every prediction is checked the same way against the true formula. Numeric Recovery: it reproduces the 512 held-out points almost exactly (FVU at most 2^-23: a typical error of at most 0.035 % of the true values' spread). Symbolic Recovery: once both formulas are simplified into a standard form, they are identical when their numbers are ignored (so x^2 matches x^3; stricter versions also check exponents and all numbers)."},
                    "catalogs": cats, "rungs": RUNGS, "nb": NB, "metrics": listed, "paired_keys": PAIRED_KEYS, "rank_keys": [k for k in RANK_KEYS if k in {m["key"] for m in listed}],
                    # budget: what one rung of the ladder buys. "candidates" is a count a generative method draws;
                    # PySR's rungs are search iterations, which have no place on the candidate axis of the site.
-                   "methods": [{"key": k, "label": l, "param": p, "budget": p if p in ("iterations", "seconds", "restarts") else "candidates",
+                   "methods": [{"key": k, "label": l, "param": PARAM_LABEL.get(p, p), "budget": p if p in ("iterations", "seconds", "restarts") else "candidates",
                                 "color": col, "group": g, "provenance": prov,
-                                "selection": sel or (FLASH_ANSR_SELECTION if g == "flash-ansr" else ""), **METHOD_STYLE.get(k, {})}
+                                "selection": sel or (FLASH_ANSR_SELECTION if g == "flash-ansr" else ""),
+                                # the budgets its run plan holds (None without a plan): a budget outside them is never run
+                                "budgets": sorted({r for _, _, r in plan}) if (plan := plans.get(k)) else None, **METHOD_STYLE.get(k, {})}
                                for k, l, p, col, g, prov, _, sel in methods],
                    "cells": cells, "status": status, "timing": timing, "timing_note": timing_note}
         return payload, hists, paired
@@ -655,6 +772,10 @@ def main() -> None:
         print(f"{note}: {out_js} ({os.path.getsize(out_js) // 1024} kB), hist/ {len(hists)} files, paired {len(paired)} pairs; methods with data: {with_data}; status {payload['status']}")
 
     payload, hists, paired = build(public, rel_base(out_dir, site_dir))
+    pred, truth = load_expressions(a.root, public)
+    pred = {k: v for k, v in pred.items() if usable(k[0], k[2])}   # the budgets the release publishes, and no others
+    payload["pred"] = write_predictions(out_dir, a.release, pred, truth, sizes)
+    payload["pred_block"] = PRED_BLOCK
     ranks = leagues([(ka, kb) for i, ka in enumerate(public) for kb in public[i + 1:]], public, payload["rank_keys"])
     write_set(payload, hists, paired, ranks, a.out, out_dir, "RESULTS_V2", f"public release {a.release}")
     if private:

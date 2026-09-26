@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **E2E's and NeSymReS's square roots and absolute values are read.** Both baselines print through SymPy, which
+  spells `sqrt(u)` and `Abs(u)`; the engine spells `rootn(u, 2)` and `abs(u)` and kept the unknown names as bare
+  tokens, so such a prediction had no description length and could never match its ground truth: 29,289 of E2E's
+  139,348 usable predictions (21 %) and 917 of NeSymReS's. The in-process adapters now store the engine's spelling
+  (`srbf.spelling.engine_spelling`, as the subprocess adapter already did), and `srbf table` rewrites the files
+  written before. The judge's fingerprint changes, so the table re-judges its cache.
+- **The results site's paired wins and losses count better and worse.** `scripts/site_export_v2.py` counted a
+  problem as a win when the method's value was higher than the baseline's; for an error (log10 FVU) that is a loss,
+  and for a ratio whose ideal is 1 the sign says nothing. They are now oriented by the metric's own terms (lower
+  error, ratio closer to 1), the same rule the ranks use, and the sign test reads them.
 - **The shards of one unit no longer race on the candidate store's manifest.** Every shard of a unit writes the
   manifest of the unit's store directory; the temp file they renamed had one shared name, so two shards renaming
   at once ended one of them with `FileNotFoundError` after hours of work. The temp name now carries the writer's
@@ -59,6 +69,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   method without a ladder when it stood next to one with a ladder.
 
 ### Changed
+- **`log10_fvu` is floored at the float64 epsilon** (`srbf.metrics.numeric.LOG10_FVU_FLOOR`, \(\log_{10} 2^{-52}
+  \approx -15.65\)). An exact fit used to be \(-\infty\), which every mean left out, while the same formula written
+  another way landed at finite rounding noise anywhere down to about \(-320\), which every mean took in: on the
+  2026-09 board, 22 % of T8-120M's usable predictions sat below the float64 epsilon and at budget 128 values below
+  \(-20\) made 45 % of its mean's sum. Below the epsilon the unexplained variance is smaller than about one rounding
+  unit of the variance it is divided by, so all of these are one value now, and an exact fit counts in a mean.
+  Blow-ups stay \(+\infty\). The judge's fingerprint changes, so `srbf table` re-judges its cache.
+- **The results site is written for a first-time reader.** Every hint, popover, metric definition, method note and
+  protocol text, and the prose below the explorer, say what they mean in plain words ("problem set", "budget",
+  "run"; no pipeline vocabulary), with the longer explanations moved to a from-scratch "How to read the results"
+  section. The Numeric Recovery threshold is described as what it is (FVU at most 2^-23: a typical error of at most
+  0.035 % of the values' spread). A method missing at a budget is said to be not run there, or not finished yet;
+  the export carries each method's planned budgets for that. `copy_lint.py` and a rendered-text test in the site
+  suite keep the pipeline's words out.
 - **A worker is handed the problem and nothing of the ground truth.** `meta` carries the problem's identifiers and
   sampling parameters (`benchmark_eq_id`, `eval_row_index`, `n_support`, `noise_level`, the variable
   names); the ground truth's skeleton, expression, constants and complexity stay on srbf's side.
@@ -76,6 +100,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `scripts/run_timing_ladder.py` measures on any machine; `--host NAME` restricts it to one.
 
 ### Added
+- **`srbf table` stores the expressions it judged:** `predicted_expression` (in the ground truth's variable names and
+  the engine's spelling) and `ground_truth_expression`, as prefix tokens at full precision.
+- **The results site's Predictions view:** one problem at a time, the true formula and every method's formula, typeset,
+  with whether each recovered it. `scripts/site_export_v2.py` writes one file per method, problem set, budget,
+  finished run and block of 500 problems; a finished file never changes.
 - **`srbf status -c CONFIG`**: how far every run of a config is (`done`, `started`, `not started`, with the
   row counts), without loading a model; the exit code is 0 when every run is done.
   `Benchmark.runs_from_config(..., build_adapter=False)` is the same from Python.
@@ -95,6 +124,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exists; every example parses; and the site builds with broken links as errors.
 
 ### Removed
+- The results site's 2026-07 (paper) release: its explorer, data and prose. Its links open the current page.
 - The scaling configs of the `v25.0-T7` checkpoints; the `v25.0-T8` configs are the reference.
 
 ## [0.20.3] - 2026-09-19

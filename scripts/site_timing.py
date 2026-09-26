@@ -39,8 +39,9 @@ from timing_readout import estimates, load_rung  # noqa: E402
 
 import numpy as np  # noqa: E402
 
-NOTE = ("Reference machine: one workstation (16 cores / 32 threads, one RTX 4090), one method at a time, on a frozen 262-problem stratified subset; "
-        "each point is the size-weighted pooled mean fit time over the suite's strata.")
+NOTE = ("Measured on one workstation (16 CPU cores, one RTX 4090 GPU), one method at a time, on a fixed sample of 262 problems. "
+        "Each point averages over the problems where the method returned a usable formula, and every problem set counts in "
+        "proportion to its size.")
 
 
 def note(suite_keys: list[str]) -> str:
@@ -48,8 +49,8 @@ def note(suite_keys: list[str]) -> str:
     if not suite_keys:
         return NOTE
     one = len(suite_keys) == 1
-    return (f"{NOTE} {', '.join(suite_keys)} {'is' if one else 'are'} evaluated on the reference machine itself: "
-            f"{'its' if one else 'their'} points are the mean over the whole suite.")
+    return (f"{NOTE} {', '.join(suite_keys)} {'was' if one else 'were'} run on all problems on this workstation, so "
+            f"{'its' if one else 'their'} points average over all problems, not over the sample.")
 
 
 def rungs_in(directory: Path, pattern: str) -> list[int]:

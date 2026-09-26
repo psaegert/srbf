@@ -13,7 +13,7 @@
 
 <p align="center">
   <a href="https://psaegert.github.io/srbf/">
-    <img alt="srbf visual abstract: any datasets and any methods go through one framework (a unified dataset formalism, built-in decontamination, paired and pre-declared statistics) into the results explorer with curves, tables and ranks."
+    <img alt="srbf visual abstract: any problem sets and any methods go through one framework (problems from symbolic-data, which a method's training data can exclude; paired comparisons) into the results explorer with curves, tables and ranks."
          src="https://raw.githubusercontent.com/psaegert/srbf/main/assets/brand/visual-abstract.svg" width="100%">
   </a>
 </p>

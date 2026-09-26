@@ -157,3 +157,21 @@ def test_a_new_worker_does_not_change_the_judge(tmp_path, monkeypatch):
     assert judge_fingerprint("acj-5-4-llm") == before
     (pkg / "result_processing.py").write_text("JUDGE = 2\n")
     assert judge_fingerprint("acj-5-4-llm") != before
+
+
+def test_sympy_spellings_in_a_stored_prediction_are_read_the_engine_way(tmp_path, engine):
+    """E2E and NeSymReS printed through SymPy: sqrt(u) and Abs(u). The engine spells rootn(u, 2) and abs(u), and read
+    the bare tokens as unknown, so such a prediction had no description length and could never match its ground truth."""
+    x = np.linspace(0.5, 2.0, 16)
+    snap = _snapshot([["sqrt", "*", "x1", "x2"], ["abs", "x1"]])
+    snap["skeleton"] = [["rootn", "*", "x1", "x2", "<constant>"], ["abs", "x1"]]
+    snap["ground_truth_prefix"] = [["rootn", "*", "x1", "x2", "2"], ["abs", "x1"]]
+    y = [np.sqrt(x * x), np.abs(x)]
+    for key in ("y", "y_pred", "y_val", "y_pred_val"):
+        snap[key] = [v.copy() for v in y]
+    snap["predicted_expression_prefix"] = [["sqrt", "*", "x1", "x2"], ["Abs", "x1"]]
+    snap["predicted_skeleton_prefix"] = [["sqrt", "*", "x1", "x2"], ["Abs", "x1"]]
+    path = _write(tmp_path, "toy", "choices_000001.pkl", snap)
+    rows = judge_result_file(path, method="m", engine=engine)
+    assert _col(rows, "predicted_mdl") != ["", ""] and "" not in _col(rows, "predicted_mdl")   # priced
+    assert _col(rows, "symbolic_recovery") == [1, 1]
