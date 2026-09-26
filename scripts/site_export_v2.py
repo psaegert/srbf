@@ -57,12 +57,14 @@ METHODS = [
     # the hybrid: a rung is a pair (D draws, I iterations) chosen so that both halves take the same time on the reference
     # machine; the ladder is labelled by its draws
     ("T8-20M-pysr", "Flash-ANSR T8-20M + PySR", "draws", "#7b1fa2", "hybrid", "author_blessed", "hybrid",
-     "Flash-ANSR T8-20M generates candidate formulas, and its best 100 become PySR's starting population. PySR's best formulas "
-     "then join Flash-ANSR's candidates, and Flash-ANSR's rule picks one. Each budget pairs a number of candidates with the number "
-     "of PySR iterations that takes the same time on our timing workstation."),
+     "Flash-ANSR T8-20M generates candidate formulas, and up to 100 of those with the best Flash-ANSR score become PySR's starting population. "
+     "PySR's best formulas then join Flash-ANSR's candidates, and Flash-ANSR's rule picks one. At a budget of B, Flash-ANSR generates B "
+     "candidates and PySR runs as many iterations as take the same time on our timing workstation, so each budget costs about twice "
+     "what Flash-ANSR alone spends at it."),
     ("prior", "Flash-ANSR prior", "draws", "#9a9a9a", "reference", "author_blessed", None,
-     "Generates random formulas from the distribution Flash-ANSR was trained on, without looking at the data, then fits and "
-     "picks them the way Flash-ANSR does. It shows how much random guessing alone achieves."),
+     "Draws random formulas of the kind Flash-ANSR was trained on, without looking at the data, then fits their constants and "
+     "picks one with Flash-ANSR's rule. It shows what guessing plus fitting and selection achieves, and so how much Flash-ANSR "
+     "gains by reading the data."),
     # the ceiling: the ground truth itself as the one candidate, fitted by Flash-ANSR's refiner; its rungs are restarts
     ("oracle", "Oracle", "restarts", "#000000", "reference", "author_blessed", "oracle",
      "Is given the true formula with its constants blanked out (exponents are kept) and only has to fit the constants, "
@@ -75,7 +77,7 @@ METHOD_STYLE: dict[str, dict[str, bool]] = {"oracle": {"dash": True, "ink": True
 RELEASE_VERSIONS = ("PySR: version 2.3.0, with SymbolicRegression.jl 2.4.0. The PySR part of Flash-ANSR T8-20M + PySR: PySR 2.4.0, "
                     "with SymbolicRegression.jl 2.4.1 (2.4.2 on our timing workstation). The settings it uses have the same defaults "
                     "in both PySR versions, and the SymbolicRegression.jl versions in between change speed, not results. "
-                    "Simplification: SimpliPy, with its rule set acj-5-4-llm.")
+                    "Simplification: SimpliPy (a formula-simplification library), with its rule set acj-5-4-llm.")
 FLASH_ANSR_SELECTION = ("A neural network generates candidate formulas from the data. Flash-ANSR fits the numbers in each and "
                         "returns the one that best balances error and length: the smallest (n/2) log2 FVU plus the formula's length "
                         "in bits, where n is the number of given points and FVU is the share of their variation the formula leaves "
@@ -112,18 +114,18 @@ METRICS = [
     ("numeric_recovery_relative_fit", "Fits as Well as the Ground Truth, Support", "GT-Level fNRR", "Numeric Recovery", "rate", True, "more", "pct", None,
      "The same test on the 512 given points."),
     ("success", "Successful Prediction Rate", "Success", "Numeric Recovery", "rate", True, "more", "pct", None,
-     "The share of problems where the method returned a formula that could be evaluated at all: it was produced and read, and its numbers were fitted, without an error."),
+     "The share of problems where the method returned a formula that could be evaluated at all: it was produced and parsed, and its numbers were fitted, without an error."),
     ("symbolic_recovery", "Symbolic Recovery: Structure", "SRRs", "Symbolic Recovery", "rate", True, "main", "pct", None,
-     "The share of problems where the predicted formula has the same form as the true formula once every number in both is ignored: 2.1 sin(x) matches 5 sin(x). Both formulas are first simplified into a standard form (with SimpliPy), so x + y also matches y + x. Short name: SRRs (s for structure)."),
+     "The share of problems where the predicted formula has the same form as the true formula once every number in both is ignored, exponents included: 2.1 sin(x) matches 5 sin(x), and x^2 also matches x^3. Both formulas are first simplified into a standard form (with SimpliPy), so x + y also matches y + x. Short name: SRRs (s for structure)."),
     ("symbolic_recovery_mask_fittable", "Symbolic Recovery: Structure + Exponents", "SRRe", "Symbolic Recovery", "rate", True, "more", "pct", None,
-     "Like SRRs, but only the numbers a method fits are ignored. Exponents and root indices must match exactly: x^2 and x^3 differ, and an exponent of 1.9999 where the true formula has 2 is a miss. Short name: SRRe (e for exponents)."),
+     "Like SRRs, but only the constants a method fits (coefficients, added terms, constants inside functions) are ignored. Exponents and root indices must match exactly: x^2 and x^3 differ, and an exponent of 1.9999 where the true formula has 2 is a miss. Short name: SRRe (e for exponents)."),
     ("symbolic_recovery_mask_none", "Symbolic Recovery: Structure + All Numbers", "SRRa", "Symbolic Recovery", "rate", True, "more", "pct", None,
-     "Like SRRe, and the formula, with its fitted numbers, must also pass Numeric Recovery on the held-out points: the formula itself was found. Short name: SRRa (a for all numbers)."),
+     "An SRRe match whose formula, with its fitted numbers, also passes Numeric Recovery on the held-out points: the formula itself was found. Short name: SRRa (a for all numbers)."),
     ("skeleton_match_raw", "Raw Symbolic Recovery", "SRRr", "Symbolic Recovery", "rate", True, "more", "pct", None,
-     "Like SRRs, but without simplifying first: the predicted formula must be written exactly like the true one, symbol by symbol, with every number ignored. x*x instead of x^2, or a sum in a different order, is a miss. It is the strictest symbolic comparison on this page. Short name: SRRr (r for raw)."),
+     "Like SRRs, but without simplifying first: the predicted formula must be written exactly like the true one, symbol by symbol, with every number ignored. x*x instead of x^2, or a sum in a different order, is a miss. It is the strictest about how a formula is written, and like SRRs it ignores all numbers. Short name: SRRr (r for raw)."),
     # ---- how good is the fit? the predictions that were made ----
     ("log10_fvu_val", "log10 FVU, Validation", "log10 FVU Val", "Fit Error", "cont", False, "main", "num2", (-17.0, 3.0, None),
-     "How much of the variation in the 512 held-out points the formula leaves unexplained (FVU: the mean squared error divided by the variance of the true values), on a log10 scale. 0 is no better than always predicting the average, -2 leaves 1 % unexplained, -7 leaves 0.00001 %. A perfect fit is minus infinity: the median counts it, the mean leaves it out."),
+     "How much of the variation in the 512 held-out points the formula leaves unexplained (FVU: the mean squared error divided by the variance of the true values), on a log10 scale. 0 is no better than always predicting the average, -2 leaves 1 % unexplained, -7 leaves 0.00001 %. The scale stops at -15.65, the precision of a 64-bit float: an exact fit counts there. A formula that blows up has no finite value: the median counts it as worst, the mean leaves it out."),
     ("log10_fvu_fit", "log10 FVU, Support", "log10 FVU Fit", "Fit Error", "cont", False, "more", "num2", (-17.0, 3.0, None),
      "The same on the 512 given points."),
     ("r2_val", "R², Validation", "R² Val", "Fit Error", "cont", True, "more", "num3", (-1.0, 1.0, None),
@@ -132,7 +134,7 @@ METRICS = [
      "The same on the 512 given points. The median is shown whichever statistic you choose."),
     # ---- comparisons of the prediction with the ground truth ----
     ("mdl_ratio", "MDL Ratio", "MDL Ratio", "Size Compared to the Ground Truth", "cont", None, "main", "ratio", (-4.0, 4.0, "log2"),
-     "The length of the predicted formula in bits divided by the length of the true formula. Length in bits (MDL, minimum description length) is how many bits it takes to write the formula down, measured by SimpliPy after simplification. 1 means as long as the true formula, 2 twice as long. Means are taken on a log scale, so ×2 and ×0.5 cancel."),
+     "The length of the predicted formula in bits divided by the length of the true formula. Length in bits (MDL, minimum description length) is how many bits it takes to write the formula down, including the digits of its numbers, measured by SimpliPy after simplification. 1 means as long as the true formula, 2 twice as long. Means are taken on a log scale, so ×2 and ×0.5 cancel. Flash-ANSR picks its prediction with this same length measure."),
     ("expr_length_ratio", "Token Count Ratio", "Token Ratio", "Size Compared to the Ground Truth", "cont", None, "main", "ratio", (-4.0, 4.0, "log2"),
      "The number of symbols in the predicted formula divided by the number in the simplified true formula; every operator, variable and number counts as one symbol. 1 means the same length. Means are taken on a log scale, so ×2 and ×0.5 cancel."),
     ("expr_length_ratio_abserr", "Token Count Mismatch", "|log2 Ratio|", "Size Compared to the Ground Truth", "cont", False, "more", "num2", (0.0, 4.0, None),
@@ -160,7 +162,7 @@ METRICS = [
     ("edit_distance_norm", "Levenshtein Edit Distance, Normalized", "Levenshtein Norm.", "Similarity to the Ground Truth", "cont", False, "more", "num3", (0.0, 1.0, None),
      "The Levenshtein distance divided by the number of symbols in the longer formula: 0 means identical, 1 means every symbol differs."),
     ("zss_edit_distance", "Tree Edit Distance", "Tree Edit Dist.", "Similarity to the Ground Truth", "cont", False, "more", "num1", (0.0, 128.0, None),
-     "The cost of turning the predicted formula's tree into the simplified true formula's tree by inserting, deleting or renaming nodes (Zhang-Shasha tree edit distance). In such a tree each operator is a node, and its arguments are its children. Each step costs the number of characters it changes in a node's name: deleting sin costs 3, renaming sin to tan costs 2."),
+     "The cost of turning the predicted formula's tree into the simplified true formula's tree by inserting, deleting or renaming nodes (Zhang-Shasha tree edit distance). In such a tree each operator is a node, and its arguments are its children. The cost follows the spelling of the node names: each step costs the number of characters it changes, so deleting sin costs 3 and renaming sin to tan costs 2."),
     # ---- properties of ONE expression, the prediction or the ground truth: no comparison ----
     ("predicted_mdl", "MDL of the Prediction", "Prediction MDL", "Expression Properties", "cont", False, "more", "num1", (0.0, 256.0, None),
      "The length of the predicted formula in bits: how many bits it takes to write the formula down (MDL, minimum description length), measured by SimpliPy after simplification."),

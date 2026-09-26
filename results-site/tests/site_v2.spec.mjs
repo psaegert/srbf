@@ -454,7 +454,7 @@ test('an untimed method changes nothing else on the time axis', async ({ page })
 test('the page says nothing about what it does not show', async ({ page }) => {
   await page.goto('/?release=2026-09&v=curves');
   // the control is plain, and neither it nor the payload names anything the release does not publish
-  await expect(page.locator(V2 + ' .v2addmopen')).toHaveText('add method');
+  await expect(page.locator(V2 + ' .v2addmopen')).toHaveText('open a method with a key');
   const html = await page.content();
   expect(html).not.toMatch(/private|sealed|decrypt|password/i);
 });
@@ -564,7 +564,7 @@ test('the distribution view opens on histograms of a continuous metric', async (
   expect(await chart.locator('rect[fill-opacity="0.28"]').count()).toBe(panels);
   await expect(chart).toContainText(/n = [\d,]+ of [\d,]+/);
   // a bin taller than the shared scale is a broken bar with its share beside it: no arrow that could point at the panel above
-  if (await chart.locator('path.v2break').count()) { await expect(chart).toContainText(/\d+ % in (this|the outermost) bin/); }
+  if (await chart.locator('path.v2break').count()) { await expect(chart).toContainText(/\d+ % in (this|the (left|right)-most) bin/); }
   await expect(chart).not.toContainText('\u25b2');
   expect(errors).toEqual([]);
 });
