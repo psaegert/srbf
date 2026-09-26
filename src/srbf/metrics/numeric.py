@@ -175,15 +175,20 @@ def r2(y_true: np.ndarray | None, y_pred: np.ndarray | None) -> float:
     return float(1.0 - fvu(y_true, y_pred))
 
 
-def log10_fvu(y_true: np.ndarray | None, y_pred: np.ndarray | None) -> float:
-    """Compute log10 of the Fraction of Variance Unexplained.
+# The floor of log10 FVU: the double-precision epsilon (2^-52, log10 = -15.65). Below it the unexplained variance is
+# smaller than about one rounding unit of the variance it is divided by, so the value is rounding noise: the same
+# formula written two ways lands anywhere from -16 to -320, or at exactly 0 (-inf) when the arithmetic happens to agree
+# bit for bit. On the floor these are one value, and an exact fit counts in a mean like any other fit.
+LOG10_FVU_FLOOR = float(np.log10(np.finfo(np.float64).eps))
 
-    Returns ``-np.inf`` when FVU is exactly zero (perfect fit).
+
+def log10_fvu(y_true: np.ndarray | None, y_pred: np.ndarray | None) -> float:
+    """Compute log10 of the Fraction of Variance Unexplained, floored at the double-precision epsilon.
+
+    An exact fit (FVU 0) and any FVU below ``2**-52`` give :data:`LOG10_FVU_FLOOR` (about -15.65), never ``-inf``;
+    an invalid or non-finite prediction gives ``+inf``.
     """
-    fvu_value = fvu(y_true, y_pred)
-    if fvu_value == 0:
-        return -np.inf
-    return np.log10(fvu_value)
+    return float(np.log10(max(fvu(y_true, y_pred), np.finfo(np.float64).eps)))
 
 
 def is_perfect_fit(y_true: np.ndarray | None, y_pred: np.ndarray | None) -> bool:

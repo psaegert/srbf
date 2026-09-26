@@ -63,6 +63,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   method without a ladder when it stood next to one with a ladder.
 
 ### Changed
+- **`log10_fvu` is floored at the float64 epsilon** (`srbf.metrics.numeric.LOG10_FVU_FLOOR`, \(\log_{10} 2^{-52}
+  \approx -15.65\)). An exact fit used to be \(-\infty\), which every mean left out, while the same formula written
+  another way landed at finite rounding noise anywhere down to about \(-320\), which every mean took in: on the
+  2026-09 board, 22 % of T8-120M's usable predictions sat below the float64 epsilon and at budget 128 values below
+  \(-20\) made 45 % of its mean's sum. Below the epsilon the unexplained variance is smaller than about one rounding
+  unit of the variance it is divided by, so all of these are one value now, and an exact fit counts in a mean.
+  Blow-ups stay \(+\infty\). The judge's fingerprint changes, so `srbf table` re-judges its cache.
 - **The results site is written for a first-time reader.** Every hint, popover, metric definition, method note and
   protocol text, and the prose below the explorer, say what they mean in plain words ("problem set", "budget",
   "run"; no pipeline vocabulary), with the longer explanations moved to a from-scratch "How to read the results"

@@ -75,8 +75,13 @@ constant target has FVU 0 when it is matched exactly and \(\infty\) otherwise. F
 ### `log10_fvu_fit`, `log10_fvu_val`
 
 \(\log_{10}\) of the FVU: \(-2\) means 99 % of the variance is explained, about \(-7\) is float32
-precision. An exact fit is \(-\infty\). Summaries of this column take the finite values, so report
-it next to the recovery rate, which counts the exact fits.
+precision. It is floored at the float64 epsilon, \(\log_{10} 2^{-52} \approx -15.65\)
+(`srbf.metrics.numeric.LOG10_FVU_FLOOR`): below it the unexplained variance is smaller than about one rounding
+unit of the variance it is divided by, so the value is rounding noise, and the same formula written two ways
+lands anywhere from \(-16\) to \(-320\), or at \(-\infty\) when the arithmetic agrees bit for bit. On the
+floor these are one value, and an exact fit counts in a mean like any other fit. A prediction with a
+non-finite value is \(+\infty\), which a mean leaves out: report the median, or the mean next to the rate of
+usable predictions.
 
 ### `r2_fit`, `r2_val`
 
