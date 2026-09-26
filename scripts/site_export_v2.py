@@ -592,14 +592,26 @@ def planned_cells(root: str, ukey: str | None, publishes: Any) -> set[tuple[int,
     return plan or None
 
 
-def status_of(rows_by_cell: dict[tuple[str, int], Any], sizes: dict[str, int], plan: set[tuple[int, str, int]] | None) -> list[int | None]:
-    """[finished, planned]: a catalog at one rung in one draw is finished once its rows cover the catalog, the same
-    test that puts a rung in the plots; counted against the plan when there is one."""
+def finished_cells(rows_by_cell: dict[tuple[str, int], Any], sizes: dict[str, int], plan: set[tuple[int, str, int]] | None) -> set[tuple[int, str, int]]:
+    """Every (draw, catalog, rung) whose rows cover the catalog, the same test that puts a rung in the plots; only the
+    planned ones when there is a plan."""
     done = {(d, c, r) for (c, r), rows in rows_by_cell.items() for d, rs in by_draw(rows).items()
             if c in sizes and len(rs) >= sizes[c]}
-    if plan is not None:
-        done &= plan
-    return [len(done), len(plan) if plan is not None else None]
+    return done & plan if plan is not None else done
+
+
+def status_of(rows_by_cell: dict[tuple[str, int], Any], sizes: dict[str, int], plan: set[tuple[int, str, int]] | None) -> list[int | None]:
+    """[finished, planned]: a catalog at one rung in one draw is finished once its rows cover the catalog; counted
+    against the plan when there is one."""
+    return [len(finished_cells(rows_by_cell, sizes, plan)), len(plan) if plan is not None else None]
+
+
+def progress_of(rows_by_cell: dict[tuple[str, int], Any], sizes: dict[str, int], plan: set[tuple[int, str, int]] | None) -> dict[str, list[int | None]]:
+    """status_of per rung: {rung: [finished, planned]}, over the plan's rungs (without a plan: the rungs with data, and
+    no total). The Progress section draws one block per budget from it."""
+    done = finished_cells(rows_by_cell, sizes, plan)
+    rungs = sorted({r for _, _, r in plan} if plan is not None else {r for _, r in rows_by_cell})
+    return {str(r): [sum(1 for x in done if x[2] == r), sum(1 for x in plan if x[2] == r) if plan is not None else None] for r in rungs}
 
 
 def catalog_meta(sizes_path: str | None, present: dict[str, int]) -> list[dict[str, Any]]:
@@ -710,6 +722,7 @@ def main() -> None:
         cells: dict[str, Any] = {}
         hists: dict[str, Any] = {k: {} for k in HIST_SPECS}
         status: dict[str, Any] = {}
+        progress: dict[str, Any] = {}
         plans: dict[str, set[tuple[int, str, int]] | None] = {}
         for key, label, param, color, group, prov, ukey, _sel in methods:
             cells[key] = {}
@@ -723,7 +736,9 @@ def main() -> None:
                     if h is not None:
                         hists[hk].setdefault(key, {}).setdefault(c, {})[str(r)] = h
             plans[key] = planned_cells(a.root, ukey, lambda r, k=key: usable(k, r))
-            status[key] = status_of({cr: rows for cr, rows in data.get(key, {}).items() if usable(key, cr[1])}, sizes, plans[key])
+            published = {cr: rows for cr, rows in data.get(key, {}).items() if usable(key, cr[1])}
+            status[key] = status_of(published, sizes, plans[key])
+            progress[key] = progress_of(published, sizes, plans[key])
         paired: dict[str, Any] = {}
         mkeys = [m[0] for m in methods]
         contrasts([(ka, kb) for i, ka in enumerate(mkeys) for kb in mkeys[i + 1:]], paired)
@@ -738,7 +753,7 @@ def main() -> None:
         payload = {"schema": 2, "base": base,
                    "release": {"id": a.release, "title": a.title or a.release, "notes": a.notes, "versions": RELEASE_VERSIONS, "generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
                                "updated": dt.datetime.now().astimezone().isoformat(timespec="minutes"),   # with its offset: shown in the reader's time zone
-                               "scoring": "Every method returns one formula per problem, its prediction, and picks it by its own rule. The ? after a method's name describes that rule; the label beside it says who chose the method's settings.",
+                               "scoring": "Every method is allowed to return one formula per problem, its prediction, and picks it by its own rule. The ? after a method's name describes that rule; the label beside it says who chose the method's settings.",
                                "judge": "Every prediction is checked the same way against the true formula. Numeric Recovery: it reproduces the 512 held-out points almost exactly (FVU at most 2^-23: a typical error of at most 0.035 % of the true values' spread). Symbolic Recovery: once both formulas are simplified into a standard form, they are identical when their numbers are ignored (so x^2 matches x^3; stricter versions also check exponents and all numbers)."},
                    "catalogs": cats, "rungs": RUNGS, "nb": NB, "metrics": listed, "paired_keys": PAIRED_KEYS, "rank_keys": [k for k in RANK_KEYS if k in {m["key"] for m in listed}],
                    # budget: what one rung of the ladder buys. "candidates" is a count a generative method draws;
@@ -749,7 +764,7 @@ def main() -> None:
                                 # the budgets its run plan holds (None without a plan): a budget outside them is never run
                                 "budgets": sorted({r for _, _, r in plan}) if (plan := plans.get(k)) else None, **METHOD_STYLE.get(k, {})}
                                for k, l, p, col, g, prov, _, sel in methods],
-                   "cells": cells, "status": status, "timing": timing, "timing_note": timing_note}
+                   "cells": cells, "status": status, "progress": progress, "timing": timing, "timing_note": timing_note}
         return payload, hists, paired
 
     def write_set(payload: dict[str, Any], hists: dict[str, Any], paired: dict[str, Any], ranks: dict[str, Any], out_js: str, out_dir: str, var: str, note: str) -> None:
