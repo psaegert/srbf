@@ -463,7 +463,8 @@ def hist_of(problems: dict[int, list[dict[str, Any]]], key: str, lo: float, hi: 
     runs; +-inf is clipped into the edge bins. A failed run of an unbounded metric counts as its worst value (owner
     2026-09-27), and the answered-only reading of a metric with a worst value (WORST) leaves the failed runs out."""
     tf = HIST_SPECS[key][2]
-    acc = np.zeros(NB)
+    xs: list[float] = []
+    ws: list[float] = []
     for runs in problems.values():
         vals = []
         for r in runs:
@@ -476,10 +477,14 @@ def hist_of(problems: dict[int, list[dict[str, Any]]], key: str, lo: float, hi: 
                 v = v if math.isinf(v) else transform(v, tf)
             if v is not None and not math.isnan(v):
                 vals.append(v)
-        if not vals:
-            continue
-        idx = np.clip(np.floor((np.clip(np.asarray(vals, float), lo, hi) - lo) / (hi - lo) * NB).astype(int), 0, NB - 1)
-        np.add.at(acc, idx, 1.0 / len(vals))
+        if vals:
+            xs.extend(vals)
+            ws.extend([1.0 / len(vals)] * len(vals))
+    if not xs:
+        return None
+    # one binning for the whole cell; bincount adds the weights in the order given, as a per-problem loop would
+    idx = np.clip(np.floor((np.clip(np.asarray(xs, float), lo, hi) - lo) / (hi - lo) * NB).astype(int), 0, NB - 1)
+    acc = np.bincount(idx, weights=np.asarray(ws), minlength=NB)
     if not acc.any():
         return None
     acc = np.round(acc, 4)
