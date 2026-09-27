@@ -633,15 +633,19 @@ test('a rate is shown per problem set, with a way to a distribution', async ({ p
 
 // A button group must show its labels: clicking works even when a style clips the buttons to a sliver, so the test
 // measures them (a progress bar's class once shared the group's name and cut every group to 9 px).
-test('every button group shows its labels in full', async ({ page }) => {
-  for (const url of ['/explorer.html?release=2026-09&v=dist&r=16', '/explorer.html?release=2026-09&v=dist&dv=ecdf&r=16', '/explorer.html?release=2026-09&v=preds']) {
+test('every button group shows its labels in full, each on one line', async ({ page }) => {
+  for (const url of ['/explorer.html?release=2026-09&v=dist&r=16', '/explorer.html?release=2026-09&v=dist&dv=ecdf&r=16', '/explorer.html?release=2026-09&v=dist&dv=rungs&r=16',
+    '/explorer.html?release=2026-09&v=preds', '/explorer.html?release=2026-09&v=ranks&x=rung&r=16']) {
     await page.goto(url);
     const btns = page.locator(V2 + ' .v2segbtn');
     await expect(btns.first()).toBeVisible({ timeout: 15000 });
     const boxes = await btns.evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(), g = e.closest('.v2seg').getBoundingClientRect();
-      return { text: e.textContent.trim(), h: r.height, clipped: g.height + 0.5 < r.height, fits: e.scrollWidth <= e.clientWidth + 1 }; }));
+      return { text: e.innerText.trim(), h: r.height, clipped: g.height + 0.5 < r.height || r.right > g.right + 0.5, fits: e.scrollWidth <= e.clientWidth + 1 }; }));
     expect(boxes.length).toBeGreaterThan(1);
-    for (const b of boxes) { expect(b.text.length).toBeGreaterThan(0); expect(b.h).toBeGreaterThanOrEqual(20); expect(b.clipped, b.text).toBe(false); expect(b.fits, b.text).toBe(true); }
+    for (const b of boxes) {
+      expect(b.text.length).toBeGreaterThan(0); expect(b.h).toBeGreaterThanOrEqual(20); expect(b.h, b.text + ' wraps').toBeLessThanOrEqual(32);   // one line of 13 px text
+      expect(b.clipped, b.text).toBe(false); expect(b.fits, b.text).toBe(true);
+    }
   }
 });
 

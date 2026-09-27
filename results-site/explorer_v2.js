@@ -915,9 +915,10 @@
   // ---- controls that live on the display itself -----------------------------------------------------------------
   // The sidebar holds what every display shares. What only ONE display can use -- which budget a snapshot is taken
   // at, how a distribution is drawn -- sits on that display, next to what it changes.
+  // opts: [value, label, tooltip?, short label?]; a short label takes the label's place on a narrow screen (styles.css)
   function seg(key, cur, opts, labelHtml, aria) {
     return '<span class="v2segwrap">' + (labelHtml ? '<span class="v2lab">' + labelHtml + "</span>" : "") + '<span class="v2seg" role="group" aria-label="' + esc(aria) + '">' +
-      opts.map(function (o) { return '<button type="button" class="v2segbtn' + (o[0] === cur ? " on" : "") + '" data-set="' + key + ":" + o[0] + '" aria-pressed="' + (o[0] === cur ? "true" : "false") + '"' + (o[2] ? ' title="' + esc(o[2]) + '"' : "") + ">" + esc(o[1]) + "</button>"; }).join("") + "</span></span>";
+      opts.map(function (o) { return '<button type="button" class="v2segbtn' + (o[0] === cur ? " on" : "") + '" data-set="' + key + ":" + o[0] + '" aria-pressed="' + (o[0] === cur ? "true" : "false") + '"' + (o[2] ? ' title="' + esc(o[2]) + '"' : "") + ">" + (o[3] ? '<span class="v2long">' + esc(o[1]) + '</span><span class="v2short">' + esc(o[3]) + "</span>" : esc(o[1])) + "</button>"; }).join("") + "</span></span>";
   }
   function stepper(key, cur, values, labelOf, labelHtml, aria) {   // values in order; cur may sit between them
     var i = values.indexOf(cur), prev = null, next = null;
@@ -955,7 +956,7 @@
   // one axis, a box per catalog, and the quartiles along the ladder. A rate has no distribution over laws (every
   // problem is a hit or a miss), so a rate shows how it is spread over the catalogs instead.
   var DMODES = [["hist", "histograms", "One histogram per method, on a shared axis"], ["ecdf", "cumulative", "The share of problems at or below each value, all methods on one axis"],
-    ["cats", "by problem set", "A box per problem set and method: where the middle half and the middle 90 % of the problems lie"], ["rungs", "along the budgets", "The median and the middle half of the problems at every budget"]];
+    ["cats", "by problem set", "A box per problem set and method: where the middle half and the middle 90 % of the problems lie", "by set"], ["rungs", "along the budgets", "The median and the middle half of the problems at every budget", "by budget"]];
   function qv(ph, q) { return binVal(ph, quantileBin(ph, Math.max(1, Math.ceil(q * ph.n)))); }
   function five(ph) { return [0.05, 0.25, 0.5, 0.75, 0.95].map(function (q) { return qv(ph, q); }); }
   function viewRange(phs) {   // the bins that hold 99 % of what is shown, so an empty tail does not squeeze the rest
