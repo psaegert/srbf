@@ -41,3 +41,15 @@ def test_srbf_imports_and_builds_a_worker_adapter_without_flash_ansr():
     assert all(m.startswith("srbf.baselines") for m in out["needs_flash_ansr"]), out["needs_flash_ansr"]
     assert "pip install 'srbf[flash-ansr]'" in out["flash_ansr_adapter"]
     assert out["subprocess_adapter"] == "SubprocessAdapter"
+
+
+def test_no_file_names_flash_ansrs_root_variable():
+    """srbf's root is SRBF_ROOT; flash-ansr's variable appears nowhere but in the changelog that retired it."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    retired = "FLASH_ANSR" + "_ROOT"
+    files = subprocess.run(["git", "ls-files"], cwd=root, capture_output=True, text=True, check=True).stdout.split("\n")
+    hits = [f for f in files if f and f != "CHANGELOG.md" and (root / f).is_file()
+            and retired in (root / f).read_text(encoding="utf-8", errors="ignore")]
+    assert hits == [], f"{retired} named in {hits}: srbf's root is SRBF_ROOT"
