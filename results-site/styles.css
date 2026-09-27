@@ -138,6 +138,7 @@ code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft)
 .home-feature p { margin: 0; color: var(--ink-soft); font-size: .95rem; }
 .home-text { margin: 0 0 1rem; max-width: 46rem; color: var(--ink-soft); }
 .home-release-intro { margin-bottom: 1.4rem; }
+.home-updated { margin: -.4rem 0 .9rem; font-size: .92rem; color: var(--ink-faint); }
 .home-progress .v2progline { margin: 0; }
 .home-two { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 2.6rem; }
 .home-code { margin: 0 0 1rem; padding: 1rem 1.2rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); overflow-x: auto;

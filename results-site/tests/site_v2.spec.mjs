@@ -170,11 +170,11 @@ test('the release publishes no as-run wall clock', async ({ page }) => {
   expect(banned, 'the payload carries an as-run wall-clock metric').toEqual([]);
 });
 
-test('the candidate axis names itself and is offered beside time', async ({ page }) => {
+test('the budget axis names itself and is offered beside time', async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto('/explorer.html?release=2026-09&v=curves');
   await pick(page, page.locator(V2 + ' .v2plot .v2xsel').first(), 'rung');
-  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('candidates');
+  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('budget');
   // a method whose budget is not a candidate count has no position on this axis and is named instead of dropped silently
   const seconds = await page.evaluate(() => (window.RESULTS_V2.methods || []).filter((m) => (m.budget || 'candidates') !== 'candidates' && window.RESULTS_V2.cells[m.key] && Object.keys(window.RESULTS_V2.cells[m.key]).length).map((m) => m.label));
   for (const label of seconds) { await expect(page.locator(V2 + ' .v2view')).toContainText(label); }
@@ -194,7 +194,7 @@ test('the home page holds the headline\'s two fixed charts, and the explorer its
   await expect(head.locator('svg.v2chart')).toHaveCount(2);
   await expect(head.locator('svg.v2chart').first()).toContainText(await hasRefTiming(page) ? 'Recovery vs time' : 'Recovery vs budget');
   if (await hasRefTiming(page)) { await calibrated(head.locator('svg.v2chart').first()); }
-  else { await expect(head.locator('svg.v2chart').first()).toContainText('candidates'); }
+  else { await expect(head.locator('svg.v2chart').first()).toContainText('budget'); }
   // the second headline chart is the trade-off: description length on x, fit error on y
   await expect(head.locator('svg.v2chart').nth(1)).toContainText('Fit vs length');
   await expect(head.locator('svg.v2chart').nth(1)).toContainText('MDL Ratio');   // the metric's own name, as everywhere else
@@ -339,7 +339,7 @@ test('every chart names both of its axes', async ({ page }) => {
     expect(n, url).toBeGreaterThanOrEqual(2);
     for (let i = 0; i < n; i++) {
       const t = await labels(charts.nth(i));
-      expect(t, `${url} chart ${i} x label`).toMatch(/time per problem|MDL Ratio|candidates per problem/);   // a budget or a metric, never an uncalibrated time
+      expect(t, `${url} chart ${i} x label`).toMatch(/time per problem|MDL Ratio|budget per problem/);   // a budget or a metric, never an uncalibrated time
       expect(t, `${url} chart ${i} y label`).toMatch(/Numeric Recovery|log10 FVU/);
     }
   }
@@ -901,7 +901,7 @@ test('the page names itself once: the bar carries the name, the title says what 
   await expect(page.locator('.site-header .brand')).toContainText(name);
   await expect(page.locator('.site-header .brand .brand-mark')).toHaveCount(0);   // the icon already reads "srbf"
   await expect(page.locator('main h1')).not.toContainText(name);
-  await expect(page.locator('main h1')).toHaveText('Compare symbolic regression methods on equal terms');
+  await expect(page.locator('main h1')).toHaveText('One standard for comparing symbolic regression methods');
 });
 
 test('the guide explains the results from scratch', async ({ page }) => {
@@ -1264,7 +1264,7 @@ test('the release has one home: a title and its update time in the headline role
     await expect(line).toHaveCount(1);
     await expect(line.locator('.v2kicker')).toHaveText('Progress');
     for (const [n, word] of [[summary.finished.length, 'finished'], [summary.in_progress.length, 'in progress'], [summary.scheduled.length, 'scheduled']]) {
-      if (n) { await expect(line).toContainText(n + ' ' + word); } else { await expect(line).not.toContainText(word); }
+      if (n) { await expect(line).toContainText(new RegExp(n + ' (methods? )?' + word)); } else { await expect(line).not.toContainText(word); }
     }
     await expect(line.locator('a')).toHaveAttribute('href', 'progress.html');
   } else {
