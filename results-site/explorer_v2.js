@@ -93,7 +93,7 @@
   };
   var TERMS = {
     complete: "Each point is one method at one budget. Each method is run over its own range of budgets, and some runs are still in progress. A point appears only once the method has at least one finished run on every problem of the problem sets you selected (in the headline charts: all 29), so every point covers the same problems. Every problem is run twice, and its value is the average of its finished runs, so a point can rest partly on problems with one run so far. The page \u201cHow to read the results\u201d explains more, and how to see partial results by selecting fewer problem sets.",
-    interval: "The 95 % interval shows how precisely a value is known. A value is an average over problem sets, and the interval treats the selected problem sets as a sample of problem sets like them: it is wide when they disagree, or when there are few of them. With one problem set selected, it comes from the spread of that set's own problems instead. Bands shade the interval around each point and between neighbouring points; crosses draw it as bars through each point. You can show either, both or neither.",
+    interval: "The 95 % interval shows how precisely a value is known on the problem sets you selected, from how much the problems within each set vary. It is about srbf's problem sets, not about problem sets in general: the range for one more problem set, in tables and tooltips, shows how far single sets spread. Bands shade the interval around each point and between neighbouring points; crosses draw it as bars through each point. You can show either, both or neither.",
     average: "First each problem's runs are averaged, then the problems of each problem set. Then the problem sets are averaged, each weighted by how precisely its own average is known, plus an allowance for how much problem sets differ from each other. Because they differ a lot, each counts about the same whatever its size, and a set of only a few problems counts less. A set of 5,000 problems therefore cannot decide the result on its own.",
     setrange: "Where the value of one more problem set would fall, with 95 % probability, if it were like the selected ones. It is wider than the 95 % interval: the interval says how precisely the average is known, this range how far single problem sets spread around it. It needs at least three problem sets.",
     median: "The median is read from a histogram with 128 bins, so it is accurate to the width of one bin (for log10 FVU, about 0.16). Each problem set weighs as much in the histogram as it does in an average, and a problem's runs share its weight.",
@@ -301,8 +301,8 @@
   // ---- averaging over problem sets (owner 2026-09-27) --------------------------------------------------------------
   // The results are problem sets > problems > runs. A problem's value is the mean of its runs; a set is its number of
   // problems with a value, their sum and their sum of squares (the exporter's cells). Sets are combined by a random-
-  // effects model: weights 1 / (tau^2 + the set's own noise), tau^2 by Paule-Mandel, the 95 % interval by Hartung-Knapp
-  // (t with S - 1 degrees of freedom), the prediction interval for a new problem set with t on S - 2. Rates on the logit
+  // effects model: weights 1 / (tau^2 + the set's own noise), tau^2 by Paule-Mandel, the 95 % interval over these problem
+  // sets (combineScale), the prediction interval for a new problem set with t on S - 2. Rates on the logit
   // scale, with the continuity-corrected rate (x n + 0.5) / (n + 1). scripts/site_random_effects.py is the reference:
   // the same arithmetic, step for step, and the site suite checks that the two agree.
   var EPS_VAR = 1e-12;
@@ -360,24 +360,23 @@
     for (i = 0; i < 80; i++) { mid = (lo + hi) / 2; if (pmExcess(y, v, mid) > 0) { lo = mid; } else { hi = mid; } }
     return (lo + hi) / 2;
   }
-  function combineScale(y, v, nSingle) {
-    var S = y.length, i;
-    if (S === 1) {
-      var se1 = Math.sqrt(v[0]), df1 = Math.max(1, (nSingle || 2) - 1), q1 = tq975(df1);
-      return { mu: y[0], lo: y[0] - q1 * se1, hi: y[0] + q1 * se1, piLo: null, piHi: null, tau2: 0, w: [1], S: 1, p: se1 > 0 ? tP(y[0] / se1, df1) : (y[0] !== 0 ? 0 : 1) };
-    }
-    var tau2 = pauleMandel(y, v), w = [], sw = 0, mu = 0, q = 0;
+  // The interval covers these problem sets (owner 2026-09-27): the weights held fixed, only each set's own noise,
+  // Var(mu) = sum w^2 v / (sum w)^2, t on the problems' degrees of freedom (sum of n - 1). One set is its own mean with
+  // the t interval on its problems. The range for one more problem set is the prediction interval, t with S - 2.
+  function combineScale(y, v, df) {
+    var S = y.length, i, tau2 = S > 1 ? pauleMandel(y, v) : 0, w = [], sw = 0, mu = 0, q = 0;
     for (i = 0; i < S; i++) { w.push(1 / (v[i] + tau2)); sw += w[i]; mu += w[i] * y[i]; }
-    mu /= sw; for (i = 0; i < S; i++) { q += w[i] * Math.pow(y[i] - mu, 2); } q /= (S - 1);
-    var seHk = Math.sqrt(q / sw), tq = tq975(S - 1), half = S >= 3 ? tq975(S - 2) * Math.sqrt(tau2 + 1 / sw) : null;
-    return { mu: mu, lo: mu - tq * seHk, hi: mu + tq * seHk, piLo: half === null ? null : mu - half, piHi: half === null ? null : mu + half,
-             tau2: tau2, w: w.map(function (x) { return x / sw; }), S: S, p: seHk > 0 ? tP(mu / seHk, S - 1) : (mu !== 0 ? 0 : 1) };
+    mu /= sw; for (i = 0; i < S; i++) { q += w[i] * w[i] * v[i]; }
+    df = Math.max(1, df || 1);
+    var se = Math.sqrt(q) / sw, tq = tq975(df), half = S >= 3 ? tq975(S - 2) * Math.sqrt(tau2 + 1 / sw) : null;
+    return { mu: mu, lo: mu - tq * se, hi: mu + tq * se, piLo: half === null ? null : mu - half, piHi: half === null ? null : mu + half,
+             tau2: tau2, w: w.map(function (x) { return x / sw; }), S: S, p: se > 0 ? tP(mu / se, df) : (mu !== 0 ? 0 : 1) };
   }
   // sets: [{n, s1, s2, ...}]; a rate ("logit") comes back on its own 0-1 scale. Also: the problems behind it, and n0,
   // the number of problems at which a set counts half as much as a very large one (sigma^2 / tau^2)
   function reCombine(sets, scale) {
     sets = sets.filter(function (st) { return st.n > 0; }); if (!sets.length) { return null; }
-    var e = setEstimates(sets, scale), c = combineScale(e.y, e.v, sets.length === 1 ? sets[0].n : null);
+    var e = setEstimates(sets, scale), c = combineScale(e.y, e.v, sets.reduce(function (a, st) { return a + st.n - 1; }, 0));
     if (scale === "logit") { ["mu", "lo", "hi", "piLo", "piHi"].forEach(function (k) { if (c[k] !== null) { c[k] = expit(c[k]); } }); }
     c.n = sets.reduce(function (a, st) { return a + st.n; }, 0); c.sets = sets; c.n0 = c.tau2 > 0 ? e.pooled / c.tau2 : Infinity;
     return c;

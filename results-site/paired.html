@@ -73,13 +73,17 @@
             For a rate, a problem's difference is A's share of hits over its runs minus B's; it is zero
             wherever the two methods agree, so only the problems where they disagree move it. The
             p-value is the probability of an average difference at least this large if both methods
-            were equally good. It comes from a t-test over the problem sets, the same that gives the
-            interval: with \(S\) problem sets, weights \(w_s\) and set averages \(\bar{\Delta}_s\),
+            were equally good. It uses the standard error of the interval: with weights \(w_s\) and
+            \(v_s\), the squared standard error of set \(s\)'s average difference,
           </p>
           $$
-            t = \frac{\hat{\Delta}}{\sqrt{\sum_s w_s\, (\bar{\Delta}_s - \hat{\Delta})^2 \,/\, \big((S - 1) \sum_s w_s\big)}},
-            \qquad p = 2\, P\big[\,T_{S-1} \ge |t|\,\big] .
+            t = \frac{\hat{\Delta} \sum_s w_s}{\sqrt{\sum_s w_s^2\, v_s}},
+            \qquad p = 2\, P\big[\,T \ge |t|\,\big] ,
           $$
+          <p>
+            with \(T\) on \(\sum_s (n_s - 1)\) degrees of freedom. Like the interval, the test is about
+            the selected problem sets.
+          </p>
         </div>
       </section>
 
