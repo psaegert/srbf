@@ -478,8 +478,9 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 .explorer-v2 .v2viewbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin: 0 0 12px; padding: 8px 12px;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); }
 .explorer-v2 .v2segwrap { display: inline-flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
-.explorer-v2 .v2seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r-ctl); overflow: hidden; }
-.explorer-v2 .v2segbtn { font: inherit; font-size: 13px; color: var(--ink-soft); background: var(--surface); border: none; border-left: 1px solid var(--line); padding: 4px 10px; cursor: pointer; }
+.explorer-v2 .v2seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; border: 1px solid var(--line); border-radius: var(--r-ctl); overflow: hidden; }   /* wraps a button, never cuts one */
+.explorer-v2 .v2segbtn { font: inherit; font-size: 13px; color: var(--ink-soft); background: var(--surface); border: none; border-left: 1px solid var(--line); padding: 4px 10px; cursor: pointer; white-space: nowrap; }
+.explorer-v2 .v2segbtn .v2short { display: none; }   /* a short label replaces the long one on a narrow screen */
 .explorer-v2 .v2segbtn:first-child { border-left: none; }
 .explorer-v2 .v2segbtn:hover, .explorer-v2 .v2segbtn:focus-visible { color: var(--ink); background: var(--accent-soft); outline: none; }
 .explorer-v2 .v2segbtn.on { background: var(--accent); color: #fff; }
@@ -500,6 +501,11 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 @media (max-width: 700px) {
   .explorer-v2 .v2viewbar { gap: 8px 12px; padding: 8px; }
   .explorer-v2 .v2segbtn { padding: 5px 8px; }
+  .explorer-v2 .v2segbtn .v2long { display: none; }
+  .explorer-v2 .v2segbtn .v2short { display: inline; }
+}
+@media (max-width: 360px) {
+  .explorer-v2 .v2segbtn { padding: 5px 6px; }
 }
 /* A wide table scrolls sideways: the row label stays in view, and a method's name sits at the start of its columns. */
 .explorer-v2 .v2table th[colspan] { text-align: left; padding-left: 14px; }
