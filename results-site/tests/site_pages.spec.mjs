@@ -1,5 +1,5 @@
-// The pages around the explorer (owner 2026-09-26: the Results page holds the intro, the headline, one line of
-// progress and the explorer; everything else has a page of its own): one navigation on every page, each page marked
+// The pages of the site (owner 2026-09-26/27: a home page that says what srbf is, with the headline's charts; the
+// explorer on a page of its own; everything else on a page of its own): one navigation on every page, each page marked
 // in it, the old section links opening their pages, the Progress page and the guide's Protocol. The explorer itself is
 // covered by site_v2.spec.mjs, the theme and the visual abstract by site.spec.mjs.
 import { test, expect } from '@playwright/test';
@@ -13,10 +13,10 @@ function collectErrors(page) {
 
 // the header names the pages; Docs, GitHub and PyPI have one place, the footer of every page. The Ranks and Paired
 // pages explain two of the explorer's displays and are reached from those displays (owner 2026-09-26), not the header.
-// The home page (the intro and the headline) is the brand's link; Results is the explorer's page.
-const NAV = [['results.html', 'Results'], ['progress.html', 'Progress'], ['guide.html', 'How to read'], ['metrics.html', 'Metrics']];
+// The home page is the brand's link; Explorer is the explorer's page.
+const NAV = [['explorer.html', 'Explorer'], ['progress.html', 'Progress'], ['guide.html', 'How to read'], ['metrics.html', 'Metrics']];
 const FOOTER = ['https://srbf.readthedocs.io/', 'https://github.com/psaegert/srbf', 'https://pypi.org/project/srbf/', 'privacy.html'];
-const PAGES = [['/', null], ['/results.html', 'Results'], ['/progress.html', 'Progress'], ['/guide.html', 'How to read'], ['/metrics.html', 'Metrics'],
+const PAGES = [['/', null], ['/explorer.html', 'Explorer'], ['/progress.html', 'Progress'], ['/guide.html', 'How to read'], ['/metrics.html', 'Metrics'],
   ['/ranks.html', null], ['/paired.html', null], ['/privacy.html', null]];
 
 for (const [url, current] of PAGES) {
@@ -45,10 +45,28 @@ test('every page the navigation names is there', async ({ page, request }) => {
   expect(await page.locator('main .katex').count()).toBeGreaterThan(20);        // the definitions are typeset
 });
 
+test('the home page\'s example is real: its link opens the explorer on that problem, with that formula', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/');
+  await expect(page.locator('.home-example .katex').first()).toBeVisible();             // the formulas are typeset
+  const href = await page.locator('.home-example figcaption a').getAttribute('href');
+  await page.goto('/' + href);
+  const view = page.locator('#results-explorer-v2 .v2view');
+  await expect(page.locator('#results-explorer-v2 .v2tab.active')).toHaveAttribute('data-view', 'preds');
+  await expect(view).toContainText('0.04775', { timeout: 20_000 });                         // PySR's fitted number, as on the card
+  expect(errors).toEqual([]);
+});
+
+test('the explorer\'s former address opens it with the same settings', async ({ page }) => {
+  await page.goto('/results.html?release=2026-09&v=ranks&x=rung&r=16');
+  await expect(page).toHaveURL(/\/explorer\.html\?release=2026-09&v=ranks/);
+  await expect(page.locator('#results-explorer-v2 .v2tab.active')).toHaveAttribute('data-view', 'ranks');
+});
+
 for (const [view, target] of [['ranks', 'ranks.html'], ['paired', 'paired.html']]) {
   test(`the ${view} display links to ${target}, the page that explains it`, async ({ page, request }) => {
     const errors = collectErrors(page);
-    await page.goto('/results.html?release=2026-09&v=' + view);
+    await page.goto('/explorer.html?release=2026-09&v=' + view);
     await expect(page.locator(`#results-explorer-v2 .v2main a[href="${target}"]`).first()).toBeVisible({ timeout: 20_000 });
     expect((await request.get('/' + target)).status()).toBe(200);
     expect(errors).toEqual([]);

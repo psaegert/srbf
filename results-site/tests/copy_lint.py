@@ -148,7 +148,7 @@ def data_texts() -> str:
 
 
 def pages() -> list[Path]:
-    """Every page of the site: the Results page and the pages around it (the local-only copy is not published)."""
+    """Every page of the site: the home page, the explorer's page and the pages around them (the local-only copy is not published)."""
     return sorted(p for p in SITE.glob("*.html") if not p.name.endswith(".local.html"))
 
 

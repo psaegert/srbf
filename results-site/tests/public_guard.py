@@ -212,7 +212,7 @@ def main() -> int:
     banned = banned_patterns()
     for page in sorted(p for p in SITE.glob("*.html") if not p.name.endswith(".local.html")):
         html = page.read_text(encoding="utf-8")
-        for needle in ("private/", "index.local", "results.local"):
+        for needle in ("private/", "index.local", "results.local", "explorer.local"):
             if needle in html:
                 failures.append(f"{page.name} mentions {needle!r}")
     for js in sorted((SITE / "data").glob("*/results.js")):
@@ -276,7 +276,7 @@ def main() -> int:
     for sj in sorted((SITE / "data").glob("*/sealed.js")):
         failures.extend(check_sealed(sj.read_text(encoding="utf-8"), str(sj)))
     if os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"):
-        for p in ("private", "index.local.html", "results.local.html"):
+        for p in ("private", "index.local.html", "results.local.html", "explorer.local.html"):
             if (SITE / p).exists():
                 failures.append(f"{p} exists in the CI checkout")
     for f in failures:

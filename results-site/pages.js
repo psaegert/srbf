@@ -1,7 +1,7 @@
 /* The pages around the explorer: the Progress page (progress.html) and the Protocol at the top of the guide
  * (guide.html). Both read window.RESULTS_V2_SUMMARY, the few kB that scripts/site_export_v2.py writes next to a
  * release's results.js as data/<release>/summary.js, so neither page loads the release's full data. Which methods are
- * finished, in progress and scheduled is the exporter's call (progress_summary), the same one the Results page's
+ * finished, in progress and scheduled is the exporter's call (progress_summary), the same one the explorer's
  * progress line shows. Method colours follow the reader's own choices from the explorer (the srbf_colors cookie). */
 (function () {
   "use strict";
