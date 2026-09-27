@@ -1,6 +1,7 @@
 """The random-effects average the results site uses (owner 2026-09-27): problem sets combined with weights
-1 / (tau^2 + noise), tau^2 by Paule-Mandel, intervals by Hartung-Knapp, rates on the logit scale. The reference values
-come from statsmodels' combine_effects(method_re="pm", use_t=True) on the same inputs (checked 2026-09-27)."""
+1 / (tau^2 + noise), tau^2 by Paule-Mandel, rates on the logit scale, and an interval over these problem sets (the
+weights held fixed, only the problems' sampling within each set). The reference tau^2 and means come from statsmodels'
+combine_effects(method_re="pm") on the same inputs (checked 2026-09-27)."""
 import importlib.util
 import os
 import sys
@@ -23,17 +24,28 @@ def test_the_t_distribution_is_students(df):
         assert re_.t_cdf(t, df) == pytest.approx(stats.t.cdf(t, df), abs=1e-12)
 
 
-@pytest.mark.parametrize("seed, tau2, mu, lo, hi", [
-    (3, 0.064344, 0.268979, 0.07990, 0.45806),
-    (7, 0.000000, 0.295731, 0.22891, 0.36255),     # the sets agree: tau^2 = 0, and the average is the precision-weighted one
-    (11, 0.021327, 0.336120, 0.19951, 0.47273),
+@pytest.mark.parametrize("seed, tau2, mu", [
+    (3, 0.064344, 0.268979),
+    (7, 0.000000, 0.295731),     # the sets agree: tau^2 = 0, and the average is the precision-weighted one
+    (11, 0.021327, 0.336120),
 ])
-def test_paule_mandel_and_hartung_knapp_match_statsmodels(seed, tau2, mu, lo, hi):
+def test_paule_mandel_matches_statsmodels_and_the_interval_is_over_these_sets(seed, tau2, mu):
     rng = np.random.default_rng(seed)
     y, v = rng.normal(0.3, 0.2, 12), rng.uniform(0.001, 0.05, 12)
-    c = re_.combine_scale(list(y), list(v))
-    assert (c.tau2, c.mu, c.lo, c.hi) == pytest.approx((tau2, mu, lo, hi), abs=1e-5)
+    c = re_.combine_scale(list(y), list(v), df=500)
+    assert (c.tau2, c.mu) == pytest.approx((tau2, mu), abs=1e-5)
     assert sum(c.weights) == pytest.approx(1.0)
+    w = 1 / (np.asarray(v) + c.tau2)
+    se = np.sqrt((w ** 2 * v).sum()) / w.sum()               # the weights held fixed: only the sets' own noise
+    assert (c.lo, c.hi) == pytest.approx((mu - stats.t.ppf(0.975, 500) * se, mu + stats.t.ppf(0.975, 500) * se), abs=1e-5)
+
+
+def test_the_interval_covers_these_problem_sets_and_the_range_one_more():
+    # three large sets that disagree: their average is known precisely, a fourth set could land far from it
+    sets = [re_.SetStat(5000, 1000.0, 1000.0), re_.SetStat(4000, 2000.0, 2000.0), re_.SetStat(3000, 2400.0, 2400.0)]
+    c = re_.combine(sets, "normal")
+    assert c.hi - c.lo < 0.02
+    assert c.pi_hi - c.pi_lo > 1.0
 
 
 def test_a_large_set_counts_about_as_much_as_a_medium_one_and_a_tiny_set_less():

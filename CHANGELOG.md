@@ -90,7 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   imported.
 - **The results site averages over problem sets, with the problem as the unit.** A problem's value is the mean of
   its runs, and the catalogs are combined by a random-effects average (Paule–Mandel between-catalog variance,
-  Hartung–Knapp intervals, rates on the logit scale, ratios as geometric means), so erbench-syneq no longer decides
+  intervals over these problem sets, rates on the logit scale, ratios as geometric means), so erbench-syneq no longer decides
   a pooled number on its own; tables and tooltips add where one more catalog would fall. Paired contrasts compare
   every run of one method with every run of the other and test over catalogs (rates on the difference, other metrics
   on the per-problem superiority); ranks are built from the pairwise chances to beat, with Holm-corrected pairwise

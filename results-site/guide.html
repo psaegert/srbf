@@ -256,20 +256,21 @@
         <h3>Intervals</h3>
         <div>
           <p>
-            Every value comes with a 95 % interval. It shows how precisely the value is known. It
-            treats the selected problem sets as a sample of problem sets like them, so it is wide when
-            they disagree or when there are few of them (the Hartung&ndash;Knapp interval, with \(S\)
-            problem sets):
+            Every value comes with a 95 % interval. It shows how precisely the value is known on the
+            problem sets you selected: the weights of the sets are held fixed, and only the variation
+            between the problems within each set counts. With \(v_s = \sigma_s^2 / n_s\), the squared
+            standard error of set \(s\)'s average,
           </p>
           $$
-            \hat{\theta} \;\pm\; t_{S-1,\,0.975}\, \sqrt{\frac{\sum_s w_s\, (\bar{x}_s - \hat{\theta})^2}{(S - 1) \sum_s w_s}} .
+            \hat{\theta} \;\pm\; t_{0.975}\, \frac{\sqrt{\sum_s w_s^2\, v_s}}{\sum_s w_s} ,
           $$
           <p>
-            With one problem set selected, the interval comes from the spread of that set's own problems
-            instead. Tables and tooltips also show where the value of one more problem set would fall,
-            with 95 % probability, once at least three problem sets are selected. That range is much
-            wider than the interval: the interval says how precisely the average is known, the range how
-            far single problem sets spread around it.
+            with \(t\) on \(\sum_s (n_s - 1)\) degrees of freedom, close to 1.96 here. The interval is
+            about srbf's problem sets, not about problem sets in general. Tables and tooltips also show
+            where the value of one more problem set would fall, with 95 % probability, once at least
+            three problem sets are selected. That range is much wider than the interval: the interval
+            says how precisely the average is known, the range how far single problem sets spread
+            around it.
           </p>
         </div>
       </section>

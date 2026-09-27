@@ -4,8 +4,10 @@ The results are organised as problem sets > problems > runs. A problem's value i
 summarised by the number of its problems with a value, their mean and their variance. The sets are then combined by a
 random-effects model: every set has a true mean, the true means scatter around an overall mean mu with spread tau, and a
 set's observed mean also carries its own sampling noise (its variance over its problems, divided by their number).
-mu is estimated with weights 1 / (tau^2 + noise), tau^2 by Paule-Mandel, and the interval by Hartung-Knapp-Sidik-Jonkman
-(t with S - 1 degrees of freedom); the prediction interval for a new set uses t with S - 2 (Higgins et al. 2009).
+mu is estimated with weights 1 / (tau^2 + noise), tau^2 by Paule-Mandel. The interval covers these problem sets (owner
+2026-09-27: a score is a claim about srbf's suite): the weights are held fixed and only the sampling of problems within
+each set counts, Var(mu) = sum w^2 noise / (sum w)^2, with t on the problems' degrees of freedom, sum (n - 1). How far
+single problem sets spread is the prediction interval for one more set, t with S - 2 (Higgins et al. 2009).
 Rates are combined on the logit scale, with a continuity-corrected rate (x n + 0.5) / (n + 1).
 
 results-site/explorer_v2.js implements the same arithmetic, step for step (the t distribution below is the same
@@ -167,29 +169,24 @@ class Combined:
     p: float
 
 
-def combine_scale(y: Sequence[float], v: Sequence[float], n_single: int | None = None) -> Combined:
-    """The random-effects mean of set estimates y with squared standard errors v. One set: its own mean, with a t
-    interval on its problems (n_single of them)."""
+def combine_scale(y: Sequence[float], v: Sequence[float], df: int = 1) -> Combined:
+    """The random-effects mean of set estimates y with squared standard errors v, and its interval over these sets:
+    Var(mu) = sum w^2 v / (sum w)^2 with the weights held fixed, t with ``df`` degrees of freedom (the problems' own,
+    sum over the sets of n - 1). One set is its own mean, with the t interval on its problems."""
     S = len(y)
-    if S == 1:
-        se = math.sqrt(v[0])
-        df = max(1, (n_single or 2) - 1)
-        tq = t_ppf(0.975, df)
-        p = t_two_sided_p(y[0] / se, df) if se > 0 else (0.0 if y[0] != 0 else 1.0)
-        return Combined(y[0], y[0] - tq * se, y[0] + tq * se, None, None, 0.0, [1.0], 1, p)
-    tau2 = paule_mandel(y, v)
+    tau2 = paule_mandel(y, v) if S > 1 else 0.0
     w = [1.0 / (vi + tau2) for vi in v]
     sw = sum(w)
     mu = sum(wi * yi for wi, yi in zip(w, y)) / sw
-    q = sum(wi * (yi - mu) ** 2 for wi, yi in zip(w, y)) / (S - 1)
-    se_hk = math.sqrt(q / sw)
-    tq = t_ppf(0.975, S - 1)
-    p = t_two_sided_p(mu / se_hk, S - 1) if se_hk > 0 else (0.0 if mu != 0 else 1.0)
+    se = math.sqrt(sum(wi * wi * vi for wi, vi in zip(w, v))) / sw
+    df = max(1, df)
+    tq = t_ppf(0.975, df)
+    p = t_two_sided_p(mu / se, df) if se > 0 else (0.0 if mu != 0 else 1.0)
     pi_lo = pi_hi = None
     if S >= 3:
         half = t_ppf(0.975, S - 2) * math.sqrt(tau2 + 1.0 / sw)
         pi_lo, pi_hi = mu - half, mu + half
-    return Combined(mu, mu - tq * se_hk, mu + tq * se_hk, pi_lo, pi_hi, tau2, [wi / sw for wi in w], S, p)
+    return Combined(mu, mu - tq * se, mu + tq * se, pi_lo, pi_hi, tau2, [wi / sw for wi in w], S, p)
 
 
 def combine(sets: Sequence[SetStat], scale: str = "normal") -> Combined | None:
@@ -198,7 +195,7 @@ def combine(sets: Sequence[SetStat], scale: str = "normal") -> Combined | None:
     if not sets:
         return None
     y, v = set_estimates(sets, scale)
-    c = combine_scale(y, v, sets[0].n if len(sets) == 1 else None)
+    c = combine_scale(y, v, sum(s.n - 1 for s in sets))
     if scale == "logit":
         f = expit
         return Combined(f(c.mu), f(c.lo), f(c.hi), None if c.pi_lo is None else f(c.pi_lo),
