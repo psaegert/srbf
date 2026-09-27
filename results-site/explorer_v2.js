@@ -189,7 +189,7 @@
     state.valid = isFinite(state.valid) ? Math.min(100, Math.max(0, Math.round(state.valid))) : VALID_DEFAULT;
     return any;
   }
-  var fromUrl = loadState();
+  loadState();
   function catsParam() {
     var set = {}; state.cats.forEach(function (c) { set[c] = 1; });
     var is = function (g) { var gs = CATS.filter(function (c) { return CAT[c].group === g; }); return gs.length === state.cats.length && gs.every(function (c) { return set[c]; }); };
@@ -1673,9 +1673,10 @@
     e.preventDefault(); var v = e.target.value.trim(); if (v) { tryKey(v, false); }
   });
   render();
-  // a key given earlier in this tab opens the same payload again without asking for it
+  // a key given earlier in this tab opens the same payload again without asking for it. (The page does not scroll to
+  // the explorer on load: it is the top of its own page, and the address carries the state after every change, so a
+  // reload scrolled the release's title under the sticky navigation bar.)
   if (root) {
     try { var saved = window.sessionStorage.getItem("srbf.k"); if (saved) { tryKey(saved, true); } } catch (e) { /* storage off */ }
-    if (fromUrl) { try { root.scrollIntoView({ block: "start" }); } catch (e) { /* ignore */ } }
   }
 })();

@@ -649,6 +649,25 @@ test('every button group shows its labels in full, each on one line', async ({ p
   }
 });
 
+// A link that carries the explorer's state, and a reload (the address carries the state after every change), open
+// the page at its top: the release's title stays clear of the sticky navigation bar.
+test('a link or a reload leaves the release title in view', async ({ page }) => {
+  await page.goto('/explorer.html?release=2026-09&v=dist&r=16&ok=90');
+  const title = page.locator(V2 + ' h2').first();
+  await expect(title).toContainText('Release 2026-09', { timeout: 15000 });
+  const clear = () => page.evaluate(() => {
+    const h = document.querySelector('.site-header').getBoundingClientRect().bottom;
+    const t = document.querySelector('#results-explorer-v2 h2').getBoundingClientRect().top;
+    return { y: Math.round(window.scrollY), clear: t >= h };
+  });
+  await page.waitForTimeout(500);
+  expect(await clear()).toEqual({ y: 0, clear: true });
+  await page.reload();
+  await expect(title).toContainText('Release 2026-09', { timeout: 15000 });
+  await page.waitForTimeout(500);
+  expect(await clear()).toEqual({ y: 0, clear: true });
+});
+
 // ---- Averaging over problem sets -------------------------------------------------------------------------------------
 // The explorer's own averaging (random effects over problem sets) against the reference, scripts/site_random_effects.py,
 // on the cases the reference wrote (scripts/site_random_effects_fixture.py): the page's code is cut out and run as it is.
