@@ -42,15 +42,14 @@ def test_a_cell_names_the_laws_a_metric_can_be_defined_for():
     assert cell["m"]["n_constants_ratio"][0] == 1                         # one of the two has a value: the other failed
 
 
-def test_a_cell_names_how_many_of_its_values_were_filled_in():
-    """The page can then leave the failed predictions out again: off the sums, out of the worst value's bin."""
+def test_a_metric_with_a_worst_value_ships_both_readings():
+    """With the failed predictions at the worst value, and without them ("a"): the page offers both."""
     rows = {0: _row(success=1.0, f1_score=0.5, recall_score=0.25, edit_distance_norm=0.5), 1: _row(f1_score=0.0, recall_score=0.0),
             2: _row(success=1.0, f1_score=0.0, recall_score=0.0, edit_distance_norm=1.0), 3: _row()}   # an answer may score the worst value itself
     cell = export.summarize_cell(rows, None)
-    assert cell["w"] == {"f1_score": 1, "recall_score": 1}
-    assert cell["m"]["f1_score"][:3] == [3, 3, 0.5] and cell["m"]["recall_score"][:3] == [3, 3, 0.25]
-    assert cell["m"]["edit_distance_norm"][:3] == [2, 2, 1.5]             # the answers that were made, nothing filled in
-    assert "w" not in export.summarize_cell({0: rows[0], 2: rows[2]}, None)
+    assert cell["m"]["f1_score"] == [3, 3, 0.5, 0.25] and cell["a"]["f1_score"] == [2, 2, 0.5, 0.25]
+    assert cell["m"]["edit_distance_norm"] == [2, 2, 1.5, 1.25] and "edit_distance_norm" not in cell["a"]
+    assert "w" not in cell
 
 
 def test_a_paired_contrast_ships_in_both_readings():
@@ -72,10 +71,10 @@ def test_a_rate_the_rows_do_not_carry_is_absent_and_not_zero():
         row["symbolic_recovery_mask_fittable"] = None
         row["symbolic_recovery_mask_none"] = None
     cell = export.summarize_cell(rows, None)
-    assert cell["m"]["symbolic_recovery"] == [1, 2]
+    assert cell["m"]["symbolic_recovery"] == [2, 1.0, 1.0]
     assert "symbolic_recovery_mask_fittable" not in cell["m"] and "symbolic_recovery_mask_none" not in cell["m"]
     rows[0]["symbolic_recovery_mask_fittable"], rows[1]["symbolic_recovery_mask_fittable"] = 1.0, 0.0
-    assert export.summarize_cell(rows, None)["m"]["symbolic_recovery_mask_fittable"] == [1, 2]
+    assert export.summarize_cell(rows, None)["m"]["symbolic_recovery_mask_fittable"] == [2, 1.0, 1.0]
 
 
 def test_the_three_levels_of_symbolic_recovery_are_in_the_registry():
@@ -113,8 +112,29 @@ def test_paired_wins_and_losses_count_better_and_worse_not_higher_and_lower():
     a = {0: _row(success=1.0, log10_fvu_val=-6.0, mdl_ratio=1.1), 1: _row(success=1.0, log10_fvu_val=-2.0, mdl_ratio=0.5)}
     b = {0: _row(success=1.0, log10_fvu_val=-3.0, mdl_ratio=2.0), 1: _row(success=1.0, log10_fvu_val=-1.0, mdl_ratio=1.5)}
     paired = export.paired_cell(a, b)["m"]
-    n, total, _, better, worse = paired["log10_fvu_val"]
+    n, total, _, _, s1, _, better, worse = paired["log10_fvu_val"]
     assert n == 2 and math.isclose(total, -3.0 - 1.0)                      # a's values are lower ...
-    assert (better, worse) == (2, 0)                                       # ... which is better for an error
-    n, _, _, better, worse = paired["mdl_ratio"]
+    assert (better, worse) == (2, 0) and s1 == 2.0                         # ... which is better for an error
+    n, _, _, _, _, _, better, worse = paired["mdl_ratio"]
     assert n == 2 and (better, worse) == (1, 1)                            # 1.1 beats 2.0; 0.5 loses to 1.5 (|log 0.5| > |log 1.5|)
+
+
+def test_two_recovered_predictions_tie_and_a_failure_is_the_worst():
+    """Comparisons read FVU <= 2^-23 as recovered and equal (owner 2026-09-27), and a failed run as the worst value."""
+    a = {0: _row(success=1.0, log10_fvu_val=-14.0), 1: _row(success=1.0, log10_fvu_val=-3.0), 2: _row()}
+    b = {0: _row(success=1.0, log10_fvu_val=-9.0), 1: _row(), 2: _row(success=1.0, log10_fvu_val=5.0)}
+    n_d, total, _, n_s, s1, _, better, worse = export.paired_cell(a, b)["m"]["log10_fvu_val"]
+    assert n_d == 1 and total == 0.0                                       # both recovered: no difference
+    assert n_s == 3 and s1 == 0.0 and (better, worse) == (1, 1)            # a tie, a win over a failure, a loss by failing
+
+
+def test_a_ratio_is_averaged_on_the_log_scale():
+    rows = {0: _row(success=1.0, mdl_ratio=2.0), 1: _row(success=1.0, mdl_ratio=0.5)}
+    assert export.summarize_cell(rows, None)["m"]["mdl_ratio"] == [2, 2, 0.0, 2.0]      # log2: +1 and -1 cancel
+
+
+def test_a_histogram_counts_each_problem_once_and_a_failed_fit_at_the_worst_end():
+    problems = {0: [_row(success=1.0, log10_fvu_val=-2.0), _row(success=1.0, log10_fvu_val=-2.0)], 1: [_row()]}
+    lo, hi, _ = export.HIST_SPECS["log10_fvu_val"]
+    h = dict(map(tuple, export.hist_of(problems, "log10_fvu_val", lo, hi)))
+    assert sum(h.values()) == 2 and h[export.NB - 1] == 1                   # two problems; the failed one in the top bin
