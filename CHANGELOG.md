@@ -77,6 +77,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   method without a ladder when it stood next to one with a ladder.
 
 ### Changed
+- **The results site averages over problem sets, with the problem as the unit.** A problem's value is the mean of
+  its runs, and the catalogs are combined by a random-effects average (Paule–Mandel between-catalog variance,
+  Hartung–Knapp intervals, rates on the logit scale, ratios as geometric means), so erbench-syneq no longer decides
+  a pooled number on its own; tables and tooltips add where one more catalog would fall. Paired contrasts compare
+  every run of one method with every run of the other and test over catalogs (rates on the difference, other metrics
+  on the per-problem superiority); ranks are built from the pairwise chances to beat, with Holm-corrected pairwise
+  tests in place of Friedman and the Nemenyi critical difference. Two predictions that both meet Numeric Recovery tie
+  in comparisons, and a failed run counts as worst in the medians, distributions, ranks and comparisons of log10 FVU
+  and R². The time axis averages the catalogs the same way. `scripts/site_random_effects.py` is the reference; the
+  site suite runs the page's own code against it.
 - **`log10_fvu` is floored at the float64 epsilon** (`srbf.metrics.numeric.LOG10_FVU_FLOOR`, \(\log_{10} 2^{-52}
   \approx -15.65\)). An exact fit used to be \(-\infty\), which every mean left out, while the same formula written
   another way landed at finite rounding noise anywhere down to about \(-320\), which every mean took in: on the

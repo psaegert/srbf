@@ -37,15 +37,16 @@ def test_mean_ranks_follow_from_the_pairwise_outcomes_exactly() -> None:
     raw = {m: [None if rng.random() < 0.2 else (-math.inf if rng.random() < 0.1 else float(np.round(rng.normal(-3, 3), 0))) for _ in range(400)]
            for m in "abcd"}                                                 # rounded: plenty of ties, and laws nobody answers
     rows = {m: _rows(v, key) for m, v in raw.items()}
-    direct = np.mean([rankdata([-sx.rank_score(raw[m][i], False) for m in "abcd"], method="average") for i in range(400)], axis=0)
+    # places as comparisons read the values: two recovered predictions (log10 FVU at or below log10 2^-23) tie
+    direct = np.mean([rankdata([-sx.rank_score(sx.comparison_value(key, raw[m][i]), False) for m in "abcd"], method="average")
+                      for i in range(400)], axis=0)
     ki = sx.RANK_KEYS.index(key)
     for j, a in enumerate("abcd"):
         lost = 0.0
         for b in "abcd":
             if a != b:
                 n, *w = sx.rank_pair_cell(rows[a], rows[b])
-                wa, wb = w[2 * ki], w[2 * ki + 1]
-                lost += (wb + 0.5 * (n - wa - wb)) / n
+                lost += (1 - w[2 * ki] / n) / 2          # the chance b beats a: (1 - a's mean superiority) / 2
         assert abs(1 + lost - direct[j]) < 1e-12
 
 

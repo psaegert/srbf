@@ -165,9 +165,9 @@
             problem, measured for every method on the same workstation (16 CPU cores, one RTX 4090
             GPU), one method at a time, on a fixed sample of 262 problems. Only these times are
             shown. Most results are computed on a shared compute cluster, where the time a job takes
-            depends on the machine it lands on, so those times cannot be compared. Each problem set's
-            average time counts in proportion to its number of problems among the 6,660, and problems
-            without a usable formula are not timed. A method that has not been timed yet can only be
+            depends on the machine it lands on, so those times cannot be compared. The problem sets'
+            average times are combined like every other value (see <a href="#averaging">How values are
+            averaged</a>), and problems without a usable formula are not timed. A method that has not been timed yet can only be
             drawn against its budget. Candidate counts and beam widths share the budget axis of the
             curves; PySR's iterations do not fit on it, so PySR's curves are drawn against time. Tables
             and the same-budget ranking list PySR by its number of iterations.
@@ -182,13 +182,14 @@
             The runs are still in progress, so results arrive over time, one problem set and budget
             at a time, and each method runs over its own range of budgets. A point, a table value or a rank is shown only once the method has results for
             every problem set you selected, at that budget. Then every value covers the same problems.
-            A problem set counts as done once one of its two runs is complete, so the number of runs
-            behind a value can differ between methods while the second runs finish.
+            A problem set counts as done once each of its problems has at least one finished run. Each
+            problem is run twice, and its value is the average of its finished runs, so while the second
+            runs finish, some problems rest on one run.
           </p>
           <p>
-            The reason is that problem sets differ a lot in difficulty and size: the largest,
-            erbench-syneq, holds 5,301 of the 6,660 problems. An average over whichever problem sets
-            happen to be finished would mostly show which ones are done, not how good the method is.
+            The reason is that problem sets differ a lot in difficulty. An average over whichever
+            problem sets happen to be finished would mostly show which ones are done, not how good the
+            method is.
             To see partial results, select fewer problem sets in the explorer: a point appears as
             soon as the selected ones are finished. The <a href="progress.html">Progress</a> page
             shows how far each method has come, in results and in measured times, budget by budget.
@@ -217,21 +218,59 @@
         </div>
       </section>
 
+      <section class="topic" id="averaging">
+        <h3>How values are averaged</h3>
+        <div>
+          <p>
+            The problems come in problem sets, and the sets differ a lot, in difficulty and in size:
+            the largest holds 5,301 of the 6,660 problems. A plain average over all
+            problems would mostly describe that one set. Every value is therefore averaged in three
+            steps. First, each problem's runs are averaged, so every problem counts once. Second, each
+            problem set's problems are averaged. Third, the problem sets are averaged, each weighted by
+            how precisely its own average is known, plus an allowance \(\tau^2\) for how much problem
+            sets differ from each other:
+          </p>
+          $$
+            \hat{\theta} = \frac{\sum_s w_s\, \bar{x}_s}{\sum_s w_s},
+            \qquad
+            w_s = \frac{1}{\tau^2 + \sigma_s^2 / n_s},
+          $$
+          <p>
+            where \(\bar{x}_s\) is the average of problem set \(s\) over its \(n_s\) problems and
+            \(\sigma_s^2\) the variance of its problems' values. The allowance \(\tau^2\) is estimated
+            from the data (Paule and Mandel's estimator), the usual way to combine studies that measure
+            the same quantity on different populations. Problem sets differ far more than chance would
+            make them differ, so the allowance dominates: every set counts about the same whatever its
+            size, and a set of only a few problems counts less, because its own average is uncertain.
+          </p>
+          <p>
+            Rates are averaged on the log-odds scale, which keeps them and their intervals between 0
+            and 100 %. Ratios, such as the MDL ratio, are averaged on a log scale, as geometric means:
+            a ratio of 2 and one of 0.5 average to 1. Medians and distributions weigh each problem set
+            as the average does.
+          </p>
+        </div>
+      </section>
+
       <section class="topic" id="intervals">
         <h3>Intervals</h3>
         <div>
           <p>
-            Every value comes with a 95 % interval. It shows how precisely the value is known, given how
-            much the results vary from problem to problem: it treats the problems as a random sample of
-            similar problems, and each of a problem's two runs as a separate problem. For a mean it is a
-            t-interval, for a median an interval from order statistics, and for a rate \(\hat{p}\) over
-            \(K\) problem runs the Wilson score interval
+            Every value comes with a 95 % interval. It shows how precisely the value is known. It
+            treats the selected problem sets as a sample of problem sets like them, so it is wide when
+            they disagree or when there are few of them (the Hartung&ndash;Knapp interval, with \(S\)
+            problem sets):
           </p>
           $$
-            \frac{\hat{p} + \frac{z^2}{2K} \;\pm\; z \sqrt{\frac{\hat{p}(1 - \hat{p})}{K} + \frac{z^2}{4K^2}}}
-                 {1 + \frac{z^2}{K}},
-            \qquad z = 1.96 .
+            \hat{\theta} \;\pm\; t_{S-1,\,0.975}\, \sqrt{\frac{\sum_s w_s\, (\bar{x}_s - \hat{\theta})^2}{(S - 1) \sum_s w_s}} .
           $$
+          <p>
+            With one problem set selected, the interval comes from the spread of that set's own problems
+            instead. Tables and tooltips also show where the value of one more problem set would fall,
+            with 95 % probability, once at least three problem sets are selected. That range is much
+            wider than the interval: the interval says how precisely the average is known, the range how
+            far single problem sets spread around it.
+          </p>
         </div>
       </section>
 

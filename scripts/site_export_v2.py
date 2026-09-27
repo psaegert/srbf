@@ -227,6 +227,13 @@ MEDIAN_ONLY = {"r2_val": "log10_fvu_val", "r2_fit": "log10_fvu_fit"}
 ELIGIBLE = {"n_constants_ratio": lambda row: bool(row.get("n_constants"))}
 # Properties of the ground truth alone: defined for every problem, whatever the method did.
 EVERY_PROBLEM = {"ground_truth_mdl", "skeleton_length", "n_constants", "total_nestedness", "n_variables"}
+# Unbounded metrics a failed run takes the worst value of, in the medians, distributions, ranks and comparisons (owner
+# 2026-09-27); their means leave failures out, as ruled.
+UNBOUNDED_WORST = {"log10_fvu_val": math.inf, "log10_fvu_fit": math.inf, "r2_val": -math.inf, "r2_fit": -math.inf}
+# Comparisons read two recovered predictions as a tie (owner 2026-09-27): FVU <= 2^-23 is Numeric Recovery, so a log10
+# FVU is read no lower than log10(2^-23), and an R^2 no higher than 1 - 2^-23. {key: (floor, higher is better)}
+RECOVERY_FLOOR = {"log10_fvu_val": (math.log10(2.0 ** -23), False), "log10_fvu_fit": (math.log10(2.0 ** -23), False),
+                  "r2_val": (1.0 - 2.0 ** -23, True), "r2_fit": (1.0 - 2.0 ** -23, True)}
 ANSWERED = "@answered"   # suffix of a paired contrast taken over the problems BOTH methods have a prediction for
 COPY_OF = {"numeric_recovery_relative_val": "numeric_recovery_val", "numeric_recovery_relative_fit": "numeric_recovery_fit"}
 
@@ -254,8 +261,9 @@ METRIC_HIGHER = {m[0]: m[5] for m in METRICS}
 PAIRED_KEYS = ["numeric_recovery_val", "symbolic_recovery", "success", "log10_fvu_val", "mdl_ratio", "expr_length_ratio", "f1_score"]
 # The Ranks view: within every problem the methods are placed 1st, 2nd, ... on one continuous metric, a method without a
 # usable prediction last. A mean rank over any set of problems and any roster of methods follows from PAIRWISE outcomes alone
-# (rank_i = 1 + sum_j [j beats i] + 0.5 [j ties i]), and pairwise counts add up over catalogs, so that is what ships:
-# per pair x catalog x slot, [n problems, then (wins of the first, wins of the second) per rank key]. A slot is a rung
+# (rank_i = 1 + sum_j P(j beats i)), and the page averages each pair's chance over catalogs, so that is what ships:
+# per pair x catalog x slot, [n problems, then the sum and sum of squares of the first method's per-problem superiority
+# per rank key] (owner 2026-09-27). A slot is a rung
 # ("64": both methods at that rung) or a time budget ("t3": each method at its largest rung the reference machine
 # timed at or under 3 s per problem). The first key is the primary league.
 # Every metric that says how good a prediction is can rank: the rates (a hit beats a miss), and every continuous metric
@@ -309,7 +317,7 @@ Rows = dict[tuple[int, int], dict[str, Any]]   # (draw, row) -> {metric: value}
 
 def load_rows(root: str) -> dict[str, dict[tuple[str, int], Rows]]:
     """{method: {(catalog, rung): {(draw, row): {metric: value}}}}: every draw the rows carry (a model is run twice
-    with different seeds; which draws a cell pools is decided per cell, see pooled_rows)."""
+    with different seeds; a cell averages each problem's runs, see problems_of)."""
     data: dict[str, dict[tuple[str, int], Rows]] = defaultdict(lambda: defaultdict(dict))
     files = sorted(set(glob.glob(os.path.join(root, "rows_full_*.csv")) + glob.glob(os.path.join(root, "*_rows_full.csv"))))
     for path in files:
@@ -426,21 +434,18 @@ def by_draw(rows: dict[Any, dict[str, Any]]) -> dict[int, dict[int, dict[str, An
     return out
 
 
-def complete_draws(rows: dict[Any, dict[str, Any]], expected: int | None) -> list[int]:
-    """The draws that cover every problem of the cell (all of them when no count is expected)."""
-    return sorted(d for d, rs in by_draw(rows).items() if expected is None or len(rs) >= expected)
-
-
-def pooled_rows(rows: dict[Any, dict[str, Any]], expected: int | None) -> tuple[Rows, list[int]]:
-    """What a cell pools: every complete draw, and only those (a draw still running is not a random subset of the
-    problems). With no complete draw the fullest draw stands in (the first draw on a tie), and the cell is partial.
-    The rows come back in (draw, problem) order, so the cell's sums do not depend on the order the table was read in."""
-    per = by_draw(rows)
-    done = complete_draws(rows, expected)
-    if not done:
-        fullest = max(sorted(per), key=lambda k: len(per[k])) if per else 1
-        return {(fullest, i): per[fullest][i] for i in sorted(per.get(fullest, {}))}, []
-    return {(d, i): per[d][i] for d in done for i in sorted(per[d])}, done
+def problems_of(rows: dict[Any, dict[str, Any]], expected: int | None) -> tuple[dict[int, list[dict[str, Any]]], bool, int]:
+    """A cell's runs grouped by problem, over every run (draw) the rows hold (owner 2026-09-27: the problem is the unit).
+    A problem's value is the mean of the runs it has, and every problem weighs the same, whatever its number of runs, so a
+    run still in progress adds precision to the problems it has reached and moves no weight. The cell is complete once
+    every problem of the set has at least one run. Returns the problems in row order, completeness and the fewest runs
+    a problem has."""
+    per: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for key in sorted(rows, key=lambda k: k if isinstance(k, tuple) else (1, k)):
+        _d, i = key if isinstance(key, tuple) else (1, key)
+        per[i].append(rows[key])
+    complete = expected is None or len(per) >= expected
+    return dict(sorted(per.items())), complete, min((len(v) for v in per.values()), default=0)
 
 
 def transform(v: float | None, tf: str | None) -> float | None:
@@ -453,86 +458,240 @@ def transform(v: float | None, tf: str | None) -> float | None:
     return v
 
 
-def hist_of(values: list[float | None], lo: float, hi: float) -> list[Any] | None:
-    """values already transformed; +-inf clipped into the edge bins; sparse [bin, count] pairs when few bins are used."""
-    v = np.asarray([x for x in values if x is not None], float)
-    v = v[~np.isnan(v)]
-    if v.size == 0:
+def hist_of(problems: dict[int, list[dict[str, Any]]], key: str, lo: float, hi: float, answered: bool = False) -> list[Any] | None:
+    """One histogram of a metric over a cell's problems, in its transformed space. Every problem weighs 1, shared by its
+    runs; +-inf is clipped into the edge bins. A failed run of an unbounded metric counts as its worst value (owner
+    2026-09-27), and the answered-only reading of a metric with a worst value (WORST) leaves the failed runs out."""
+    tf = HIST_SPECS[key][2]
+    xs: list[float] = []
+    ws: list[float] = []
+    for runs in problems.values():
+        vals = []
+        for r in runs:
+            if answered and not r["success"]:
+                continue
+            v = r[key]
+            if (v is None or (isinstance(v, float) and math.isnan(v))) and key in UNBOUNDED_WORST and not r["success"]:
+                v = UNBOUNDED_WORST[key]
+            if v is not None and not (isinstance(v, float) and math.isnan(v)):
+                v = v if math.isinf(v) else transform(v, tf)
+            if v is not None and not math.isnan(v):
+                vals.append(v)
+        if vals:
+            xs.extend(vals)
+            ws.extend([1.0 / len(vals)] * len(vals))
+    if not xs:
         return None
-    idx = np.clip(np.floor((np.clip(v, lo, hi) - lo) / (hi - lo) * NB).astype(int), 0, NB - 1)
-    h = np.bincount(idx, minlength=NB)
-    nz = np.nonzero(h)[0]
+    # one binning for the whole cell; bincount adds the weights in the order given, as a per-problem loop would
+    idx = np.clip(np.floor((np.clip(np.asarray(xs, float), lo, hi) - lo) / (hi - lo) * NB).astype(int), 0, NB - 1)
+    acc = np.bincount(idx, weights=np.asarray(ws), minlength=NB)
+    if not acc.any():
+        return None
+    acc = np.round(acc, 4)
+    nz = np.nonzero(acc)[0]
+
+    def num(x: float) -> float | int:
+        return int(x) if float(x).is_integer() else float(x)
+
     if nz.size <= NB // 4:
-        return [[int(i), int(h[i])] for i in nz]
-    return h.tolist()
+        return [[int(i), num(acc[i])] for i in nz]
+    return [num(x) for x in acc]
+
+
+def hist_file(key: str) -> str:
+    """A histogram's file name: the metric's key, an answered-only reading's suffix spelled without the @."""
+    return key.replace(ANSWERED, "_answered") + ".js"
+
+
+def _sums(xs: list[float]) -> list[float]:
+    a = np.asarray(xs, float)
+    return [round(float(a.sum()), 6), round(float((a * a).sum()), 6)] if a.size else [0.0, 0.0]
+
+
+def problem_value(runs: list[dict[str, Any]], key: str, tf: str | None, answered: bool = False) -> tuple[bool, float | None]:
+    """(defined, value): whether any run has a value for `key`, and the mean of its runs' finite values in the metric's
+    transformed space (None when none is finite). The answered-only reading skips the failed runs."""
+    defined, vals = False, []
+    for r in runs:
+        if answered and not r["success"]:
+            continue
+        v = r[key]
+        if v is None or (isinstance(v, float) and math.isnan(v)):
+            continue
+        defined = True
+        t = transform(v, tf)
+        if t is not None and math.isfinite(t):
+            vals.append(t)
+    return defined, (sum(vals) / len(vals) if vals else None)
 
 
 def summarize_cell(rows: dict[Any, dict[str, Any]], expected: int | None) -> dict[str, Any]:
-    pool, done = pooled_rows(rows, expected)
-    vals = list(pool.values())
-    cell: dict[str, Any] = {
-        "state": "complete" if done else "partial", "d": max(1, len(done)),   # d: how many draws the cell pools
-        "n": len(vals), "ok": int(sum(1 for x in vals if x["success"])), "m": {}}
+    """A cell: its problems' values summed per metric, for the page to combine over problem sets.
+    A rate: [problems, sum, sum of squares] of the problems' values (a problem's value is its share of hits over its runs).
+    Any other metric: [problems with a value, problems with a finite value, sum, sum of squares] in its transformed space
+    (a ratio as log2, so its mean is the geometric one); a metric with a worst value (WORST) also in its answered-only
+    reading ("a"). "e": the problems a metric can be defined for (ELIGIBLE)."""
+    problems, complete, fewest = problems_of(rows, expected)
+    cell: dict[str, Any] = {"state": "complete" if complete else "partial", "d": max(1, fewest), "n": len(problems),
+                            "ok": int(sum(1 for runs in problems.values() if any(r["success"] for r in runs))), "m": {}}
     for k in RATE_KEYS:
-        if any(x[k] is not None for x in vals):
-            cell["m"][k] = [int(sum(1 for x in vals if x[k])), len(vals)]
+        if any(r[k] is not None for runs in problems.values() for r in runs):
+            xs = [sum(1.0 if r[k] else 0.0 for r in runs) / len(runs) for runs in problems.values()]
+            cell["m"][k] = [len(xs)] + _sums(xs)
     for k in CONT_KEYS:
-        xs = [x[k] for x in vals if x[k] is not None and not math.isnan(x[k])]
-        if not xs:
-            continue
-        fin = np.asarray([x for x in xs if math.isfinite(x)], float)
-        if k in MEDIAN_ONLY:   # no mean is read, and the sums of an unbounded metric overflow
-            cell["m"][k] = [len(xs), int(fin.size), 0.0, 0.0]
-        else:
-            cell["m"][k] = [len(xs), int(fin.size), float(fin.sum()) if fin.size else 0.0, float((fin * fin).sum()) if fin.size else 0.0]
+        tf = HIST_SPECS[k][2] if k in HIST_SPECS else None
+        readings = [(cell["m"], False)] + ([(cell.setdefault("a", {}), True)] if k in WORST else [])
+        for target, answered in readings:
+            defined, xs = 0, []
+            for runs in problems.values():
+                has, x = problem_value(runs, k, tf, answered)
+                defined += has
+                if x is not None:
+                    xs.append(x)
+            if not defined:
+                continue
+            target[k] = [defined, len(xs)] + ([0.0, 0.0] if k in MEDIAN_ONLY else _sums(xs))
     for k, eligible in ELIGIBLE.items():
-        cell.setdefault("e", {})[k] = int(sum(1 for x in vals if eligible(x)))
-    for k in WORST:
-        filled = int(sum(1 for x in vals if not x["success"] and x[k] is not None))
-        if filled:
-            cell.setdefault("w", {})[k] = filled
+        cell.setdefault("e", {})[k] = int(sum(1 for runs in problems.values() if eligible(runs[0])))
     return cell
 
 
+def comparison_value(key: str, v: float | None) -> float | None:
+    """A value as comparisons read it: two predictions that both meet the recovery criterion (FVU <= 2^-23) tie, whatever
+    digits lie below it (owner 2026-09-27)."""
+    if v is None or (isinstance(v, float) and math.isnan(v)):
+        return None
+    if key in RECOVERY_FLOOR:
+        floor, higher = RECOVERY_FLOOR[key]
+        return min(v, floor) if higher else max(v, floor)
+    return v
+
+
+def superiority(runs_a: list[dict[str, Any]], runs_b: list[dict[str, Any]], key: str, answered: bool = False) -> float | None:
+    """On one problem, the share of run pairs the first method wins minus the share it loses (ties count neither), on the
+    metric's own terms (rank_score): a failed run is worst, and two recovered runs tie. None without a run pair. The
+    reference for the matrices below, which compute the same over every problem of a cell at once."""
+    higher, ideal = METRIC_HIGHER[key], IDEAL.get(key)
+    ra = [r for r in runs_a if not answered or r["success"]]
+    rb = [r for r in runs_b if not answered or r["success"]]
+    if not ra or not rb:
+        return None
+    sa = [rank_score(comparison_value(key, r.get(key)), higher, ideal) for r in ra]
+    sb = [rank_score(comparison_value(key, r.get(key)), higher, ideal) for r in rb]
+    return sum((x > y) - (y > x) for x in sa for y in sb) / (len(sa) * len(sb))
+
+
+# A cell's problems as matrices, one row per problem (ascending id) and one column per run, built once per cell and
+# metric: the comparisons read each cell against every other method at every budget and time slot. Keyed by the rows'
+# id, holding the rows themselves so that the id cannot be reused while the entry lives.
+_MATRICES: dict[tuple[Any, ...], tuple[Any, Any]] = {}
+
+
+def _cached(rows: dict[Any, dict[str, Any]], tag: tuple[Any, ...], build: Any) -> Any:
+    k = (id(rows),) + tag
+    hit = _MATRICES.get(k)
+    if hit is None or hit[0] is not rows:
+        hit = _MATRICES[k] = (rows, build())
+    return hit[1]
+
+
+def _problem_runs(rows: dict[Any, dict[str, Any]]) -> tuple[np.ndarray, list[list[dict[str, Any]]]]:
+    def build() -> tuple[np.ndarray, list[list[dict[str, Any]]]]:
+        per = problems_of(rows, None)[0]
+        return np.asarray(list(per), dtype=np.int64), list(per.values())
+    return _cached(rows, ("runs",), build)
+
+
+def _width(runs: list[list[dict[str, Any]]]) -> int:
+    return max((len(r) for r in runs), default=0)
+
+
+def score_matrix(rows: dict[Any, dict[str, Any]], key: str, answered: bool = False) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """(problem ids, scores, mask): each run's rank_score of its comparison value, and whether the run takes part (it
+    exists, and has succeeded for the answered-only reading)."""
+    def build() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        ids, runs = _problem_runs(rows)
+        higher, ideal = METRIC_HIGHER[key], IDEAL.get(key)
+        sc = np.full((len(runs), _width(runs)), -np.inf)
+        mask = np.zeros(sc.shape, dtype=bool)
+        for i, rs in enumerate(runs):
+            for j, r in enumerate(rs):
+                if answered and not r["success"]:
+                    continue
+                mask[i, j] = True
+                sc[i, j] = rank_score(comparison_value(key, r.get(key)), higher, ideal)
+        return ids, sc, mask
+    return _cached(rows, ("score", key, answered), build)
+
+
+def value_matrix(rows: dict[Any, dict[str, Any]], key: str, answered: bool = False) -> tuple[np.ndarray, np.ndarray]:
+    """(problem ids, values): each problem's value as problem_value reads it after comparison_value (the mean of its
+    runs' finite transformed values; NaN without one)."""
+    def build() -> tuple[np.ndarray, np.ndarray]:
+        ids, runs = _problem_runs(rows)
+        tf = HIST_SPECS[key][2] if key in HIST_SPECS else None
+        out = np.full(len(runs), np.nan)
+        for i, rs in enumerate(runs):
+            x = problem_value([{key: comparison_value(key, r[key]), "success": r["success"]} for r in rs], key, tf, answered)[1]
+            if x is not None:
+                out[i] = x
+        return ids, out
+    return _cached(rows, ("value", key, answered), build)
+
+
+def rate_matrix(rows: dict[Any, dict[str, Any]], key: str) -> tuple[np.ndarray, np.ndarray]:
+    """(problem ids, each problem's share of hits over its runs)."""
+    def build() -> tuple[np.ndarray, np.ndarray]:
+        ids, runs = _problem_runs(rows)
+        return ids, np.asarray([sum(1.0 if r[key] else 0.0 for r in rs) / len(rs) for rs in runs])
+    return _cached(rows, ("rate", key), build)
+
+
+def _align(ia: np.ndarray, ib: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    common = np.intersect1d(ia, ib)
+    return common, np.searchsorted(ia, common), np.searchsorted(ib, common)
+
+
+def superiority_of(sa: np.ndarray, ma: np.ndarray, sb: np.ndarray, mb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """superiority() over aligned problems at once: (values, defined), the value 0 where no run pair exists."""
+    num = np.zeros(sa.shape[0])
+    den = np.zeros(sa.shape[0])
+    for r in range(sa.shape[1]):
+        for q in range(sb.shape[1]):
+            both = ma[:, r] & mb[:, q]
+            x, y = sa[:, r], sb[:, q]
+            num += np.where(both, (x > y).astype(float) - (y > x).astype(float), 0.0)
+            den += both
+    ok = den > 0
+    return np.where(ok, num / np.maximum(den, 1), 0.0), ok
+
+
 def paired_cell(rows_a: dict[Any, dict[str, Any]], rows_b: dict[Any, dict[str, Any]], expected: int | None = None) -> dict[str, Any] | None:
-    """A problem is paired with itself within a draw, over the draws complete on both sides."""
-    rows_a, rows_b = pooled_rows(rows_a, expected)[0], pooled_rows(rows_b, expected)[0]
-    common = sorted(set(rows_a) & set(rows_b))
-    if not common:
+    """Two methods on the problems both have, one problem at a time over every combination of their runs (runs of
+    different methods share the problem, not the points, so pairing them by run number would be arbitrary).
+    A rate: [problems, sum, sum of squares of the problems' differences, problems where the first does better, worse].
+    Any other metric: the difference of the problems' values where both have one, [problems, sum, sum of squares], then
+    the superiority over every problem (failures worst, recovered runs tied), [problems, sum, sum of squares, better,
+    worse]. A metric with a worst value also ships its answered-only reading (key + ANSWERED)."""
+    common, ja, jb = _align(_problem_runs(rows_a)[0], _problem_runs(rows_b)[0])
+    if not common.size:
         return None
     out: dict[str, Any] = {}
     for k in PAIRED_KEYS:
         if k in RATE_KEYS:
-            n11 = n10 = n01 = n00 = 0
-            for i in common:
-                a, b = bool(rows_a[i][k]), bool(rows_b[i][k])
-                if a and b:
-                    n11 += 1
-                elif a:
-                    n10 += 1
-                elif b:
-                    n01 += 1
-                else:
-                    n00 += 1
-            out[k] = [n11, n10, n01, n00]
-        else:
-            tf = HIST_SPECS[k][2] if k in HIST_SPECS else None
-            for name, laws in ((k, common),) + (((k + ANSWERED, [i for i in common if rows_a[i]["success"] and rows_b[i]["success"]]),) if k in WORST else ()):
-                # d is the first method's value minus the second's; the wins and losses count where the first is BETTER
-                # or WORSE on the metric's own terms (rank_score: lower is better for an error, closer to the ideal
-                # for a ratio), which the sign of d alone does not say
-                ds, better, worse = [], 0, 0
-                higher, ideal = METRIC_HIGHER[k], IDEAL.get(k)
-                for i in laws:
-                    va, vb = transform(rows_a[i][k], tf), transform(rows_b[i][k], tf)
-                    if va is None or vb is None or not (math.isfinite(va) and math.isfinite(vb)):
-                        continue
-                    ds.append(va - vb)
-                    sa, sb = rank_score(rows_a[i][k], higher, ideal), rank_score(rows_b[i][k], higher, ideal)
-                    better, worse = better + (sa > sb), worse + (sb > sa)
-                d = np.asarray(ds, float)
-                out[name] = [int(d.size), float(d.sum()) if d.size else 0.0, float((d * d).sum()) if d.size else 0.0, int(better), int(worse)]
-    return {"n": len(common), "m": out}
+            ds = rate_matrix(rows_a, k)[1][ja] - rate_matrix(rows_b, k)[1][jb]
+            out[k] = [int(ds.size)] + _sums(list(ds)) + [int((ds > 0).sum()), int((ds < 0).sum())]
+            continue
+        for name, answered in [(k, False)] + ([(k + ANSWERED, True)] if k in WORST else []):
+            va, vb = value_matrix(rows_a, k, answered)[1][ja], value_matrix(rows_b, k, answered)[1][jb]
+            both = np.isfinite(va) & np.isfinite(vb)
+            ds = (va - vb)[both]
+            _, sa, ma = score_matrix(rows_a, k, answered)
+            _, sb, mb = score_matrix(rows_b, k, answered)
+            sup, ok = superiority_of(sa[ja], ma[ja], sb[jb], mb[jb])
+            ss = sup[ok]
+            out[name] = [int(ds.size)] + _sums(list(ds)) + [int(ss.size)] + _sums(list(ss)) + [int((ss > 0).sum()), int((ss < 0).sum())]
+    return {"n": int(common.size), "m": out}
 
 
 def budget_key(t: float) -> str:
@@ -567,22 +726,17 @@ def rank_score(value: float | None, higher: bool | None, ideal: float | None = N
 
 
 def rank_pair_cell(rows_a: dict[Any, dict[str, Any]], rows_b: dict[Any, dict[str, Any]], expected: int | None = None,
-                   keys: list[str] | None = None) -> list[int] | None:
-    rows_a, rows_b = pooled_rows(rows_a, expected)[0], pooled_rows(rows_b, expected)[0]
-    common = sorted(set(rows_a) & set(rows_b))
-    if not common:
+                   keys: list[str] | None = None) -> list[float] | None:
+    """[problems both methods have, then (sum, sum of squares) of the per-problem superiority per rank key]: the page
+    combines them over problem sets into the chance that one method beats the other on a problem, and places from those."""
+    common, ja, jb = _align(_problem_runs(rows_a)[0], _problem_runs(rows_b)[0])
+    if not common.size:
         return None
-    out = [len(common)]
+    out: list[float] = [int(common.size)]
     for k in RANK_KEYS if keys is None else keys:
-        higher, ideal = METRIC_HIGHER[k], IDEAL.get(k)
-        wa = wb = 0
-        for i in common:
-            sa, sb = rank_score(rows_a[i].get(k), higher, ideal), rank_score(rows_b[i].get(k), higher, ideal)
-            if sa > sb:
-                wa += 1
-            elif sb > sa:
-                wb += 1
-        out += [wa, wb]
+        _, sa, ma = score_matrix(rows_a, k)
+        _, sb, mb = score_matrix(rows_b, k)
+        out += _sums(list(superiority_of(sa[ja], ma[ja], sb[jb], mb[jb])[0]))
     return out
 
 
@@ -737,7 +891,7 @@ def main() -> None:
         rungs_of = {k: {r for (_c, r) in data.get(k, {}) if usable(k, r)} for k in {x for p in pairs for x in p} | set(keys)}
         # a time budget buys a rung the method has FINISHED: every catalog, every problem (the site shows no pooled number
         # for a rung that is still running, so a budget must not point at one)
-        finished = {k: {r for r in rungs_of[k] if all(complete_draws(data[k].get((c, r), {}), n) for c, n in sizes.items())} for k in rungs_of}
+        finished = {k: {r for r in rungs_of[k] if all(problems_of(data[k].get((c, r), {}), n)[1] for c, n in sizes.items())} for k in rungs_of}
         at: dict[str, dict[str, int]] = {k: {} for k in rungs_of}
         for k in rungs_of:
             for t in TIME_BUDGETS:
@@ -777,11 +931,12 @@ def main() -> None:
                 if not usable(key, r):
                     continue
                 cells[key].setdefault(c, {})[str(r)] = summarize_cell(rows, sizes.get(c))
-                pool = pooled_rows(rows, sizes.get(c))[0]
-                for hk, (lo, hi, tf) in HIST_SPECS.items():
-                    h = hist_of([transform(x[hk], tf) for x in pool.values()], lo, hi)
-                    if h is not None:
-                        hists[hk].setdefault(key, {}).setdefault(c, {})[str(r)] = h
+                problems = problems_of(rows, sizes.get(c))[0]
+                for hk, (lo, hi, _tf) in HIST_SPECS.items():
+                    for name, answered in [(hk, False)] + ([(hk + ANSWERED, True)] if hk in WORST else []):
+                        h = hist_of(problems, hk, lo, hi, answered)
+                        if h is not None:
+                            hists.setdefault(name, {}).setdefault(key, {}).setdefault(c, {})[str(r)] = h
             plans[key] = planned_cells(a.root, ukey, lambda r, k=key: usable(k, r))
             published = {cr: rows for cr, rows in data.get(key, {}).items() if usable(key, cr[1])}
             status[key] = status_of(published, sizes, plans[key])
@@ -822,8 +977,8 @@ def main() -> None:
             fh.write(f"window.{var} = " + json.dumps(payload, separators=(",", ":")) + ";\n")
         rel = json.dumps(payload["release"]["id"])
         for hk, per in hists.items():
-            lo, hi, _ = HIST_SPECS[hk]
-            with open(os.path.join(out_dir, "hist", hk + ".js"), "w") as fh:
+            lo, hi, _ = HIST_SPECS[hk.split(ANSWERED)[0]]   # an answered-only reading shares its metric's bins
+            with open(os.path.join(out_dir, "hist", hist_file(hk)), "w") as fh:
                 fh.write("window.RESULTS_V2_HIST=window.RESULTS_V2_HIST||{};(function(){var R=window.RESULTS_V2_HIST;R[%s]=R[%s]||{};var H=R[%s];H[%s]=H[%s]||{lo:%s,hi:%s,nb:%d,cells:{}};Object.assign(H[%s].cells,%s);})();\n" % (
                     rel, rel, rel, json.dumps(hk), json.dumps(hk), lo, hi, NB, json.dumps(hk), json.dumps(per, separators=(",", ":"))))
         with open(os.path.join(out_dir, "paired.js"), "w") as fh:

@@ -1,15 +1,23 @@
-"""The site's inputs are rebuilt from files in the repository: the time axis (complete rungs only, size-weighted,
-failures left out) and the catalog descriptions."""
+"""The site's inputs are rebuilt from files in the repository: the time axis (complete rungs only, each catalog's
+mean averaged over the catalogs like every number on the site, failures left out) and the catalog descriptions."""
 import importlib.util
 import json
 import pickle
 import sys
 from pathlib import Path
 
+import numpy as np
+
 sys.path.insert(0, str(Path(__file__).parents[1] / "scripts"))
 _SPEC = importlib.util.spec_from_file_location("site_timing", Path(__file__).parents[1] / "scripts" / "site_timing.py")
 site_timing = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(site_timing)
+
+
+def over_catalogs(*times: list[float]) -> float:
+    """The time the site shows for these catalogs' answered fit times (scripts/site_random_effects.py's average)."""
+    return round(site_timing.over_sets([np.asarray(t) for t in times]), 4)
+
 
 # two catalogs: "big" is 3/4 of the suite, "small" 1/4; the subset holds two problems of each
 MANIFEST = {"rule": "toy", "suite_size": 8, "total_problems": 4,
@@ -24,13 +32,14 @@ def _write(root: Path, catalog: str, name: str, times, errors=None) -> None:
                      "error": errors or [None] * len(times), "prediction_success": [e is None for e in (errors or [None] * len(times))]}, fh)
 
 
-def test_a_subset_rung_is_the_size_weighted_mean_and_waits_for_every_catalog(tmp_path: Path) -> None:
+def test_a_subset_rung_averages_the_catalogs_and_waits_for_every_catalog(tmp_path: Path) -> None:
     sub = tmp_path / "sub"
     _write(sub, "big", "choices_000001.pkl", [1.0, 3.0])        # catalog mean 2
     _write(sub, "small", "choices_000001.pkl", [10.0, 10.0])    # catalog mean 10
     _write(sub, "big", "choices_000002.pkl", [1.0, 1.0])        # rung 2: "small" still missing
     timing = site_timing.build(MANIFEST, {"m": sub}, {}, "niter_{rung:05d}.pkl")
-    assert timing["m"] == {"1": 0.75 * 2 + 0.25 * 10}
+    assert timing["m"] == {"1": over_catalogs([1.0, 3.0], [10.0, 10.0])}
+    assert timing["m"]["1"] != 0.75 * 2 + 0.25 * 10                   # not in proportion to the catalogs' sizes
     assert timing["__provenance__"]["rows_timed"]["m"] == {"1": [4, 4]}
 
 
@@ -39,7 +48,7 @@ def test_a_failed_fit_is_left_out_of_the_time(tmp_path: Path) -> None:
     _write(sub, "big", "choices_000001.pkl", [1.0, 99.0], errors=[None, "no prediction"])
     _write(sub, "small", "choices_000001.pkl", [2.0, 2.0])
     timing = site_timing.build(MANIFEST, {"m": sub}, {}, "niter_{rung:05d}.pkl")
-    assert timing["m"]["1"] == 0.75 * 1.0 + 0.25 * 2.0
+    assert timing["m"]["1"] == over_catalogs([1.0], [2.0, 2.0])
     assert timing["__provenance__"]["rows_timed"]["m"]["1"] == [3, 4]
 
 
@@ -50,7 +59,7 @@ def test_a_whole_suite_rung_is_the_mean_over_answered_problems_once_every_file_i
     _write(suite, "big", "niter_00002.pkl", [1.0] * 6)
     _write(suite, "small", "niter_00002.pkl", [1.0])            # short: the unit is still running
     timing = site_timing.build(MANIFEST, {}, {"PySR": suite}, "niter_{rung:05d}.pkl")
-    assert timing["PySR"] == {"1": round((5 * 1.0 + 2 * 4.0) / 7, 4)}
+    assert timing["PySR"] == {"1": over_catalogs([1.0] * 5, [4.0, 4.0])}
 
 
 def test_a_subset_ladder_may_keep_its_iteration_files(tmp_path: Path) -> None:
@@ -60,7 +69,7 @@ def test_a_subset_ladder_may_keep_its_iteration_files(tmp_path: Path) -> None:
     _write(sub, "small", "niter_00001.pkl", [10.0, 10.0])
     assert "PySR" not in site_timing.build(MANIFEST, {"PySR": sub}, {}, "niter_{rung:05d}.pkl")    # read as choices_ files: none
     timing = site_timing.build(MANIFEST, {"PySR": sub}, {}, "niter_{rung:05d}.pkl", patterns={"PySR": "niter_{rung:05d}.pkl"})
-    assert timing["PySR"] == {"1": 0.75 * 2 + 0.25 * 10}
+    assert timing["PySR"] == {"1": over_catalogs([1.0, 3.0], [10.0, 10.0])}
 
 
 def test_the_note_names_a_method_timed_on_the_whole_suite_only_when_there_is_one(tmp_path: Path) -> None:

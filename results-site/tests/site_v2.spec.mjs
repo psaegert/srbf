@@ -110,7 +110,7 @@ test('terms and metric help open a floating explanation', async ({ page }) => {
   await page.keyboard.press('Escape');
   await expect(page.locator('.v2pop')).toHaveCount(0);
   await page.locator(V2 + ' .v2view .v2term[data-term="complete"]').first().click();
-  await expect(page.locator('.v2pop')).toContainText('all the problem sets you selected');
+  await expect(page.locator('.v2pop')).toContainText('every problem of the problem sets you selected');
 });
 
 // A published time is a CALIBRATED time. Seconds measured wherever a unit happened to run are not comparable
@@ -631,6 +631,31 @@ test('a rate is shown per problem set, with a way to a distribution', async ({ p
   await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toHaveAttribute('aria-label', /one histogram per method/);
 });
 
+// ---- Averaging over problem sets -------------------------------------------------------------------------------------
+// The explorer's own averaging (random effects over problem sets) against the reference, scripts/site_random_effects.py,
+// on the cases the reference wrote (scripts/site_random_effects_fixture.py): the page's code is cut out and run as it is.
+test('the explorer averages over problem sets exactly as the reference does', () => {
+  const src = readFileSync(new URL('../explorer_v2.js', import.meta.url), 'utf8');
+  const a = src.indexOf('  var EPS_VAR = '), b = src.indexOf('  function binVal(');
+  expect(a).toBeGreaterThan(0); expect(b).toBeGreaterThan(a);
+  const core = new Function(src.slice(a, b) + '\nreturn { reCombine: reCombine, holm: holm };')();
+  const cases = JSON.parse(readFileSync(new URL('./fixtures/random_effects_cases.json', import.meta.url), 'utf8'));
+  expect(cases.length).toBeGreaterThan(40);
+  const close = (x, y) => Math.abs(x - y) <= 1e-6 * Math.max(1, Math.abs(y));
+  const off = [];
+  cases.forEach((c, i) => {
+    const got = core.reCombine(c.sets, c.scale);
+    if (c.out === null) { if (got !== null) { off.push(i + ': expected nothing'); } return; }
+    if (got.S !== c.out.S) { off.push(i + ': S ' + got.S + ' vs ' + c.out.S); }
+    for (const k of ['mu', 'lo', 'hi', 'tau2', 'p', 'piLo', 'piHi']) {
+      const want = c.out[k], have = got[k];
+      if (want === null ? have !== null : !close(have, want)) { off.push(i + ' ' + c.scale + ': ' + k + ' ' + have + ' vs ' + want); }
+    }
+  });
+  expect(off).toEqual([]);
+  expect(core.holm([0.01, 0.04, 0.03]).map((x) => +x.toFixed(6))).toEqual([0.03, 0.06, 0.06]);
+});
+
 // ---- Ranks ---------------------------------------------------------------------------------------------------------
 test('the ranks view places the methods, names what it ranks on and how it holds them equal', async ({ page }) => {
   const errors = collectErrors(page);
@@ -638,7 +663,7 @@ test('the ranks view places the methods, names what it ranks on and how it holds
   const chart = page.locator(V2 + ' .v2view svg.v2rankchart');
   await expect(chart).toBeVisible({ timeout: 15000 });
   await expect(chart).toHaveAttribute('aria-label', /Average place on .* budget 16/);
-  await expect(chart).toContainText('critical difference');
+  await expect(page.locator(V2 + ' .v2view')).toContainText('pairwise tests');   // pairs are tested one by one, not by a critical difference
   await expect(page.locator(V2 + ' .v2viewbar .v2tag-primary')).toBeVisible();
   // mean ranks: one per ranked method, each within [1, k], and they sum to k (k + 1) / 2 as ranks must
   const ranks = await page.locator(V2 + ' .v2ranktable tbody tr td:nth-child(3)').allTextContents();
@@ -648,12 +673,12 @@ test('the ranks view places the methods, names what it ranks on and how it holds
   for (const v of vals) { expect(v).toBeGreaterThanOrEqual(1); expect(v).toBeLessThanOrEqual(k); }
   expect(Math.abs(vals.reduce((a, b) => a + b, 0) - k * (k + 1) / 2)).toBeLessThan(0.02 * k);
   expect(vals.slice().sort((a, b) => a - b)).toEqual(vals);   // the standings are in order
-  // head to head: k x k, and a pair's two shares plus their ties make 100 %
+  // head to head: k x k, and a pair's two shares make 100 % (a tie counts half to each)
   await expect(page.locator(V2 + ' .v2h2h tbody tr')).toHaveCount(k);
   const cell = (r, c) => page.locator(V2 + ` .v2h2h tbody tr:nth-child(${r}) td:nth-child(${c + 1})`).textContent();
-  const num = (t) => parseFloat(t), tied = (t) => parseFloat(t.split('%')[1]);
+  const num = (t) => parseFloat(t);
   const ab = await cell(1, 2), ba = await cell(2, 1);
-  expect(Math.abs(num(ab) + num(ba) + tied(ab) - 100)).toBeLessThan(1.6);
+  expect(Math.abs(num(ab) + num(ba) - 100)).toBeLessThan(0.15);
   // the standings along the ladder
   await expect(page.locator(V2 + ' .v2view svg.v2chart').last()).toContainText('Comparisons won');
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -666,7 +691,7 @@ test('ranks follow the selection: another metric, fewer methods, fewer catalogs'
   const rows = page.locator(V2 + ' .v2ranktable tbody tr');
   await expect(rows.first()).toBeVisible({ timeout: 15000 });
   const k = await rows.count();
-  const laws = () => page.locator(V2 + ' .v2view').textContent().then((t) => +t.match(/on ([\d,]+) problem runs/)[1].replace(/,/g, ''));
+  const laws = () => page.locator(V2 + ' .v2view').textContent().then((t) => +t.match(/on ([\d,]+) problems from/)[1].replace(/,/g, ''));
   const all = await laws();
   await page.locator(V2 + ' button[data-act="phys"]').click();
   await expect.poll(laws).toBeLessThan(all);
@@ -919,10 +944,13 @@ async function withHalfAnswered(page) {
   await page.route('**/data/2026-09/results.js', async (route) => {
     const res = await route.fetch();
     const add = `;(function () { var D = window.RESULTS_V2;
-      // its answers have a token F1 of 0.8; the laws it failed are counted at 0, and the cell says how many those are
-      var mk = function (k) { return { state: 'complete', n: 100, ok: k, e: { n_constants_ratio: 42 }, w: { f1_score: 100 - k }, m: {
-        numeric_recovery_val: [10, 100], success: [k, 100], mdl_ratio: [k, k, 1.5 * k, 2.5 * k], log10_fvu_val: [k, k, -2 * k, 5 * k],
-        f1_score: [100, 100, 0.8 * k, 0.64 * k], n_constants_ratio: [40, 40, 44, 50] } }; };
+      // 100 problems, one run each, k of them answered. Its answers have a token F1 of 0.8; the problems it failed are
+      // counted at 0, and the answered-only reading ("a") leaves them out. A rate is [problems, sum, sum of squares], any
+      // other metric [problems with a value, with a finite value, sum, sum of squares], a ratio on log2.
+      var L = Math.log2(1.5), C = Math.log2(1.1);
+      var mk = function (k) { return { state: 'complete', n: 100, d: 1, ok: k, e: { n_constants_ratio: 42 }, m: {
+        numeric_recovery_val: [100, 10, 10], success: [100, k, k], mdl_ratio: [k, k, L * k, L * L * k], log10_fvu_val: [k, k, -2 * k, 5 * k],
+        f1_score: [100, 100, 0.8 * k, 0.64 * k], n_constants_ratio: [40, 40, 40 * C, 40 * C * C] }, a: { f1_score: [k, k, 0.8 * k, 0.64 * k] } }; };
       D.methods.push({ key: 'fixture-half', label: 'Fixture half answered', param: 'draws', budget: 'candidates', color: '#555555', group: 'baseline', provenance: 'upstream_default', selection: '' });
       D.cells['fixture-half'] = {}; D.catalogs.forEach(function (c) { D.cells['fixture-half'][c.key] = { '16': mk(50), '32': mk(95) }; });
       D.status['fixture-half'] = [2, 2]; })();`;
@@ -1060,8 +1088,8 @@ test('a failed prediction counts the worst value, or is left out: the reader cho
 
 test('leaving failed predictions out is exact for the median, the distribution and a paired contrast', async ({ page }) => {
   const errors = collectErrors(page);
-  // the release's own numbers: a method that answers under half of the laws has a median overlap of 0 when its
-  // failures count, and the median of its answers when they do not
+  // the release's own numbers: for a method that answers under half of the problems, the median overlap is lower when
+  // its failures count (at 0) than when they are left out, and left out it rests on too few problems (hollow)
   const low = await page.goto('/explorer.html?release=2026-09&v=table&rows=rungs&x=rung&s=median&band=0&p=rung~f1_score').then(() => page.evaluate(() => {
     const D = window.RESULTS_V2; let best = null;
     D.methods.forEach((m) => { const per = D.cells[m.key] || {}; let n = 0, ok = 0; Object.keys(per).forEach((c) => { const x = per[c]['1']; if (x) { n += x.n; ok += x.ok; } }); if (n && ok / n < 0.45 && (!best || ok / n < best.share)) { best = { key: m.key, share: ok / n }; } });
@@ -1071,10 +1099,10 @@ test('leaving failed predictions out is exact for the median, the distribution a
   const first = () => page.locator(V2 + ' .v2table tbody tr').first().locator('td').nth(2);
   await page.goto(url('&v=table&imp=1'));
   await expect(first()).toHaveText(/\d/, { timeout: 15000 });
-  expect(parseFloat((await first().textContent()).replace(/^[≤≥○ ]+/, ''))).toBeLessThan(0.05);
+  const counted0 = parseFloat((await first().textContent()).replace(/^[≤≥○ ]+/, ''));
   await page.locator(V2 + ' .v2impute').uncheck();
   await expect(first()).toHaveText(/○/);
-  expect(parseFloat((await first().textContent()).replace(/^[≤≥○ ]+/, ''))).toBeGreaterThan(0.3);
+  expect(parseFloat((await first().textContent()).replace(/^[≤≥○ ]+/, ''))).toBeGreaterThan(counted0);
   // the distribution loses exactly the laws that were filled in
   await page.goto(url('&v=dist&dm=f1_score&dv=hist&r=1&imp=1'));   // the choice is remembered, so the link states it
   await expect(page.locator(V2 + ' .v2view')).toContainText('All problems: a problem without a usable formula counts as 0', { timeout: 15000 });
@@ -1099,8 +1127,9 @@ test('symbolic recovery is asked at three levels of masking, each implying the o
       const x = D.cells[m][c][r].m, all = x.symbolic_recovery, exp = x.symbolic_recovery_mask_fittable, num = x.symbolic_recovery_mask_none;
       cells += 1;
       if (!all || !exp || !num) { missing += 1; return; }
-      if (!(num[0] <= exp[0] && exp[0] <= all[0] && num[0] <= x.numeric_recovery_val[0] && exp[1] === all[1] && num[1] === all[1])) { broken += 1; }
-      if (exp[0] < all[0]) { strict += 1; }
+      // a rate is [problems, sum, sum of squares]: the same problems, and each level's hits within the one before it
+      if (!(num[1] <= exp[1] && exp[1] <= all[1] && num[1] <= x.numeric_recovery_val[1] && exp[0] === all[0] && num[0] === all[0])) { broken += 1; }
+      if (exp[1] < all[1]) { strict += 1; }
     })));
     const labels = D.metrics.filter((m) => m.key.indexOf('symbolic_recovery') === 0).map((m) => m.label);
     return { cells, missing, broken, strict, labels };
