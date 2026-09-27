@@ -49,6 +49,7 @@ test('the home page\'s example is real: its link opens the explorer on that prob
   const errors = collectErrors(page);
   await page.goto('/');
   await expect(page.locator('.home-example .katex').first()).toBeVisible();             // the formulas are typeset
+  await expect(page.locator('#results-updated-v2 time')).toHaveCount(1);                  // the release says when it was updated
   const href = await page.locator('.home-example figcaption a').getAttribute('href');
   await page.goto('/' + href);
   const view = page.locator('#results-explorer-v2 .v2view');

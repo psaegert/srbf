@@ -61,11 +61,13 @@
     <div class="wrap">
     <section class="home-hero">
       <div class="home-hero-text">
-        <h1>Compare symbolic regression methods on equal terms</h1>
+        <h1>One standard for comparing symbolic regression methods</h1>
         <p class="lede">
-          Symbolic regression finds a mathematical formula that describes a set of data points.
-          srbf, the Symbolic Regression Benchmark Framework, runs any such method on the same 6,660
-          problems from 29 published problem sets, and checks every formula it returns the same way.
+          Symbolic regression finds a mathematical formula that describes a set of data points. Its
+          results are hard to compare: papers test methods on different problems, with different budgets
+          and different criteria for success. srbf, the Symbolic Regression Benchmark Framework, fixes
+          all three. Every method runs on the same 6,660 problems from 29 published problem sets, at a
+          series of budgets, and every formula a method returns is checked by the same strict rules.
         </p>
         <div class="home-actions">
           <a class="home-btn home-btn-primary" href="explorer.html">Open the explorer</a>
@@ -75,21 +77,21 @@
       </div>
       <div class="home-example-wrap">
         <figure class="home-example">
-          <p class="home-example-kicker">One of the 6,660 problems · Feynman II.8.7</p>
+          <p class="home-example-kicker">One of the 6,660 problems · Feynman Lectures II.8.7</p>
           <div class="home-example-row">
             <span class="home-example-label">True formula</span>
             <span class="home-example-math">\(E = \dfrac{3}{5}\,\dfrac{q^2}{4\pi\,\varepsilon\,d}\)</span>
           </div>
           <div class="home-example-row">
-            <span class="home-example-label">PySR, 8 iterations</span>
+            <span class="home-example-label">PySR, 8 search iterations</span>
             <span class="home-example-math">\(E = \dfrac{0.04775\; q \cdot q}{\varepsilon\,d}\)</span>
           </div>
           <ul class="home-example-checks">
-            <li><span class="home-check" aria-hidden="true">✓</span> <b>Numeric Recovery</b>: it reproduces 512 points it never saw</li>
+            <li><span class="home-check" aria-hidden="true">✓</span> <b>Numeric Recovery</b>: it reproduces 512 points it never saw, almost exactly</li>
             <li><span class="home-check" aria-hidden="true">✓</span> <b>Symbolic Recovery</b>: it has the true formula's form, numbers aside</li>
           </ul>
           <figcaption>
-            A real result from the current release: PySR found the form and fitted the number,
+            A real result from the 2026-09 release: PySR found the form and fitted the number,
             \(0.04775 \approx \tfrac{3}{20\pi}\).
             <a href="explorer.html?release=2026-09&amp;v=preds&amp;ps=feynman&amp;r=8&amp;pr=1&amp;pn=58&amp;m=PySR">See it in the explorer</a>
           </figcaption>
@@ -197,7 +199,8 @@
           <p>29 problem sets with 6,660 problems: the Feynman equations, the classic benchmark sets, physics
             collections and machine-generated formulas, from the
             <a href="https://github.com/psaegert/symbolic-data" target="_blank" rel="noopener">symbolic-data</a>
-            package. A method's training data can leave all of them out.</p>
+            package. Because they come as one package, a method trained in advance can leave all of them out of its
+            training data.</p>
         </div>
         <div class="home-feature">
           <h3>Any method</h3>
@@ -211,8 +214,9 @@
         </div>
         <div class="home-feature">
           <h3>Budgets and time</h3>
-          <p>Each method runs at a series of budgets, each twice the one before, so its accuracy can be read
-            against its cost. Times are measured on one workstation, one method at a time.</p>
+          <p>Each method runs at a series of budgets. A budget is how much it may search per problem, such as how
+            many candidate formulas it may try, and each is twice the one before, so accuracy can be read against
+            cost. Times are measured on one workstation, one method at a time.</p>
         </div>
         <div class="home-feature">
           <h3>Paired statistics</h3>
@@ -221,20 +225,23 @@
         <div class="home-feature">
           <h3>Stated settings</h3>
           <p>Every method is labelled with who chose its settings: its own defaults, its authors, or the
-            benchmark's maintainers. The people who run this benchmark also develop Flash-ANSR.</p>
+            benchmark's maintainers. The people who run this benchmark also develop Flash-ANSR, one of the methods
+            compared here.</p>
         </div>
       </div>
     </section>
 
     <section class="home-section home-release-intro">
-      <h2>The current release</h2>
+      <h2>The 2026-09 release</h2>
+      <p class="home-text explorer-v2 home-updated" id="results-updated-v2"></p>
       <p class="home-text">
         E2E, NeSymReS and Flash-ANSR are neural networks trained in advance on many machine-generated
         formulas; given a new problem, they propose formulas without further training. PySR is an
         evolutionary search. Flash-ANSR comes in three sizes and is also combined with PySR. A baseline,
-        Flash-ANSR prior, draws random formulas of the kind Flash-ANSR was trained on without looking at the
-        data, then fits their numbers and picks one with Flash-ANSR's rule. The number after a network's name
-        is its size in millions of parameters.
+        Flash-ANSR prior, ignores the data: it draws random formulas of the kind Flash-ANSR was trained on, fits
+        their numbers and picks one the way Flash-ANSR does. It shows how much Flash-ANSR gains by reading the
+        data. The number after a network's name is its size in millions of parameters (M); T8 is the version of
+        the Flash-ANSR models.
       </p>
       <div id="results-progress-v2" class="explorer-v2 home-progress"></div>
     </section>

@@ -98,7 +98,7 @@
           </p>
           <p>
             Every method is run twice on every problem, each time with newly sampled points. The
-            curves and tables average over both runs.
+            curves and tables average over the runs that are finished: both, once the second is complete.
           </p>
         </div>
       </section>
@@ -247,7 +247,8 @@
           </p>
           <ul>
             <li><strong>Upstream defaults</strong> (PySR, NeSymReS, E2E): the settings the method's own
-              release ships with, not tuned in either direction.</li>
+              release ships with, not tuned in either direction. srbf sets only the budget and, for PySR, the
+            operators: the 23 the problems are written in, where PySR's own default is +, −, × and ÷.</li>
             <li><strong>Author-blessed</strong> (the Flash-ANSR models, the
               combination with PySR and the random-guessing reference): the settings were chosen
               by the method's authors. Here they are also the benchmark's authors, and this label says

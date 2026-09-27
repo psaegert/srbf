@@ -68,7 +68,7 @@ METHODS = [
     # the ceiling: the ground truth itself as the one candidate, fitted by Flash-ANSR's refiner; its rungs are restarts
     ("oracle", "Oracle", "restarts", "#000000", "reference", "author_blessed", "oracle",
      "Is given the true formula with its constants blanked out (exponents are kept) and only has to fit the constants, "
-     "the way Flash-ANSR does. It shows the best result that fitting alone can reach. Its budget is the number of fitting "
+     "the way Flash-ANSR does. It shows how well Flash-ANSR's fitting does when it is given the true form. Its budget is the number of fitting "
      "attempts, each from new random starting values.")]
 # How a method is drawn when its colour alone is not the point: the oracle is the ceiling, a dashed line in the ink colour
 # of the page (black, or white in the dark theme), like the ground truth's own reference line.
@@ -87,12 +87,14 @@ SCHEDULED = [
      "polynomial fitting. The asterisk: the paper's version also uses a pre-trained network and a step from AI Feynman, "
      "which were never released."),
     ("rilsrols", "RILS-ROLS", "A local search over formulas that fits their numbers by ordinary least squares."),
-    ("oracle", "Oracle", "A reference, not a method: it is given the true formula with its numbers blanked out and only "
-     "fits the numbers, the way Flash-ANSR does. It shows the best result that fitting alone can reach.")]
+    ("oracle", "Oracle", "A reference, not a method: it is given the true formula with its constants blanked out (exponents "
+     "are kept) and only fits the constants, the way Flash-ANSR does. It shows how well Flash-ANSR's fitting does when it is "
+     "given the true form.")]
 # Where two methods share a component at different versions, the release says so (Protocol, "Versions").
 RELEASE_VERSIONS = ("PySR: version 2.3.0, with SymbolicRegression.jl 2.4.0. The PySR part of Flash-ANSR T8-20M + PySR: PySR 2.4.0, "
                     "with SymbolicRegression.jl 2.4.1 (2.4.2 on our timing workstation). The settings it uses have the same defaults "
-                    "in both PySR versions, and the SymbolicRegression.jl versions in between change speed, not results. "
+                    "in both PySR versions. Between these versions, the release notes of both packages list performance improvements, "
+                    "packaging fixes and optional additions, and no change to the search at the settings used here. "
                     "Simplification: SimpliPy (a formula-simplification library), with its rule set acj-5-4-llm.")
 FLASH_ANSR_SELECTION = ("A neural network generates candidate formulas from the data. Flash-ANSR fits the numbers in each and "
                         "returns the one that best balances error and length: the smallest (n/2) log2 FVU plus the formula's length "

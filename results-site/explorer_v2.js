@@ -86,7 +86,7 @@
   function lastAxis() { return state.plots.length ? state.plots[state.plots.length - 1].x : defaultAxis(); }   // a new plot joins the last one
   var PROV = { upstream_default: "upstream defaults", author_blessed: "author-blessed", harness_tuned: "maintainer-chosen" };
   var PROV_NOTE = {
-    upstream_default: "Settings: the defaults the method's own release ships with. Nothing was tuned.",
+    upstream_default: "Settings: the defaults the method's own release ships with. srbf sets only the budget and, for PySR, the operators: the 23 the problems are written in. Nothing was tuned.",
     author_blessed: "Settings: chosen by the method's authors. The Flash-ANSR authors also run this benchmark, and this label says so.",
     harness_tuned: "Settings: chosen by the benchmark's maintainers."
   };
@@ -100,7 +100,7 @@
     valid: "Most metrics can only be measured on some problems: where the method returned a usable formula, and the value could be computed for it (a formula can, for example, give infinite values, or be one SimpliPy cannot simplify or price in bits). A method that fails on the hard problems then looks better than it is, because only its easier problems are measured. A point is drawn hollow when it is based on fewer than this share of the problems. The setting is under Reading in the explorer's side panel; 0 % turns the marking off.",
     mcnemar: "For a rate, only the problems where the two methods disagree (one recovered the formula, the other did not) can tell them apart. The p-value comes from the exact McNemar test on those problems. A p-value below 0.05 means a difference this large is unlikely to be chance. The interval is the 95 % interval of the difference in rates.",
     signtest: "Over the problems where both methods have a finite value: the mean difference with its 95 % interval, and a sign test that asks whether one method is better on more problems than chance would give. The two answer different questions and can disagree: a few large differences move the mean, while the sign test only counts better and worse. A p-value below 0.05 means a difference this large is unlikely to be chance.",
-    draw1: "Every method is run twice on each problem, with newly sampled points each time. A comparison pairs the two methods on the same problem in the same run, so both had exactly the same data. Every run that both methods have finished counts, so a problem usually counts twice.",
+    draw1: "Every method is run twice on each problem, with newly sampled points each time. A comparison pairs the two methods on the same problem and the same run number: the same formula, with points sampled from the same ranges (each method's points are drawn anew). Every run that both methods have finished counts, so a problem usually counts twice.",
     time: "Seconds per problem, measured for every method on the same workstation (16 CPU cores, one RTX 4090 GPU), one method at a time, on a fixed sample of 262 problems. Timings from the compute cluster that produces most of the results depend on which machine a job ran on, so they are never shown. A method that has not been timed on the workstation yet has no place on a time axis; it is named below the chart instead.",
     candidates: "The budget of the methods that generate candidate formulas: how many candidates they may generate per problem. NeSymReS is placed here by its beam width, the number of partial formulas its search keeps. PySR counts search iterations, which cannot be placed on this axis, so it appears on the time axis only.",
     rungs: "A budget is how much search a method may spend on one problem, in the method's own unit: candidate formulas, beam width or search iterations. Budgets are powers of two (1, 2, 4, 8 and so on), each method over its own range, and each point on a curve is one of them. Because the units differ, the same budget number means different amounts of work for different methods; the time axis shows what each budget costs.",
@@ -510,7 +510,7 @@
     }
     var xlab = opts.xlabel || (timeAxis
       ? (nr ? "time (s)" : "time per problem (s, log scale)")
-      : (nr ? "candidates" : "candidates per problem (log scale)"));
+      : (nr ? "budget" : "budget per problem (log scale)"));
     s += '<text x="' + ((L + W - R) / 2).toFixed(0) + '" y="' + (H - B + 32) + '" class="tick" text-anchor="middle">' + esc(xlab) + '</text>';
     if (opts.ylabel) { s += '<text transform="translate(' + YLABEL_X + ',' + ((T + H - B) / 2).toFixed(0) + ') rotate(-90)" class="tick" text-anchor="middle">' + esc(opts.ylabel) + "</text>"; }
     var ly = nr ? H - B + 46 : T + 6, lx = nr ? L : W - R + LEG_GAP;
@@ -701,7 +701,7 @@
     { key: "numeric_recovery_val", title: function () { return anyTime() ? "Recovery vs time" : "Recovery vs budget"; },
       caption: "Numeric Recovery: the share of problems where the method's formula reproduces the held-out points (the validation set, which the method never saw) almost exactly: its typical (root-mean-square) error is at most 0.035 % of the true values' standard deviation. Up and to the left is better: more problems solved in less time." },
     { x: "mdl_ratio", y: "log10_fvu_val", title: "Fit vs length",
-      caption: "Down is a better fit: log10 FVU is the share of the variation in the held-out points that the formula leaves unexplained, on a log scale (-2 means 1 %). Across is the formula's length: the MDL Ratio divides its length in bits by the true formula's, so the dashed line at 1 is the true length, left of it shorter and right of it longer. Best is low and close to the line. Both are averaged over the problems where the method's formula has a value; an exact fit counts at -15.65, the precision of a 64-bit float." }];
+      caption: "Down is a better fit: log10 FVU is the share of the variation in the held-out points that the formula leaves unexplained, on a log scale (-2 means 1 %). Across is the formula's length: the MDL Ratio divides its length in bits (its minimum description length, MDL) by the true formula's, so the dashed line at 1 is the true length, left of it shorter and right of it longer. Best is low and close to the line. Both are averaged over the problems where the method's formula has a value; an exact fit counts at -15.65, the precision of a 64-bit float." }];
   function hlText(v) { return typeof v === "function" ? v() : v; }
   function withState(over, fn) { var prev = state; state = Object.assign({}, prev, over); try { return fn(); } finally { state = prev; } }
   function renderHeadline() {
@@ -723,7 +723,7 @@
           return '<figure class="v2hlfig">' + svg + "<figcaption>" + esc(hlText(h.caption)) + "</figcaption></figure>";
         }).join("");
         return '<h2 class="v2hltitle">Accuracy, cost and formula length</h2>' +
-          '<p class="v2hlsub">Each point is one method at one ' + term("rungs", "budget") + ', the ' + (state.stat === "mean" ? "mean" : "median") + ' over both runs of all ' + laws(CATS).toLocaleString() + ' problems of the ' + CATS.length + ' problem sets (' + (CATS.length ? CAT[CATS[0]].laws.toLocaleString() + ' of them from one problem set, ' + esc(CATS[0]) : '') + '), with a ' + term("wilson", "95 % interval") + '. ' + term("complete", "Why do some methods have fewer points?") + '</p>' +
+          '<p class="v2hlsub">Each point is one method at one ' + term("rungs", "budget") + ', the ' + (state.stat === "mean" ? "mean" : "median") + ' over all ' + laws(CATS).toLocaleString() + ' problems of the ' + CATS.length + ' problem sets (' + (CATS.length ? CAT[CATS[0]].laws.toLocaleString() + ' of them from one problem set, ' + esc(CATS[0]) : '') + '), with a ' + term("wilson", "95 % interval") + '. Every method is run twice on every problem; a point averages the runs that are finished. ' + term("complete", "Why do some methods have fewer points?") + '</p>' +
           '<div class="v2hlcharts">' + charts + "</div>" +
           '<p class="v2hint">' + (src === "ref" ? term("time", "Time is measured on one workstation for every method") +
               (off.length ? ". " + esc(off.map(function (m) { return m.label; }).join(", ")) + (off.length > 1 ? " have" : " has") + " not been timed yet, so " +
@@ -936,7 +936,7 @@
     var ly = nr ? H - B + 50 : T + 6, lx = nr ? L : W - R + LEG_GAP;
     series.forEach(function (sr) { var col = colorOf(sr.m), den = all ? sr.rows : sr.ph.n, cum = all && low ? sr.rows - sr.ph.n : 0, pts = [];
       for (var b = 0; b < sr.ph.nb; b++) { var before = cum; cum += sr.ph.h[b]; if (b < vr.b0) { continue; } if (b > vr.b1) { break; } var x0 = vr.lo + (b - vr.b0) * vr.w; if (!pts.length) { pts.push(xs(x0).toFixed(1) + "," + y(before / den).toFixed(1)); } pts.push(xs(x0 + vr.w).toFixed(1) + "," + y(before / den).toFixed(1), xs(x0 + vr.w).toFixed(1) + "," + y(cum / den).toFixed(1)); }
-      s += '<polyline fill="none" stroke="' + col + '" stroke-width="2"' + dashOf(sr.m) + ' points="' + pts.join(" ") + '"><title>' + esc(sr.m.label + ": " + fiveText(p, sr.f) + "; " + sr.ph.n + " of " + sr.rows + " problems have a usable formula") + "</title></polyline>";
+      s += '<polyline fill="none" stroke="' + col + '" stroke-width="2"' + dashOf(sr.m) + ' points="' + pts.join(" ") + '"><title>' + esc(sr.m.label + ": " + fiveText(p, sr.f) + "; " + sr.ph.n + " of " + sr.rows + " problem runs have a usable formula") + "</title></polyline>";
       s += '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 20) + '" y2="' + ly + '" stroke="' + col + '" stroke-width="3"' + dashOf(sr.m) + '/><text x="' + (lx + 26) + '" y="' + (ly + 4) + '" class="leg">' + esc(sr.m.label + (sr.m.local ? " (local)" : "")) + "</text>"; ly += 20; });
     return s + "</svg>" + '<p class="v2hint">' + (p.higher === true ? "Further right is better: a curve that stays low longer holds more of its problems at high values." : p.higher === false ? "Further left is better: a curve that rises early holds more of its problems at low values." : p.ideal !== undefined ? "Closer to " + p.ideal + " is better: a curve that rises steeply around " + p.ideal + " is the tighter one." : "") +
       (all ? " Out of all problems, a method that leaves problems without a prediction " + (low ? "starts above 0 %." : "ends below 100 %.") : "") + "</p>";
@@ -999,12 +999,12 @@
     if (!state.base || !shown.some(function (m) { return m.key === state.base; })) { state.base = shown[0].key; }
     var base = D.methods.filter(function (m) { return m.key === state.base; })[0], others = shown.filter(function (m) { return m.key !== state.base; }), keys = shown.map(function (m) { return m.key; });
     var plots = plotMetrics().filter(function (k) { return PAIRED_KEYS.indexOf(k) >= 0; }).map(function (k) { return METRIC[k]; });
-    var ctl = '<p class="v2hint">Each method is compared with ' + esc(base.label) + ' problem by problem: every number is the method\u2019s value minus ' + esc(base.label) + '\u2019s. ' + term("draw1", "Both methods are compared on the same data") + '.</p>';
+    var ctl = '<p class="v2hint">Each method is compared with ' + esc(base.label) + ' problem by problem: every number is the method\u2019s value minus ' + esc(base.label) + '\u2019s. ' + term("draw1", "Both methods are compared on the same problems") + '.</p>';
     if (!plots.length) { return ctl + '<p class="v2hint">None of the plotted metrics has paired contrasts. Paired contrasts exist for: ' + esc(PAIRED_KEYS.map(function (k) { return METRIC[k] ? mname(METRIC[k]) : k; }).join(", ")) + '.</p>'; }
     var src = timeSource(axisMethods(others).map(function (m) { return m.key; }));   // the drawn set, not the baseline
     var charts = inBlock(root.querySelector(".v2main"), plots.length, function () { return plots.map(function (p) { var series = [], ymin = Infinity, ymax = -Infinity, tmin = Infinity, tmax = -Infinity;
       axisMethods(others).forEach(function (m) { var pts = []; D.rungs.forEach(function (r) { var use = bothDone(m.key, base.key, r); if (!use.length) { return; } var x = xOf(m.key, r, use, src); if (x === null) { return; } var st = pairedStat(p, m.key, base.key, r, use); if (!st || !isFinite(st.v)) { return; }
-          pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, title: m.label + " − " + base.label + " @ " + r + ": " + fmtDelta(p, st.v) + " [" + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + "], n = " + st.n + " problems, p = " + fmtP(st.p) });
+          pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, title: m.label + " − " + base.label + " @ " + r + ": " + fmtDelta(p, st.v) + " [" + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + "], n = " + st.n + " problem runs, p = " + fmtP(st.p) });
           [st.v, anyCI() ? st.lo : st.v, anyCI() ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } }); if (state.xaxis === "time") { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); } });
         if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), dash: !!m.dash, pts: pts }); } });
       var title = "Δ " + mname(p) + " vs " + base.label;
@@ -1018,7 +1018,7 @@
     others.forEach(function (m) { rows += '<tr><td><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + '</td>' + plots.map(function (p) { var use = bothDone(m.key, base.key, r); var st = use.length ? pairedStat(p, m.key, base.key, r, use) : null; if (!st) { return '<td class="v2na">–</td><td class="v2na">–</td><td class="v2na">–</td>'; } var sig = st.p !== null && st.p < 0.05; return '<td' + (sig ? ' class="v2sig"' : "") + '>' + fmtDelta(p, st.v) + ' <span class="v2ci-txt">[' + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + ']</span></td><td>' + fmtP(st.p) + '</td><td class="v2hint">' + st.wins.toLocaleString() + " / " + st.losses.toLocaleString() + " of " + st.n.toLocaleString() + '</td>'; }).join("") + '</tr>'; });
     var anyRow = others.some(function (m) { return plots.some(function (p) { var use = bothDone(m.key, base.key, r); return use.length && pairedStat(p, m.key, base.key, r, use); }); });
     var table = '<h3 class="v2h">At one budget</h3><div class="v2viewbar">' + rungStepper(shown, true) + "</div>" + (anyRow ? "" : '<p class="v2hint">No method has ' + term("complete", "finished all selected problem sets") + " at budget " + r + " together with the baseline yet. Choose another budget above, or select fewer problem sets.</p>") + '<div class="v2table-wrap"><table class="v2table"><thead><tr><th>method − ' + esc(base.label) + ', budget ' + r + '</th>' + plots.map(function (p) { return '<th colspan="3">' + esc(mname(p)) + " " + mhelp(p) + '</th>'; }).join("") + '</tr><tr><th></th>' + plots.map(function () { return '<th>Δ [95 %]</th><th>p</th><th>better / worse</th>'; }).join("") + '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
-      '<p class="v2hint">\u0394: the method\u2019s value minus the baseline\u2019s, with its 95 % interval; pp are percentage points, and ratios are compared as factors (\u00d7 0.5 means half). p: the probability of a difference at least this large if both methods were equally good; for rates it comes from ' + term("mcnemar", "the McNemar test") + ', for other metrics from ' + term("signtest", "a sign test on the better and worse counts") + ', not from \u0394. Bold means below 0.05. Better / worse: on how many problems the method does better or worse than the baseline on that metric; for a ratio, only these counts say which is closer to 1. Choose the baseline above. <a href="paired.html">How paired comparisons work</a></p>';
+      '<p class="v2hint">\u0394: the method\u2019s value minus the baseline\u2019s, with its 95 % interval; pp are percentage points, and ratios are compared as factors (\u00d7 0.5 means half). p: the probability of a difference at least this large if both methods were equally good; for rates it comes from ' + term("mcnemar", "the McNemar test") + ', for other metrics from ' + term("signtest", "a sign test on the better and worse counts") + ', not from \u0394. Bold: p below 0.05, so the direction of the difference is unlikely to be chance. The \u0394 column shows its size; with this many problem runs, a difference on a few of them can be bold. Better / worse: on how many problem runs the method does better or worse than the baseline on that metric; for a ratio, only these counts say which is closer to 1. Choose the baseline above. <a href="paired.html">How paired comparisons work</a></p>';
     return ctl + '<div class="v2charts">' + charts.join("") + "</div>" + table;
   }
 
@@ -1238,8 +1238,8 @@
       ord.map(function (x) { return '<tr><td><span class="v2sw" style="background:' + colorOf(x.m) + '"></span>' + esc(x.m.label) + "</td><td>" + x.r + (timed && refTime(x.m.key, x.r) ? ' <span class="v2ci-txt">' + refTime(x.m.key, x.r).toFixed(2) + " s</span>" : "") + "</td><td><b>" + x.rank.toFixed(2) + "</b></td><td>" + (100 * x.share).toFixed(1) + " %</td><td>" + x.blank.toLocaleString() + ' <span class="v2ci-txt">of ' + lg.n.toLocaleString() + "</span></td></tr>"; }).join("") + "</tbody></table></div>";
     var t2 = '<h3 class="v2h">Head to head</h3><div class="v2table-wrap"><table class="v2table v2matrix v2h2h"><thead><tr><th>row beats column on</th>' + ord.map(function (x) { return '<th><span class="v2sw" style="background:' + colorOf(x.m) + '"></span>' + esc(x.m.label) + "</th>"; }).join("") + "</tr></thead><tbody>" +
       ord.map(function (x, a) { return '<tr><td><span class="v2sw" style="background:' + colorOf(x.m) + '"></span>' + esc(x.m.label) + "</td>" + ord.map(function (z, b) { if (a === b) { return '<td class="v2na">·</td>'; } var e = lg.beat[idx[a]][idx[b]], w = e.w / e.n, l = lg.beat[idx[b]][idx[a]].w / e.n, rgb = accentRGB();
-        return '<td style="background:rgba(' + rgb.join(",") + "," + (0.04 + 0.5 * w).toFixed(2) + ')" title="' + esc(x.m.label + " beats " + z.m.label + " on " + e.w + ", ties on " + e.t + " and loses on " + lg.beat[idx[b]][idx[a]].w + " of " + e.n + " problems") + '">' + (w > l ? "<b>" : "") + (100 * w).toFixed(1) + " %" + (w > l ? "</b>" : "") + ' <span class="v2ci-txt">' + (100 * e.t / e.n).toFixed(0) + " % tied</span></td>"; }).join("") + "</tr>"; }).join("") + "</tbody></table></div>" +
-      '<p class="v2hint">Each cell: the share of problems where the row\u2019s method does better than the column\u2019s on ' + esc(p.label) + "; the rest are ties or losses. Bold: the row\u2019s method wins more often than it loses.</p>";
+        return '<td style="background:rgba(' + rgb.join(",") + "," + (0.04 + 0.5 * w).toFixed(2) + ')" title="' + esc(x.m.label + " beats " + z.m.label + " on " + e.w + ", ties on " + e.t + " and loses on " + lg.beat[idx[b]][idx[a]].w + " of " + e.n + " problem runs") + '">' + (w > l ? "<b>" : "") + (100 * w).toFixed(1) + " %" + (w > l ? "</b>" : "") + ' <span class="v2ci-txt">' + (100 * e.t / e.n).toFixed(0) + " % tied</span></td>"; }).join("") + "</tr>"; }).join("") + "</tbody></table></div>" +
+      '<p class="v2hint">Each cell: the share of problem runs where the row\u2019s method does better than the column\u2019s on ' + esc(p.label) + "; the rest are ties or losses. Bold: the row\u2019s method wins more often than it loses.</p>";
     return t1 + t2;
   }
   function rankLadder(R, shown, p, ki, timed) {
@@ -1287,20 +1287,21 @@
     var s = D.summary;
     if (!s) { return ""; }
     var parts = [[s.finished.length, "finished"], [s.in_progress.length, "in progress"], [s.scheduled.length, "scheduled"]]
-      .filter(function (p) { return p[0] > 0; }).map(function (p) { return p[0] + " " + p[1]; });
+      .filter(function (p) { return p[0] > 0; }).map(function (p, i) { return p[0] + (i ? " " : p[0] === 1 ? " method " : " methods ") + p[1]; });
     return '<p class="v2progline"><span class="v2kicker">Progress</span> ' + parts.join(" · ") + ' · <a href="progress.html">details by method and budget</a></p>';
+  }
+  // When the release was last refreshed: stored with its offset, shown in the reader's own time zone, with how long ago
+  function releaseStamp(rel) {
+    var t = rel.updated ? new Date(rel.updated) : null;
+    if (!t || isNaN(t.getTime())) { return rel.generated ? '<span class="v2updated">Updated ' + esc(rel.generated) + '</span>' : ""; }
+    var abs = t.toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
+    var mins = Math.round((Date.now() - t.getTime()) / 60000), ago;
+    if (mins < 1) { ago = "just now"; } else if (mins < 60) { ago = mins + (mins === 1 ? " minute" : " minutes") + " ago"; } else if (mins < 48 * 60) { var h = Math.round(mins / 60); ago = h + (h === 1 ? " hour" : " hours") + " ago"; } else { ago = Math.round(mins / 1440) + " days ago"; }
+    return '<time class="v2updated" datetime="' + esc(rel.updated) + '">Updated ' + esc(abs) + ' <span class="v2ago">· ' + ago + '</span></time>';
   }
   function shell() {
     var rel = D.release;
-    // When the release was last refreshed: stored with its offset, shown in the reader's own time zone, with how long ago
-    var stamp = (function () {
-      var t = rel.updated ? new Date(rel.updated) : null;
-      if (!t || isNaN(t.getTime())) { return rel.generated ? '<span class="v2updated">Updated ' + esc(rel.generated) + '</span>' : ""; }
-      var abs = t.toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
-      var mins = Math.round((Date.now() - t.getTime()) / 60000), ago;
-      if (mins < 1) { ago = "just now"; } else if (mins < 60) { ago = mins + (mins === 1 ? " minute" : " minutes") + " ago"; } else if (mins < 48 * 60) { var h = Math.round(mins / 60); ago = h + (h === 1 ? " hour" : " hours") + " ago"; } else { ago = Math.round(mins / 1440) + " days ago"; }
-      return '<time class="v2updated" datetime="' + esc(rel.updated) + '">Updated ' + esc(abs) + ' <span class="v2ago">· ' + ago + '</span></time>';
-    })();
+    var stamp = releaseStamp(rel);
     var catList = CATS.map(function (c) { var m = CAT[c]; return '<label title="' + esc(GROUPS[m.group] + (m.mu ? " · typical formula length " + m.mu[1] + " bits (middle half: " + m.mu[0] + " to " + m.mu[2] + ")" : "")) + '"><input type="checkbox" data-c="' + c + '"> ' + esc(c) + ' <span class="v2hint">' + m.laws + '</span></label>'; }).join("");
     var methList = D.methods.filter(withData).map(function (m) { return '<div class="v2meth"><label><input type="checkbox" data-m="' + m.key + '"><input type="color" class="v2swatch" data-m="' + m.key + '" value="' + colorOf(m) + '" title="Colour for ' + esc(m.label) + '"><span class="v2mname">' + esc(m.label) + '</span></label>' + (m.local ? ' <span class="v2tag v2tag-local">local only</span>' : "") + ' <span class="v2hint">' + esc(m.param) + '</span>' + (m.selection ? " " + help(m.selection, "How does " + m.label + " choose its prediction?") : "") + ' <span class="v2tag" title="' + esc(PROV_NOTE[m.provenance] || "") + '">' + esc(PROV[m.provenance] || m.provenance || "") + '</span><button type="button" class="v2reset" data-m="' + m.key + '" title="Reset colour to default" hidden>↺</button></div>'; }).join("") || '<span class="v2hint">no method has finished a budget yet</span>';
     var metricList = MGROUPS.map(function (g) { var ms = D.metrics.filter(function (m) { return m.group === g; }); return '<div class="v2mgroup" data-group="' + esc(g) + '"><h4>' + esc(g) + '</h4>' + ms.map(function (m) { return '<div class="v2metric" data-tier="' + m.tier + '" data-key="' + m.key + '"><label><input type="checkbox" data-p="' + m.key + '"> ' + esc(m.label) + '</label> ' + mhelp(m) + '</div>'; }).join("") + "</div>"; }).join("");
@@ -1375,6 +1376,8 @@
       renderHeadline();
       var pl = document.getElementById("results-progress-v2");
       if (pl) { pl.innerHTML = progressLine(); }
+      var up = document.getElementById("results-updated-v2");
+      if (up) { up.innerHTML = releaseStamp(D.release); }
       return;
     }
     try {

@@ -31,6 +31,10 @@ BANNED = {
     r"not a leaderboard": "self-undermining framing: say how to read the table instead",
     r"never quote": "scolding tone: name the quotable alternative instead",
     r"curve read": "retired vocabulary: the split is declared-vs-free, say 'descriptive' (same interpolation)",
+    r"exactly the same data": "false: every run samples its points anew; two methods share the problem, not the points",
+    r"best result that fitting alone can reach": "overclaim: the Oracle uses Flash-ANSR's fitter, a ceiling for that fitting only",
+    r"change speed, not results": "unmeasured claim: cite what the release notes list instead",
+    r"says nothing about": "dismissive and absolute: say what the statistic shows and where the rest is (owner 2026-09-27)",
 }
 
 

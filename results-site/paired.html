@@ -94,9 +94,10 @@
             exact sign test asks whether one method is better on more problems than chance would give;
             it can disagree with the interval of the mean, because a few large differences move the
             mean. Ratios are compared on a log scale and shown as factors: \(\times\, 0.5\) means half.
-            Each comparison pairs the two methods on the same problem in the same run, so both had
-            exactly the same data. Every run that both methods have finished counts, so a problem
-            usually counts twice.
+            Each comparison pairs the two methods on the same problem: the same formula, with points
+            sampled from the same ranges, though each method's points are drawn anew. So the pairing
+            removes differences in how hard the problems are. Every run that both methods have finished
+            counts, so a problem usually counts twice.
           </p>
         </div>
       </section>
