@@ -53,12 +53,12 @@
     var perKnown = Object.keys(per).length > 0;   // data without per-budget counts: the results row is one bar of the total
     var runs = perKnown ? budgets.map(function (b) {
       var c = per[String(b)] || [0, null], share = c[1] ? Math.min(1, c[0] / c[1]) : 0;
-      return '<i class="v2seg" title="Budget ' + b.toLocaleString() + ": " + c[0] + " of " + (c[1] == null ? "?" : c[1]) + ' runs finished"><i style="width:' + (100 * share).toFixed(1) + '%"></i></i>';
-    }).join("") : '<i class="v2seg" title="' + st[0] + " of " + (st[1] == null ? "?" : st[1]) + ' runs finished"><i style="width:' + (st[1] ? 100 * Math.min(1, st[0] / st[1]) : 0).toFixed(1) + '%"></i></i>';
+      return '<i class="v2pbar" title="Budget ' + b.toLocaleString() + ": " + c[0] + " of " + (c[1] == null ? "?" : c[1]) + ' runs finished"><i style="width:' + (100 * share).toFixed(1) + '%"></i></i>';
+    }).join("") : '<i class="v2pbar" title="' + st[0] + " of " + (st[1] == null ? "?" : st[1]) + ' runs finished"><i style="width:' + (st[1] ? 100 * Math.min(1, st[0] / st[1]) : 0).toFixed(1) + '%"></i></i>';
     var timed = budgets.filter(function (b) { return tm[String(b)] != null; }).length;
     var times = budgets.map(function (b) {
       var s = tm[String(b)];
-      return '<i class="v2seg" title="Budget ' + b.toLocaleString() + ": " + (s != null ? roundNum(s) + " s per problem" : "time not measured yet") + '"><i style="width:' + (s != null ? 100 : 0) + '%"></i></i>';
+      return '<i class="v2pbar" title="Budget ' + b.toLocaleString() + ": " + (s != null ? roundNum(s) + " s per problem" : "time not measured yet") + '"><i style="width:' + (s != null ? 100 : 0) + '%"></i></i>';
     }).join("");
     return '<div class="v2tile" data-m="' + esc(m.key) + '" style="--n:' + n + '"><b>' + swatch(m) + esc(m.label) + '</b>' +
       '<span class="v2plab">Results</span><span class="v2segs" aria-hidden="true"' + (perKnown ? "" : ' style="--n:1"') + '>' + runs + '</span><span class="v2pnum">' + st[0] + '<small> / ' + (st[1] == null ? "?" : st[1]) + '</small></span>' +
