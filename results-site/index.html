@@ -18,16 +18,16 @@
     (function () {
       var to = { "#about": "guide.html", "#paired": "paired.html", "#ranks": "ranks.html", "#metrics": "metrics.html" }[window.location.hash];
       if (to) { window.location.replace(to); return; }
-      if (window.location.search) { window.location.replace("results.html" + window.location.search + window.location.hash); }
+      if (window.location.search) { window.location.replace("explorer.html" + window.location.search + window.location.hash); }
     })();
   </script>
-  <title>srbf: Symbolic Regression Benchmark Framework</title>
-  <meta name="description" content="Results of srbf, the Symbolic Regression Benchmark Framework: symbolic regression methods compared on the same 6,660 problems, with every formula checked the same way." />
+  <title>srbf · Symbolic Regression Benchmark Framework</title>
+  <meta name="description" content="srbf, the Symbolic Regression Benchmark Framework, runs any symbolic regression method on the same 6,660 problems from 29 published problem sets and checks every formula it returns the same way." />
   <link rel="icon" type="image/svg+xml" href="srbf-icon.svg" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="srbf: Symbolic Regression Benchmark Framework · Results" />
-  <meta property="og:description" content="Results of srbf, the Symbolic Regression Benchmark Framework: symbolic regression methods compared on the same 6,660 problems, with every formula checked the same way." />
+  <meta property="og:description" content="srbf, the Symbolic Regression Benchmark Framework, runs any symbolic regression method on the same 6,660 problems from 29 published problem sets and checks every formula it returns the same way." />
   <meta property="og:url" content="https://psaegert.github.io/srbf/" />
   <meta property="og:image" content="https://psaegert.github.io/srbf/srbf-social.png" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -48,7 +48,7 @@
         <span class="brand-sub">Symbolic Regression Benchmark Framework</span>
       </a>
       <nav class="site-nav" aria-label="Pages">
-        <a href="results.html">Results</a>
+        <a href="explorer.html">Explorer</a>
         <a href="progress.html">Progress</a>
         <a href="guide.html">How to read</a>
         <a href="metrics.html">Metrics</a>
@@ -59,34 +59,45 @@
 
   <main>
     <div class="wrap">
-    <section class="hero">
-      <h1>Benchmark results</h1>
-      <p class="lede">
-        Symbolic regression means finding a mathematical formula that describes a set of data
-        points. This page compares symbolic regression methods on the same 6,660 problems from 29
-        published problem sets, with srbf, the Symbolic Regression Benchmark Framework. Each problem
-        is a known formula. A method gets the formula's exact values (without noise) at 512 input
-        points and has to return a formula, which is then checked against 512 further points it
-        never saw, and against the true formula.
-      </p>
-      <p class="lede">
-        <strong>E2E</strong>, <strong>NeSymReS</strong> and <strong>Flash-ANSR</strong> are neural
-        networks trained in advance on many machine-generated formulas; given a new problem, they
-        propose formulas without further training. <strong>PySR</strong> is an evolutionary search.
-        Flash-ANSR comes in three sizes and is also combined with PySR. A baseline, Flash-ANSR prior,
-        draws random formulas of the kind Flash-ANSR was trained on without looking at the data, then
-        fits their numbers and picks one with Flash-ANSR's rule; it shows how much Flash-ANSR gains by
-        reading the data. The number after a network's
-        name is its size in millions of parameters (M); T8 is the version of the Flash-ANSR models.
-        The people who run this benchmark also develop Flash-ANSR, so every method is labelled with
-        who chose its settings.
-      </p>
-      <p class="lede">
-        The pages “<a href="guide.html">How to read the results</a>” and “<a href="metrics.html">Metrics</a>”
-        explain how every number is computed. Any method can be added: it needs a small piece
-        of code that runs it, its settings, and a statement of who chose them.
-      </p>
-      <div class="va-wrap">
+    <section class="home-hero">
+      <div class="home-hero-text">
+        <h1>Compare symbolic regression methods on equal terms</h1>
+        <p class="lede">
+          Symbolic regression finds a mathematical formula that describes a set of data points.
+          srbf, the Symbolic Regression Benchmark Framework, runs any such method on the same 6,660
+          problems from 29 published problem sets, and checks every formula it returns the same way.
+        </p>
+        <div class="home-actions">
+          <a class="home-btn home-btn-primary" href="explorer.html">Open the explorer</a>
+          <a class="home-btn" href="https://srbf.readthedocs.io/" target="_blank" rel="noopener">Read the documentation</a>
+        </div>
+        <p class="home-install"><code>pip install srbf</code></p>
+      </div>
+      <div class="home-example-wrap">
+        <figure class="home-example">
+          <p class="home-example-kicker">One of the 6,660 problems · Feynman II.8.7</p>
+          <div class="home-example-row">
+            <span class="home-example-label">True formula</span>
+            <span class="home-example-math">\(E = \dfrac{3}{5}\,\dfrac{q^2}{4\pi\,\varepsilon\,d}\)</span>
+          </div>
+          <div class="home-example-row">
+            <span class="home-example-label">PySR, 8 iterations</span>
+            <span class="home-example-math">\(E = \dfrac{0.04775\; q \cdot q}{\varepsilon\,d}\)</span>
+          </div>
+          <ul class="home-example-checks">
+            <li><span class="home-check" aria-hidden="true">✓</span> <b>Numeric Recovery</b>: it reproduces 512 points it never saw</li>
+            <li><span class="home-check" aria-hidden="true">✓</span> <b>Symbolic Recovery</b>: it has the true formula's form, numbers aside</li>
+          </ul>
+          <figcaption>
+            A real result from the current release: PySR found the form and fitted the number,
+            \(0.04775 \approx \tfrac{3}{20\pi}\).
+            <a href="explorer.html?release=2026-09&amp;v=preds&amp;ps=feynman&amp;r=8&amp;pr=1&amp;pn=58&amp;m=PySR">See it in the explorer</a>
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <div class="va-wrap home-va">
         <!-- Inline copy of ../assets/brand/visual-abstract.svg: geometry identical (the copy
              lint enforces the match); colours live in styles.css scoped under #va so the
              graphic follows the site theme, including the manual toggle, which an <img> embed
@@ -177,8 +188,56 @@
         <text class="soft" x="1084" y="272" text-anchor="middle" font-size="13.5" font-weight="600">Ranks</text>
         </svg>
       </div>
+
+    <section class="home-section">
+      <h2>What srbf does</h2>
+      <div class="home-features">
+        <div class="home-feature">
+          <h3>Published problems</h3>
+          <p>29 problem sets with 6,660 problems: the Feynman equations, the classic benchmark sets, physics
+            collections and machine-generated formulas, from the
+            <a href="https://github.com/psaegert/symbolic-data" target="_blank" rel="noopener">symbolic-data</a>
+            package. A method's training data can leave all of them out.</p>
+        </div>
+        <div class="home-feature">
+          <h3>Any method</h3>
+          <p>Each method runs in its own environment, with whatever PyTorch, Julia or NumPy version it needs.
+            One small Python file connects it.</p>
+        </div>
+        <div class="home-feature">
+          <h3>One judge</h3>
+          <p>Every formula is checked the same way: on 512 points the method never saw, and against the true
+            formula once both are simplified into a standard form.</p>
+        </div>
+        <div class="home-feature">
+          <h3>Budgets and time</h3>
+          <p>Each method runs at a series of budgets, each twice the one before, so its accuracy can be read
+            against its cost. Times are measured on one workstation, one method at a time.</p>
+        </div>
+        <div class="home-feature">
+          <h3>Paired statistics</h3>
+          <p>Methods are compared problem by problem, with 95 % intervals, paired tests and ranks.</p>
+        </div>
+        <div class="home-feature">
+          <h3>Stated settings</h3>
+          <p>Every method is labelled with who chose its settings: its own defaults, its authors, or the
+            benchmark's maintainers. The people who run this benchmark also develop Flash-ANSR.</p>
+        </div>
+      </div>
     </section>
 
+    <section class="home-section home-release-intro">
+      <h2>The current release</h2>
+      <p class="home-text">
+        E2E, NeSymReS and Flash-ANSR are neural networks trained in advance on many machine-generated
+        formulas; given a new problem, they propose formulas without further training. PySR is an
+        evolutionary search. Flash-ANSR comes in three sizes and is also combined with PySR. A baseline,
+        Flash-ANSR prior, draws random formulas of the kind Flash-ANSR was trained on without looking at the
+        data, then fits their numbers and picks one with Flash-ANSR's rule. The number after a network's name
+        is its size in millions of parameters.
+      </p>
+      <div id="results-progress-v2" class="explorer-v2 home-progress"></div>
+    </section>
     </div>
 
     <div class="wrap-wide">
@@ -186,10 +245,41 @@
       <div id="results-headline-v2" class="explorer-v2 headline-v2">
         <div class="loading">Loading the charts…</div>
       </div>
-      <p class="explore-cta"><a href="results.html">Explore all results</a>: every metric, problem set, budget and time, method by method.</p>
+      <p class="explore-cta"><a href="explorer.html">Explore all results</a>: every metric, problem set, budget and time, method by method.</p>
     </section>
     </div>
 
+    <div class="wrap">
+    <section class="home-section home-two">
+      <div>
+        <h2>Run it yourself</h2>
+        <p class="home-text">
+          srbf is a Python package. A method plugs in with one small file, a YAML file describes the
+          evaluation, and four commands take it from a first test to a report.
+        </p>
+        <pre class="home-code"><code>pip install srbf
+srbf new mymethod                 # a template for your method
+srbf check   -c config.yaml       # a few real problems, step by step
+srbf run     -c config.yaml -v    # the evaluation
+srbf analyze -c config.yaml -o report</code></pre>
+        <p class="home-links">
+          <a href="https://srbf.readthedocs.io/en/latest/quickstart/" target="_blank" rel="noopener">Quickstart</a> ·
+          <a href="https://srbf.readthedocs.io/en/latest/adapters/" target="_blank" rel="noopener">Adding your method</a> ·
+          <a href="https://srbf.readthedocs.io/en/latest/benchmarks/" target="_blank" rel="noopener">The problem sets</a>
+        </p>
+      </div>
+      <div>
+        <h2>Cite</h2>
+        <p class="home-text">
+          srbf accompanies Saegert &amp; Köthe 2026, <em>Breaking the Simplification Bottleneck in Amortized
+          Neural Symbolic Regression</em> (ICML 2026),
+          <a href="https://arxiv.org/abs/2602.08885" target="_blank" rel="noopener">arXiv:2602.08885</a>.
+          If you publish numbers on a problem set, cite its source as well.
+        </p>
+        <p class="home-text">Free and open source, under the MIT licence.</p>
+      </div>
+    </section>
+    </div>
   </main>
 
   <footer class="site-footer">

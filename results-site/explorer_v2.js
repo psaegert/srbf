@@ -16,7 +16,7 @@
  * retired on 2026-09-26; its links' keys are dropped from the URL and its ?release= opens this page. */
 (function () {
   "use strict";
-  // Two pages mount this script: the home page holds the headline's two fixed charts, the Results page the explorer.
+  // Two pages mount this script: the home page holds the headline's two fixed charts, the explorer's page (explorer.html) the explorer.
   // Without the explorer's mount, only the headline is drawn: no controls, and the URL is left alone.
   var root = document.getElementById("results-explorer-v2");
   var headRoot = document.getElementById("results-headline-v2");
@@ -1371,7 +1371,12 @@
   var rt = null;
   function scheduleRender() { clearTimeout(rt); rt = setTimeout(render, 30); }
   function render() {
-    if (!root) { renderHeadline(); return; }   // the home page: the headline alone
+    if (!root) {   // the home page: the headline, and the release's line of progress where the page has a place for it
+      renderHeadline();
+      var pl = document.getElementById("results-progress-v2");
+      if (pl) { pl.innerHTML = progressLine(); }
+      return;
+    }
     try {
       syncControls();
       var shown = shownMethods(), view = root.querySelector(".v2view");

@@ -11,7 +11,7 @@ function collectErrors(page) {
   return errors;
 }
 
-// a page is open once its first chart is drawn: the headline's on the home page, the explorer's on the Results page
+// a page is open once its first chart is drawn: the headline's on the home page, the explorer's on its own page
 const CHART = '#results-headline-v2 svg.v2chart, #results-explorer-v2 svg.v2chart';
 async function open(page, url = '/') {
   await page.goto(url);
@@ -74,7 +74,7 @@ test('provenance: the prose explains the three labels and discloses the shared a
   await expect(about).toContainText('Maintainer-chosen');
   await expect(about).toContainText("Here they are also the benchmark's authors");
   await page.goto('/');
-  await expect(page.locator('.hero')).toContainText('The people who run this benchmark also develop Flash-ANSR');
+  await expect(page.locator('main')).toContainText('The people who run this benchmark also develop Flash-ANSR');
 });
 
 // ---- the retired 2026-07 explorer -----------------------------------------------------------------------------------
@@ -83,7 +83,7 @@ for (const url of ['/?release=2026-07', '/?view=curves&bench=FastSRB', '/?view=r
   test(`a link of the retired 2026-07 explorer opens the current explorer: ${url}`, async ({ page }) => {
     const errors = collectErrors(page);
     await open(page, url);
-    await expect(page).toHaveURL(/\/results\.html\?/);
+    await expect(page).toHaveURL(/\/explorer\.html\?/);
     await expect(page.locator(V2 + ' svg.v2chart').first()).toBeVisible();
     for (const k of ['view', 'bench', 'baseline', 'metric', 'budget']) { expect(new URL(page.url()).searchParams.has(k), k).toBe(false); }
     expect(errors).toEqual([]);
