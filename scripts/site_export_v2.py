@@ -802,7 +802,7 @@ def main() -> None:
         rungs_of = {k: {r for (_c, r) in data.get(k, {}) if usable(k, r)} for k in {x for p in pairs for x in p} | set(keys)}
         # a time budget buys a rung the method has FINISHED: every catalog, every problem (the site shows no pooled number
         # for a rung that is still running, so a budget must not point at one)
-        finished = {k: {r for r in rungs_of[k] if all(complete_draws(data[k].get((c, r), {}), n) for c, n in sizes.items())} for k in rungs_of}
+        finished = {k: {r for r in rungs_of[k] if all(problems_of(data[k].get((c, r), {}), n)[1] for c, n in sizes.items())} for k in rungs_of}
         at: dict[str, dict[str, int]] = {k: {} for k in rungs_of}
         for k in rungs_of:
             for t in TIME_BUDGETS:

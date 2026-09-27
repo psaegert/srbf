@@ -27,9 +27,11 @@ carries a label for who chose it, and the labels are shown wherever methods are 
 Seconds depend on the machine, its GPU and whatever shares it. Published times therefore come from
 one reference machine that runs one problem at a time with nothing else on it, on a fixed subset of
 the suite: 262 problems, stratified by catalog, the same instances for every method and every
-budget. The subset estimates the pooled mean of the whole suite, because each catalog's problems
-are weighted by the catalog's full size. A fit that returns no prediction does not enter the mean
-time; how often that happens is a metric of its own, the success rate.
+budget. The results explorer averages each catalog's mean time over the catalogs like every other
+number it shows (a random-effects average, see
+[the site's guide](https://psaegert.github.io/srbf/guide.html#averaging)), so no catalog decides the
+time on its own. A fit that returns no prediction does not enter the mean time; how often that happens
+is a metric of its own, the success rate.
 
 Three scripts in the repository implement the protocol. They expect a config with one experiment
 per catalog and a sweep named `ladder`, like the configs under `configs/evaluation/scaling/`:

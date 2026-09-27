@@ -631,6 +631,31 @@ test('a rate is shown per problem set, with a way to a distribution', async ({ p
   await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toHaveAttribute('aria-label', /one histogram per method/);
 });
 
+// ---- Averaging over problem sets -------------------------------------------------------------------------------------
+// The explorer's own averaging (random effects over problem sets) against the reference, scripts/site_random_effects.py,
+// on the cases the reference wrote (scripts/site_random_effects_fixture.py): the page's code is cut out and run as it is.
+test('the explorer averages over problem sets exactly as the reference does', () => {
+  const src = readFileSync(new URL('../explorer_v2.js', import.meta.url), 'utf8');
+  const a = src.indexOf('  var EPS_VAR = '), b = src.indexOf('  function binVal(');
+  expect(a).toBeGreaterThan(0); expect(b).toBeGreaterThan(a);
+  const core = new Function(src.slice(a, b) + '\nreturn { reCombine: reCombine, holm: holm };')();
+  const cases = JSON.parse(readFileSync(new URL('./fixtures/random_effects_cases.json', import.meta.url), 'utf8'));
+  expect(cases.length).toBeGreaterThan(40);
+  const close = (x, y) => Math.abs(x - y) <= 1e-6 * Math.max(1, Math.abs(y));
+  const off = [];
+  cases.forEach((c, i) => {
+    const got = core.reCombine(c.sets, c.scale);
+    if (c.out === null) { if (got !== null) { off.push(i + ': expected nothing'); } return; }
+    if (got.S !== c.out.S) { off.push(i + ': S ' + got.S + ' vs ' + c.out.S); }
+    for (const k of ['mu', 'lo', 'hi', 'tau2', 'p', 'piLo', 'piHi']) {
+      const want = c.out[k], have = got[k];
+      if (want === null ? have !== null : !close(have, want)) { off.push(i + ' ' + c.scale + ': ' + k + ' ' + have + ' vs ' + want); }
+    }
+  });
+  expect(off).toEqual([]);
+  expect(core.holm([0.01, 0.04, 0.03]).map((x) => +x.toFixed(6))).toEqual([0.03, 0.06, 0.06]);
+});
+
 // ---- Ranks ---------------------------------------------------------------------------------------------------------
 test('the ranks view places the methods, names what it ranks on and how it holds them equal', async ({ page }) => {
   const errors = collectErrors(page);
@@ -638,7 +663,7 @@ test('the ranks view places the methods, names what it ranks on and how it holds
   const chart = page.locator(V2 + ' .v2view svg.v2rankchart');
   await expect(chart).toBeVisible({ timeout: 15000 });
   await expect(chart).toHaveAttribute('aria-label', /Average place on .* budget 16/);
-  await expect(chart).toContainText('critical difference');
+  await expect(page.locator(V2 + ' .v2view')).toContainText('pairwise tests');   // pairs are tested one by one, not by a critical difference
   await expect(page.locator(V2 + ' .v2viewbar .v2tag-primary')).toBeVisible();
   // mean ranks: one per ranked method, each within [1, k], and they sum to k (k + 1) / 2 as ranks must
   const ranks = await page.locator(V2 + ' .v2ranktable tbody tr td:nth-child(3)').allTextContents();
@@ -648,12 +673,12 @@ test('the ranks view places the methods, names what it ranks on and how it holds
   for (const v of vals) { expect(v).toBeGreaterThanOrEqual(1); expect(v).toBeLessThanOrEqual(k); }
   expect(Math.abs(vals.reduce((a, b) => a + b, 0) - k * (k + 1) / 2)).toBeLessThan(0.02 * k);
   expect(vals.slice().sort((a, b) => a - b)).toEqual(vals);   // the standings are in order
-  // head to head: k x k, and a pair's two shares plus their ties make 100 %
+  // head to head: k x k, and a pair's two shares make 100 % (a tie counts half to each)
   await expect(page.locator(V2 + ' .v2h2h tbody tr')).toHaveCount(k);
   const cell = (r, c) => page.locator(V2 + ` .v2h2h tbody tr:nth-child(${r}) td:nth-child(${c + 1})`).textContent();
-  const num = (t) => parseFloat(t), tied = (t) => parseFloat(t.split('%')[1]);
+  const num = (t) => parseFloat(t);
   const ab = await cell(1, 2), ba = await cell(2, 1);
-  expect(Math.abs(num(ab) + num(ba) + tied(ab) - 100)).toBeLessThan(1.6);
+  expect(Math.abs(num(ab) + num(ba) - 100)).toBeLessThan(0.15);
   // the standings along the ladder
   await expect(page.locator(V2 + ' .v2view svg.v2chart').last()).toContainText('Comparisons won');
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -666,7 +691,7 @@ test('ranks follow the selection: another metric, fewer methods, fewer catalogs'
   const rows = page.locator(V2 + ' .v2ranktable tbody tr');
   await expect(rows.first()).toBeVisible({ timeout: 15000 });
   const k = await rows.count();
-  const laws = () => page.locator(V2 + ' .v2view').textContent().then((t) => +t.match(/on ([\d,]+) problem runs/)[1].replace(/,/g, ''));
+  const laws = () => page.locator(V2 + ' .v2view').textContent().then((t) => +t.match(/on ([\d,]+) problems from/)[1].replace(/,/g, ''));
   const all = await laws();
   await page.locator(V2 + ' button[data-act="phys"]').click();
   await expect.poll(laws).toBeLessThan(all);

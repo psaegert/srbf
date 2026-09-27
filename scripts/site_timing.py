@@ -3,11 +3,12 @@
 The site places a method's rung on a time axis only with seconds measured on the reference machine. Two kinds of
 measurement, both read from result files:
 
-  * a timing ladder on the frozen subset (scripts/freeze_timing_subset.py): the rung's seconds are the POOLED mean fit
-    time over the subset, each catalog weighted by its full size (scripts/timing_readout.py), so the number estimates
-    the whole suite's mean;
-  * a method evaluated on the whole suite on the reference machine itself: the rung's seconds are the mean fit time
-    over the problems it answered.
+  * a timing ladder on the frozen subset (scripts/freeze_timing_subset.py);
+  * a method evaluated on the whole suite on the reference machine itself.
+
+Either way the rung's seconds are each catalog's mean fit time over the problems it answered, averaged over the
+catalogs like every other number on the site (owner 2026-09-27: random effects, scripts/site_random_effects.py), so
+no catalog decides the time on its own.
 
 A rung is timed only once it is complete: every catalog has its file with every problem (the subset's count, or the
 catalog's full size). Failed problems do not count towards the time: a row with an error, prediction_success False, or
@@ -35,13 +36,22 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from timing_readout import estimates, load_rung  # noqa: E402
+from site_random_effects import SetStat, combine  # noqa: E402
+from timing_readout import load_rung  # noqa: E402
 
 import numpy as np  # noqa: E402
 
 NOTE = ("Measured on one workstation (16 CPU cores, one RTX 4090 GPU), one method at a time, on a fixed sample of 262 problems. "
-        "Each point averages over the problems where the method returned a usable formula, and every problem set counts in "
-        "proportion to its size.")
+        "Each point averages over the problems where the method returned a usable formula, with the problem sets weighted "
+        "as in every other average on the site.")
+
+
+def over_sets(per_catalog: list[np.ndarray]) -> float | None:
+    """The seconds per problem: each catalog's mean over its answered (finite) problems, averaged over the catalogs."""
+    sets = [SetStat(int(t.size), float(t.sum()), float((t * t).sum())) for t in (np.asarray(x, float) for x in per_catalog)
+            if t.size]
+    c = combine(sets, "normal")
+    return None if c is None else c.mu
 
 
 def note(suite_keys: list[str]) -> str:
@@ -61,19 +71,21 @@ def rungs_in(directory: Path, pattern: str) -> list[int]:
 
 
 def subset_rung(directory: Path, catalogs: dict[str, Any], rung: int, pattern: str) -> dict[str, Any] | None:
-    """The pooled mean of one complete rung of a subset ladder, or None while a catalog is missing or short."""
+    """The seconds of one complete rung of a subset ladder, or None while a catalog is missing or short."""
     cols, missing, short = load_rung(directory.parent, "", directory.name, catalogs, rung, pattern, False)
     if missing or short:
         return None
-    weights = {e: float(m["weight"]) for e, m in catalogs.items()}
-    ident = {e: np.arange(int(m["count"])) for e, m in catalogs.items()}
-    est = estimates(cols, weights, ident)
-    return {"seconds": est["pooled_mean"], "n_ok": est["n_ok"], "n": est["n"]}
+    times = [c["fit_time"][np.isfinite(c["fit_time"])] for c in cols.values()]
+    seconds = over_sets(times)
+    if seconds is None:
+        return None
+    return {"seconds": seconds, "n_ok": int(sum(t.size for t in times)), "n": int(sum(c["fit_time"].size for c in cols.values()))}
 
 
 def suite_rung(directory: Path, catalogs: dict[str, Any], rung: int, pattern: str) -> dict[str, Any] | None:
-    """The mean fit time over the answered problems of one complete rung of a whole-suite evaluation, or None."""
-    total, ok, n, hung = 0.0, 0, 0, 0
+    """The seconds of one complete rung of a whole-suite evaluation, or None."""
+    per: list[list[float]] = []
+    n, hung = 0, 0
     for catalog, meta in catalogs.items():
         path = directory / catalog / pattern.format(rung=rung)
         if not path.exists():
@@ -85,17 +97,19 @@ def suite_rung(directory: Path, catalogs: dict[str, Any], rung: int, pattern: st
             return None
         errors, success = snap.get("error") or [], snap.get("prediction_success") or []
         hangs = snap.get("worker_hangs") or []
+        per.append([])
         for j, t in enumerate(times):
             n += 1
             hung += 1 if j < len(hangs) and hangs[j] else 0
             failed = (j < len(errors) and errors[j]) or (j < len(success) and success[j] is False)
             if failed or t is None or t != t or t == float("inf"):
                 continue
-            total += float(t)
-            ok += 1
-    if not ok:
+            per[-1].append(float(t))
+    ok = sum(len(x) for x in per)
+    seconds = over_sets([np.asarray(x) for x in per]) if ok else None
+    if seconds is None:
         return None
-    return {"seconds": total / ok, "n_ok": ok, "n": n, "hung": hung}
+    return {"seconds": seconds, "n_ok": ok, "n": n, "hung": hung}
 
 
 def build(manifest: dict[str, Any], subset: dict[str, Path], suite: dict[str, Path], suite_pattern: str,

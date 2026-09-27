@@ -64,3 +64,14 @@ def test_sets_without_spread_of_their_own_borrow_one():
 
 def test_holm():
     assert re_.holm([0.01, 0.04, 0.03]) == pytest.approx([0.03, 0.06, 0.06])
+
+
+def test_the_sites_parity_cases_are_current():
+    """The explorer's own averaging is checked against these cases (site_v2.spec.mjs); they must be the reference's."""
+    import json
+    _FIX = importlib.util.spec_from_file_location(
+        "site_random_effects_fixture", os.path.join(os.path.dirname(__file__), "..", "scripts", "site_random_effects_fixture.py"))
+    fixture = importlib.util.module_from_spec(_FIX)
+    _FIX.loader.exec_module(fixture)
+    with open(fixture.OUT) as fh:
+        assert json.load(fh) == json.loads(json.dumps(fixture.cases())), "regenerate: python scripts/site_random_effects_fixture.py"

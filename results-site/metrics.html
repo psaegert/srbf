@@ -58,7 +58,9 @@
         separate <em>validation set</em> \((X_{\mathrm{val}}, y_{\mathrm{val}})\) of \(N\) held-out
         points that it never sees; here \(N = 512\). The method returns a formula \(\hat{f}\), and
         \(\hat{y}\) and \(\hat{y}_{\mathrm{val}}\) are its values on the two sets. \(K\) is the number
-        of problem runs (each problem is run twice). Some metrics compare <em>skeletons</em>: a skeleton is a formula with every number
+        of problems in a problem set; each problem is run twice and counts with the average of its runs.
+        How the problem sets are then averaged is explained under
+        <a href="guide.html#averaging">How values are averaged</a>. Some metrics compare <em>skeletons</em>: a skeleton is a formula with every number
         replaced by the same placeholder, written as a sequence of symbols with each operator before
         its arguments, so \(2.1 \sin(x) + 3\) becomes <code>+ * c sin x c</code>, with c for the
         placeholder. \(\tau\) is
