@@ -110,7 +110,7 @@ test('terms and metric help open a floating explanation', async ({ page }) => {
   await page.keyboard.press('Escape');
   await expect(page.locator('.v2pop')).toHaveCount(0);
   await page.locator(V2 + ' .v2view .v2term[data-term="complete"]').first().click();
-  await expect(page.locator('.v2pop')).toContainText('all the problem sets you selected');
+  await expect(page.locator('.v2pop')).toContainText('every problem of the problem sets you selected');
 });
 
 // A published time is a CALIBRATED time. Seconds measured wherever a unit happened to run are not comparable
@@ -944,10 +944,13 @@ async function withHalfAnswered(page) {
   await page.route('**/data/2026-09/results.js', async (route) => {
     const res = await route.fetch();
     const add = `;(function () { var D = window.RESULTS_V2;
-      // its answers have a token F1 of 0.8; the laws it failed are counted at 0, and the cell says how many those are
-      var mk = function (k) { return { state: 'complete', n: 100, ok: k, e: { n_constants_ratio: 42 }, w: { f1_score: 100 - k }, m: {
-        numeric_recovery_val: [10, 100], success: [k, 100], mdl_ratio: [k, k, 1.5 * k, 2.5 * k], log10_fvu_val: [k, k, -2 * k, 5 * k],
-        f1_score: [100, 100, 0.8 * k, 0.64 * k], n_constants_ratio: [40, 40, 44, 50] } }; };
+      // 100 problems, one run each, k of them answered. Its answers have a token F1 of 0.8; the problems it failed are
+      // counted at 0, and the answered-only reading ("a") leaves them out. A rate is [problems, sum, sum of squares], any
+      // other metric [problems with a value, with a finite value, sum, sum of squares], a ratio on log2.
+      var L = Math.log2(1.5), C = Math.log2(1.1);
+      var mk = function (k) { return { state: 'complete', n: 100, d: 1, ok: k, e: { n_constants_ratio: 42 }, m: {
+        numeric_recovery_val: [100, 10, 10], success: [100, k, k], mdl_ratio: [k, k, L * k, L * L * k], log10_fvu_val: [k, k, -2 * k, 5 * k],
+        f1_score: [100, 100, 0.8 * k, 0.64 * k], n_constants_ratio: [40, 40, 40 * C, 40 * C * C] }, a: { f1_score: [k, k, 0.8 * k, 0.64 * k] } }; };
       D.methods.push({ key: 'fixture-half', label: 'Fixture half answered', param: 'draws', budget: 'candidates', color: '#555555', group: 'baseline', provenance: 'upstream_default', selection: '' });
       D.cells['fixture-half'] = {}; D.catalogs.forEach(function (c) { D.cells['fixture-half'][c.key] = { '16': mk(50), '32': mk(95) }; });
       D.status['fixture-half'] = [2, 2]; })();`;
@@ -1085,8 +1088,8 @@ test('a failed prediction counts the worst value, or is left out: the reader cho
 
 test('leaving failed predictions out is exact for the median, the distribution and a paired contrast', async ({ page }) => {
   const errors = collectErrors(page);
-  // the release's own numbers: a method that answers under half of the laws has a median overlap of 0 when its
-  // failures count, and the median of its answers when they do not
+  // the release's own numbers: for a method that answers under half of the problems, the median overlap is lower when
+  // its failures count (at 0) than when they are left out, and left out it rests on too few problems (hollow)
   const low = await page.goto('/explorer.html?release=2026-09&v=table&rows=rungs&x=rung&s=median&band=0&p=rung~f1_score').then(() => page.evaluate(() => {
     const D = window.RESULTS_V2; let best = null;
     D.methods.forEach((m) => { const per = D.cells[m.key] || {}; let n = 0, ok = 0; Object.keys(per).forEach((c) => { const x = per[c]['1']; if (x) { n += x.n; ok += x.ok; } }); if (n && ok / n < 0.45 && (!best || ok / n < best.share)) { best = { key: m.key, share: ok / n }; } });
@@ -1096,10 +1099,10 @@ test('leaving failed predictions out is exact for the median, the distribution a
   const first = () => page.locator(V2 + ' .v2table tbody tr').first().locator('td').nth(2);
   await page.goto(url('&v=table&imp=1'));
   await expect(first()).toHaveText(/\d/, { timeout: 15000 });
-  expect(parseFloat((await first().textContent()).replace(/^[≤≥○ ]+/, ''))).toBeLessThan(0.05);
+  const counted0 = parseFloat((await first().textContent()).replace(/^[≤≥○ ]+/, ''));
   await page.locator(V2 + ' .v2impute').uncheck();
   await expect(first()).toHaveText(/○/);
-  expect(parseFloat((await first().textContent()).replace(/^[≤≥○ ]+/, ''))).toBeGreaterThan(0.3);
+  expect(parseFloat((await first().textContent()).replace(/^[≤≥○ ]+/, ''))).toBeGreaterThan(counted0);
   // the distribution loses exactly the laws that were filled in
   await page.goto(url('&v=dist&dm=f1_score&dv=hist&r=1&imp=1'));   // the choice is remembered, so the link states it
   await expect(page.locator(V2 + ' .v2view')).toContainText('All problems: a problem without a usable formula counts as 0', { timeout: 15000 });
@@ -1124,8 +1127,9 @@ test('symbolic recovery is asked at three levels of masking, each implying the o
       const x = D.cells[m][c][r].m, all = x.symbolic_recovery, exp = x.symbolic_recovery_mask_fittable, num = x.symbolic_recovery_mask_none;
       cells += 1;
       if (!all || !exp || !num) { missing += 1; return; }
-      if (!(num[0] <= exp[0] && exp[0] <= all[0] && num[0] <= x.numeric_recovery_val[0] && exp[1] === all[1] && num[1] === all[1])) { broken += 1; }
-      if (exp[0] < all[0]) { strict += 1; }
+      // a rate is [problems, sum, sum of squares]: the same problems, and each level's hits within the one before it
+      if (!(num[1] <= exp[1] && exp[1] <= all[1] && num[1] <= x.numeric_recovery_val[1] && exp[0] === all[0] && num[0] === all[0])) { broken += 1; }
+      if (exp[1] < all[1]) { strict += 1; }
     })));
     const labels = D.metrics.filter((m) => m.key.indexOf('symbolic_recovery') === 0).map((m) => m.label);
     return { cells, missing, broken, strict, labels };

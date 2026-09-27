@@ -261,8 +261,9 @@ METRIC_HIGHER = {m[0]: m[5] for m in METRICS}
 PAIRED_KEYS = ["numeric_recovery_val", "symbolic_recovery", "success", "log10_fvu_val", "mdl_ratio", "expr_length_ratio", "f1_score"]
 # The Ranks view: within every problem the methods are placed 1st, 2nd, ... on one continuous metric, a method without a
 # usable prediction last. A mean rank over any set of problems and any roster of methods follows from PAIRWISE outcomes alone
-# (rank_i = 1 + sum_j [j beats i] + 0.5 [j ties i]), and pairwise counts add up over catalogs, so that is what ships:
-# per pair x catalog x slot, [n problems, then (wins of the first, wins of the second) per rank key]. A slot is a rung
+# (rank_i = 1 + sum_j P(j beats i)), and the page averages each pair's chance over catalogs, so that is what ships:
+# per pair x catalog x slot, [n problems, then the sum and sum of squares of the first method's per-problem superiority
+# per rank key] (owner 2026-09-27). A slot is a rung
 # ("64": both methods at that rung) or a time budget ("t3": each method at its largest rung the reference machine
 # timed at or under 3 s per problem). The first key is the primary league.
 # Every metric that says how good a prediction is can rank: the rates (a hit beats a miss), and every continuous metric
@@ -563,7 +564,8 @@ def comparison_value(key: str, v: float | None) -> float | None:
 
 def superiority(runs_a: list[dict[str, Any]], runs_b: list[dict[str, Any]], key: str, answered: bool = False) -> float | None:
     """On one problem, the share of run pairs the first method wins minus the share it loses (ties count neither), on the
-    metric's own terms (rank_score): a failed run is worst, and two recovered runs tie. None without a run pair."""
+    metric's own terms (rank_score): a failed run is worst, and two recovered runs tie. None without a run pair. The
+    reference for the matrices below, which compute the same over every problem of a cell at once."""
     higher, ideal = METRIC_HIGHER[key], IDEAL.get(key)
     ra = [r for r in runs_a if not answered or r["success"]]
     rb = [r for r in runs_b if not answered or r["success"]]
@@ -574,6 +576,91 @@ def superiority(runs_a: list[dict[str, Any]], runs_b: list[dict[str, Any]], key:
     return sum((x > y) - (y > x) for x in sa for y in sb) / (len(sa) * len(sb))
 
 
+# A cell's problems as matrices, one row per problem (ascending id) and one column per run, built once per cell and
+# metric: the comparisons read each cell against every other method at every budget and time slot. Keyed by the rows'
+# id, holding the rows themselves so that the id cannot be reused while the entry lives.
+_MATRICES: dict[tuple[Any, ...], tuple[Any, Any]] = {}
+
+
+def _cached(rows: dict[Any, dict[str, Any]], tag: tuple[Any, ...], build: Any) -> Any:
+    k = (id(rows),) + tag
+    hit = _MATRICES.get(k)
+    if hit is None or hit[0] is not rows:
+        hit = _MATRICES[k] = (rows, build())
+    return hit[1]
+
+
+def _problem_runs(rows: dict[Any, dict[str, Any]]) -> tuple[np.ndarray, list[list[dict[str, Any]]]]:
+    def build() -> tuple[np.ndarray, list[list[dict[str, Any]]]]:
+        per = problems_of(rows, None)[0]
+        return np.asarray(list(per), dtype=np.int64), list(per.values())
+    return _cached(rows, ("runs",), build)
+
+
+def _width(runs: list[list[dict[str, Any]]]) -> int:
+    return max((len(r) for r in runs), default=0)
+
+
+def score_matrix(rows: dict[Any, dict[str, Any]], key: str, answered: bool = False) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """(problem ids, scores, mask): each run's rank_score of its comparison value, and whether the run takes part (it
+    exists, and has succeeded for the answered-only reading)."""
+    def build() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        ids, runs = _problem_runs(rows)
+        higher, ideal = METRIC_HIGHER[key], IDEAL.get(key)
+        sc = np.full((len(runs), _width(runs)), -np.inf)
+        mask = np.zeros(sc.shape, dtype=bool)
+        for i, rs in enumerate(runs):
+            for j, r in enumerate(rs):
+                if answered and not r["success"]:
+                    continue
+                mask[i, j] = True
+                sc[i, j] = rank_score(comparison_value(key, r.get(key)), higher, ideal)
+        return ids, sc, mask
+    return _cached(rows, ("score", key, answered), build)
+
+
+def value_matrix(rows: dict[Any, dict[str, Any]], key: str, answered: bool = False) -> tuple[np.ndarray, np.ndarray]:
+    """(problem ids, values): each problem's value as problem_value reads it after comparison_value (the mean of its
+    runs' finite transformed values; NaN without one)."""
+    def build() -> tuple[np.ndarray, np.ndarray]:
+        ids, runs = _problem_runs(rows)
+        tf = HIST_SPECS[key][2] if key in HIST_SPECS else None
+        out = np.full(len(runs), np.nan)
+        for i, rs in enumerate(runs):
+            x = problem_value([{key: comparison_value(key, r[key]), "success": r["success"]} for r in rs], key, tf, answered)[1]
+            if x is not None:
+                out[i] = x
+        return ids, out
+    return _cached(rows, ("value", key, answered), build)
+
+
+def rate_matrix(rows: dict[Any, dict[str, Any]], key: str) -> tuple[np.ndarray, np.ndarray]:
+    """(problem ids, each problem's share of hits over its runs)."""
+    def build() -> tuple[np.ndarray, np.ndarray]:
+        ids, runs = _problem_runs(rows)
+        return ids, np.asarray([sum(1.0 if r[key] else 0.0 for r in rs) / len(rs) for rs in runs])
+    return _cached(rows, ("rate", key), build)
+
+
+def _align(ia: np.ndarray, ib: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    common = np.intersect1d(ia, ib)
+    return common, np.searchsorted(ia, common), np.searchsorted(ib, common)
+
+
+def superiority_of(sa: np.ndarray, ma: np.ndarray, sb: np.ndarray, mb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """superiority() over aligned problems at once: (values, defined), the value 0 where no run pair exists."""
+    num = np.zeros(sa.shape[0])
+    den = np.zeros(sa.shape[0])
+    for r in range(sa.shape[1]):
+        for q in range(sb.shape[1]):
+            both = ma[:, r] & mb[:, q]
+            x, y = sa[:, r], sb[:, q]
+            num += np.where(both, (x > y).astype(float) - (y > x).astype(float), 0.0)
+            den += both
+    ok = den > 0
+    return np.where(ok, num / np.maximum(den, 1), 0.0), ok
+
+
 def paired_cell(rows_a: dict[Any, dict[str, Any]], rows_b: dict[Any, dict[str, Any]], expected: int | None = None) -> dict[str, Any] | None:
     """Two methods on the problems both have, one problem at a time over every combination of their runs (runs of
     different methods share the problem, not the points, so pairing them by run number would be arbitrary).
@@ -581,29 +668,25 @@ def paired_cell(rows_a: dict[Any, dict[str, Any]], rows_b: dict[Any, dict[str, A
     Any other metric: the difference of the problems' values where both have one, [problems, sum, sum of squares], then
     the superiority over every problem (failures worst, recovered runs tied), [problems, sum, sum of squares, better,
     worse]. A metric with a worst value also ships its answered-only reading (key + ANSWERED)."""
-    pa, pb = problems_of(rows_a, expected)[0], problems_of(rows_b, expected)[0]
-    common = sorted(set(pa) & set(pb))
-    if not common:
+    common, ja, jb = _align(_problem_runs(rows_a)[0], _problem_runs(rows_b)[0])
+    if not common.size:
         return None
     out: dict[str, Any] = {}
     for k in PAIRED_KEYS:
         if k in RATE_KEYS:
-            ds = [sum(1.0 if r[k] else 0.0 for r in pa[i]) / len(pa[i]) - sum(1.0 if r[k] else 0.0 for r in pb[i]) / len(pb[i]) for i in common]
-            out[k] = [len(ds)] + _sums(ds) + [sum(1 for d in ds if d > 0), sum(1 for d in ds if d < 0)]
+            ds = rate_matrix(rows_a, k)[1][ja] - rate_matrix(rows_b, k)[1][jb]
+            out[k] = [int(ds.size)] + _sums(list(ds)) + [int((ds > 0).sum()), int((ds < 0).sum())]
             continue
-        tf = HIST_SPECS[k][2] if k in HIST_SPECS else None
         for name, answered in [(k, False)] + ([(k + ANSWERED, True)] if k in WORST else []):
-            ds, ss = [], []
-            for i in common:
-                va = problem_value([dict(r, **{k: comparison_value(k, r[k])}) for r in pa[i]], k, tf, answered)[1]
-                vb = problem_value([dict(r, **{k: comparison_value(k, r[k])}) for r in pb[i]], k, tf, answered)[1]
-                if va is not None and vb is not None:
-                    ds.append(va - vb)
-                sup = superiority(pa[i], pb[i], k, answered)
-                if sup is not None:
-                    ss.append(sup)
-            out[name] = [len(ds)] + _sums(ds) + [len(ss)] + _sums(ss) + [sum(1 for x in ss if x > 0), sum(1 for x in ss if x < 0)]
-    return {"n": len(common), "m": out}
+            va, vb = value_matrix(rows_a, k, answered)[1][ja], value_matrix(rows_b, k, answered)[1][jb]
+            both = np.isfinite(va) & np.isfinite(vb)
+            ds = (va - vb)[both]
+            _, sa, ma = score_matrix(rows_a, k, answered)
+            _, sb, mb = score_matrix(rows_b, k, answered)
+            sup, ok = superiority_of(sa[ja], ma[ja], sb[jb], mb[jb])
+            ss = sup[ok]
+            out[name] = [int(ds.size)] + _sums(list(ds)) + [int(ss.size)] + _sums(list(ss)) + [int((ss > 0).sum()), int((ss < 0).sum())]
+    return {"n": int(common.size), "m": out}
 
 
 def budget_key(t: float) -> str:
@@ -641,13 +724,14 @@ def rank_pair_cell(rows_a: dict[Any, dict[str, Any]], rows_b: dict[Any, dict[str
                    keys: list[str] | None = None) -> list[float] | None:
     """[problems both methods have, then (sum, sum of squares) of the per-problem superiority per rank key]: the page
     combines them over problem sets into the chance that one method beats the other on a problem, and places from those."""
-    pa, pb = problems_of(rows_a, expected)[0], problems_of(rows_b, expected)[0]
-    common = sorted(set(pa) & set(pb))
-    if not common:
+    common, ja, jb = _align(_problem_runs(rows_a)[0], _problem_runs(rows_b)[0])
+    if not common.size:
         return None
-    out: list[float] = [len(common)]
+    out: list[float] = [int(common.size)]
     for k in RANK_KEYS if keys is None else keys:
-        out += _sums([superiority(pa[i], pb[i], k) or 0.0 for i in common])
+        _, sa, ma = score_matrix(rows_a, k)
+        _, sb, mb = score_matrix(rows_b, k)
+        out += _sums(list(superiority_of(sa[ja], ma[ja], sb[jb], mb[jb])[0]))
     return out
 
 

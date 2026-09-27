@@ -483,12 +483,12 @@
     if (metric.median_via) {
       var pf = pooledHist(metric.median_via, m, r, cs); if (!pf) { return null; }
       var q = function (share_) { return r2Quantile(ph, pf, Math.max(1e-9, Math.min(ph.n, share_ * ph.n))); }, half0 = medianShareHalf(pf, quantileBin(pf, pf.n / 2)), qm = q(0.5);
-      out = { v: qm.v, lo: q(Math.max(0, 0.5 - half0)).v, hi: q(Math.min(1, 0.5 + half0)).v, n: ph.n, edge: qm.edge, share: share };
+      out = { v: qm.v, lo: q(Math.max(0, 0.5 - half0)).v, hi: q(Math.min(1, 0.5 + half0)).v, n: ph.n, S: ph.parts.length, edge: qm.edge, share: share };
       return out;
     }
     var mid = quantileBin(ph, ph.n / 2), half = medianShareHalf(ph, mid);
     var lo = quantileBin(ph, Math.max(1e-9, (0.5 - half) * ph.n)), hi = quantileBin(ph, Math.min(ph.n, (0.5 + half) * ph.n));
-    return { v: binVal(ph, mid), lo: binVal(ph, lo), hi: binVal(ph, hi), n: ph.n, edge: mid === 0 ? -1 : (mid === ph.nb - 1 ? 1 : 0), share: share };
+    return { v: binVal(ph, mid), lo: binVal(ph, lo), hi: binVal(ph, hi), n: ph.n, S: ph.parts.length, edge: mid === 0 ? -1 : (mid === ph.nb - 1 ? 1 : 0), share: share };
   }
 
   function fmt(metric, x, edge) {
@@ -698,7 +698,7 @@
         var least = thin(sx) && (!thin(sy) || sx.share < sy.share) ? sx : sy;
         if (thin(sx) || thin(sy)) { thinDrawn = true; }
         pts.push({ x: sx.v, xlo: sx.lo, xhi: sx.hi, v: sy.v, lo: sy.lo, hi: sy.hi, hollow: thin(sx) || thin(sy),
-          title: m.label + " @ " + r + ": " + fmt(xm, sx.v, sx.edge) + " " + xm.short + ", " + fmt(ym, sy.v, sy.edge) + " " + ym.short + ", " + Math.round(sy.n).toLocaleString() + " problems in " + (sy.S || "") + " problem sets" + (least.share < 1 ? ", " + shareText(least) : "") });
+          title: m.label + " @ " + r + ": " + fmt(xm, sx.v, sx.edge) + " " + xm.short + ", " + fmt(ym, sy.v, sy.edge) + " " + ym.short + ", " + Math.round(sy.n).toLocaleString() + " problems in " + sy.S + (sy.S === 1 ? " problem set" : " problem sets") + (least.share < 1 ? ", " + shareText(least) : "") });
         [sx.v, anyCI() ? sx.lo : sx.v, anyCI() ? sx.hi : sx.v].forEach(function (v) { if (isFinite(v)) { xmin = Math.min(xmin, v); xmax = Math.max(xmax, v); } });
         [sy.v, anyCI() ? sy.lo : sy.v, anyCI() ? sy.hi : sy.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
       });

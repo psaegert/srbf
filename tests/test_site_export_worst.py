@@ -138,3 +138,53 @@ def test_a_histogram_counts_each_problem_once_and_a_failed_fit_at_the_worst_end(
     lo, hi, _ = export.HIST_SPECS["log10_fvu_val"]
     h = dict(map(tuple, export.hist_of(problems, "log10_fvu_val", lo, hi)))
     assert sum(h.values()) == 2 and h[export.NB - 1] == 1                   # two problems; the failed one in the top bin
+
+
+def test_the_comparison_matrices_match_the_scalar_reference():
+    """paired_cell and rank_pair_cell compute every problem at once; per problem they must equal superiority() and
+    problem_value() on its runs, whatever the runs hold: one or two runs, failures, infinities, missing values."""
+    import numpy as np
+    rng = np.random.default_rng(5)
+
+    def value(k):
+        u = rng.random()
+        if u < 0.15:
+            return None
+        if k.startswith("log10_fvu"):
+            return -math.inf if u < 0.25 else float(np.round(rng.normal(-5, 4), 1))
+        return float(np.round(rng.uniform(0.2, 3.0), 1))
+
+    def rows_of():
+        out = {}
+        for i in range(60):
+            for d in range(1, 1 + int(rng.integers(1, 3))):
+                ok = rng.random() < 0.8
+                out[(d, i)] = _row(success=1.0 if ok else 0.0, numeric_recovery_val=float(rng.random() < 0.4),
+                                   **{k: (value(k) if ok else None) for k in export.CONT_KEYS if k in export.PAIRED_KEYS + export.RANK_KEYS})
+        return out
+
+    a, b = rows_of(), rows_of()
+    pa, pb = export.problems_of(a, None)[0], export.problems_of(b, None)[0]
+    common = sorted(set(pa) & set(pb))
+    rank = export.rank_pair_cell(a, b)
+    for ki, k in enumerate(export.RANK_KEYS):
+        sup = [export.superiority(pa[i], pb[i], k) or 0.0 for i in common]
+        assert rank[1 + 2 * ki] == round(sum(sup), 6), k
+    paired = export.paired_cell(a, b)["m"]
+    for k in export.PAIRED_KEYS:
+        if k in export.RATE_KEYS:
+            continue
+        tf = export.HIST_SPECS[k][2] if k in export.HIST_SPECS else None
+        for name, answered in [(k, False)] + ([(k + export.ANSWERED, True)] if k in export.WORST else []):
+            ds, ss = [], []
+            for i in common:
+                va = export.problem_value([dict(r, **{k: export.comparison_value(k, r[k])}) for r in pa[i]], k, tf, answered)[1]
+                vb = export.problem_value([dict(r, **{k: export.comparison_value(k, r[k])}) for r in pb[i]], k, tf, answered)[1]
+                if va is not None and vb is not None:
+                    ds.append(va - vb)
+                s = export.superiority(pa[i], pb[i], k, answered)
+                if s is not None:
+                    ss.append(s)
+            want = [len(ds), round(sum(ds), 6), round(sum(d * d for d in ds), 6), len(ss), round(sum(ss), 6),
+                    round(sum(x * x for x in ss), 6), sum(1 for x in ss if x > 0), sum(1 for x in ss if x < 0)]
+            assert len(paired[name]) == len(want) and all(abs(g - w) < 1e-6 for g, w in zip(paired[name], want)), (name, paired[name], want)
