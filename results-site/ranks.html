@@ -69,7 +69,8 @@
             narrow win counts as much as a wide one. Ranks therefore measure how <em>consistently</em>
             a method is ahead, while the paired comparisons measure <em>by how much</em>.
             A method without a usable formula for a problem is placed last on
-            it, on every metric, and two formulas that both meet Numeric Recovery tie.
+            it, on every metric. On log10 FVU, two formulas that both meet Numeric Recovery tie, however
+            much smaller one's error is below the criterion.
           </p>
         </div>
       </section>
@@ -99,10 +100,11 @@
             Each pair of methods is tested: could \(P_{ij}\) be one half, so that neither does better
             more often? The test is a t-test over the problem sets, like the interval of an average.
             Since every pair is tested, the p-values are corrected for the number of pairs (Holm's
-            method), so the chance that chance alone separates any pair stays below 5 %. Methods in a
-            row of the standings that no test tells apart share a shaded band. That does not prove they
-            are equal; with more problem sets, a difference might show. A method you add with a key is
-            tested among its own pairs, so it never changes the verdict between the others.
+            method), so the chance that chance alone separates any pair stays below 5 %. Neighbouring
+            methods in the standings that no test tells apart share a shaded band. That does not prove they
+            are equal; with more problem sets, a difference might show. A method that is shown only
+            with an access key is tested among its own pairs, so it never changes the verdict between the
+            published methods.
           </p>
         </div>
       </section>

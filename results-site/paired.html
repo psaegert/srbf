@@ -55,9 +55,9 @@
       <p class="lede">
         Every method gets the same problems, so two methods A and B can be compared problem by
         problem: on each problem \(k\), take A's value minus B's, \(\Delta_k = x_A^{(k)} - x_B^{(k)}\),
-        and look at these differences. A problem's value is the average of its runs, so every run of
-        A meets every run of B. The differences are averaged over the problem sets like any value (see
-        <a href="guide.html#averaging">How values are averaged</a>), with a 95 % interval. This is more sensitive than comparing two averages. Some
+        and look at these differences. A problem's value is the average of its runs. The differences are
+        averaged over the problem sets like any value (see <a href="guide.html#averaging">How values
+        are averaged</a>), with a 95 % interval. This is more sensitive than comparing two averages. Some
         problems are hard for every method, which widens the interval of each average, but that
         shared difficulty cancels in the difference. So two intervals can overlap even when one
         method is better problem after problem.
@@ -88,9 +88,10 @@
         <div>
           <p>
             For the other metrics, the difference \(\hat{\Delta}\) takes the problems where both
-            methods have a finite value. Two formulas that both meet Numeric Recovery tie: log10 FVU
-            is read no lower than \(\log_{10} 2^{-23}\), so digits below the recovery criterion do not
-            count. Ratios are compared on a log scale and shown as factors: \(\times\, 0.5\) means
+            methods have a finite value. Two formulas that both meet Numeric Recovery tie: here log10
+            FVU is read no lower than \(\log_{10} 2^{-23} \approx -6.92\), the recovery criterion, so
+            two recovered formulas are not told apart by their error below it. (Means go further down,
+            to -15.65, the precision of a 64-bit float.) Ratios are compared on a log scale and shown as factors: \(\times\, 0.5\) means
             half. The p-value does not test \(\hat{\Delta}\), which a few very large differences can
             move. It tests how often A does better than B on a problem: each problem's
             <em>superiority</em> is the share of run pairs A wins minus the share it loses, on the

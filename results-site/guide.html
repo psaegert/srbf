@@ -183,8 +183,8 @@
             at a time, and each method runs over its own range of budgets. A point, a table value or a rank is shown only once the method has results for
             every problem set you selected, at that budget. Then every value covers the same problems.
             A problem set counts as done once each of its problems has at least one finished run. Each
-            problem is run twice and counts with the runs it has, so while the second runs finish, some
-            problems rest on one run.
+            problem is run twice, and its value is the average of its finished runs, so while the second
+            runs finish, some problems rest on one run.
           </p>
           <p>
             The reason is that problem sets differ a lot in difficulty. An average over whichever
@@ -223,7 +223,7 @@
         <div>
           <p>
             The problems come in problem sets, and the sets differ a lot, in difficulty and in size:
-            the largest, erbench-syneq, holds 5,301 of the 6,660 problems. A plain average over all
+            the largest holds 5,301 of the 6,660 problems. A plain average over all
             problems would mostly describe that one set. Every value is therefore averaged in three
             steps. First, each problem's runs are averaged, so every problem counts once. Second, each
             problem set's problems are averaged. Third, the problem sets are averaged, each weighted by
@@ -265,10 +265,11 @@
             \hat{\theta} \;\pm\; t_{S-1,\,0.975}\, \sqrt{\frac{\sum_s w_s\, (\bar{x}_s - \hat{\theta})^2}{(S - 1) \sum_s w_s}} .
           $$
           <p>
-            With one problem set selected, the interval covers that set's problems instead. Tables and
-            tooltips also show where the value of one more problem set would fall, with 95 %
-            probability. That range is much wider than the interval: the interval says how precisely
-            the average is known, the range how far single problem sets spread around it.
+            With one problem set selected, the interval comes from the spread of that set's own problems
+            instead. Tables and tooltips also show where the value of one more problem set would fall,
+            with 95 % probability, once at least three problem sets are selected. That range is much
+            wider than the interval: the interval says how precisely the average is known, the range how
+            far single problem sets spread around it.
           </p>
         </div>
       </section>
