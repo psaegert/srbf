@@ -307,8 +307,8 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 .explorer-v2 .v2pnum { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .explorer-v2 .v2pnum small { font-size: 12px; font-weight: 400; color: var(--ink-faint); }
 .explorer-v2 .v2segs { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 2px; }
-.explorer-v2 .v2seg { display: block; height: 9px; background: var(--line); border-radius: 2px; overflow: hidden; }
-.explorer-v2 .v2seg i { display: block; height: 100%; background: var(--accent); }
+.explorer-v2 .v2pbar { display: block; height: 9px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.explorer-v2 .v2pbar i { display: block; height: 100%; background: var(--accent); }
 .explorer-v2 .v2paxis { grid-column: 2; display: flex; justify-content: space-between; margin-top: -3px; font-size: 11px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
 /* the finished methods: names on one line */
 .explorer-v2 .v2done { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 10px 0 14px; }

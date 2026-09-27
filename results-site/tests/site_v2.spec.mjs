@@ -631,6 +631,20 @@ test('a rate is shown per problem set, with a way to a distribution', async ({ p
   await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toHaveAttribute('aria-label', /one histogram per method/);
 });
 
+// A button group must show its labels: clicking works even when a style clips the buttons to a sliver, so the test
+// measures them (a progress bar's class once shared the group's name and cut every group to 9 px).
+test('every button group shows its labels in full', async ({ page }) => {
+  for (const url of ['/explorer.html?release=2026-09&v=dist&r=16', '/explorer.html?release=2026-09&v=dist&dv=ecdf&r=16', '/explorer.html?release=2026-09&v=preds']) {
+    await page.goto(url);
+    const btns = page.locator(V2 + ' .v2segbtn');
+    await expect(btns.first()).toBeVisible({ timeout: 15000 });
+    const boxes = await btns.evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(), g = e.closest('.v2seg').getBoundingClientRect();
+      return { text: e.textContent.trim(), h: r.height, clipped: g.height + 0.5 < r.height, fits: e.scrollWidth <= e.clientWidth + 1 }; }));
+    expect(boxes.length).toBeGreaterThan(1);
+    for (const b of boxes) { expect(b.text.length).toBeGreaterThan(0); expect(b.h).toBeGreaterThanOrEqual(20); expect(b.clipped, b.text).toBe(false); expect(b.fits, b.text).toBe(true); }
+  }
+});
+
 // ---- Averaging over problem sets -------------------------------------------------------------------------------------
 // The explorer's own averaging (random effects over problem sets) against the reference, scripts/site_random_effects.py,
 // on the cases the reference wrote (scripts/site_random_effects_fixture.py): the page's code is cut out and run as it is.
