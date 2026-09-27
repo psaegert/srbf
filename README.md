@@ -47,12 +47,13 @@ The published results are on the [results explorer](https://psaegert.github.io/s
 ## Install
 
 ```bash
-pip install srbf                 # the framework, the metrics and the Flash-ANSR adapter
+pip install srbf                 # the framework, the metrics and the adapters of the worker protocol
 pip install "srbf[baselines]"    # plus what the PySR, NeSymReS and E2E adapters import
 pip install "srbf[analysis]"     # plus matplotlib, for the figures of `srbf analyze`
+pip install "srbf[flash-ansr]"   # plus flash-ansr, for the Flash-ANSR adapter
 ```
 
-srbf needs Python 3.12 or newer and installs `flash-ansr`, `symbolic-data` and `simplipy` with it.
+srbf needs Python 3.12 or newer and installs `symbolic-data` and `simplipy` with it.
 
 ## Quickstart
 
@@ -60,7 +61,7 @@ No GPU and no model are needed for a first run: `srbf new` writes an adapter who
 a linear model.
 
 ```bash
-export FLASH_ANSR_ROOT=$PWD/bench                                   # models, results and adapters live here
+export SRBF_ROOT=$PWD/bench                                         # models, results and adapters live here
 srbf new mymethod --python "$(which python)"
 srbf check   -c bench/adapters/mymethod/config.yaml                  # two real problems, every step named
 srbf run     -c bench/adapters/mymethod/config.yaml --experiment nguyen -v
@@ -70,8 +71,8 @@ srbf analyze -c bench/adapters/mymethod/config.yaml -o report        # report/re
 To evaluate a released Flash-ANSR model on one catalog at one budget:
 
 ```bash
-git clone https://github.com/psaegert/srbf && cd srbf && export FLASH_ANSR_ROOT=$PWD
-flash_ansr install psaegert/flash-ansr-v25.0-T8-3M
+git clone https://github.com/psaegert/srbf && cd srbf && pip install ".[flash-ansr]" && export SRBF_ROOT=$PWD
+hf download psaegert/flash-ansr-v25.0-T8-3M --local-dir models/psaegert/flash-ansr-v25.0-T8-3M
 srbf run -c configs/evaluation/scaling/flash-ansr-v25.0-T8-3M_srbf.yaml --experiment nguyen --sweep-filter ladder=32 -v
 ```
 

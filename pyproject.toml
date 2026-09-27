@@ -12,13 +12,12 @@ license-files = ["LICEN[CS]E*", "THIRD_PARTY_LICENSES*"]
 
 dependencies = [
     "scipy>=1.9",        # paired statistics: Wilcoxon signed-rank (zero_method pinned in reporting)
-    "flash-ansr>=0.18,<0.20",  # one-way dependency: FlashANSR.infer(), the CandidateLedger join, the ranking modes resolved through resolve_ranking
     "simplipy>=0.14.6,<0.15", # direct: baselines and the mu dialect; the line the reference checkpoint is qualified against
     "symbolic-data>=0.18,<0.19", # direct: catalog / ProblemSource data layer (CatalogSource wraps it), normalize_* (token_ops), the holdout family key the decontamination probes use
     "numpy>=1.24",
-    "pandas>=1.3",       # runtime: baselines imported top-level by model_adapters.py
-    "scikit-learn>=1.0", # runtime: baselines BaseEstimator, same reason
-    "torch>=2.0",        # direct in provenance/model_adapters/token_prediction/baselines
+    "pandas>=1.3",       # runtime: analysis tables, the refining baselines
+    "scikit-learn>=1.0", # runtime: the refining baselines' BaseEstimator
+    "torch>=2.0",        # direct in provenance/model_adapters/token_prediction/result_processing/baselines
     "tqdm",
     "pyyaml",            # config loading
     "zss",               # tree-edit-distance metric (eval-only)
@@ -34,9 +33,12 @@ baselines = [
 ]
 # srbf.analysis figures (leaderboard/scaling/per-benchmark/distribution -> the results page).
 analysis = ["matplotlib>=3.5"]
+# srbf does not need flash-ansr. The adapters built on it (flash_ansr) and the two baselines that fit their constants
+# with its refiner (lample_charton, brute_force) do; they import it when they are built.
+flash-ansr = ["flash-ansr>=0.18,<0.20"]
 # the flash_ansr_hybrid adapter: flash-ansr's hybrid with its PySR stage
 hybrid = ["flash-ansr[pysr]>=0.19,<0.20"]
-dev = ["pre-commit", "pytest", "pytest-cov", "mypy", "flake8", "srbf[baselines]", "srbf[analysis]"]
+dev = ["pre-commit", "pytest", "pytest-cov", "mypy", "flake8", "srbf[baselines]", "srbf[analysis]", "srbf[flash-ansr]"]
 
 [project.scripts]
 srbf = "srbf.__main__:main"

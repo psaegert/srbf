@@ -3,7 +3,8 @@ import pytest
 from simplipy import SimpliPyEngine
 
 from symbolic_data import LampleChartonCatalog
-from srbf.baselines.lample_charton_model import LampleChartonModel
+pytest.importorskip("flash_ansr", reason="the refining baselines fit their constants with flash-ansr's refiner (pip install 'srbf[flash-ansr]')")
+from srbf.baselines.lample_charton_model import LampleChartonModel  # noqa: E402
 
 
 @pytest.fixture(scope="module")

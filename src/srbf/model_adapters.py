@@ -11,7 +11,6 @@ from contextlib import nullcontext
 from typing import Any, Callable, Iterable, Mapping, TYPE_CHECKING
 
 import numpy as np
-from srbf.baselines import BruteForceModel, LampleChartonModel
 from symbolic_data.token_ops import normalize_expression, normalize_skeleton
 # sympy is imported lazily inside the two baseline adapters that use it (E2E, NeSymReS);
 # it is an optional `[baselines]` extra, not a core runtime dependency.
@@ -21,9 +20,7 @@ from srbf.spelling import engine_spelling
 from srbf.variable_renaming import (
     E2E_FIRST_INDEX, NESYMRES_FIRST_INDEX, rename_variable_tokens, rename_variables_in_infix, skeleton_variable_names)
 from srbf.candidate_store import CandidateStoreWriter
-from flash_ansr.flash_ansr import FlashANSR
-from flash_ansr.refine import ConvergenceError
-from flash_ansr.scoring import compute_fvu
+from srbf.metrics.numeric import fvu as _fvu
 
 PySRRegressor: type[Any] | None  # pragma: no cover - assigned lazily
 PySRRegressor = None
@@ -42,6 +39,9 @@ except Exception:  # pragma: no cover - optional dependency missing
     _HAVE_NESYMRES = False
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
+    # flash-ansr is an optional install: the adapters and baselines built on it import it when they are built
+    from flash_ansr.flash_ansr import FlashANSR
+    from srbf.baselines import BruteForceModel, LampleChartonModel
     from nesymres.architectures.model import Model as NesymresModel  # type: ignore
 else:
     NesymresModel = Any
@@ -138,6 +138,8 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         complexity_value = self._resolve_complexity(record)
         variable_names = record.get("variable_names")
         x_val = sample.x_validation if sample.x_validation.shape[0] > 0 else None
+
+        from flash_ansr.refine import ConvergenceError   # flash-ansr is installed wherever this adapter exists
 
         numpy_errors = getattr(self.model, "numpy_errors", None)
         fit_t0 = time.time()
@@ -862,13 +864,12 @@ class FlashANSRHybridAdapter(EvaluationModelAdapter):
 
 
 def _compute_fvu_from_predictions(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """The FVU an adapter records next to its prediction: srbf's own metric (srbf.metrics.fvu), NaN without points."""
     y_true_arr = np.asarray(y_true, dtype=float).reshape(-1)
     y_pred_arr = np.asarray(y_pred, dtype=float).reshape(-1)
     if y_true_arr.size == 0 or y_pred_arr.size == 0:
         return float("nan")
-    loss = float(np.mean((y_true_arr - y_pred_arr) ** 2))
-    variance = float(np.var(y_true_arr))
-    return compute_fvu(loss, y_true_arr.size, variance)
+    return float(_fvu(y_true_arr, y_pred_arr))
 
 
 def _print_fvu_summary(support_fvu: float, validation_fvu: float | None) -> None:

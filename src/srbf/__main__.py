@@ -62,7 +62,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     new_parser = subparsers.add_parser("new", help="Scaffold an adapter: a worker, its suite config, requirements and a smoke test")
     new_parser.add_argument('name', type=str, help='The method name, a lowercase identifier (e.g. mymethod)')
-    new_parser.add_argument('--dir', type=str, default=None, help='Where the adapter directory goes (default: $FLASH_ANSR_ROOT/adapters, else ./adapters)')
+    new_parser.add_argument('--dir', type=str, default=None, help='Where the adapter directory goes (default: $SRBF_ROOT/adapters, else ./adapters)')
     new_parser.add_argument('--python', type=str, default=None, help="The method's interpreter to write into the config (default: {{ROOT}}/envs/<name>/bin/python)")
     new_parser.add_argument('--repo', action='store_true', help='Write into the srbf checkout layout (src/srbf/worker/models, configs/evaluation, envs/, tests/test_workers) for a pull request')
     new_parser.add_argument('--force', action='store_true', help='Overwrite files that exist')
@@ -96,7 +96,7 @@ def main(argv: list[str] | None = None) -> None:
     match args.command_name:
         case 'run':
             from srbf.benchmark import Benchmark
-            from flash_ansr.utils.paths import substitute_root_path
+            from srbf.paths import substitute_root_path
 
             config_path = substitute_root_path(args.config)
             if args.verbose:
@@ -149,7 +149,7 @@ def main(argv: list[str] | None = None) -> None:
         case 'status':
             from srbf.benchmark import Benchmark
             from srbf.shards import parse_shard
-            from flash_ansr.utils.paths import substitute_root_path
+            from srbf.paths import substitute_root_path
 
             sweep_filter = dict(pair.split('=', 1) for pair in args.sweep_filter.split(',') if '=' in pair) if args.sweep_filter else None
             runs = Benchmark.runs_from_config(substitute_root_path(args.config), experiment=args.experiment, sweep_filter=sweep_filter,
@@ -218,7 +218,7 @@ def main(argv: list[str] | None = None) -> None:
                 print(f"  {index}. {text}")
         case 'check':
             from srbf.check import check_config
-            from flash_ansr.utils.paths import substitute_root_path
+            from srbf.paths import substitute_root_path
 
             sweep_filter = None
             if args.sweep_filter:

@@ -10,7 +10,7 @@ from srbf.suites import SRBF_CATALOGS
 
 
 def test_bench_layout_under_the_asset_root(tmp_path, monkeypatch):
-    monkeypatch.setenv("FLASH_ANSR_ROOT", str(tmp_path))
+    monkeypatch.setenv("SRBF_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
     scaffold = scaffold_adapter("mymethod")
     adapter_dir = tmp_path / "adapters" / "mymethod"
@@ -32,7 +32,7 @@ def test_bench_layout_under_the_asset_root(tmp_path, monkeypatch):
 
 
 def test_explicit_dir_and_python(tmp_path, monkeypatch):
-    monkeypatch.setenv("FLASH_ANSR_ROOT", str(tmp_path / "root"))
+    monkeypatch.setenv("SRBF_ROOT", str(tmp_path / "root"))
     scaffold = scaffold_adapter("other", directory=str(tmp_path / "elsewhere"), python="/opt/venv/bin/python")
     model_cfg = select_experiment(load_run_config(str(scaffold.config)), "fastsrb")["model_adapter"]
     assert model_cfg["worker"] == str(tmp_path / "elsewhere" / "other" / "worker.py")  # outside the root: absolute
@@ -70,7 +70,7 @@ def test_bad_names_and_missing_checkout(tmp_path, monkeypatch):
 def test_the_scaffolded_worker_fits_the_toy_problem(tmp_path, monkeypatch):
     from srbf.testing import fit_once
 
-    monkeypatch.setenv("FLASH_ANSR_ROOT", str(tmp_path))
+    monkeypatch.setenv("SRBF_ROOT", str(tmp_path))
     scaffold = scaffold_adapter("linear", python=sys.executable)
     record = fit_once(config=scaffold.config)
     assert record["prediction_success"], record.get("error")

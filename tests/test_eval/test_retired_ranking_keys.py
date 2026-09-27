@@ -48,6 +48,7 @@ def test_historical_doctrine_config_now_raises() -> None:
 
 
 def test_ranking_block_resolves_through_flash_ansr_not_a_second_copy() -> None:
+    pytest.importorskip("flash_ansr", reason="the ranking block is flash-ansr's (pip install 'srbf[flash-ansr]')")
     cfg = resolve_ranking_block({"ranking": {"mode": "weighted", "weights": {"n_nodes": 0.05}}}, {})
     assert cfg.as_dict() == {"mode": "weighted", "weights": {"n_nodes": 0.05}}
     with pytest.raises(ValueError, match="model_adapter.evaluation_config.ranking"):
