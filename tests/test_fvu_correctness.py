@@ -18,8 +18,13 @@ import numpy as np
 import pytest
 
 from srbf.metrics.numeric import LOG10_FVU_FLOOR, fvu, is_perfect_fit, log10_fvu, safe_divide
-from flash_ansr import scoring
-from flash_ansr.scoring import compute_fvu, score_from_fvu
+
+try:   # flash-ansr is an optional install: the tests of its selection FVU run where it is installed
+    from flash_ansr import scoring
+    from flash_ansr.scoring import compute_fvu, score_from_fvu
+except ImportError:
+    scoring = compute_fvu = score_from_fvu = None  # type: ignore[assignment]
+needs_flash_ansr = pytest.mark.skipif(scoring is None, reason="flash-ansr is not installed (pip install 'srbf[flash-ansr]')")
 
 F32_EPS = float(np.finfo(np.float32).eps)
 
@@ -41,6 +46,7 @@ class TestScaleInvariance:
         yt = alpha * np.array([1.0, 2.0, 3.0, 4.0, 5.0])
         assert fvu(yt, np.full_like(yt, yt.mean())) == pytest.approx(1.0, rel=1e-9)
 
+    @needs_flash_ansr
     @pytest.mark.parametrize("alpha", [1e-30, 1e-15, 1.0, 1e15, 1e30, 1e60])
     def test_scoring_fvu_scale_invariant(self, alpha):
         # compute_fvu(loss, n, var); a common data rescale multiplies BOTH loss and var by alpha**2
@@ -56,12 +62,14 @@ class TestScaleInvariance:
 class TestTinyMagnitudeBugRegression:
     # magnitudes straddle the old absolute floor (FLOAT64_EPS=2.2e-16): every value <= ~2e-16 (i.e.
     # |y| <~ 1.5e-8) was corrupted by the old code -- not exotic. All genuinely fail on the old floor.
+    @needs_flash_ansr
     @pytest.mark.parametrize("v", [2.0, 1e-8, 1e-15, 2.2e-16, 1e-16, 1e-17, 1e-32, 1e-64, 1e-100])
     def test_scoring_predict_mean_is_one_regardless_of_magnitude(self, v):
         # predict-the-mean => loss == variance => fvu == 1.0, at EVERY magnitude. The bug returned
         # loss/FLOAT64_EPS ~ 1e-49 for v=1e-64 (spuriously perfect).
         assert compute_fvu(v, 10, v) == pytest.approx(1.0, rel=1e-12)
 
+    @needs_flash_ansr
     @pytest.mark.parametrize("var", [1e-30, 1e-64])
     def test_constant_candidate_loses_selection_to_correct(self, var):
         # The ACTUAL bug was mis-SELECTION: on a tiny-magnitude target both a trivial constant
@@ -74,6 +82,7 @@ class TestTinyMagnitudeBugRegression:
         # and the constant is no longer a (spurious) perfect fit
         assert compute_fvu(var, 100, var) == pytest.approx(1.0, rel=1e-9)
 
+    @needs_flash_ansr
     def test_scoring_tiny_constant_is_not_perfect(self):
         # var(y) ~ 1e-64; a constant candidate has loss ~ var -> fvu ~ 1.0, NOT < float32 eps
         assert compute_fvu(2.0e-64, 5, 2.0e-64) > F32_EPS
@@ -89,6 +98,7 @@ class TestTinyMagnitudeBugRegression:
 # CROSS-PATH CONSISTENCY: compute_fvu(loss, n, var(ddof=0)) == eval fvu, for the same data
 # --------------------------------------------------------------------------------------------------
 class TestCrossPathConsistency:
+    @needs_flash_ansr
     @pytest.mark.parametrize("seed", range(8))
     @pytest.mark.parametrize("alpha", [1e-20, 1.0, 1e20])
     def test_scoring_matches_eval_ddof0(self, seed, alpha):
@@ -105,17 +115,20 @@ class TestCrossPathConsistency:
 # DEFINITIONAL CASES (both paths)
 # --------------------------------------------------------------------------------------------------
 class TestDefinitional:
+    @needs_flash_ansr
     def test_perfect_fit_zero(self):
         y = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
         assert fvu(y, y) == 0.0
         assert is_perfect_fit(y, y)
         assert compute_fvu(0.0, 5, 2.0) == 0.0
 
+    @needs_flash_ansr
     def test_predict_mean_is_one(self):
         y = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
         assert fvu(y, np.full_like(y, 3.0)) == pytest.approx(1.0, rel=1e-12)
         assert compute_fvu(2.0, 5, 2.0) == pytest.approx(1.0)
 
+    @needs_flash_ansr
     def test_worse_than_mean_above_one_not_clamped(self):
         y = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
         yp = np.array([5.0, 4.0, 3.0, 2.0, 1.0])
@@ -141,6 +154,7 @@ class TestConstantTarget:
         assert fvu(c, c + 1.0) == np.inf        # wrong const -> inf
         assert not is_perfect_fit(c, c + 1.0)
 
+    @needs_flash_ansr
     def test_scoring_constant_target(self):
         assert compute_fvu(0.0, 5, 0.0) == 0.0          # zero residual -> perfect
         assert compute_fvu(0.25, 5, 0.0) == np.inf      # nonzero residual -> inf
@@ -150,19 +164,23 @@ class TestConstantTarget:
 # NON-FINITE INPUTS -> WORST (never spuriously best)
 # --------------------------------------------------------------------------------------------------
 class TestNonFiniteIsWorst:
+    @needs_flash_ansr
     @pytest.mark.parametrize("loss", [np.nan, np.inf])
     def test_scoring_non_finite_loss_is_inf(self, loss):
         assert compute_fvu(loss, 5, 2.0) == np.inf
 
+    @needs_flash_ansr
     @pytest.mark.parametrize("var", [np.nan, np.inf])
     def test_scoring_non_finite_variance_is_inf(self, var):
         assert compute_fvu(0.5, 5, var) == np.inf
 
+    @needs_flash_ansr
     @pytest.mark.parametrize("bad_fvu", [-1.0, np.inf, -np.inf, np.nan])
     def test_score_from_fvu_non_finite_is_worst(self, bad_fvu):
         # a diverged/invalid candidate must score WORST (+inf), not best (ranking-inversion guard)
         assert score_from_fvu(bad_fvu, 0, 0, None, 0.0, 0.0, 0.0) == np.inf
 
+    @needs_flash_ansr
     def test_score_from_fvu_perfect_is_best_finite(self):
         assert score_from_fvu(0.0, 0, 0, None, 0.0, 0.0, 0.0) == pytest.approx(float(np.log10(scoring.FLOAT64_EPS)))
 
@@ -265,15 +283,18 @@ class TestInputContract:
 # NO REGRESSION + n=1 divergence + RECOVERY PROOF
 # --------------------------------------------------------------------------------------------------
 class TestRegressionAndScope:
+    @needs_flash_ansr
     def test_in_distribution_scoring_unchanged(self):
         # normal-magnitude scoring (var >> FLOAT64_EPS) is byte-identical to the pre-fix behaviour
         assert compute_fvu(0.5, 10, 2.0) == 0.25
 
+    @needs_flash_ansr
     def test_single_sample_returns_raw_loss(self):
         # n<=1: variance undefined -> raw loss (deployed convention; consistency is scoped to n>=2)
         assert compute_fvu(0.5, 1, 2.0) == 0.5
         assert compute_fvu(0.5, 0, 2.0) == 0.5
 
+    @needs_flash_ansr
     def test_function_consistency_uses_ddof0(self):
         # compute_fvu == numeric.fvu when fed a ddof=0 variance (the function-level contract)
         rng = np.random.default_rng(3)
@@ -281,6 +302,7 @@ class TestRegressionAndScope:
         yp = yt + rng.normal(0, 0.4, 9)
         assert compute_fvu(float(np.mean((yt - yp) ** 2)), 9, float(np.var(yt))) == pytest.approx(fvu(yt, yp), rel=1e-9)
 
+    @needs_flash_ansr
     def test_ddof_ratio_is_constant_factor(self):
         # The deployed feeders (flash_ansr.py, both baselines) are now standardized to ddof=0 so the
         # selection FVU equals numeric.fvu exactly. This pins the math fact that the OLD ddof=1

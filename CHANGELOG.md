@@ -77,6 +77,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   method without a ladder when it stood next to one with a ladder.
 
 ### Changed
+- **srbf no longer depends on flash-ansr, and its root is `SRBF_ROOT`.** `{{ROOT}}` in a config stands for the
+  `SRBF_ROOT` directory (the current directory when it is unset); `FLASH_ANSR_ROOT` means nothing to srbf any more,
+  so a script that set only it must set `SRBF_ROOT`. srbf reads its configs and resolves `{{ROOT}}` itself
+  (`srbf.paths`). flash-ansr is an optional install, `pip install "srbf[flash-ansr]"`, needed only by the adapters
+  built on it (`flash_ansr`, and `flash_ansr_hybrid` through `srbf[hybrid]`) and by the two baselines that fit their
+  constants with its refiner (`lample_charton`, `brute_force`); they import it when they are built and say how to
+  install it when it is missing. A run of any other method never imports it: the FVU the NeSymReS and hybrid adapters
+  record is srbf's own `srbf.metrics.fvu`, and the run's provenance reads flash-ansr's version without importing it.
+  Flash-ANSR checkpoints are downloaded with `hf download <checkpoint> --local-dir "$SRBF_ROOT/models/<checkpoint>"`.
+  CI runs the suite with and without flash-ansr, and a test imports every srbf module where flash-ansr cannot be
+  imported.
 - **The results site averages over problem sets, with the problem as the unit.** A problem's value is the mean of
   its runs, and the catalogs are combined by a random-effects average (Paule–Mandel between-catalog variance,
   Hartung–Knapp intervals, rates on the logit scale, ratios as geometric means), so erbench-syneq no longer decides

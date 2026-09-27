@@ -19,7 +19,7 @@ import os
 import copy
 import pickle
 from pathlib import Path
-from typing import Any, Callable, Mapping, MutableMapping, Sequence, cast
+from typing import TYPE_CHECKING, Any, Callable, Mapping, MutableMapping, Sequence, cast
 
 from simplipy import SimpliPyEngine
 
@@ -33,12 +33,21 @@ from srbf.model_adapters import (
     NeSymReSAdapter,
 )
 from srbf.subprocess_adapter import BUILTIN_WORKERS, SubprocessAdapter
-from srbf.baselines import BruteForceModel, LampleChartonModel
-from flash_ansr.flash_ansr import FlashANSR
-from flash_ansr.scoring import RankingConfig, resolve_ranking
-from flash_ansr.utils.config_io import load_config
-from flash_ansr.utils.generation import create_generation_config
-from flash_ansr.utils.paths import substitute_root_path
+from srbf.paths import load_config, substitute_root_path
+
+if TYPE_CHECKING:
+    from flash_ansr.scoring import RankingConfig
+
+
+def require_flash_ansr(what: str) -> None:
+    """Raise a clear error when flash-ansr, an optional install, is missing: srbf itself never needs it, only
+    the adapters built on it (``flash_ansr``, ``flash_ansr_hybrid``) and the two baselines that fit their constants
+    with its refiner (``lample_charton``, ``brute_force``)."""
+    try:
+        import flash_ansr  # noqa: F401
+    except ImportError as exc:
+        raise ImportError(f"{what} needs flash-ansr, which srbf does not install by default: "
+                          f"pip install 'srbf[flash-ansr]'") from exc
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +155,10 @@ def build_model_adapter(config: Mapping[str, Any]) -> Any:
 
 
 def _build_flash_ansr_adapter(config: Mapping[str, Any]) -> FlashANSRAdapter:
+    require_flash_ansr("the flash_ansr adapter")
+    from flash_ansr.flash_ansr import FlashANSR
+    from flash_ansr.utils.generation import create_generation_config
+
     model_path = config.get("model_path")
     eval_config_payload = config.get("evaluation_config")
     if model_path is None or eval_config_payload is None:
@@ -404,6 +417,9 @@ def _build_e2e_adapter(config: Mapping[str, Any]) -> E2EAdapter:
 
 
 def _build_lample_charton_adapter(config: Mapping[str, Any]) -> LampleChartonAdapter:
+    require_flash_ansr("the lample_charton adapter")
+    from srbf.baselines import LampleChartonModel
+
     reject_retired_ranking_keys(config, where="model_adapter (lample_charton)")
     simplipy_engine = resolve_simplipy_engine(config, adapter_name="lample_charton")
 
@@ -428,6 +444,9 @@ def _build_lample_charton_adapter(config: Mapping[str, Any]) -> LampleChartonAda
 
 
 def _build_brute_force_adapter(config: Mapping[str, Any]) -> BruteForceAdapter:
+    require_flash_ansr("the brute_force adapter")
+    from srbf.baselines import BruteForceModel
+
     reject_retired_ranking_keys(config, where="model_adapter (brute_force)")
     simplipy_engine = resolve_simplipy_engine(config, adapter_name="brute_force")
 
@@ -489,7 +508,7 @@ def reject_retired_ranking_keys(
             )
 
 
-def resolve_ranking_block(config: Mapping[str, Any], eval_cfg: Mapping[str, Any]) -> RankingConfig:
+def resolve_ranking_block(config: Mapping[str, Any], eval_cfg: Mapping[str, Any]) -> "RankingConfig":
     """Resolve the REQUIRED ``ranking:`` block of a flash_ansr adapter into flash-ansr's RankingConfig.
 
     Read from ``model_adapter.ranking``; when absent, from ``evaluation_config.ranking``. When BOTH
@@ -521,6 +540,8 @@ def resolve_ranking_block(config: Mapping[str, Any], eval_cfg: Mapping[str, Any]
         raise ValueError(f"{where}: unknown keys {unknown}; allowed: {list(_RANKING_BLOCK_KEYS)}")
     if "mode" not in block:
         raise ValueError(f"{where}: 'mode' is required (one of mdl, weighted, pareto)")
+    require_flash_ansr("a flash_ansr ranking block")
+    from flash_ansr.scoring import resolve_ranking
     try:
         return resolve_ranking(
             str(block["mode"]),

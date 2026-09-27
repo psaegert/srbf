@@ -14,7 +14,7 @@ import re
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from flash_ansr.utils.paths import substitute_root_path
+from srbf.paths import substitute_root_path
 
 from srbf.store import ResultStore
 

@@ -7,7 +7,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, DefaultDict, Dict, Iterable, Mapping
 
-from flash_ansr.utils.paths import substitute_root_path
+from srbf.paths import substitute_root_path
 
 
 _REQUIRED_RESULT_FIELDS: dict[str, Any] = {

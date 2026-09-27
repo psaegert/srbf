@@ -5,7 +5,7 @@ block. To enter a method of your own, see [Adding your method](adapters.md).
 
 | `type` | method | installation |
 |---|---|---|
-| `flash_ansr` | [Flash-ANSR](#flash-ansr) and its prior reference | `flash_ansr install <checkpoint>` |
+| `flash_ansr` | [Flash-ANSR](#flash-ansr) and its prior reference | `pip install "srbf[flash-ansr]"`, then download a checkpoint |
 | `pysr` | [PySR](#pysr) | `pip install pysr`, in an environment of its own if you like |
 | `subprocess`, `worker: operon` | [Operon](#operon) | `pip install pyoperon==0.6.1 scikit-learn`, in an environment of its own |
 | `subprocess`, `worker: rilsrols` | [RILS-ROLS](#rils-rols) | `scripts/envs/build_rilsrols_env.sh`, an environment of its own |
@@ -13,7 +13,7 @@ block. To enter a method of your own, see [Adding your method](adapters.md).
 | `e2e` | [E2E](#e2e) | clone, patch, download weights |
 | `subprocess`, `worker: dso` | [DSR and uDSR\*](#dso) | `scripts/envs/build_dso_env.sh`: a conda environment with Python 3.7 |
 | `subprocess`, `worker: gpgomea` | [GP-GOMEA](#gp-gomea) | `scripts/envs/build_gpgomea_env.sh envs/gpgomea`: a conda environment of its own, compiled from source |
-| `lample_charton`, `brute_force` | [prior sampling and enumeration](#sampling-and-enumeration-baselines) | none |
+| `lample_charton`, `brute_force` | [prior sampling and enumeration](#sampling-and-enumeration-baselines) | `pip install "srbf[flash-ansr]"` (they fit constants with its refiner) |
 | `subprocess` | [any method, in its own environment](adapters.md) | yours |
 
 Two keys are common to every block. `config_provenance` states who chose the configuration
@@ -28,11 +28,12 @@ side they conflict, so give each its own virtual environment; srbf installs into
 ## Flash-ANSR
 
 ```bash
-flash_ansr install psaegert/flash-ansr-v25.0-T8-3M     # also: -T8-20M, -T8-120M
+pip install "srbf[flash-ansr]"
+hf download psaegert/flash-ansr-v25.0-T8-3M --local-dir "$SRBF_ROOT/models/psaegert/flash-ansr-v25.0-T8-3M"   # also: -T8-20M, -T8-120M
 ```
 
-The command comes with srbf and puts the checkpoint under
-`$FLASH_ANSR_ROOT/models/psaegert/flash-ansr-v25.0-T8-3M`. The configs
+The adapter needs `flash-ansr`, which srbf installs only with the `flash-ansr` extra, and `hf` (from
+`huggingface_hub`, which comes with it) puts the checkpoint where the configs look for it. The configs
 `configs/evaluation/scaling/flash-ansr-v25.0-T8-*_srbf.yaml` evaluate the three sizes on the whole
 suite along a ladder of 1 to 65,536 draws.
 
@@ -538,7 +539,8 @@ configuration that SRBench 2021 published its GP-GOMEA results with, on the Feyn
 ## Sampling and enumeration baselines
 
 `lample_charton` fits expressions sampled from a generative `symbolic-data` catalog and
-`brute_force` enumerates them. Neither has weights. Both need `simplipy_engine` and a `catalog` to
+`brute_force` enumerates them. Neither has weights, and both fit their constants with flash-ansr's refiner
+(`pip install "srbf[flash-ansr]"`). Both need `simplipy_engine` and a `catalog` to
 draw from; this is the adapter's own key and unrelated to `data_source.catalog`, which names the
 expressions being evaluated.
 

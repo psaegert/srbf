@@ -10,7 +10,7 @@ from simplipy import SimpliPyEngine
 from symbolic_data import LampleChartonCatalog, build_catalog
 from flash_ansr.refine import Refiner, ConvergenceError
 from flash_ansr.scoring import compute_fvu, count_constants, is_constant_token, normalize_variance, score_from_fvu
-from flash_ansr.utils.paths import substitute_root_path
+from srbf.paths import substitute_root_path
 
 # The optimizer backends the shared Refiner accepts; single source for both baselines' signatures.
 RefinerMethod = Literal[

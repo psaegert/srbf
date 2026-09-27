@@ -2,7 +2,7 @@
 # Build the environment the RILS-ROLS worker runs in (src/srbf/worker/models/rilsrols_worker.py,
 # docs/models.md#rils-rols).
 #
-#   scripts/envs/build_rilsrols_env.sh PREFIX        e.g. scripts/envs/build_rilsrols_env.sh "$FLASH_ANSR_ROOT/envs/rilsrols"
+#   scripts/envs/build_rilsrols_env.sh PREFIX        e.g. scripts/envs/build_rilsrols_env.sh "$SRBF_ROOT/envs/rilsrols"
 #
 # Environment variables: PYTHON (a Python 3.12 interpreter; default: python3.12 on PATH).
 #

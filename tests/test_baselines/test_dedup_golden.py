@@ -16,7 +16,8 @@ import pytest
 from simplipy import SimpliPyEngine
 
 from symbolic_data import LampleChartonCatalog
-from srbf.baselines import BruteForceModel, LampleChartonModel
+pytest.importorskip("flash_ansr", reason="the refining baselines fit their constants with flash-ansr's refiner (pip install 'srbf[flash-ansr]')")
+from srbf.baselines import BruteForceModel, LampleChartonModel  # noqa: E402
 
 FIXTURE = os.path.join(os.path.dirname(__file__), "..", "fixtures", "golden_baseline_results.json")
 

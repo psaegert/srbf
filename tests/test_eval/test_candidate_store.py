@@ -10,7 +10,8 @@ from srbf.candidate_store import CandidateStoreReader, CandidateStoreWriter
 from srbf.model_adapters import FlashANSRAdapter
 # The candidate-ledger JOIN (gen pool U refined, classified) now lives in flash-ansr (infer() builds
 # result.ledger); srbf only persists it. FIT_* + CandidateLedger come from there.
-from flash_ansr.inference import CandidateLedger, FIT_FAILED, FIT_OK, INVALID
+pytest.importorskip("flash_ansr", reason="the candidate store persists flash-ansr's candidate ledger (pip install 'srbf[flash-ansr]')")
+from flash_ansr.inference import CandidateLedger, FIT_FAILED, FIT_OK, INVALID  # noqa: E402
 
 
 def test_ledger_round_trips_through_writer_reader(tmp_path):

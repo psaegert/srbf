@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the environment the DSO worker runs in (src/srbf/worker/models/dso_worker.py, docs/models.md#dso).
 #
-#   scripts/envs/build_dso_env.sh <prefix>          e.g. scripts/envs/build_dso_env.sh "$FLASH_ANSR_ROOT/envs/dso"
+#   scripts/envs/build_dso_env.sh <prefix>          e.g. scripts/envs/build_dso_env.sh "$SRBF_ROOT/envs/dso"
 #
 # DSO v3.0.0 (github.com/dso-org/deep-symbolic-optimization, commit 2069d4e) needs Python 3.6 or 3.7:
 # it pins tensorflow==1.14, numba==0.53.1 and numpy<=1.19. The script creates a conda environment from the
