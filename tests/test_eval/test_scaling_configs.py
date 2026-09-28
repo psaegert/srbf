@@ -46,6 +46,8 @@ EXPECTED_PROVENANCE = {
     "subprocess:operon": "author_blessed",
     # RILS-ROLS: its first author's SRBench 2.0 submission, without the grid the benchmark's maintainers searched
     "subprocess:rilsrols": "author_blessed",
+    # Bingo: the configuration its authors ship for benchmarking and submitted to SRBench (their srbench_interface)
+    "subprocess:bingo": "author_blessed",
     # a shipped worker's arms, most specific first ("<type>:<worker>:<options.arm>", then "<type>:<worker>"): DSO's
     # uDSR* runs the configuration its authors published for benchmarking it (the uDSR paper's Table 3), DSR the
     # regression defaults DSO ships

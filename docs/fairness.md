@@ -113,6 +113,9 @@ The configs in the repository are labeled as follows, and a test keeps them that
   benchmark baseline (SRBench 2021), without the hyperparameter grid that the benchmark's maintainers
   searched around it. Its library defaults differ: they run the interleaved multistart scheme, which
   the author turned off for benchmarking, and stop after 60 seconds.
+- **Bingo:** `author_blessed`: the configuration its authors ship for benchmarking and submitted to
+  SRBench. Its library defaults differ: stack size 32, no simplification, crossover and mutation
+  probability 0.4, and the four arithmetic operators only.
 
 ## Submitting a configuration for your method
 
