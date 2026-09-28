@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **QLattice as a subprocess worker** (`worker: qlattice`): feyn 3.5.0 through its authors' SRBench loop (200 epochs,
+  at most 10 edges, `wide_parsimony`, squared error). srbf sets the operators, the budget (`n_epochs`, rung files
+  `epochs_<n>.pkl`) and the seed; the answer is the first model the loop returns, written at full precision, with
+  feyn's protected functions written out where they clip. `scripts/envs/build_qlattice_env.sh` builds a pinned
+  Python 3.12 environment; feyn runs offline without a licence key (CC BY-NC-ND 4.0: research use). On SRBench 2025's
+  first-principles data it reproduces the published QLattice accuracy: mean mid-rank 0.41 among the published runs
+  (2 epochs: 0.07).
 - **The `flash_ansr_hybrid` adapter type is built in again.** The hybrid method moved into flash-ansr 0.19
   (`flash_ansr.hybrid`); srbf's adapter hands it each problem through its evaluation path (`HybridRegressor.solve`)
   and records the answer like every adapter. Configs that named the private plugin (`hybrid_adapter:build`) use

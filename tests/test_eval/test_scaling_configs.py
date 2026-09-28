@@ -51,6 +51,8 @@ EXPECTED_PROVENANCE = {
     # regression defaults DSO ships
     "subprocess:dso:udsr": "author_blessed",
     "subprocess:dso:dsr": "upstream_default",
+    # QLattice: the configuration its authors submitted to SRBench (the 2022 competition, unchanged in srbench_2025)
+    "subprocess:qlattice": "author_blessed",
 }
 BANNED = ["skeleton_pool", "skeleton dataset", "skeleton_dataset", "type: fastsrb",
           "benchmark_path", "datasets_per_expression", "noise_level", "support_points"]

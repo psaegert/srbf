@@ -13,6 +13,7 @@ block. To enter a method of your own, see [Adding your method](adapters.md).
 | `e2e` | [E2E](#e2e) | clone, patch, download weights |
 | `subprocess`, `worker: dso` | [DSR and uDSR\*](#dso) | `scripts/envs/build_dso_env.sh`: a conda environment with Python 3.7 |
 | `subprocess`, `worker: gpgomea` | [GP-GOMEA](#gp-gomea) | `scripts/envs/build_gpgomea_env.sh envs/gpgomea`: a conda environment of its own, compiled from source |
+| `subprocess`, `worker: qlattice` | [QLattice](#qlattice) | `scripts/envs/build_qlattice_env.sh envs/qlattice`: a virtual environment with Python 3.12 |
 | `lample_charton`, `brute_force` | [prior sampling and enumeration](#sampling-and-enumeration-baselines) | `pip install "srbf[flash-ansr]"` (they fit constants with its refiner) |
 | `subprocess` | [any method, in its own environment](adapters.md) | yours |
 
@@ -535,6 +536,74 @@ The worker also stores GP-GOMEA's own printed model in the `model_string` column
 the first power of two above the cost of one generation, up to about 100 s per problem on the
 reference machine. `configs/evaluation/panels/gpgomea_srbench2021_feynman.yaml` runs the
 configuration that SRBench 2021 published its GP-GOMEA results with, on the Feynman catalogs.
+
+## QLattice
+
+```bash
+scripts/envs/build_qlattice_env.sh envs/qlattice     # Python 3.12, feyn 3.5.0 and pinned dependencies
+```
+
+QLattice samples models from a probability distribution over expression graphs, fits every sampled model's
+parameters by gradient descent and moves the distribution towards the best models, epoch after epoch. It is
+distributed as the Python package `feyn` (Abzu), whose core is closed source; it runs locally, without a licence key
+or network access. **Licence:** feyn is licensed CC BY-NC-ND 4.0, for research and other non-commercial use. The
+script installs it from PyPI; srbf redistributes none of it.
+
+QLattice runs through the [worker protocol](adapters.md) as `worker: qlattice`, in an environment of its own. The
+configuration is the one QLattice's authors submitted to SRBench:
+- their own epoch loop: sample new models, fit the whole pool, prune it, update the distribution;
+- 200 epochs, at most 10 edges per model;
+- models ranked by feyn's `wide_parsimony` criterion, fitted to the squared error, every input numerical;
+- the prediction is the first model the loop returns, its best by that ranking.
+
+```yaml
+model_adapter:
+  type: subprocess
+  worker: qlattice
+  python: "{{ROOT}}/envs/qlattice/bin/python"
+  config_provenance: author_blessed
+  simplipy_engine: acj-5-4-llm
+  timeout: 7200
+  options:
+    n_epochs: 16
+```
+
+| key | default | meaning |
+|---|---|---|
+| `options.n_epochs` | `200` | epochs of the loop: the budget |
+| `options.seed` | `0` | mixed with a hash of the problem's data into the run's seed |
+| `options.max_time` | `3600` | the authors' wall-clock stop in seconds, SRBench's limit for this method; when it passes, the best models so far are returned and `hit_time_guard` is set |
+| `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
+
+**Budget.** An epoch samples about a thousand new models and refits the whole pool, each model on 20,000 rows
+resampled from the data, so its cost hardly depends on the number of data points.
+
+**Operators.** QLattice searches over the functions it has among the benchmark's operators:
+- `+ *` and `exp log tanh`;
+- `^` as the square, `rootn` as the square root and `inv` as `1/u`;
+- the affine node `w*u + b`, through which it places constants inside a model.
+
+It has no `sin`, `cos` or other trigonometric function, no `abs`, and no general power or root; subtraction and
+negation it expresses through signed weights. Its `gaussian` function, `exp(-2u²)`, is a compound of the
+benchmark's operators and is left out.
+
+**Patches.** The method is unchanged. The authors' loop gets one crash fix: it passes `stypes=None` to feyn's data
+validation, which the version the authors submitted with (3.0.1) accepted and 3.5.0 rejects; the worker passes an
+empty mapping there, which states the same thing, every input numerical.
+
+**What to know when reading the results:**
+- Every input enters through an affine map and the output leaves through one, so a prediction reads
+  `A*f(a1*x1 + c1, ...) + B`. Like Operon's, that shape rarely matches a law symbol for symbol, so its numeric
+  recovery is the comparable rate.
+- A model has at most 10 edges.
+- QLattice's `exp`, `log`, square root, square and `1/u` are protected: the model clips their argument. Where a
+  clip is active at a support or validation point, the prediction writes it out with `abs`, so that the expression
+  computes the model's own prediction; the `protections` column names these functions.
+- One search runs on one thread, and its result depends only on the problem's data and the seed.
+
+The worker stores the other models the method returned in the `diverse` column, and the largest deviation of the
+expression from the model's own predictions in `string_deviation` and `string_deviation_val`.
+`configs/evaluation/scaling/qlattice_fastsrb.yaml` sweeps the epochs in doublings from 1 to 16.
 
 ## Sampling and enumeration baselines
 

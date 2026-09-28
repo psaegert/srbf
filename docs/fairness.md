@@ -113,6 +113,9 @@ The configs in the repository are labeled as follows, and a test keeps them that
   benchmark baseline (SRBench 2021), without the hyperparameter grid that the benchmark's maintainers
   searched around it. Its library defaults differ: they run the interleaved multistart scheme, which
   the author turned off for benchmarking, and stop after 60 seconds.
+- **QLattice:** `author_blessed`: the configuration its authors submitted to SRBench, their own loop for 200
+  epochs with models ranked by feyn's `wide_parsimony` criterion. The library's `auto_run` defaults differ: 10
+  epochs and the Bayesian information criterion.
 
 ## Submitting a configuration for your method
 
