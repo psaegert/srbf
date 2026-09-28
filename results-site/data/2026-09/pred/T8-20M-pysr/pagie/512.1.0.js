@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-20M-pysr|pagie|512|1|0"]={"0":["- - 2.013 cos atan * x2 sinh / * -4 x2 3 cos atan * pow x1 3 + cos atan * 2.2 x1 / 4 3",0]};})();

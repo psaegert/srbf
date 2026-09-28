@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-20M-pysr|koza|512|2|0"]={"0":["- atan tanh tanh sin sinh x1 atan tanh tanh pow x1 3",0],"1":["sin atan atan asinh asinh * 0.992 asinh asin * exp * x1 sinh / * -42 asin x1 23 sinh pow x1 2",0]};})();
