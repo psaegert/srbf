@@ -42,7 +42,7 @@ python scripts/site_timing.py --manifest configs/timing/timing_subset.json \
     --subset T8-20M=<timing results>/t8-20m ... --suite PySR=<PySR results> --out <root>/timing.json
 # 3. the release
 python scripts/site_export_v2.py <root> 2026-09 results-site/data/2026-09/results.js \
-    --public e2e,nesymres-100M,PySR,T8-3M,T8-20M,T8-120M,prior
+    --public e2e,nesymres-100M,PySR,T8-3M,T8-20M,T8-120M,T8-20M-pysr,prior
 ```
 
 The method names in `--tree`, `--subset` and `--suite` are the site's method keys (`METHODS` in the exporter).
