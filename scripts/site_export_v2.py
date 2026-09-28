@@ -96,7 +96,7 @@ SCHEDULED = [
 # there either.
 RELEASE_VERSIONS = ("PySR: version 2.3.0, with SymbolicRegression.jl 2.4.0. ",
                     ("T8-20M-pysr", "The PySR part of Flash-ANSR T8-20M + PySR: PySR 2.4.0, "
-                     "with SymbolicRegression.jl 2.4.1 (2.4.2 on our timing workstation). The settings it uses have the same defaults "
+                     "with SymbolicRegression.jl 2.4.2. The settings it uses have the same defaults "
                      "in both PySR versions. Between these versions, the release notes of both packages list performance improvements, "
                      "packaging fixes and optional additions, and no change to the search at the settings used here. "),
                     "Simplification: SimpliPy (a formula-simplification library), with its rule set acj-5-4-llm.")
