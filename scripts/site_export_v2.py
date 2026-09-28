@@ -30,6 +30,7 @@ import glob
 import json
 import math
 import os
+import shutil
 import sys
 from collections import defaultdict
 from typing import Any, Mapping
@@ -91,11 +92,22 @@ SCHEDULED = [
      "are kept) and only fits the constants, the way Flash-ANSR does. It shows how well Flash-ANSR's fitting does when it is "
      "given the true form.")]
 # Where two methods share a component at different versions, the release says so (Protocol, "Versions").
-RELEASE_VERSIONS = ("PySR: version 2.3.0, with SymbolicRegression.jl 2.4.0. The PySR part of Flash-ANSR T8-20M + PySR: PySR 2.4.0, "
-                    "with SymbolicRegression.jl 2.4.1 (2.4.2 on our timing workstation). The settings it uses have the same defaults "
-                    "in both PySR versions. Between these versions, the release notes of both packages list performance improvements, "
-                    "packaging fixes and optional additions, and no change to the search at the settings used here. "
+# The hybrid's sentence is part of a payload only when the hybrid is: a method withheld from the public page is not named
+# there either.
+RELEASE_VERSIONS = ("PySR: version 2.3.0, with SymbolicRegression.jl 2.4.0. ",
+                    ("T8-20M-pysr", "The PySR part of Flash-ANSR T8-20M + PySR: PySR 2.4.0, "
+                     "with SymbolicRegression.jl 2.4.1 (2.4.2 on our timing workstation). The settings it uses have the same defaults "
+                     "in both PySR versions. Between these versions, the release notes of both packages list performance improvements, "
+                     "packaging fixes and optional additions, and no change to the search at the settings used here. "),
                     "Simplification: SimpliPy (a formula-simplification library), with its rule set acj-5-4-llm.")
+
+
+def release_versions(keys: Any) -> str:
+    """The release's "Versions" text for a payload holding the methods ``keys``."""
+    return "".join(part if isinstance(part, str) else part[1] for part in RELEASE_VERSIONS
+                   if isinstance(part, str) or part[0] in keys)
+
+
 FLASH_ANSR_SELECTION = ("A neural network generates candidate formulas from the data. Flash-ANSR fits the numbers in each and "
                         "returns the one that best balances error and length: the smallest (n/2) log2 FVU plus the formula's length "
                         "in bits, where n is the number of given points and FVU is the share of their variation the formula leaves "
@@ -422,6 +434,11 @@ def write_predictions(out_dir: str, rel: str, pred: Expressions, truth: dict[str
         if c in sizes:
             for b, chunk in blocks(formulas).items():
                 put(os.path.join(out_dir, "pred", "truth", f"{c}.{b}.js"), f"truth|{c}|{b}", chunk)
+    # A method this release no longer holds leaves no files behind: a withheld method would otherwise stay published.
+    pred_root = os.path.join(out_dir, "pred")
+    for name in sorted(os.listdir(pred_root)) if os.path.isdir(pred_root) else []:
+        if name != "truth" and name not in index and os.path.isdir(os.path.join(pred_root, name)):
+            shutil.rmtree(os.path.join(pred_root, name))
     return dict(index)
 
 
@@ -954,7 +971,7 @@ def main() -> None:
         listed = listed_metrics(cells)
         payload: dict[str, Any]
         payload = {"schema": 2, "base": base,
-                   "release": {"id": a.release, "title": a.title or a.release, "notes": a.notes, "versions": RELEASE_VERSIONS, "generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                   "release": {"id": a.release, "title": a.title or a.release, "notes": a.notes, "versions": release_versions(keys), "generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
                                "updated": dt.datetime.now().astimezone().isoformat(timespec="minutes"),   # with its offset: shown in the reader's time zone
                                "scoring": "Every method is allowed to return one formula per problem, its prediction, and picks it by its own rule. The ? after a method's name describes that rule; the label beside it says who chose the method's settings.",
                                "judge": "Every prediction is checked the same way against the true formula. Numeric Recovery: it reproduces the 512 held-out points almost exactly (FVU at most 2^-23: a typical error of at most 0.035 % of the true values' spread). Symbolic Recovery: once both formulas are simplified into a standard form, they are identical when their numbers are ignored (so x^2 matches x^3; stricter versions also check exponents and all numbers)."},
