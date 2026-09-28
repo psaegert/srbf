@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-3M|physo-astro|8|1|0"]={"0":["/ acos + exp neg + x1 1.62 / 14 17 pow x1 2.11",0],"1":["- + x1 + rootn + inv x1 1 2 * 9.8 pow x1 2 / x1 rootn x1 3",0]};})();

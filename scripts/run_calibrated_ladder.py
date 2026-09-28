@@ -7,7 +7,7 @@ rung above it on a stratified subset -- shard 0 of N per catalog, N chosen by th
 The subset is deterministic, so it is the same problems for every model and rung. Resumable: a finished
 unit leaves a marker under ``<root>/calibrated/<model>/``, and ``srbf run`` resumes a partial file itself.
 
-    FLASH_ANSR_ROOT=/path/to/root CUDA_VISIBLE_DEVICES=0 python scripts/run_calibrated_ladder.py \
+    SRBF_ROOT=/path/to/root CUDA_VISIBLE_DEVICES=0 python scripts/run_calibrated_ladder.py \
         -c configs/evaluation/scaling/flash-ansr-v25.0-T8-3M_srbf.yaml --refiner-workers 16 [--dry-run]
 """
 from __future__ import annotations
@@ -57,12 +57,12 @@ def main() -> int:
     ap.add_argument("--rungs", help="comma-separated rungs to run (default: the config's ladder)")
     ap.add_argument("--experiments", help="comma-separated experiments to run (default: all)")
     ap.add_argument("--refiner-workers", type=int, help="pin refiner_workers in every adapter block (recorded in the run's config)")
-    ap.add_argument("--root", default=os.environ.get("FLASH_ANSR_ROOT"), help="FLASH_ANSR_ROOT for the runs (default: the environment)")
+    ap.add_argument("--root", default=os.environ.get("SRBF_ROOT"), help="SRBF_ROOT for the runs (default: the environment)")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
     if not a.root:
-        sys.exit("set FLASH_ANSR_ROOT or pass --root")
-    os.environ["FLASH_ANSR_ROOT"] = a.root
+        sys.exit("set SRBF_ROOT or pass --root")
+    os.environ["SRBF_ROOT"] = a.root
     cfg = load_run_config(a.config)
     experiments = list(cfg["experiments"])
     if a.experiments:

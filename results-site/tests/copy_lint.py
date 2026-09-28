@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Copy lint for the results site: banned patterns in VIEWER-FACING text.
 
-Three surfaces: the full prose of index.html, and the string literals of explorer.js and
-explorer_v2.js (comments are internal and exempt). Every entry here is a fixed bug that must not return —
-extend the list whenever a new wording bug is fixed.
+The surfaces: the full source of every page (index.html and the pages around it) and the string literals of
+explorer_v2.js and pages.js (comments are internal and exempt); the reader's vocabulary (BANNED_V2) is also checked on
+every page's text and on the reader-facing texts the exporter writes into the data. Every entry here is a fixed bug that must not return: extend the list whenever a new
+wording bug is fixed.
 """
+import ast
 import json
 import re
 import sys
+from html.parser import HTMLParser
 from pathlib import Path
 
 SITE = Path(__file__).resolve().parent.parent
@@ -28,6 +31,10 @@ BANNED = {
     r"not a leaderboard": "self-undermining framing: say how to read the table instead",
     r"never quote": "scolding tone: name the quotable alternative instead",
     r"curve read": "retired vocabulary: the split is declared-vs-free, say 'descriptive' (same interpolation)",
+    r"exactly the same data": "false: every run samples its points anew; two methods share the problem, not the points",
+    r"best result that fitting alone can reach": "overclaim: the Oracle uses Flash-ANSR's fitter, a ceiling for that fitting only",
+    r"change speed, not results": "unmeasured claim: cite what the release notes list instead",
+    r"says nothing about": "dismissive and absolute: say what the statistic shows and where the rest is (owner 2026-09-27)",
 }
 
 
@@ -39,6 +46,22 @@ def _local_patterns() -> dict[str, str]:
 
 
 BANNED.update(_local_patterns())
+
+# The reader's vocabulary: the words of our own pipeline, which a first-time reader cannot know, are banned from the
+# page's prose and from the reader-facing texts the exporter and the timing script write into the data. (The
+# explorer's own text is checked where the reader sees it, rendered, by the site suite: its string literals mix with
+# code here.)
+BANNED_V2 = {
+    r"\bcatalogs?\b": "say 'problem set'",
+    r"\brungs?\b": "say 'budget'",
+    r"\bdraws? (\d|per\b|of\b)|\b(\d+|two|its|their|one|per|of|over|the) draws?\b": "say 'run' (every method is run twice); the verb is fine",
+    r"\bpooled\b|\bpooling\b": "say what is averaged over which problems",
+    r"reference[- ]machine": "say 'our timing workstation' or 'one workstation'",
+    r"\bladder\b": "say 'budgets 1, 2, 4, ...'",
+    r"\bcanon\b|canonical form": "say 'standard form'",
+    r"\bstrat(um|a)\b|stratified": "internal statistics vocabulary",
+    r"\bmu\b": "SimpliPy's internal name for its length measure",
+}
 
 
 def js_strings(source: str) -> list[str]:
@@ -91,13 +114,62 @@ def va_drift(index_html: str) -> str | None:
     return None
 
 
+class _Text(HTMLParser):
+    """The text of a page, without its scripts and styles."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.out: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        self.out.append(data)
+
+
+def page_text(html: str) -> str:
+    parser = _Text()
+    parser.feed(re.sub(r"<(script|style)\b.*?</\1>", "", html, flags=re.S))
+    return " ".join(parser.out)
+
+
+def data_texts() -> str:
+    """The reader-facing strings the exporter and the timing script put into the release data: metric definitions,
+    method notes and budget units, the release's protocol texts and the time axis's note."""
+    scripts = SITE.parent / "scripts"
+    out: list[str] = []
+    for name, targets in (("site_export_v2.py", {"METRICS", "METHODS", "PARAM_LABEL", "RELEASE_VERSIONS", "FLASH_ANSR_SELECTION", "SCHEDULED"}),
+                          ("site_timing.py", {"NOTE"})):
+        tree = ast.parse((scripts / name).read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id in targets for t in node.targets):
+                out += [c.value for c in ast.walk(node.value) if isinstance(c, ast.Constant) and isinstance(c.value, str) and " " in c.value]
+            if isinstance(node, ast.Dict):
+                for k, v in zip(node.keys, node.values):
+                    if isinstance(k, ast.Constant) and k.value in ("scoring", "judge") and isinstance(v, ast.Constant):
+                        out.append(v.value)
+            if isinstance(node, ast.FunctionDef) and node.name == "note":
+                out += [c.value for c in ast.walk(node) if isinstance(c, ast.Constant) and isinstance(c.value, str) and " " in c.value]
+    return "\n".join(out)
+
+
+def pages() -> list[Path]:
+    """Every page of the site: the home page, the explorer's page and the pages around them (the local-only copy is not published)."""
+    return sorted(p for p in SITE.glob("*.html") if not p.name.endswith(".local.html"))
+
+
 def main() -> int:
     failures = []
-    surfaces = {
-        "index.html": (SITE / "index.html").read_text(encoding="utf-8"),
-        "explorer.js (strings)": "\n".join(js_strings((SITE / "explorer.js").read_text(encoding="utf-8"))),
-        "explorer_v2.js (strings)": "\n".join(js_strings((SITE / "explorer_v2.js").read_text(encoding="utf-8"))),
-    }
+    surfaces = {p.name: p.read_text(encoding="utf-8") for p in pages()}
+    assert "index.html" in surfaces and len(surfaces) >= 2, "the site's pages"
+    html_names = list(surfaces)
+    for js in ("explorer_v2.js", "pages.js"):
+        surfaces[f"{js} (strings)"] = "\n".join(js_strings((SITE / js).read_text(encoding="utf-8")))
+    current = {f"{n} (text)": page_text(surfaces[n]) for n in html_names}
+    current["release data texts"] = data_texts()
+    for pattern, why in BANNED_V2.items():
+        for name, text in current.items():
+            for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+                snippet = text[max(0, match.start() - 40):match.end() + 40].replace("\n", " ")
+                failures.append(f"{name}: /{pattern}/ ({why})\n    …{snippet}…")
     drift = va_drift(surfaces["index.html"])
     if drift:
         failures.append(drift)
@@ -107,10 +179,7 @@ def main() -> int:
                 snippet = text[max(0, match.start() - 40):match.end() + 40].replace("\n", " ")
                 failures.append(f"{name}: /{pattern}/ ({why})\n    …{snippet}…")
     # em-dash budget: AI prose overuses them; colons, semicolons and structure read better.
-    # index.html allows 0; explorer.js strings allow 2 (the matrix-diagonal placeholders).
-    for name, text, budget in [("index.html", surfaces["index.html"], 0),
-                               ("explorer.js (strings)", surfaces["explorer.js (strings)"], 2),
-                               ("explorer_v2.js (strings)", surfaces["explorer_v2.js (strings)"], 0)]:
+    for name, text, budget in [(n, t, 0) for n, t in surfaces.items()]:
         count = text.count("—") + text.count("&mdash;")
         if count > budget:
             failures.append(f"{name}: {count} em-dashes (budget {budget}) — rewrite with "

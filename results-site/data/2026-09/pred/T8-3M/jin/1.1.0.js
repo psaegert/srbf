@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-3M|jin|1|1|0"]={"0":["neg + * 2 x2 + atan x1 pow x1 3",0],"1":["* 10 - pow x1 2 1",0],"2":["/ * 3 x2 2",0],"3":null,"4":["* -0.06037 * x1 tanh x1",0],"5":["+ x2 * 1.4 * x1 x2",0]};})();

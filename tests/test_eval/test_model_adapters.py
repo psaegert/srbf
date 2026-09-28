@@ -1,10 +1,14 @@
+import importlib.util
+
 import numpy as np
-from flash_ansr.utils.generation import SoftmaxSamplingConfig
 import pytest
 
 from srbf.core import EvaluationResult, EvaluationSample
 from srbf import model_adapters
 from srbf import variable_renaming
+
+needs_flash_ansr = pytest.mark.skipif(importlib.util.find_spec("flash_ansr") is None,
+                                      reason="flash-ansr is not installed (pip install 'srbf[flash-ansr]')")
 
 
 class _DummyModel:
@@ -168,6 +172,7 @@ def test_pysr_config_builds_a_worker_backed_adapter(monkeypatch):
     assert adapter.options["maxsize"] is None and adapter.options["warmup"] is True
 
 
+@needs_flash_ansr
 class TestEmissionConfig:
     """The promptable emission format is a sampling POLICY (flash-ansr 0.17): the builder puts the
     adapter config's `emission` into the softmax generation config, 'fittable' by default."""
@@ -180,13 +185,15 @@ class TestEmissionConfig:
         class FakeModel:
             simplipy_engine = object()
 
-        monkeypatch.setattr(cfg_mod.FlashANSR, "load", staticmethod(lambda **kwargs: FakeModel()))
+        import flash_ansr.flash_ansr
+        import flash_ansr.utils.generation
+        monkeypatch.setattr(flash_ansr.flash_ansr.FlashANSR, "load", staticmethod(lambda **kwargs: FakeModel()))
 
         def fake_create(method, **kwargs):
             captured.update(method=method, **kwargs)
             return object()
 
-        monkeypatch.setattr(cfg_mod, "create_generation_config", fake_create)
+        monkeypatch.setattr(flash_ansr.utils.generation, "create_generation_config", fake_create)
         config = {"model_path": "/nowhere", "evaluation_config": {
             "n_restarts": 2, "refiner_p0_noise": "normal", "ranking": {"mode": "mdl"},
             "generation_config": {"method": "softmax_sampling", "kwargs": {"draws": 4}}}}
@@ -212,6 +219,7 @@ class TestEmissionConfig:
             SoftmaxSamplingConfig(emission="masked")
 
 
+@needs_flash_ansr
 class TestRefineScopeConfig:
     """`refine_scope` is a MODEL knob (which literals the refiner may move) and rides on
     FlashANSR.load; the default is the predict-vs-refine doctrine ('fittable')."""
@@ -228,8 +236,10 @@ class TestRefineScopeConfig:
             captured.update(kwargs)
             return FakeModel()
 
-        monkeypatch.setattr(cfg_mod.FlashANSR, "load", staticmethod(fake_load))
-        monkeypatch.setattr(cfg_mod, "create_generation_config", lambda method, **kw: object())
+        import flash_ansr.flash_ansr
+        import flash_ansr.utils.generation
+        monkeypatch.setattr(flash_ansr.flash_ansr.FlashANSR, "load", staticmethod(fake_load))
+        monkeypatch.setattr(flash_ansr.utils.generation, "create_generation_config", lambda method, **kw: object())
         eval_cfg = {"n_restarts": 2, "refiner_p0_noise": "normal", "ranking": {"mode": "mdl"},
                     "generation_config": {"method": "softmax", "kwargs": {}}}
         eval_cfg.update(eval_extra or {})
@@ -249,6 +259,7 @@ class TestRefineScopeConfig:
         assert self._build(monkeypatch, {}, {"refine_scope": "all"})["refine"]["scope"] == "all"
 
 
+@needs_flash_ansr
 class TestAnswerProvenanceColumns:
     """The flash_ansr adapter records where its rank-0 answer came from: how many predicted typed
     literals it kept frozen, whether it is a thawed duplicate (which typed token indices it re-fitted)
@@ -258,6 +269,7 @@ class TestAnswerProvenanceColumns:
         import numpy as np
         from flash_ansr.inference import Candidate, FitResult
         from flash_ansr.scoring import resolve_ranking
+        from flash_ansr.utils.generation import SoftmaxSamplingConfig
         from srbf.core import EvaluationSample
         from srbf.model_adapters import FlashANSRAdapter
 
@@ -290,6 +302,9 @@ class TestAnswerProvenanceColumns:
 
 class _SplitEngine:
     """An engine stub whose reader is just whitespace tokenisation (prefix in, prefix out)."""
+
+    # the real engine always carries its vocabulary; the adapters spell sqrt and Abs by it
+    operator_arity = {"+": 2, "-": 2, "*": 2, "/": 2, "pow": 2, "rootn": 2, "abs": 1, "sin": 1, "cos": 1, "exp": 1, "log": 1}
 
     def infix_to_prefix(self, expression):  # noqa: D401 - simple stub
         return str(expression).split()
@@ -424,7 +439,7 @@ def test_an_adapter_from_another_package_is_named_by_its_builder(tmp_path, monke
 def test_the_root_token_is_replaced_in_worker_options_and_in_the_data_source(tmp_path, monkeypatch):
     """`{{ROOT}}` means the same directory wherever a config names a file: worker options and holdouts too."""
     from srbf import config as run_config
-    monkeypatch.setenv("FLASH_ANSR_ROOT", str(tmp_path))
+    monkeypatch.setenv("SRBF_ROOT", str(tmp_path))
     monkeypatch.setattr(run_config, "resolve_simplipy_engine", lambda cfg, adapter_name: _DummyEngine())
     adapter = run_config.build_model_adapter({
         "type": "subprocess", "worker": "example", "simplipy_engine": "unused",

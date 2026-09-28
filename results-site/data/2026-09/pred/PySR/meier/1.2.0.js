@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|meier|1|2|0"]={"0":["sinh * * x2 atanh abs abs * x2 x1 abs atanh x2",0],"1":["abs sinh - 0.5472 log * * atanh x2 * atanh x2 0.2318 0.05371",0]};})();

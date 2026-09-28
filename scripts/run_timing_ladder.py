@@ -2,7 +2,7 @@
 subset written by scripts/freeze_timing_subset.py, rung by rung, so that the recorded fit times are comparable
 across methods and budgets and paired by instance. It measures time; recovery is measured by the full runs.
 
-    FLASH_ANSR_ROOT=<root> CUDA_VISIBLE_DEVICES=0 python scripts/run_timing_ladder.py \\
+    SRBF_ROOT=<root> CUDA_VISIBLE_DEVICES=0 python scripts/run_timing_ladder.py \\
         -c configs/evaluation/scaling/flash-ansr-v25.0-T8-20M_srbf.yaml --data-dir <root>/timing_data \\
         --model-name t8-20m [--model-path DIR] [--rungs 1,2,4,...] [--experiments a,b] [--refiner-workers 16]
         [--budget-hours 100] [--up-to RUNG] [--host NAME] [--dry-run]
@@ -137,14 +137,14 @@ def main() -> int:
                     "raises several model rows together, one rung at a time)")
     ap.add_argument("--experiments", help="comma-separated experiments (default: all in the config)")
     ap.add_argument("--refiner-workers", type=int, help="pin refiner_workers in every adapter block")
-    ap.add_argument("--root", default=os.environ.get("FLASH_ANSR_ROOT"), help="FLASH_ANSR_ROOT (default: the environment)")
+    ap.add_argument("--root", default=os.environ.get("SRBF_ROOT"), help="SRBF_ROOT (default: the environment)")
     ap.add_argument("--host", default=None, help="the measuring machine's hostname; when given, measuring elsewhere is refused")
     ap.add_argument("--budget-hours", type=float, help="wall-time budget of this model row; rungs that do not fit are skipped")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
     if not a.root:
-        sys.exit("set FLASH_ANSR_ROOT or pass --root")
-    os.environ["FLASH_ANSR_ROOT"] = a.root
+        sys.exit("set SRBF_ROOT or pass --root")
+    os.environ["SRBF_ROOT"] = a.root
     host = socket.gethostname()
     if a.host and host != a.host and not a.dry_run:
         sys.exit(f"this is {host}, not {a.host}: this ladder is measured on {a.host} only")

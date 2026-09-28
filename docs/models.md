@@ -5,7 +5,7 @@ block. To enter a method of your own, see [Adding your method](adapters.md).
 
 | `type` | method | installation |
 |---|---|---|
-| `flash_ansr` | [Flash-ANSR](#flash-ansr) and its prior reference | `flash_ansr install <checkpoint>` |
+| `flash_ansr` | [Flash-ANSR](#flash-ansr) and its prior reference | `pip install "srbf[flash-ansr]"`, then download a checkpoint |
 | `pysr` | [PySR](#pysr) | `pip install pysr`, in an environment of its own if you like |
 | `subprocess`, `worker: operon` | [Operon](#operon) | `pip install pyoperon==0.6.1 scikit-learn`, in an environment of its own |
 | `subprocess`, `worker: rilsrols` | [RILS-ROLS](#rils-rols) | `scripts/envs/build_rilsrols_env.sh`, an environment of its own |
@@ -14,7 +14,7 @@ block. To enter a method of your own, see [Adding your method](adapters.md).
 | `subprocess`, `worker: dso` | [DSR and uDSR\*](#dso) | `scripts/envs/build_dso_env.sh`: a conda environment with Python 3.7 |
 | `subprocess`, `worker: gpgomea` | [GP-GOMEA](#gp-gomea) | `scripts/envs/build_gpgomea_env.sh envs/gpgomea`: a conda environment of its own, compiled from source |
 | `subprocess`, `worker: bingo` | [Bingo](#bingo) | `scripts/envs/build_bingo_env.sh`, a conda environment of its own |
-| `lample_charton`, `brute_force` | [prior sampling and enumeration](#sampling-and-enumeration-baselines) | none |
+| `lample_charton`, `brute_force` | [prior sampling and enumeration](#sampling-and-enumeration-baselines) | `pip install "srbf[flash-ansr]"` (they fit constants with its refiner) |
 | `subprocess` | [any method, in its own environment](adapters.md) | yours |
 
 Two keys are common to every block. `config_provenance` states who chose the configuration
@@ -29,11 +29,12 @@ side they conflict, so give each its own virtual environment; srbf installs into
 ## Flash-ANSR
 
 ```bash
-flash_ansr install psaegert/flash-ansr-v25.0-T8-3M     # also: -T8-20M, -T8-120M
+pip install "srbf[flash-ansr]"
+hf download psaegert/flash-ansr-v25.0-T8-3M --local-dir "$SRBF_ROOT/models/psaegert/flash-ansr-v25.0-T8-3M"   # also: -T8-20M, -T8-120M
 ```
 
-The command comes with srbf and puts the checkpoint under
-`$FLASH_ANSR_ROOT/models/psaegert/flash-ansr-v25.0-T8-3M`. The configs
+The adapter needs `flash-ansr`, which srbf installs only with the `flash-ansr` extra, and `hf` (from
+`huggingface_hub`, which comes with it) puts the checkpoint where the configs look for it. The configs
 `configs/evaluation/scaling/flash-ansr-v25.0-T8-*_srbf.yaml` evaluate the three sizes on the whole
 suite along a ladder of 1 to 65,536 draws.
 
@@ -96,6 +97,29 @@ other. Its budget is the refiner's restarts (`configs/evaluation/scaling/flash-a
 1 to 1,024). It is the ceiling of the fitting stage and runs only where a ground truth exists. The
 judge is strict for the oracle as for every method: where the refitted law comes back in another form,
 a constant factor or a root spelled differently, that is another structure.
+
+## Flash-ANSR + PySR
+
+The adapter type `flash_ansr_hybrid` evaluates flash-ansr's hybrid (`flash_ansr.hybrid`, flash-ansr >= 0.19,
+`pip install srbf[hybrid]`): Flash-ANSR draws and fits candidates, its best `k_seeds` seed PySR's
+populations, PySR's hall of fame is priced the way Flash-ANSR prices its own candidates, and Flash-ANSR's
+ranking picks the prediction from the combined pool.
+
+```yaml
+model_adapter:
+  type: flash_ansr_hybrid
+  flash_ansr: {type: flash_ansr, model_path: "{{ROOT}}/models/flash-ansr-v25.0-T8-20M", ...}   # a full flash_ansr block
+  hybrid:
+    rungs: [[512, 16], [1024, 64], [2048, 256], [4096, 512], [8192, 1024]]   # (draws, PySR iterations) per budget
+    k_seeds: 100
+    snapshot_dir: "{{ROOT}}/snapshots/hybrid"   # one generation pass per problem serves every budget of the ladder
+  pysr: {warmup: true}
+```
+
+The budget is a pair: Flash-ANSR's draws and PySR's iterations, paired so that both stages take the same time on
+the reference machine (r* = 0.5; `flash_ansr.hybrid.R_STAR_LADDER`); the axis is labelled by the draws. The hybrid
+can also run by the clock (`hybrid: {budget_s: T, ratio: r}`: Flash-ANSR gets (1 - r) T of wall time, PySR the
+rest), which is how the ratio was chosen.
 
 ## PySR
 
@@ -593,7 +617,8 @@ evaluations in doublings from 2^14 up to about 100 s per problem on the referenc
 ## Sampling and enumeration baselines
 
 `lample_charton` fits expressions sampled from a generative `symbolic-data` catalog and
-`brute_force` enumerates them. Neither has weights. Both need `simplipy_engine` and a `catalog` to
+`brute_force` enumerates them. Neither has weights, and both fit their constants with flash-ansr's refiner
+(`pip install "srbf[flash-ansr]"`). Both need `simplipy_engine` and a `catalog` to
 draw from; this is the adapter's own key and unrelated to `data_source.catalog`, which names the
 expressions being evaluated.
 

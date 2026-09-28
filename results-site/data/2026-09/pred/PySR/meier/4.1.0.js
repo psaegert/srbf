@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|meier|4|1|0"]={"0":["tan - * tan x2 x1 0.2217",0],"1":["sinh + + + sinh sinh x1 sinh sinh x1 - + + sinh sinh x1 sinh sinh x1 log atan * x2 x2 x2 atan x1",0]};})();

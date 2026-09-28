@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|meier|4|2|0"]={"0":["+ tan - - sinh - x1 0.3314 x1 x2 x1",0],"1":["* / x1 sinh x2 abs abs / - cosh abs cosh - x1 -0.5072 1.781 * sinh x2 -0.04308",0]};})();

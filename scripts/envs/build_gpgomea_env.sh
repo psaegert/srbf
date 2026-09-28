@@ -4,7 +4,7 @@
 #
 #   scripts/envs/build_gpgomea_env.sh PREFIX [SOURCE_DIR]
 #
-#   PREFIX       the environment to create, e.g. $FLASH_ANSR_ROOT/envs/gpgomea (must not exist)
+#   PREFIX       the environment to create, e.g. $SRBF_ROOT/envs/gpgomea (must not exist)
 #   SOURCE_DIR   where the source is cloned and built (default: PREFIX/src/GP-GOMEA)
 #
 # Environment variables: CONDA (conda or mamba; default: the first found on PATH), JOBS (parallel compile

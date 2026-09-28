@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|nonic|32|1|0"]={"0":["inv / exp * x1 + x1 -0.1425 * sinh x1 + exp + x1 * + abs x1 0.9032 * x1 x1 -0.03202",0]};})();

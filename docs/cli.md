@@ -58,7 +58,7 @@ Scaffold an adapter for a method: `srbf new <name>`, where the name is a lowerca
 
 | flag | meaning |
 |---|---|
-| `--dir` | where the adapter directory goes; by default `$FLASH_ANSR_ROOT/adapters`, else `./adapters` |
+| `--dir` | where the adapter directory goes; by default `$SRBF_ROOT/adapters`, else `./adapters` |
 | `--python` | the interpreter of the method's environment, written into the config; by default `{{ROOT}}/envs/<name>/bin/python` |
 | `--repo` | write into the layout of an srbf checkout, for a pull request |
 | `--force` | overwrite files that exist |

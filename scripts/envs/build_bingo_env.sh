@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the environment the Bingo worker runs in (src/srbf/worker/models/bingo_worker.py, docs/models.md#bingo).
 #
-#   scripts/envs/build_bingo_env.sh <prefix>        e.g. scripts/envs/build_bingo_env.sh "$FLASH_ANSR_ROOT/envs/bingo"
+#   scripts/envs/build_bingo_env.sh <prefix>        e.g. scripts/envs/build_bingo_env.sh "$SRBF_ROOT/envs/bingo"
 #
 # Bingo (github.com/nasa/bingo, Apache-2.0) is installed from its PyPI release bingo-nasa 0.5.7, a binary wheel that
 # carries its C++ extension (bingocpp). The package requires mpi4py 4, which needs an MPI library, so the script

@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-3M|pagie|128|2|0"]={"0":["acos / 0.8 cosh / * 20 * pow x1 2 asinh x2 + x2 / * x1 - + x1 16 x2 x2",0]};})();

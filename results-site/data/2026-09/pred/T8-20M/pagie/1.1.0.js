@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-20M|pagie|1|1|0"]={"0":["- / 5 3 inv rootn + x1 * cosh + * 4 x2 / pow x2 2 x1 + sinh x2 / 7 3 3",0]};})();

@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-20M|sine|64|2|0"]={"0":["- sin / * -11 * + / 180 acosh + x1 + pow x1 3000 400000000 2 inv pow x1 0.04 7 cos + x1 + cos / * 26 x1 3 1.2",0]};})();

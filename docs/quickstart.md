@@ -5,11 +5,11 @@ fits a linear model, and takes it through a check, a run and a report. The secon
 released Flash-ANSR model.
 
 Both start the same way. srbf keeps models, results, adapters and environments under one
-directory, named by the `FLASH_ANSR_ROOT` environment variable; configs refer to it as `{{ROOT}}`.
+directory, named by the `SRBF_ROOT` environment variable; configs refer to it as `{{ROOT}}`.
 
 ```bash
 pip install "srbf[analysis]"
-export FLASH_ANSR_ROOT=$PWD/bench
+export SRBF_ROOT=$PWD/bench
 ```
 
 ## A method of your own, in a minute
@@ -90,13 +90,14 @@ environment and what a pull request carries.
 
 ## A released model
 
-The Flash-ANSR checkpoints are on the Hugging Face Hub, and the `flash_ansr` command that installs
-them comes with srbf. The evaluation configs are in the repository:
+The Flash-ANSR checkpoints are on the Hugging Face Hub. The Flash-ANSR adapter needs `flash-ansr`, which
+srbf installs only when asked (`srbf[flash-ansr]`). The evaluation configs are in the repository:
 
 ```bash
 git clone https://github.com/psaegert/srbf && cd srbf
-export FLASH_ANSR_ROOT=$PWD
-flash_ansr install psaegert/flash-ansr-v25.0-T8-3M      # into models/psaegert/flash-ansr-v25.0-T8-3M
+pip install ".[flash-ansr]"
+export SRBF_ROOT=$PWD
+hf download psaegert/flash-ansr-v25.0-T8-3M --local-dir models/psaegert/flash-ansr-v25.0-T8-3M
 ```
 
 The config `configs/evaluation/scaling/flash-ansr-v25.0-T8-3M_srbf.yaml` holds one experiment per

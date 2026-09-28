@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-120M|pagie|256|2|0"]={"0":["- + / * 9 pow tanh x2 2 8 / 6 7 / * tanh x1 inv cosh pow x1 2 x1",0]};})();
