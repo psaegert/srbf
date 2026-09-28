@@ -14,7 +14,7 @@ Then put your method into `fit()` in `src/srbf/worker/models/mymethod_worker.py`
 environment in `envs/mymethod/requirements.txt`, and run
 
 ```bash
-export FLASH_ANSR_ROOT=$PWD                                     # models, results and environments live under here
+export SRBF_ROOT=$PWD                                           # models, results and environments live under here
 python -m venv envs/mymethod && envs/mymethod/bin/pip install -r envs/mymethod/requirements.txt
 srbf check -c configs/evaluation/mymethod_srbf.yaml             # a few real problems end to end
 srbf run -c configs/evaluation/mymethod_srbf.yaml -v            # the whole suite, or --experiment fastsrb

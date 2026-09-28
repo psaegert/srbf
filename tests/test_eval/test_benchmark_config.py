@@ -224,6 +224,12 @@ def test_from_config_requires_experiment_name():
 # --- adapter builders (config.py) --------------------------------------------------------
 
 def _patch_flash_ansr(monkeypatch, captured):
+    # the builder imports flash-ansr's model and generation configs when it runs (flash-ansr is an optional
+    # install), so the fakes go where it looks them up; its ranking block is flash-ansr's own
+    pytest.importorskip("flash_ansr", reason="the flash_ansr adapter is flash-ansr's (pip install 'srbf[flash-ansr]')")
+    import flash_ansr.flash_ansr
+    import flash_ansr.utils.generation
+
     def fake_create_generation_config(method, **kwargs):
         captured["method"] = method
         captured["kwargs"] = kwargs
@@ -241,8 +247,8 @@ def _patch_flash_ansr(monkeypatch, captured):
         def __init__(self, model, device, complexity, candidate_store_dir=None):
             self.model = model
 
-    monkeypatch.setattr(run_config, "create_generation_config", fake_create_generation_config)
-    monkeypatch.setattr(run_config, "FlashANSR", FakeFlashANSR)
+    monkeypatch.setattr(flash_ansr.utils.generation, "create_generation_config", fake_create_generation_config)
+    monkeypatch.setattr(flash_ansr.flash_ansr, "FlashANSR", FakeFlashANSR)
     monkeypatch.setattr(run_config, "FlashANSRAdapter", DummyAdapter)
     return DummyAdapter
 

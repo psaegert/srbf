@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["prior|pagie|1024|2|0"]={"0":["inv rootn / * 0.02 + * x1 - + * 2 x1 cos x1 1 10 pow x1 2 5",0]};})();

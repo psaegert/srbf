@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-3M|pagie|1|1|0"]={"0":["+ asinh x1 atan * x2 - x2 / * 66 * x1 x2 + x2 200",0]};})();

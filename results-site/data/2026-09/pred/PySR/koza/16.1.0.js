@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|koza|16|1|0"]={"0":["sinh * * tan sinh cos asin x1 cos * + x1 x1 asinh * x1 -0.9565 * x1 0.4168",0],"1":["abs * sin sinh * * x1 cos x1 * x1 * cos * tan x1 0.9683 cos x1 abs cos * tan x1 1.027",0]};})();

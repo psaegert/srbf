@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|physo-astro|64|2|0"]={"0":["/ / / -1.55 - * x1 0.8672 -1.228 x1 - -0.9226 * x1 0.675",1],"1":["+ * - * * x1 -3.432 - -1.321 * x1 0.4403 -4.534 x1 1.149",1]};})();

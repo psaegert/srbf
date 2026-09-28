@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|pagie|32|2|0"]={"0":["* atan + + cosh / atan + cosh / atan x1 0.629 + tanh cosh x2 -1.941 0.6305 cosh tanh x2 -1.869 atan cosh / x2 0.6068",0]};})();

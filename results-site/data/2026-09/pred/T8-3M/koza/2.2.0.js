@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-3M|koza|2|2|0"]={"0":["+ * x1 + / * 4 x1 11 / 3 4 / pow x1 3 - x1 cosh asin x1",0],"1":["- 0.4 * pow x1 4 cosh x1",0]};})();

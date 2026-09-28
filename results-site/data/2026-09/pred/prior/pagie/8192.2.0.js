@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["prior|pagie|8192|2|0"]={"0":["* -4e-09 - + x1 + cosh - pow x2 2 20 / 300000 x2 440000000",0]};})();

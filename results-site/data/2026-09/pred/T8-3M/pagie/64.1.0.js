@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-3M|pagie|64|1|0"]={"0":["+ tanh / * -8 * x1 pow x2 2 neg + * 17 x1 / pow x2 4 x1 0.9",0]};})();

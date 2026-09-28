@@ -63,7 +63,7 @@ def fit_once(
     loaded ``SimpliPyEngine``). ``options`` overrides the config's. The record carries the keys a
     run records: ``prediction_success``, ``predicted_expression``, ``y_pred_val``, ``error``, ...
     """
-    from flash_ansr.utils.paths import substitute_root_path
+    from srbf.paths import substitute_root_path
     from simplipy import SimpliPyEngine
 
     from srbf.config import (

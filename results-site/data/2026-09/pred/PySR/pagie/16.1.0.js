@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|pagie|16|1|0"]={"0":["+ * tanh cosh * * x1 -0.9939 sinh sinh tanh sinh tanh x1 + sinh tanh * x2 tanh x2 3.089 -2.276",0]};})();

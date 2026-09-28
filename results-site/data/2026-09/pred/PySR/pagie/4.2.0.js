@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|pagie|4|2|0"]={"0":["- tan - 0.8926 atan inv abs * x1 x2 -0.9271",0]};})();

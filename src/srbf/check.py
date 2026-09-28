@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping
 
-from flash_ansr.utils.paths import substitute_root_path
+from srbf.paths import substitute_root_path
 
 PROVENANCE_HINT = "set model_adapter.config_provenance to upstream_default, author_blessed or harness_tuned (docs/fairness.md)"
 

@@ -1,3 +1,4 @@
+import importlib.util
 import time
 
 import numpy as np
@@ -5,10 +6,12 @@ import pytest
 from simplipy import SimpliPyEngine
 
 from symbolic_data import LampleChartonCatalog
-from srbf.baselines import BruteForceModel, LampleChartonModel
 from srbf.core import EvaluationSample
 from srbf.model_adapters import (BruteForceAdapter, E2EAdapter, FlashANSRAdapter, LampleChartonAdapter,
                                  NeSymReSAdapter, _evaluate_refiner_baseline)
+
+needs_flash_ansr = pytest.mark.skipif(importlib.util.find_spec("flash_ansr") is None,
+                                      reason="flash-ansr is not installed (pip install 'srbf[flash-ansr]')")
 
 
 def test_flash_ansr_adapter_rejects_unknown_complexity_string() -> None:
@@ -85,8 +88,11 @@ def _build_sample() -> EvaluationSample:
     )
 
 
+@needs_flash_ansr
 def test_lample_charton_adapter_identity(simplipy_engine: SimpliPyEngine) -> None:
     pool = _build_toy_pool(simplipy_engine)
+    from srbf.baselines import LampleChartonModel
+
     model = LampleChartonModel(
         simplipy_engine=simplipy_engine,
         catalog=pool,
@@ -112,8 +118,11 @@ def test_lample_charton_adapter_identity(simplipy_engine: SimpliPyEngine) -> Non
     assert values["predicted_skeleton_prefix"] is not None
 
 
+@needs_flash_ansr
 def test_brute_force_adapter_identity(simplipy_engine: SimpliPyEngine) -> None:
     pool = _build_toy_pool(simplipy_engine)
+    from srbf.baselines import BruteForceModel
+
     model = BruteForceModel(
         simplipy_engine=simplipy_engine,
         catalog=pool,
@@ -157,6 +166,8 @@ def _toy_sample() -> EvaluationSample:
 class _RaisingModel:
     """A model whose fit burns a measurable slice of time and then raises, like NeSymReS on a wide support box."""
 
+    generation_config = None   # the Flash-ANSR test gives it a real one; the other adapters never read it
+
     def fit(self, *args, **kwargs):
         time.sleep(0.01)
         raise ValueError("upstream blew up")
@@ -170,8 +181,12 @@ def _failed(values) -> None:
     assert values.get("fit_time") is None, "a failed fit must carry no time"
 
 
+@needs_flash_ansr
 def test_flash_ansr_adapter_does_not_time_a_failed_fit() -> None:
-    _failed(FlashANSRAdapter(model=_RaisingModel()).evaluate_sample(_toy_sample()).values)
+    from flash_ansr.utils.generation import SoftmaxSamplingConfig
+    model = _RaisingModel()
+    model.generation_config = SoftmaxSamplingConfig()   # as FlashANSR carries one
+    _failed(FlashANSRAdapter(model=model).evaluate_sample(_toy_sample()).values)
 
 
 def test_refiner_baseline_does_not_time_a_failed_fit() -> None:

@@ -56,7 +56,7 @@ def _construct_sweep(loader: yaml.Loader, node: yaml.Node) -> Sweep:
 def register_sweep_yaml() -> None:
     """Register the ``!sweep`` tag on PyYAML's safe loaders (idempotent).
 
-    ``flash_ansr.utils.config_io.load_config`` parses with ``yaml.safe_load`` (the default
+    ``srbf.paths.load_config`` parses with ``yaml.safe_load`` (the default
     ``SafeLoader``), so registering here lets the shared loader build ``Sweep`` markers; configs
     without ``!sweep`` are unaffected.
     """

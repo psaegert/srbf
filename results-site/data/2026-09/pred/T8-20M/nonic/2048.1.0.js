@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-20M|nonic|2048|1|0"]={"0":["+ x1 / - - + * 6 x1 cosh * 2.06 pow x1 2 / * 5 asin x1 3 1.23 - + x1 / 41 * 11 x1 3.942",0]};})();

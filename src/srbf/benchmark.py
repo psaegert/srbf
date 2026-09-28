@@ -22,7 +22,7 @@ from tqdm import tqdm
 
 from srbf.store import ResultStore
 from srbf.shards import shard_output_path, shard_share
-from flash_ansr.utils.paths import substitute_root_path
+from srbf.paths import substitute_root_path
 
 
 class Benchmark:

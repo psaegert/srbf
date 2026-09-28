@@ -13,25 +13,21 @@
     })();
   </script>
   <script>
-    // Benchmark release routing (client-side, no server), before the first paint so that prose written for one
-    // release never flashes under the other: the newest release is the default; a deep link of the 2026-07
-    // explorer (?view=, ?bench=, ?baseline=, ?metric=, ?budget=) or ?release=2026-07 selects it.
+    // A link to a section this page used to hold opens that section's own page; a link to a view of the explorer
+    // (its settings are the query) opens the Results page with the same settings.
     (function () {
-      var q = new URLSearchParams(window.location.search);
-      var v1 = ["view", "bench", "baseline", "metric", "budget"].some(function (k) { return q.has(k); });
-      var release = q.get("release") || (v1 ? "2026-07" : "2026-09");
-      if (release !== "2026-07" && release !== "2026-09") { release = "2026-09"; }
-      document.documentElement.setAttribute("data-release", release);
-      window.SRBF_RELEASE = release;
+      var to = { "#about": "guide.html", "#paired": "paired.html", "#ranks": "ranks.html", "#metrics": "metrics.html" }[window.location.hash];
+      if (to) { window.location.replace(to); return; }
+      if (window.location.search) { window.location.replace("explorer.html" + window.location.search + window.location.hash); }
     })();
   </script>
-  <title>srbf: Symbolic Regression Benchmark Framework · Results</title>
-  <meta name="description" content="Interactive results explorer of srbf, the Symbolic Regression Benchmark Framework: symbolic regression methods on the same problems, sampled the same way and read by one judge, over compute, noise, and support-size sweeps." />
+  <title>srbf · Symbolic Regression Benchmark Framework</title>
+  <meta name="description" content="srbf, the Symbolic Regression Benchmark Framework, runs any symbolic regression method on the same 6,660 problems from 29 published problem sets and checks every formula it returns the same way." />
   <link rel="icon" type="image/svg+xml" href="srbf-icon.svg" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="srbf: Symbolic Regression Benchmark Framework" />
-  <meta property="og:description" content="Interactive results explorer: symbolic regression methods on the same problems, sampled the same way and read by one judge, over compute, noise, and sample-count sweeps." />
+  <meta property="og:title" content="srbf: Symbolic Regression Benchmark Framework · Results" />
+  <meta property="og:description" content="srbf, the Symbolic Regression Benchmark Framework, runs any symbolic regression method on the same 6,660 problems from 29 published problem sets and checks every formula it returns the same way." />
   <meta property="og:url" content="https://psaegert.github.io/srbf/" />
   <meta property="og:image" content="https://psaegert.github.io/srbf/srbf-social.png" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -40,7 +36,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous" />
-  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"
     onload="renderMathInElement(document.body, {delimiters: [{left: '$$', right: '$$', display: true}, {left: '\\(', right: '\\)', display: false}]});"></script>
@@ -52,14 +47,11 @@
         <img class="brand-icon" src="srbf-icon.svg" alt="srbf" width="26" height="26" />
         <span class="brand-sub">Symbolic Regression Benchmark Framework</span>
       </a>
-      <nav class="site-nav">
-        <a href="#about">About</a>
-        <a href="#paired">Paired</a>
-        <a href="#ranks">Ranks</a>
-        <a href="#metrics">Metrics</a>
-        <a href="https://srbf.readthedocs.io/" target="_blank" rel="noopener">Docs</a>
-        <a href="https://github.com/psaegert/srbf" target="_blank" rel="noopener">GitHub</a>
-        <a href="https://pypi.org/project/srbf/" target="_blank" rel="noopener">PyPI</a>
+      <nav class="site-nav" aria-label="Pages">
+        <a href="explorer.html">Explorer</a>
+        <a href="progress.html">Progress</a>
+        <a href="guide.html">How to read</a>
+        <a href="metrics.html">Metrics</a>
       </nav>
       <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Theme"></button>
     </div>
@@ -67,45 +59,72 @@
 
   <main>
     <div class="wrap">
-    <section class="hero">
-      <h1>Benchmark results</h1>
-      <p class="lede">
-        Symbolic regression methods on the same problems, sampled the same way, read by one judge:
-        <strong>E2E</strong>, <strong>NeSymReS</strong>, <strong>PySR</strong>, the
-        <strong>Flash-ANSR</strong> series and a hybrid that seeds PySR with Flash-ANSR's draws, on
-        6,660 problems from 29 catalogs, next to a reference that
-        samples expressions from Flash-ANSR's training prior with no model at all. The explorer
-        reads one set of results six ways: curves along the budget, tables, a catalog matrix,
-        distributions, ranks and paired differences. <a href="#about">About</a> says how a number
-        is made and <a href="#metrics">Metrics</a> defines each one. Any method can be entered: it
-        needs an adapter, a configuration, and a name for whoever chose it.
-      </p>
-      <div class="va-wrap">
+    <section class="home-hero">
+      <div class="home-hero-text">
+        <h1>One standard for comparing symbolic regression methods</h1>
+        <p class="lede">
+          Symbolic regression finds a mathematical formula that describes a set of data points. Its
+          results are hard to compare: papers test methods on different problems, with different budgets
+          and different criteria for success. srbf, the Symbolic Regression Benchmark Framework, fixes
+          all three. Every method runs on the same 6,660 problems from 29 published problem sets, at a
+          series of budgets, and every formula a method returns is checked by the same strict rules.
+        </p>
+        <div class="home-actions">
+          <a class="home-btn home-btn-primary" href="explorer.html">Open the explorer</a>
+          <a class="home-btn" href="https://srbf.readthedocs.io/" target="_blank" rel="noopener">Read the documentation</a>
+        </div>
+        <p class="home-install"><code>pip install srbf</code></p>
+      </div>
+      <div class="home-example-wrap">
+        <figure class="home-example">
+          <p class="home-example-kicker">One of the 6,660 problems · Feynman Lectures II.8.7</p>
+          <div class="home-example-row">
+            <span class="home-example-label">True formula</span>
+            <span class="home-example-math">\(E = \dfrac{3}{5}\,\dfrac{q^2}{4\pi\,\varepsilon\,d}\)</span>
+          </div>
+          <div class="home-example-row">
+            <span class="home-example-label">PySR, 8 search iterations</span>
+            <span class="home-example-math">\(E = \dfrac{0.04775\; q \cdot q}{\varepsilon\,d}\)</span>
+          </div>
+          <ul class="home-example-checks">
+            <li><span class="home-check" aria-hidden="true">✓</span> <b>Numeric Recovery</b>: it reproduces 512 points it never saw, almost exactly</li>
+            <li><span class="home-check" aria-hidden="true">✓</span> <b>Symbolic Recovery</b>: it has the true formula's form, numbers aside</li>
+          </ul>
+          <figcaption>
+            A real result from the 2026-09 release: PySR found the form and fitted the number,
+            \(0.04775 \approx \tfrac{3}{20\pi}\).
+            <a href="explorer.html?release=2026-09&amp;v=preds&amp;ps=feynman&amp;r=8&amp;pr=1&amp;pn=58&amp;m=PySR">See it in the explorer</a>
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <div class="va-wrap home-va">
         <!-- Inline copy of ../assets/brand/visual-abstract.svg: geometry identical (the copy
              lint enforces the match); colours live in styles.css scoped under #va so the
              graphic follows the site theme, including the manual toggle, which an <img> embed
              never could (media queries inside an image only see the OS scheme). -->
         <svg id="va" class="visual-abstract" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320"
              font-family="Inter, system-ui, -apple-system, sans-serif" role="img"
-             aria-label="srbf visual abstract: any datasets crossed with any methods go through one framework (unified dataset formalism, decontamination built in, paired pre-declared statistics) into the explorer's Curves, Tables, and Ranks views.">
+             aria-label="srbf visual abstract: any problem sets crossed with any methods go through one framework (problems from symbolic-data, which a method's training data can exclude; paired comparisons) into the explorer's Curves, Tables and Ranks views.">
           <rect class="bg" x="1" y="1" width="1198" height="318" rx="18" stroke-width="2"/>
 
         <!-- phase captions -->
-        <text class="ink" x="193" y="58" text-anchor="middle" font-size="15" font-weight="700">Any datasets &#215; any methods</text>
+        <text class="ink" x="193" y="58" text-anchor="middle" font-size="15" font-weight="700">Any problem sets &#215; any methods</text>
         <text class="ink" x="525" y="58" text-anchor="middle" font-size="15" font-weight="700">One framework</text>
         <text class="ink" x="932" y="58" text-anchor="middle" font-size="15" font-weight="700">Explore &amp; compare</text>
 
         <!-- left: datasets x methods -->
         <rect class="panel" x="48" y="80" width="290" height="78" rx="12"/>
-        <text class="accent" x="70" y="106" font-size="11.5" font-weight="700" letter-spacing="1.4">DATASETS</text>
-        <text class="ink" x="70" y="127" font-size="13">One formalism, any source:</text>
+        <text class="accent" x="70" y="106" font-size="11.5" font-weight="700" letter-spacing="1.4">PROBLEM SETS</text>
+        <text class="ink" x="70" y="127" font-size="13">One format, any source:</text>
         <text class="soft" x="70" y="145" font-size="13">Feynman &#183; Nguyen &#183; your own</text>
 
         <text class="accent" x="193" y="185" text-anchor="middle" font-size="23" font-weight="600">&#215;</text>
 
         <rect class="panel" x="48" y="198" width="290" height="78" rx="12"/>
         <text class="accent" x="70" y="224" font-size="11.5" font-weight="700" letter-spacing="1.4">METHODS</text>
-        <text class="ink" x="70" y="245" font-size="13">One adapter interface:</text>
+        <text class="ink" x="70" y="245" font-size="13">One interface for every method:</text>
         <text class="soft" x="70" y="263" font-size="13">E2E &#183; Flash-ANSR &#183; NeSymReS &#183; PySR</text>
 
         <!-- arrow -->
@@ -120,9 +139,9 @@
             <path fill="#ffffff" d="M278.0 -9Q183.0 -9 129.0 34.0Q75.0 77 75.0 154H182.0Q182.0 119 207.0 99.5Q232.0 80 278.0 80H322.0Q369.0 80 395.0 99.5Q421.0 119 421.0 155Q421.0 218 354.0 227L209.0 247Q148.0 255 114.5 295.5Q81.0 336 81.0 401Q81.0 476 132.0 517.5Q183.0 559 276.0 559H321.0Q407.0 559 460.5 518.0Q514.0 477 517.0 410H409.0Q407.0 437 383.5 454.5Q360.0 472 321.0 472H276.0Q233.0 472 209.5 453.0Q186.0 434 186.0 402Q186.0 351 243.0 343L379.0 325Q526.0 305 526.0 156Q526.0 77 473.0 34.0Q420.0 -9 322.0 -9Z M684.0 0V550H791.0V442Q799.0 497 838.0 528.5Q877.0 560 941.0 560Q1026.0 560 1073.0 507.0Q1120.0 454 1120.0 358V309H1012.0V355Q1012.0 466 903.0 466Q849.0 466 820.5 434.5Q792.0 403 792.0 343V0Z M1501.0 -10Q1441.0 -10 1401.5 20.0Q1362.0 50 1351.0 104V0H1244.0V730H1352.0V573L1349.0 446Q1361.0 499 1401.5 529.5Q1442.0 560 1501.0 560Q1583.0 560 1632.0 504.0Q1681.0 448 1681.0 352V197Q1681.0 102 1632.0 46.0Q1583.0 -10 1501.0 -10ZM1463.0 84Q1515.0 84 1544.0 111.5Q1573.0 139 1573.0 200V351Q1573.0 411 1544.0 438.5Q1515.0 466 1463.0 466Q1411.0 466 1381.5 434.5Q1352.0 403 1352.0 346V205Q1352.0 147 1381.5 115.5Q1411.0 84 1463.0 84Z M1948.0 0V377H1792.0V475H1948.0V581Q1948.0 650 1992.0 690.0Q2036.0 730 2112.0 730H2273.0V634H2114.0Q2056.0 634 2056.0 580V475H2273.0V377H2056.0V0Z"/>
           </g>
         </g>
-        <text class="ink" x="525" y="224" text-anchor="middle" font-size="12.5">unified dataset formalism</text>
-        <text class="ink" x="525" y="246" text-anchor="middle" font-size="12.5">decontamination built in</text>
-        <text class="ink" x="525" y="268" text-anchor="middle" font-size="12.5">paired, pre-declared statistics</text>
+        <text class="ink" x="525" y="224" text-anchor="middle" font-size="12.5">problems from symbolic-data</text>
+        <text class="ink" x="525" y="246" text-anchor="middle" font-size="12.5">training data can exclude them</text>
+        <text class="ink" x="525" y="268" text-anchor="middle" font-size="12.5">paired comparisons</text>
 
         <!-- arrow -->
         <path class="accent-stroke" d="M658 178 h33" stroke-width="2.5" fill="none"/>
@@ -167,851 +186,107 @@
         <line class="grid" x1="1032" y1="178" x2="1138" y2="178" stroke-width="1.5"/>
         <text class="faint" x="1032" y="198" font-size="10.5">1</text>
         <text class="faint" x="1131" y="198" font-size="10.5">k</text>
-        <text class="faint" x="1085" y="218" text-anchor="middle" font-size="10.5">mean rank</text>
+        <text class="faint" x="1085" y="218" text-anchor="middle" font-size="10.5">average place</text>
         <text class="soft" x="1084" y="272" text-anchor="middle" font-size="13.5" font-weight="600">Ranks</text>
         </svg>
       </div>
+
+    <section class="home-section">
+      <h2>What srbf does</h2>
+      <div class="home-features">
+        <div class="home-feature">
+          <h3>Published problems</h3>
+          <p>29 problem sets with 6,660 problems: the Feynman equations, the classic benchmark sets, physics
+            collections and machine-generated formulas, from the
+            <a href="https://github.com/psaegert/symbolic-data" target="_blank" rel="noopener">symbolic-data</a>
+            package. Because they come as one package, a method trained in advance can leave all of them out of its
+            training data.</p>
+        </div>
+        <div class="home-feature">
+          <h3>Any method</h3>
+          <p>Each method runs in its own environment, with whatever PyTorch, Julia or NumPy version it needs.
+            One small Python file connects it.</p>
+        </div>
+        <div class="home-feature">
+          <h3>One judge</h3>
+          <p>Every formula is checked the same way: on 512 points the method never saw, and against the true
+            formula once both are simplified into a standard form.</p>
+        </div>
+        <div class="home-feature">
+          <h3>Budgets and time</h3>
+          <p>Each method runs at a series of budgets. A budget is how much it may search per problem, such as how
+            many candidate formulas it may try, and each is twice the one before, so accuracy can be read against
+            cost. Times are measured on one workstation, one method at a time.</p>
+        </div>
+        <div class="home-feature">
+          <h3>Paired statistics</h3>
+          <p>Methods are compared problem by problem, with 95 % intervals, paired tests and ranks.</p>
+        </div>
+        <div class="home-feature">
+          <h3>Stated settings</h3>
+          <p>Every method is labelled with who chose its settings: its own defaults, its authors, or the
+            benchmark's maintainers. The people who run this benchmark also develop Flash-ANSR, one of the methods
+            compared here.</p>
+        </div>
+      </div>
     </section>
 
+    <section class="home-section home-release-intro">
+      <h2>The 2026-09 release</h2>
+      <p class="home-text explorer-v2 home-updated" id="results-updated-v2"></p>
+      <p class="home-text">
+        E2E, NeSymReS and Flash-ANSR are neural networks trained in advance on many machine-generated
+        formulas; given a new problem, they propose formulas without further training. PySR is an
+        evolutionary search. Flash-ANSR comes in three sizes and is also combined with PySR. A baseline,
+        Flash-ANSR prior, ignores the data: it draws random formulas of the kind Flash-ANSR was trained on, fits
+        their numbers and picks one the way Flash-ANSR does. It shows how much Flash-ANSR gains by reading the
+        data. The number after a network's name is its size in millions of parameters (M); T8 is the version of
+        the Flash-ANSR models.
+      </p>
+      <div id="results-progress-v2" class="explorer-v2 home-progress"></div>
+    </section>
     </div>
 
     <div class="wrap-wide">
     <section class="panel">
-      <nav class="release-switch" id="release-switch" aria-label="Benchmark release">
-        <span class="release-label">Benchmark release</span>
-        <a href="?release=2026-09" data-release="2026-09">2026-09 · current</a>
-        <a href="?release=2026-07" data-release="2026-07">2026-07 · paper</a>
-      </nav>
-      <div id="results-headline-v2" class="explorer-v2 headline-v2" hidden></div>
-      <div id="results-explorer-v2" class="explorer-v2" hidden>
-        <div class="loading">Loading the results explorer…</div>
+      <div id="results-headline-v2" class="explorer-v2 headline-v2">
+        <div class="loading">Loading the charts…</div>
       </div>
-      <div id="results-explorer" class="explorer" hidden>
-        <div class="loading">Loading the results explorer…</div>
-      </div>
+      <p class="explore-cta"><a href="explorer.html">Explore all results</a>: every metric, problem set, budget and time, method by method.</p>
     </section>
     </div>
 
     <div class="wrap">
-    <section id="about" class="prose">
-      <h2>About these numbers</h2>
-      <p class="section-lede" data-for="2026-09">
-        The 2026-09 release is a fresh <code>srbf</code> run: every method sees the same problems, sampled
-        the same way, and every prediction is read the same way.
-      </p>
-      <p class="section-lede" data-for="2026-07">
-        The 2026-07 release re-scores the archived predictions behind the Flash-ANSR paper.
-      </p>
-
-      <section class="topic" data-for="2026-09">
-        <h3>Problems</h3>
-        <div>
-          <p>
-            29 catalogs hold 6,660 ground-truth expressions, and each is one problem: 512 support points for the
-            method and 512 validation points it never sees, drawn from the catalog's own ranges
-            without noise. The numbers on this page come from one draw per problem.
-          </p>
-        </div>
-      </section>
-
-      <section class="topic" data-for="2026-09">
-        <h3>Judging a prediction</h3>
-        <div>
-          <p>
-            A prediction is read twice. Numerically, by its fraction of variance unexplained on the
-            validation points. Symbolically, by simplifying the prediction and the ground truth into one
-            certified canonical form, in the ground truth's own variable names, and comparing the two. How a
-            method arrives at the prediction it submits is its own affair: the explorer states that
-            rule next to the method's name.
-          </p>
-        </div>
-      </section>
-
-      <section class="topic" data-for="2026-09">
-        <h3>Budget and cost</h3>
-        <div>
-          <p>
-            A method runs along a ladder of budgets \(1, 2, 4, \dots\) per problem: samples, beam
-            width or candidates, and search iterations for PySR. Cost is seconds per problem on one
-            reference machine, the only timing this release publishes, so a curve is drawn against
-            that time or against the candidate budget. PySR spends iterations rather than
-            candidates and therefore appears on the time axis only.
-          </p>
-        </div>
-      </section>
-
-      <section class="topic" data-for="2026-09">
-        <h3>Pooling and intervals</h3>
-        <div>
-          <p>
-            A pooled number is a statistic over all problems of the selected catalogs. It is shown for a
-            budget once the method has finished every selected catalog there, so every point, row
-            and rank is over the same problems. A rate counts every problem, and a failed prediction is a
-            miss. A metric whose range has a worst value counts every problem too: a failed prediction
-            takes that value: the token and variable overlaps, where it counts 0. The explorer can
-            leave the failed predictions out of these metrics instead. Every other metric describes
-            the predictions that were made, since most can be arbitrarily bad; a point that rests on fewer than 90 % of
-            the problems is drawn hollow, and the threshold can be moved. Intervals are 95 %: a
-            t-interval for a mean, an order-statistic interval for a median, and for a rate
-            \(\hat{p}\) over \(K\) problems the Wilson score interval
-          </p>
-          $$
-            \frac{\hat{p} + \frac{z^2}{2K} \;\pm\; z \sqrt{\frac{\hat{p}(1 - \hat{p})}{K} + \frac{z^2}{4K^2}}}
-                 {1 + \frac{z^2}{K}},
-            \qquad z = 1.96 .
-          $$
-        </div>
-      </section>
-
-      <section class="topic" data-for="2026-07">
-        <h3>Provenance</h3>
-        <div>
-          <p>
-            The series are re-scored through <a href="https://srbf.readthedocs.io/" rel="noopener"
-            target="_blank"><code>srbf.analysis</code></a> from the archived raw predictions of the
-            <strong>Flash-ANSR v23.0</strong> evaluation, the experiments behind
-            <a href="https://arxiv.org/abs/2602.08885" target="_blank" rel="noopener"><em>Breaking
-            the Simplification Bottleneck in Amortized Neural Symbolic Regression</em></a>.
-            Flash-ANSR series carry version <code>v23.0</code> (<code>v23.3</code> for the KV-cache
-            decode re-evaluation), and the version travels with each series in the legend. The
-            <em>Ablations</em> group holds the paper's ablation grid: training data and budget
-            (Track A), architecture reverts toward NeSymReS (Track B), the constants prior (C1) and
-            inference-only re-evaluations of the unchanged checkpoint (Track Z). Ablation B1
-            (post-norm) has no timing in its archive and so no place on the compute axis.
-          </p>
-        </div>
-      </section>
-
-      <section class="topic" data-for="2026-07">
-        <h3>Benchmarks and sweeps</h3>
-        <div>
-          <p>
-            <strong>FastSRB</strong> is a curated suite of textbook and physics expressions, each
-            evaluated at several sampled problem instances. <strong>v23-val</strong> is a held-out
-            set of expression skeletons from Flash-ANSR's training distribution, decontaminated
-            against the training data. Three sweeps supply the x axis: <em>inference compute</em>,
-            <em>support size</em> and <em>noise level</em>. The compute axis is the median
-            wall-clock fit time per problem, the one budget that is comparable across methods: each
-            method scales along its own knob (sampled candidates, iterations, beam width), and time
-            puts them on a single frontier. Times were measured on the same hardware per sweep.
-          </p>
-        </div>
-      </section>
-
-      <section class="topic" data-for="2026-07">
-        <h3>From predictions to a point</h3>
-        <div>
-          <ol>
-            <li><strong>Placeholder rows are excluded.</strong> A draw that could not be realized,
-              for example because no valid problem instance exists at the requested support size,
-              never enters a statistic.</li>
-            <li><strong>Failures count against rate metrics only.</strong> A problem without a
-              usable prediction scores 0 on recovery, exact match and success. Metrics that need a
-              prediction (FVU, token overlap, edit distances, lengths, timings) are taken over the
-              successful predictions.</li>
-            <li><strong>Rows are grouped by expression.</strong> The draws of one expression are
-              averaged into one value, so no expression is over-weighted.</li>
-            <li><strong>The per-expression values are bootstrapped.</strong> Over 1,000 resamples
-              with replacement, the plotted point is the median of the resampled means and the band
-              is its 2.5th to 97.5th percentile. The <code>n</code> in a tooltip (tap or hover) is
-              the number of contributing expressions.</li>
-          </ol>
-        </div>
-      </section>
-
-      <section class="topic" data-for="2026-07">
-        <h3>Reading the curves</h3>
-        <div>
-          <p>
-            Recovery and FVU are scored against clean targets: in the noise sweep a method fits
-            noisy values and is evaluated on the noise-free function, because the question is
-            whether the law was recovered. Token-level and exact-match metrics compare raw prefix
-            skeletons, which the methods spell differently, so their levels are offset between
-            method families and the signal is the trend within a series. Log-probability and
-            selection score come from Flash-ANSR's own decoder and selection stage, and the
-            baselines have no equivalent.
-          </p>
-        </div>
-      </section>
-
-      <section class="topic">
-        <h3>Who chose each configuration</h3>
-        <div>
-          <p>
-            Every method carries a label that answers the first question to ask of a benchmark
-            whose authors enter their own method: who picked the hyperparameters? The labels are
-            part of the written <a href="https://srbf.readthedocs.io/en/latest/fairness/"
-            target="_blank" rel="noopener">fairness policy</a> and are shown wherever methods are
-            compared.
-          </p>
-          <ul>
-            <li><strong>Upstream defaults</strong> (PySR, NeSymReS, E2E): the method's own released
-              defaults, untouched in either direction. Where a default is consequential here, srbf
-              measures the consequence and documents it next to the method's results.</li>
-            <li><strong>Author-blessed</strong> (every Flash-ANSR series): the configuration was
-              chosen by the method's authors. The benchmark and Flash-ANSR share authors, which is
-              exactly what this label discloses; any method's authors can submit a blessed
-              configuration on the same terms.</li>
-            <li><strong>Maintainer-chosen</strong> (the prior reference): a benchmark-native series
-              with no upstream and no external author.</li>
-          </ul>
-        </div>
-      </section>
-    </section>
-
-    <section id="paired" class="prose">
-      <h2>Paired comparisons</h2>
-      <p class="section-lede">
-        Every method solved the same problems, so two methods are compared problem by problem,
-        \(\Delta_k = m_A^{(k)} - m_B^{(k)}\), rather than through two separate averages: the
-        difficulty both share widens each average's interval and cancels in the difference. Two
-        intervals can overlap while one method is reliably better problem after problem, so an A-versus-B
-        question belongs in a paired view.
-      </p>
-
-      <section class="topic" data-for="2026-09">
-        <h3>Rates</h3>
-        <div>
-          <p>
-            For a rate, only the problems the two methods disagree on carry information: \(b\) problems
-            that A alone recovers and \(c\) that B alone recovers, out of \(K\). The exact McNemar
-            test needs no asymptotics, and the difference of the rates carries a 95 % Wald
-            interval:
-          </p>
-          $$
-            p = \min\!\Big\{1,\; 2\, P\big[\operatorname{Bin}(b + c, \tfrac{1}{2}) \le \min(b, c)\big]\Big\},
-            \qquad
-            \hat{\Delta} = \frac{b - c}{K} \;\pm\; \frac{z}{K} \sqrt{b + c - \frac{(b - c)^2}{K}} .
-          $$
-        </div>
-      </section>
-
-      <section class="topic" data-for="2026-09">
-        <h3>Continuous metrics</h3>
-        <div>
-          <p>
-            Over the problems where both methods have a finite value, the view reports the mean
-            difference \(\bar{\Delta}\) with its 95 % interval and a two-sided exact sign test on
-            the wins and losses. Ratios and times are differenced on a log scale and read as
-            factors: \(\times\, 0.5\) is half. These are contrasts from one draw per problem, on the
-            same problems for both methods.
-          </p>
-        </div>
-      </section>
-
-      <section class="topic" data-for="2026-07">
-        <h3>Convention</h3>
-        <div>
-          <p>
-            <strong>&Delta;&nbsp;=&nbsp;selected&nbsp;&minus;&nbsp;baseline</strong>; in the Matrix,
-            cells read row&nbsp;&minus;&nbsp;column, and the tap or hover record says which series
-            a value favors. The Absolute Table answers what one method achieves at a budget; the
-            Paired views (the &Delta;-curves and the verdict Matrix) answer who is better. Every
-            statistic is computed ahead of time by
-            <a href="https://github.com/psaegert/srbf" target="_blank" rel="noopener">srbf</a>'s
-            open-source paired layer and published with the page, so what is shown is exactly what
-            is citable. Every claim is per benchmark: the two benchmarks measure different
-            populations, and there is deliberately no combined number.
-          </p>
-        </div>
-      </section>
-
-      <section class="topic" data-for="2026-07">
-        <h3>The noise margin</h3>
-        <div>
-          <p>
-            Each comparison is judged against a <em>measurement-noise margin</em>: the largest
-            difference to expect between two <em>equally good</em> models, given the draw-to-draw
-            noise of these two series. The margin is derived from the data: each model's repeated
-            draws are split into halves, the halves are compared with each other, and the margin is
-            the 95th percentile of those null differences, combined for the pair at hand.
-          </p>
-        </div>
-      </section>
-
-      <section class="topic" data-for="2026-07">
-        <h3>Budgets</h3>
-        <div>
-          <p>
-            Verdicts are issued at <em>standardized compute budgets</em> (&le;1, 10, 100 or 1000
-            seconds per problem, median), and every method is evaluated at exactly that time:
-            interpolated per problem, linearly in log-time, between its two bracketing measured
-            configurations, which is the model that draws the &Delta;(t) curves. A method whose
-            cheapest configuration exceeds the budget is <em>n/a</em>. A method whose measurements
-            end below it is never extrapolated: its largest tested configuration is carried
-            forward, flagged <em>max tested</em> and treated as a lower bound, and a verdict that
-            such a side could overturn by improving is downgraded to <em>undecided (max-tested
-            limit)</em>. Same-method comparisons (ablations, the size ladder) keep the same
-            measured configuration on both sides instead, because equal time would let two factors
-            vary at once. Between the marked budgets the slider shows <em>descriptive</em> reads of
-            the plotted curves; verdicts and corrected p-values belong to the pre-declared marks,
-            which keeps the set of quotable claims finite.
-          </p>
-        </div>
-      </section>
-
-      <section class="topic" data-for="2026-07">
-        <h3>Verdicts</h3>
-        <div>
-          <ul>
-            <li><strong style="color:#16a34a">better</strong> / <strong style="color:#dc2626">worse</strong>:
-              the 95 % confidence interval clears the noise margin. A real difference, larger than
-              benchmark noise can explain.</li>
-            <li><strong style="color:#2563eb">equivalent</strong>: the interval fits entirely
-              <em>inside</em> the margin. Any remaining difference is smaller than this benchmark
-              can measure, which is not proof that the models are identical.</li>
-            <li><strong>undecided</strong>: neither of the above. Each record reports its
-              <em>minimum detectable effect</em> (MDE₈₀), the smallest true difference this
-              comparison would have caught 80 % of the time; smaller differences could have been
-              missed, so undecided never means equal.</li>
-          </ul>
-        </div>
-      </section>
-
-      <section class="topic" data-for="2026-07">
-        <h3>Corrected p-values</h3>
-        <div>
-          <p>
-            Checking many comparisons at once produces false positives by luck alone, so displayed
-            significance is corrected: Holm within the small <em>pre-declared</em> set of
-            confirmatory comparisons, Benjamini&ndash;Hochberg for everything else, which stays
-            labeled <em>exploratory</em>. The confirmatory set (a small <strong>C</strong> in the
-            matrix) varies exactly one factor per pair: each ablation against its parent, adjacent
-            steps of the size ladder, and each model size against each baseline. The p-value asks
-            whether &Delta; is exactly zero and the verdict asks whether the interval clears the
-            margin, so a comparison can be significant and still undecided. Verdicts do not change
-            with the correction toggle, which can show raw p-values for browsing; the corrected
-            values are the quotable ones.
-          </p>
-        </div>
-      </section>
-
-      <section class="topic" data-for="2026-07">
-        <h3>Measurement details</h3>
-        <div>
-          <p>
-            The compute axis pairs configurations whose <em>median</em> cost is <em>t</em>, not
-            per-expression equal budgets; solid dots are measured configurations, hollow dots are
-            interpolated between measured neighbors. Where one model failed on an expression the
-            other solved, rate metrics count the failure as 0 while quality-of-fit metrics compare
-            only the expressions both solved, and each record discloses those counts. On v23-val,
-            cross-method cells carry an <em>in-distribution</em> note, because that benchmark is
-            drawn from Flash-ANSR's training distribution. Bands on &Delta;-curves are pointwise.
-            Every number carries a release id; cite them together.
-          </p>
-        </div>
-      </section>
-    </section>
-
-    <section id="ranks" class="prose">
-      <h2>Ranks</h2>
-      <p class="section-lede">
-        Ranks answer the standings question: how do all methods compare at once? Within each problem
-        the methods are placed 1st, 2nd, and so on by the chosen metric, and a method's standing
-        is its mean rank over the \(K\) problems, \(\bar{r}_j = \frac{1}{K} \sum_{k} r_{jk}\).
-      </p>
-
-      <section class="topic">
-        <h3>What a rank measures</h3>
-        <div>
-          <p>
-            Every problem hands out the same places, so easy and hard problems count alike, and a win by a
-            hair counts like a win by a mile. Ranks measure <em>consistency</em> where the paired
-            views measure <em>by how much</em>, which is why the two complement each other. Methods
-            with the same value share the mean of the places they occupy.
-            <span data-for="2026-09">A method without a usable prediction for a problem is placed last on
-            it, on every ranking metric.</span>
-            <span data-for="2026-07">Failures rank last within their expression on quality metrics;
-            expression-property metrics such as length are ranked over the expressions every method
-            solved, a smaller, labeled population.</span>
-          </p>
-        </div>
-      </section>
-
-      <section class="topic">
-        <h3>Groups</h3>
-        <div>
-          <p>
-            Friedman's test first asks whether the spread of mean ranks is larger than
-            interchangeable methods would produce by chance; groups are drawn only if it is. For
-            \(k\) methods, the critical difference (Nemenyi, 5 %)
-          </p>
-          $$ \mathrm{CD} = q_{0.05} \sqrt{\frac{k (k + 1)}{6 K}} $$
-          <p>
-            is the smallest gap between two mean ranks that counts as real when every pair is
-            compared at once. Methods closer than one CD share a shaded band: no reliable
-            difference was detected at this sample size, which is not proof of equality.
-          </p>
-        </div>
-      </section>
-
-      <section class="topic" data-for="2026-09">
-        <h3>Comparisons won</h3>
-        <div>
-          <p>
-            The share of head-to-head comparisons a method wins, a tie counting as half, is the
-            mean rank on a fixed scale: \(w_j = (k - \bar{r}_j) / (k - 1)\). At 100 % a method beats
-            every other on every problem and at 50 % it breaks even, whatever the number of ranked
-            methods, so it can be followed along the budget while the roster changes.
-          </p>
-        </div>
-      </section>
-
-      <section class="topic" data-for="2026-09">
-        <h3>Holding methods equal</h3>
-        <div>
-          <p>
-            The ranking follows the selection: any set of methods over any set of catalogs. The
-            methods are held equal either on the rung of their own ladder or on time, each at the
-            largest finished budget that the reference machine timed within the chosen limit per
-            problem. A method that cannot finish within the limit sits out, and so does one without
-            outcomes against the others at that setting. A method whose ladder ends below the limit
-            is drawn hollow: more budget could only help it.
-          </p>
-        </div>
-      </section>
-
-      <section class="topic" data-for="2026-07">
-        <h3>Roster and budget</h3>
-        <div>
-          <p>
-            The fixed roster, every Flash-ANSR size plus every baseline, is ranked at exactly the
-            selected compute budget. Hollow dots mark methods whose measurements end below the
-            budget: their plotted position is a worst case that more compute could only improve. A
-            pre-declared Paired verdict can separate two methods that share a band, because it asks
-            a different, magnitude-based question.
-          </p>
-        </div>
-      </section>
-
-      <section class="topic">
-        <h3>Primary metric</h3>
-        <div>
-          <p>
-            One ranking is primary and quotable, the one on held-out \(\log_{10}\) FVU. The ranking
-            on any other metric is exploratory, and a badge on the metric control says which kind
-            is on screen.
-          </p>
-        </div>
-      </section>
-    </section>
-
-    <section id="metrics" class="prose">
-      <h2>Metrics</h2>
-      <p class="section-lede">
-        A problem is a ground-truth expression with prefix skeleton \(\bar{\tau}\) (constants masked, structure
-        simplified with SimpliPy), a <em>support set</em> \((X, y)\) of \(N\) points given to the
-        method, and a disjoint, equally sized <em>validation set</em>
-        \((X_{\mathrm{val}}, y_{\mathrm{val}})\) it never sees. A method returns an expression
-        with skeleton \(\hat{\tau}\) and fitted constants; \(\hat{y}\) and
-        \(\hat{y}_{\mathrm{val}}\) are its values on the two sets, \(|\tau|\) is a skeleton's
-        length in prefix tokens, and \(K\) is the number of problems. The definitions follow the
-        <a href="https://arxiv.org/abs/2602.08885" target="_blank" rel="noopener">Flash-ANSR
-        paper</a>; in the explorer every metric carries a one-sentence definition behind its
-        <code>?</code>.
-      </p>
-
-      <section class="topic">
-        <h3>Numeric fit</h3>
-        <div>
-        <p>
-          All numeric metrics build on the <strong>Fraction of Variance Unexplained</strong>, the
-          scale-invariant normalized squared error
+    <section class="home-section home-two">
+      <div>
+        <h2>Run it yourself</h2>
+        <p class="home-text">
+          srbf is a Python package. A method plugs in with one small file, a YAML file describes the
+          evaluation, and four commands take it from a first test to a report.
         </p>
-        $$
-          \operatorname{FVU}(y, \hat{y}) \;=\;
-          \frac{\sum_{i=1}^{N} (y_i - \hat{y}_i)^2}{\sum_{i=1}^{N} (y_i - \bar{y})^2},
-          \qquad \bar{y} = \tfrac{1}{N} \textstyle\sum_{i=1}^{N} y_i .
-        $$
-        <p>
-          An FVU of 0 is a perfect fit, an FVU of 1 is no better than predicting the mean, and
-          values above 1 are worse than the mean predictor. Because the denominator is the variance
-          of the targets, the measure is invariant to the output scale of the problem. The
-          implementation guards the numerics: a divergent or non-finite prediction scores
-          \(\infty\), and residuals are rescaled internally to avoid floating-point over- and
-          underflow.
+        <pre class="home-code"><code>pip install srbf
+srbf new mymethod                 # a template for your method
+srbf check   -c config.yaml       # a few real problems, step by step
+srbf run     -c config.yaml -v    # the evaluation
+srbf analyze -c config.yaml -o report</code></pre>
+        <p class="home-links">
+          <a href="https://srbf.readthedocs.io/en/latest/quickstart/" target="_blank" rel="noopener">Quickstart</a> ·
+          <a href="https://srbf.readthedocs.io/en/latest/adapters/" target="_blank" rel="noopener">Adding your method</a> ·
+          <a href="https://srbf.readthedocs.io/en/latest/benchmarks/" target="_blank" rel="noopener">The problem sets</a>
         </p>
-
-        <article class="metric">
-          <h4><span data-for="2026-09">Numeric Recovery, Validation (vNRR)</span><span data-for="2026-07">Numeric recovery (vNRR)</span> <span class="dir up">higher is better</span></h4>
-          $$
-            \mathrm{vNRR} \;=\; \frac{1}{K} \sum_{k=1}^{K}
-            \mathbb{1}\!\left[ \operatorname{FVU}\!\big(y_{\mathrm{val}}^{(k)},
-            \hat{y}_{\mathrm{val}}^{(k)}\big) \le \varepsilon_{32} \right],
-            \qquad \varepsilon_{32} = 2^{-23} \approx 1.19 \times 10^{-7}
-          $$
-          <p>
-            The <em>validation Numeric Recovery Rate</em>, the headline metric. A problem counts as
-            recovered only if the predicted expression matches the clean function values on the
-            <em>unseen validation points</em> up to 32-bit floating-point machine precision. This is
-            a deliberately strict, essentially all-or-nothing criterion: an expression either is the
-            (numeric) ground truth on the domain or it is not. Approximate fits, however close, do
-            not count. Failed predictions count as 0.
-          </p>
-        </article>
-
-        <article class="metric">
-          <h4><span data-for="2026-09">Numeric Recovery, Support (fNRR)</span><span data-for="2026-07">Numeric recovery on support (fNRR)</span> <span class="dir up">higher is better</span></h4>
-          <p>
-            The same machine-precision indicator evaluated on the support points the method was
-            fitted on, \(\mathbb{1}[\operatorname{FVU}(y, \hat{y}) \le \varepsilon_{32}]\).
-            Comparing fNRR to vNRR separates memorization of the support from generalization to the
-            rest of the domain: an expression that nails the support but misses validation is an
-            overfit, not a recovery.
-          </p>
-        </article>
-
-        <article class="metric">
-          <h4><span data-for="2026-09">log<sub>10</sub> FVU, Validation / Support</span><span data-for="2026-07">log<sub>10</sub> FVU (validation / support)</span> <span class="dir down">lower is better</span></h4>
-          $$
-            \log_{10} \operatorname{FVU}\big(y_{\mathrm{val}}, \hat{y}_{\mathrm{val}}\big)
-            \quad\text{and}\quad
-            \log_{10} \operatorname{FVU}\big(y, \hat{y}\big)
-          $$
-          <p>
-            The continuous companion to the recovery rate: how close the fits are on a log scale,
-            including approximate fits the strict \(\varepsilon_{32}\) threshold discards. A value
-            of \(-2\) means 99% of the target variance is explained; \(-7\) is at the recovery
-            threshold. Both are diagnostics over successful predictions only, and cover fits with
-            <em>finite, positive</em> FVU: an exact \(\operatorname{FVU} = 0\) maps to \(-\infty\)
-            and drops that expression from this aggregate, and a divergent fit
-            (\(\operatorname{FVU} = \infty\)) likewise drops out. Note that the paper goes further
-            and excludes <em>all</em> numerically perfect fits
-            (\(\operatorname{FVU} \le \varepsilon_{32}\)) from its log-FVU summaries; this page
-            keeps near-perfect fits with tiny positive FVU, so its levels are not directly
-            comparable to the paper's.
-          </p>
-        </article>
-
-        <article class="metric" data-for="2026-09">
-          <h4>R², Validation / Support <span class="dir up">higher is better</span></h4>
-          <p>
-            \(1 - \operatorname{FVU}\) on either set of points: 1 is a perfect fit, 0 is as good as
-            predicting the mean, and there is no lower bound. One prediction that diverges would decide
-            the mean of a whole catalog, so \(R^2\) is read by its median, whichever statistic is
-            chosen for the other metrics.
-          </p>
-        </article>
-        </div>
-      </section>
-
-      <section class="topic">
-        <h3>Success</h3>
-        <div>
-
-        <article class="metric">
-          <h4><span data-for="2026-09">Successful Prediction Rate</span><span data-for="2026-07">Prediction success rate</span> <span class="dir up">higher is better</span></h4>
-          <p>
-            The fraction of problems for which the method produced any usable prediction at all:
-            decoding, parsing, compiling, and constant fitting all completed and returned an
-            evaluable expression. This is the denominator-integrity metric behind the failure
-            convention above: where success dips, the rate metrics absorb the failures as zeros and
-            the diagnostic metrics thin out (visible as shrinking <code>n</code> in the tooltip).
-          </p>
-        </article>
-        </div>
-      </section>
-
-      <section class="topic">
-        <h3>Symbolic similarity</h3>
-        <div>
-        <p data-for="2026-07">
-          These metrics compare the predicted skeleton \(\hat{\tau}\) to the ground-truth skeleton
-          \(\bar{\tau}\) as token sequences and trees. They are computed on <em>raw</em> prefix
-          skeletons: the predictions are not re-normalized to a common simplified form, so levels
-          are offset between method families and the signal is the trend within a series.
+      </div>
+      <div>
+        <h2>Cite</h2>
+        <p class="home-text">
+          srbf accompanies Saegert &amp; Köthe 2026, <em>Breaking the Simplification Bottleneck in Amortized
+          Neural Symbolic Regression</em> (ICML 2026),
+          <a href="https://arxiv.org/abs/2602.08885" target="_blank" rel="noopener">arXiv:2602.08885</a>.
+          If you publish numbers on a problem set, cite its source as well.
         </p>
-        <p data-for="2026-09">
-          These metrics compare the predicted skeleton \(\hat{\tau}\) to the ground-truth skeleton
-          \(\bar{\tau}\). Every prediction is first mapped into the ground truth's variable names and
-          simplified into the same canonical form, so the levels are comparable across methods.
-        </p>
-
-        <article class="metric" data-for="2026-09">
-          <h4>Symbolic Recovery (SRRs, SRRe, SRRa) <span class="dir up">higher is better</span></h4>
-          $$
-            \mathrm{SRR}_{\mathrm{s}} \;=\; \frac{1}{K} \sum_{k=1}^{K}
-            \mathbb{1}\!\left[ \operatorname{canon}\big(\hat{f}^{(k)}\big) = \operatorname{canon}\big(f^{(k)}\big) \right]
-          $$
-          <p>
-            The prediction \(\hat{f}\) and the ground truth \(f\) have the same certified canonical form
-            (SimpliPy, float64) once both are simplified and their numbers are masked: structurally
-            the same expression. A re-ordered sum or an unsimplified sub-term still counts, and a close
-            numerical fit of another shape does not. Failed predictions count as 0.
-          </p>
-          <p>
-            The same question is asked at three levels of masking, each implying the one before it.
-            <em>Structure</em> (SRRs) masks every number, so \(x^2\) and \(x^3\) are one structure.
-            <em>Structure + Exponents</em> (SRRe) masks only the fittable constants: the numbers of the structure,
-            exponents and root indices, have to be the ground truth's, and an exponent left at 1.9999 is a
-            miss. <em>Structure + All Numbers</em> (SRRa) masks nothing: the fitted constants have to be right too,
-            which is measured as numeric recovery is, by reproducing the ground truth to float32 precision on
-            the validation points.
-          </p>
-        </article>
-
-        <article class="metric">
-          <h4><span data-for="2026-09">Raw Symbolic Recovery (SRRr)</span><span data-for="2026-07">Exact skeleton match (raw)</span> <span class="dir up">higher is better</span></h4>
-          $$
-            \mathrm{SRR}_{\mathrm{r}} \;=\; \frac{1}{K} \sum_{k=1}^{K}
-            \mathbb{1}\!\left[ \hat{\tau}^{(k)} = \bar{\tau}^{(k)} \right]
-          $$
-          <p>
-            Token-for-token equality of the two prefix skeletons. This is the most conservative
-            symbolic criterion on this page: a prediction that is mathematically identical but
-            written differently (e.g. re-ordered commutative operands, an unsimplified sub-term)
-            does not count. It is a raw-form variant of the paper's Symbolic Recovery Rate, which
-            re-simplifies both sides before comparing. Failed predictions count as 0.
-          </p>
-        </article>
-
-        <article class="metric">
-          <h4><span data-for="2026-09">Token Overlap: F1 / Precision / Recall</span><span data-for="2026-07">Skeleton token F1 / precision / recall</span> <span class="dir up">higher is better</span></h4>
-          $$
-            P = \frac{|\mathcal{T}(\hat{\tau}) \cap \mathcal{T}(\bar{\tau})|}{|\mathcal{T}(\hat{\tau})|},
-            \qquad
-            R = \frac{|\mathcal{T}(\hat{\tau}) \cap \mathcal{T}(\bar{\tau})|}{|\mathcal{T}(\bar{\tau})|},
-            \qquad
-            F_1 = \frac{2PR}{P + R}
-          $$
-          <p>
-            Overlap of the <em>sets of unique tokens</em> \(\mathcal{T}(\cdot)\) used by the two
-            skeletons: did the prediction use the right operators, variables, and constants at all?
-            Precision penalizes inventing tokens the ground truth does not use; recall penalizes
-            missing tokens it does use. Being set-based, these ignore token order and multiplicity:
-            they measure vocabulary agreement, not structure. \(F_1\) is defined as 0 when both
-            \(P\) and \(R\) are 0.
-          </p>
-          <p data-for="2026-09">
-            All three lie in \([0, 1]\), so they have a worst value, and a failed prediction takes
-            it: it counts 0, the precision of an empty prediction being 0 by definition.
-          </p>
-        </article>
-
-        <article class="metric" data-for="2026-09">
-          <h4>Variable Overlap: F1 / Precision / Recall <span class="dir up">higher is better</span></h4>
-          <p>
-            The same three quantities over the sets of input variables that the prediction and the
-            ground truth use: precision falls when a prediction leans on a variable the ground truth ignores, recall
-            when it leaves out one the ground truth needs. A failed prediction counts 0.
-          </p>
-        </article>
-
-        <article class="metric">
-          <h4><span data-for="2026-09">Levenshtein Edit Distance (Tokens), Normalized</span><span data-for="2026-07">Skeleton edit distance (normalized)</span> <span class="dir down">lower is better</span></h4>
-          $$
-            d_{\mathrm{edit}}(\hat{\tau}, \bar{\tau}) \;=\;
-            \frac{\operatorname{Levenshtein}(\hat{\tau}, \bar{\tau})}{\max(|\hat{\tau}|, |\bar{\tau}|)}
-            \;\in\; [0, 1]
-          $$
-          <p>
-            The Levenshtein distance between the two prefix token sequences (minimum number of
-            token insertions, deletions, and substitutions to turn one into the other), normalized
-            by the longer length. Unlike the set-based F1, this is order- and count-sensitive: it
-            measures how much of the sequence structure is wrong, not just the vocabulary.
-          </p>
-        </article>
-
-        <article class="metric">
-          <h4><span data-for="2026-09">Tree Edit Distance (Zhang-Shasha)</span><span data-for="2026-07">Tree edit distance (ZSS)</span> <span class="dir down">lower is better</span></h4>
-          <p>
-            The Zhang–Shasha tree edit distance between the expression <em>trees</em> obtained by
-            parsing the two prefix skeletons: the minimum total cost of node insertions, deletions,
-            and relabelings that transforms one tree into the other. In this implementation the
-            operations are weighted by the character-level string distance of the node labels
-            (inserting or deleting a node costs the length of its label; relabeling costs the string
-            edit distance between the two labels), so long-named tokens like
-            <code>arccosh</code> or <code>&lt;constant&gt;</code> weigh more than single-character
-            ones, and the value is unnormalized label-edit cost, not a node count. Because it works
-            on the parsed tree rather than the flat token sequence, it respects the expression
-            structure: swapping a deeply nested operator costs the same as swapping a shallow one,
-            and subtree moves are scored more faithfully than by string edits.
-          </p>
-        </article>
-        </div>
-      </section>
-
-      <section class="topic">
-        <h3>Complexity and parsimony</h3>
-        <div>
-
-        <article class="metric" data-for="2026-09">
-          <h4>MDL Ratio (Prediction / Ground Truth) <span class="dir one">1 is ideal</span></h4>
-          $$ \frac{L(\hat{f})}{L(f)} $$
-          <p>
-            The description length \(L\) of the prediction over the ground truth's, in bits, both priced in
-            the certified canonical form: operators, variables and the digits a constant needs.
-            Unlike a token count it charges a long constant more than a short one. 1 means as long
-            as the ground truth, and the median is taken on the \(\log_2\) scale.
-          </p>
-        </article>
-
-        <article class="metric">
-          <h4><span data-for="2026-09">Token Count Ratio (Prediction / Ground Truth)</span><span data-for="2026-07">Expression length ratio (pred/GT)</span> <span class="dir one">1 is ideal</span></h4>
-          $$
-            \rho \;=\; \frac{|\hat{\tau}|}{|\bar{\tau}|}
-          $$
-          <p>
-            The length of the predicted skeleton relative to the ground truth, in prefix tokens.
-            A ratio of 1 means the prediction is exactly as concise as the true expression; values
-            above 1 flag verbose, over-parameterized predictions (a common failure mode: fitting
-            the data with a longer expression than necessary), values below 1 flag predictions that
-            are too simple to be the true expression. This is the second headline metric because it tracks
-            <em>interpretability</em>, the point of symbolic regression: a recovered-looking fit
-            made of twice as many terms is a worse scientific explanation.
-          </p>
-        </article>
-
-        <article class="metric">
-          <h4><span data-for="2026-09">Token Count Mismatch (|log<sub>2</sub> Ratio|)</span><span data-for="2026-07">Length ratio |log<sub>2</sub>| error</span> <span class="dir down">lower is better</span></h4>
-          $$
-            \left| \log_2 \rho \right| \;=\; \left| \log_2 \tfrac{|\hat{\tau}|}{|\bar{\tau}|} \right|
-          $$
-          <p>
-            The symmetric version of the length ratio: doubling and halving the true length are
-            equally wrong (both give 1), and 0 means exactly matched length. Useful when averaging,
-            where over- and under-shoots of the raw ratio would otherwise partially cancel.
-          </p>
-        </article>
-
-        <article class="metric">
-          <h4><span data-for="2026-09">Token Count of the Prediction / of the Ground Truth</span><span data-for="2026-07">Predicted / GT skeleton length</span> <span class="dir down">lower is more concise</span></h4>
-          <p>
-            The raw prefix-token lengths \(|\hat{\tau}|\) and \(|\bar{\tau}|\) behind the ratio.
-            The ground-truth length is a property of the benchmark (constant per expression, useful
-            as a reference line); the predicted length shows how expression size scales with
-            compute, noise, or data availability.
-          </p>
-        </article>
-
-        <article class="metric">
-          <h4><span data-for="2026-09">Constant Count Ratio / Difference (Prediction vs Ground Truth)</span><span data-for="2026-07">Constant-count ratio / delta (pred vs GT)</span> <span class="dir one">1 / 0 is ideal</span></h4>
-          $$
-            \frac{c(\hat{\tau})}{c(\bar{\tau})}
-            \qquad\text{and}\qquad
-            c(\hat{\tau}) - c(\bar{\tau}),
-          $$
-          <p>
-            where \(c(\cdot)\) counts the <code>&lt;constant&gt;</code> tokens in a skeleton. A
-            positive delta means the prediction uses <em>excess constants</em>: free parameters
-            that let a structurally wrong expression bend toward the data. The ratio is only
-            defined for ground truths that contain at least one constant; the delta is defined
-            everywhere.
-          </p>
-        </article>
-
-        <article class="metric">
-          <h4><span data-for="2026-09">Function Nesting Difference (Prediction − Ground Truth)</span><span data-for="2026-07">Unary-nestedness delta (pred − GT)</span> <span class="dir down">lower is better</span></h4>
-          <p>
-            Total nestedness counts, over each maximal chain of \(m\) directly nested unary
-            operators, the excess \(m - 1\), summed over the expression:
-            \(\sin(\log(x))\) contributes 1, \(\sin(\log(\operatorname{arccosh}(x)))\) contributes
-            2, and \(\sin(x) + \log(x)\) contributes 0. Deeply nested unary chains
-            (\(\exp(\sin(\exp(\dots)))\)) are a hallmark of unnatural, hard-to-interpret
-            predictions. The reported value is the difference between the predicted and
-            ground-truth nestedness, so 0 means the prediction is as (un)nested as the true
-            expression; this is a delta variant of the paper's Total Nestedness, which reports the
-            predicted expression's absolute count.
-          </p>
-        </article>
-        </div>
-      </section>
-
-      <section class="topic">
-        <h3>Model internals (Flash-ANSR series only)</h3>
-        <div>
-
-        <article class="metric">
-          <h4><span data-for="2026-09">Log-Probability of the Prediction</span><span data-for="2026-07">Predicted log-probability</span> <span class="dir up">higher is better</span></h4>
-          <p>
-            The log-probability \(\log p(\hat{\tau} \mid X, y)\) of the selected candidate's token
-            sequence under the model's decoder, summed over the tokens of the sequence: how likely
-            the model itself considered the expression it ended up returning. Being a sum, its level
-            scales with expression length. Baselines have no decoder likelihood, so their series are
-            empty here.
-          </p>
-        </article>
-
-        <article class="metric" data-for="2026-09">
-          <h4>Selection Score and Pareto Rank <span class="dir down">lower is better</span></h4>
-          $$ S(\hat{f}) \;=\; \tfrac{N}{2} \log_2 \operatorname{FVU}(y, \hat{y}) \;+\; L(\hat{f}) $$
-          <p>
-            The score by which the method chose its prediction, as the method computed it. For
-            Flash-ANSR this is a two-part code in bits: the cost of the residuals on the \(N\)
-            support points plus the description length of the expression. It is only comparable
-            within one method. The Pareto rank says where the chosen candidate sits on the method's
-            own front of FVU against length; 0 is on the front.
-          </p>
-        </article>
-
-        <article class="metric" data-for="2026-07">
-          <h4>Predicted selection score <span class="dir down">lower is better</span></h4>
-          $$
-            s(\hat{\tau}) \;=\; \log_{10} \operatorname{FVU}(y, \hat{y})
-            \;+\; \gamma \, |\hat{\tau}|,
-            \qquad \gamma = 0.05
-          $$
-          <p>
-            The parsimony-penalized criterion Flash-ANSR uses to pick its final answer from the
-            sampled candidate set: the best candidate is the one minimizing support-set log-FVU
-            plus a complexity penalty of \(\gamma\) per token (each additional token must be
-            bought with roughly an 11% relative FVU reduction). The value plotted is the score of
-            the selected candidate; it is a model-internal quantity, shown for completeness and
-            for reasoning about the selection stage.
-          </p>
-        </article>
-        </div>
-      </section>
-
-      <section class="topic">
-        <h3>Cost</h3>
-        <div>
-
-        <article class="metric" data-for="2026-09">
-          <h4>Fit Time on the Reference Machine (s) <span class="dir down">lower is better</span></h4>
-          <p>
-            Wall-clock seconds to solve one problem, from the data to the submitted prediction, measured
-            for every budget of every method on one machine over a fixed, stratified subset of 262
-            problems. It is an axis of the explorer rather than a metric in its menu: a method is
-            placed on it once the reference machine has timed it.
-          </p>
-        </article>
-
-        <article class="metric" data-for="2026-07">
-          <h4>Per-problem fit time (s) <span class="dir down">lower is better</span></h4>
-          <p>
-            End-to-end wall-clock seconds to solve one problem: for Flash-ANSR that spans encoding
-            the data, decoding candidates, constant fitting, and candidate selection; for the
-            baselines, their full search or inference pipeline. The median fit time of a run is
-            also what defines the compute axis, so this metric makes the x-axis itself inspectable
-            against noise level or support size.
-          </p>
-        </article>
-        </div>
-      </section>
+        <p class="home-text">Free and open source, under the MIT licence.</p>
+      </div>
     </section>
-
-    <section class="notes">
-      <details class="provenance privacy">
-        <summary>Privacy &amp; storage</summary>
-        <p>
-          This site is a static page with no analytics, no tracking, and no third-party cookies. It
-          stores at most two small things on your device, each <strong>only after you explicitly
-          ask for it</strong>: one first-party cookie (<code>srbf_colors</code>) after you change a
-          series colour, holding your colour overrides so the chart looks the same when you return;
-          and one <code>localStorage</code> entry (<code>srbf_theme</code>) after you pick Light or
-          Dark with the header toggle (the default Auto setting follows your device and stores
-          nothing). Neither contains personal data and neither is sent anywhere; the page is fully
-          client-side. <em>Reset all colours</em> deletes the cookie, and switching the theme back
-          to Auto deletes the theme entry. Because both exist solely to fulfil preferences you
-          explicitly request and carry no tracking, they are functional/strictly-necessary storage
-          under the GDPR / ePrivacy Directive and require no consent banner; this notice is provided
-          for transparency.
-        </p>
-      </details>
-    </section>
-  </div>
-
+    </div>
   </main>
 
   <footer class="site-footer">
@@ -1022,24 +297,13 @@
         · <a href="https://srbf.readthedocs.io/" target="_blank" rel="noopener">Docs</a>
         · <a href="https://github.com/psaegert/srbf" target="_blank" rel="noopener">GitHub</a>
         · <a href="https://pypi.org/project/srbf/" target="_blank" rel="noopener">PyPI</a>
+        · <a href="privacy.html">Privacy</a>
       </span>
     </div>
   </footer>
 
   <script src="data/2026-09/results.js" charset="utf-8"></script>
-  <script src="results_data.js" charset="utf-8"></script>
+  <script src="theme.js" charset="utf-8"></script>
   <script src="explorer_v2.js" charset="utf-8"></script>
-  <script src="explorer.js" charset="utf-8"></script>
-  <script>
-    (function () {
-      var release = window.SRBF_RELEASE || "2026-09";
-      document.getElementById("results-headline-v2").hidden = release !== "2026-09";
-      document.getElementById("results-explorer-v2").hidden = release !== "2026-09";
-      document.getElementById("results-explorer").hidden = release !== "2026-07";
-      document.querySelectorAll("#release-switch a").forEach(function (a) {
-        a.setAttribute("aria-current", a.dataset.release === release ? "true" : "false");
-      });
-    })();
-  </script>
 </body>
 </html>

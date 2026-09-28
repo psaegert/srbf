@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["prior|poly|1|1|0"]={"0":["+ pow x4 115.9 * x10 * x4 abs inv x3",0],"1":null,"2":null,"3":["* x2 sinh - sinh / * x1 x2 - x1 * 0.0048 x2 * pow x1 2 pow x2 2",0],"4":null,"5":null};})();

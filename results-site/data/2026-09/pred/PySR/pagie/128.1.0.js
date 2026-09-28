@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|pagie|128|1|0"]={"0":["* exp tan / asin cos inv * cos inv cosh * cos inv cosh sinh x2 x2 cos inv cosh / sinh x1 1.366 1.209 1.198",0]};})();

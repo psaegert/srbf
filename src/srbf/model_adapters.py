@@ -11,18 +11,16 @@ from contextlib import nullcontext
 from typing import Any, Callable, Iterable, Mapping, TYPE_CHECKING
 
 import numpy as np
-from srbf.baselines import BruteForceModel, LampleChartonModel
 from symbolic_data.token_ops import normalize_expression, normalize_skeleton
 # sympy is imported lazily inside the two baseline adapters that use it (E2E, NeSymReS);
 # it is an optional `[baselines]` extra, not a core runtime dependency.
 
 from srbf.core import EvaluationModelAdapter, EvaluationResult, EvaluationSample
+from srbf.spelling import engine_spelling
 from srbf.variable_renaming import (
     E2E_FIRST_INDEX, NESYMRES_FIRST_INDEX, rename_variable_tokens, rename_variables_in_infix, skeleton_variable_names)
 from srbf.candidate_store import CandidateStoreWriter
-from flash_ansr.flash_ansr import FlashANSR
-from flash_ansr.refine import ConvergenceError
-from flash_ansr.scoring import compute_fvu
+from srbf.metrics.numeric import fvu as _fvu
 
 PySRRegressor: type[Any] | None  # pragma: no cover - assigned lazily
 PySRRegressor = None
@@ -41,6 +39,9 @@ except Exception:  # pragma: no cover - optional dependency missing
     _HAVE_NESYMRES = False
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
+    # flash-ansr is an optional install: the adapters and baselines built on it import it when they are built
+    from flash_ansr.flash_ansr import FlashANSR
+    from srbf.baselines import BruteForceModel, LampleChartonModel
     from nesymres.architectures.model import Model as NesymresModel  # type: ignore
 else:
     NesymresModel = Any
@@ -124,9 +125,21 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         record["ranking"] = self.ranking_config()
 
         y_fit = sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support
+        if getattr(self.model.generation_config, "method", None) == "oracle":
+            # The oracle's one privilege, in oracle mode only: this problem's ground truth (the law with its
+            # literals spelled, over the columns as x1..xN) becomes the one candidate the refiner fits.
+            # A fresh config of the model's own kind, so srbf needs no newer flash-ansr to run older ones.
+            expression = record.get("expression")
+            if not expression:
+                record["error"] = "The oracle needs the problem's ground truth, and this problem has none."
+                record["prediction_success"] = False
+                return EvaluationResult(record)
+            self.model.generation_config = type(self.model.generation_config)(expression=list(expression))
         complexity_value = self._resolve_complexity(record)
         variable_names = record.get("variable_names")
         x_val = sample.x_validation if sample.x_validation.shape[0] > 0 else None
+
+        from flash_ansr.refine import ConvergenceError   # flash-ansr is installed wherever this adapter exists
 
         numpy_errors = getattr(self.model, "numpy_errors", None)
         fit_t0 = time.time()
@@ -548,6 +561,7 @@ class E2EAdapter(EvaluationModelAdapter):
             record["predicted_expression"] = predicted_expression
             predicted_prefix = self.simplipy_engine.read_infix(predicted_expression)  # engine grammar, not the raw reader tokens
             predicted_prefix = rename_variable_tokens(predicted_prefix, names, first_index=E2E_FIRST_INDEX)
+            predicted_prefix = engine_spelling(predicted_prefix, self.simplipy_engine.operator_arity)   # sqrt -> rootn(u, 2)
             record["predicted_expression_prefix"] = normalize_expression(predicted_prefix)
             record["predicted_skeleton_prefix"] = normalize_skeleton(predicted_prefix)
 
@@ -647,6 +661,7 @@ class NeSymReSAdapter(EvaluationModelAdapter):
             record["predicted_expression"] = predicted_expression
             predicted_prefix = self.simplipy_engine.read_infix(predicted_expression)  # engine grammar, not the raw reader tokens
             predicted_prefix = rename_variable_tokens(predicted_prefix, names, first_index=NESYMRES_FIRST_INDEX)
+            predicted_prefix = engine_spelling(predicted_prefix, self.simplipy_engine.operator_arity)   # Abs -> abs, sqrt -> rootn(u, 2)
             record["predicted_expression_prefix"] = normalize_expression(predicted_prefix)
             record["predicted_skeleton_prefix"] = normalize_skeleton(predicted_prefix)
         except Exception as exc:  # pragma: no cover - parse errors
@@ -799,14 +814,62 @@ def _require_e2e_regressor() -> type[Any]:
     return E2ERegressor
 
 
+class FlashANSRHybridAdapter(EvaluationModelAdapter):
+    """Flash-ANSR seeding PySR: the method is flash-ansr's ``flash_ansr.hybrid.HybridRegressor`` (Flash-ANSR draws and
+    fits candidates, its best seed PySR, PySR's hall of fame joins the pool, Flash-ANSR's ranking picks); this adapter
+    hands it each problem's arrays through its evaluation path (``solve``) and records the answer the way every
+    adapter does."""
+
+    def __init__(self, flash: FlashANSRAdapter, regressor: Any) -> None:
+        self.flash = flash
+        self.regressor = regressor
+
+    def get_simplipy_engine(self) -> Any:
+        return self.flash.get_simplipy_engine()
+
+    def ranking_config(self) -> dict[str, Any] | None:
+        return self.flash.ranking_config()
+
+    def prepare(self, *, data_source: Any | None = None) -> None:  # type: ignore[override]
+        self.flash.prepare(data_source=data_source)
+        self.regressor.prepare()
+
+    def evaluate_sample(self, sample: EvaluationSample) -> EvaluationResult:
+        record = sample.clone_metadata()
+        record["ranking"] = self.ranking_config()
+        y_fit = sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support
+        y_val = sample.y_validation_noisy if sample.y_validation_noisy is not None else sample.y_validation
+        variables = list(record.get("variables") or record.get("variable_names") or [])
+        problem_id = record.get("eval_row_index")
+        try:
+            result = self.regressor.solve(
+                sample.x_support, y_fit, X_val=sample.x_validation, variables=variables or None,
+                problem_id=None if problem_id is None else int(problem_id),
+                complexity=self.flash._resolve_complexity(dict(record)))
+        except Exception as exc:  # noqa: BLE001 - the method's failure is the row's error, never the run's
+            record["error"] = f"{type(exc).__name__}: {exc}"
+            record["prediction_success"] = False
+            return EvaluationResult(record)
+        record.update(result)
+        # the FVU columns every adapter records, from the method's own curves
+        y_pred = record.get("y_pred")
+        y_sup = np.asarray(y_fit, dtype=float).reshape(-1, 1)
+        if y_pred is not None and np.asarray(y_pred).shape[0] == y_sup.shape[0]:
+            record["support_fvu"] = _compute_fvu_from_predictions(y_sup, np.asarray(y_pred, dtype=float))
+        y_pred_val = record.get("y_pred_val")
+        y_v = np.asarray(y_val, dtype=float).reshape(-1, 1) if y_val is not None else np.empty((0, 1))
+        if y_v.size and y_pred_val is not None and np.asarray(y_pred_val).shape[0] == y_v.shape[0]:
+            record["validation_fvu"] = _compute_fvu_from_predictions(y_v, np.asarray(y_pred_val, dtype=float))
+        return EvaluationResult(record)
+
+
 def _compute_fvu_from_predictions(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """The FVU an adapter records next to its prediction: srbf's own metric (srbf.metrics.fvu), NaN without points."""
     y_true_arr = np.asarray(y_true, dtype=float).reshape(-1)
     y_pred_arr = np.asarray(y_pred, dtype=float).reshape(-1)
     if y_true_arr.size == 0 or y_pred_arr.size == 0:
         return float("nan")
-    loss = float(np.mean((y_true_arr - y_pred_arr) ** 2))
-    variance = float(np.var(y_true_arr))
-    return compute_fvu(loss, y_true_arr.size, variance)
+    return float(_fvu(y_true_arr, y_pred_arr))
 
 
 def _print_fvu_summary(support_fvu: float, validation_fvu: float | None) -> None:

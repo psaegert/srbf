@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-120M|koza|1024|2|0"]={"0":["+ x1 atan / * -56 * pow x1 2 atan / * 3 x1 4 23",0],"1":["- * atan x1 + / * 27 x1 11 atanh * -1.486 * x1 cos * 0.9765 x1 pow x1 4",0]};})();

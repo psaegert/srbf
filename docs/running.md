@@ -7,18 +7,18 @@ split across GPUs. Every flag is listed in the [command reference](cli.md).
 ## The root directory
 
 srbf keeps models, results, adapters and environments under one directory, named by the
-`FLASH_ANSR_ROOT` environment variable. In a config the token `{{ROOT}}` stands for it, so one
+`SRBF_ROOT` environment variable. In a config the token `{{ROOT}}` stands for it, so one
 config runs on any machine:
 
 ```bash
-export FLASH_ANSR_ROOT=/path/to/bench
+export SRBF_ROOT=/path/to/bench
 ```
 
 `{{ROOT}}` is replaced wherever a config names a file or a directory: in the config path itself,
 in `runner.output`, in `data_source.catalog` and `holdouts`, in the path fields of the
 `model_adapter` block (`model_path`, `worker`, `python`, `worker_log`, `simplipy_engine`, and the
-like) and in every string of a worker's `options` and `env`. Set the variable explicitly: without
-it the token resolves to a directory that depends on how `flash-ansr` was installed.
+like) and in every string of a worker's `options` and `env`. Without the variable the token stands
+for the current directory, so set it whenever a run may start elsewhere.
 
 ## The config
 
@@ -240,7 +240,7 @@ One array task then takes one catalog at one rung, here with Slurm:
 #SBATCH --array=0-28
 #SBATCH --gres=gpu:1
 CATALOGS=(fastsrb feynman feynman-bonus nguyen)   # ... the catalogs of your suite
-export FLASH_ANSR_ROOT=/path/to/bench
+export SRBF_ROOT=/path/to/bench
 srbf run -c config.yaml --experiment "${CATALOGS[$SLURM_ARRAY_TASK_ID]}" --sweep-filter ladder=16 -v
 ```
 

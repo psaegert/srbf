@@ -16,6 +16,7 @@ The dict is printed at run start and embedded into each result pickle under the 
 from __future__ import annotations
 
 import hashlib
+import sys
 import json
 import os
 import platform
@@ -25,8 +26,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from flash_ansr.utils.config_io import load_config
-from flash_ansr.utils.paths import substitute_root_path
+from srbf.paths import load_config
+from srbf.paths import substitute_root_path
 
 META_KEY = "__meta__"
 
@@ -80,12 +81,14 @@ def git_provenance(root: Path | None = None) -> dict:
 
 
 def _module_git_provenance(module_name: str) -> dict | None:
-    """git_provenance for another installed package's checkout (editable install), else None."""
+    """git_provenance for another installed package's checkout (editable install), else None. Located without
+    importing it, so recording a package that a run does not use never loads it."""
+    import importlib.util
     try:
-        module = __import__(module_name)
+        spec = importlib.util.find_spec(module_name)
     except Exception:
         return None
-    file = getattr(module, "__file__", None)
+    file = spec.origin if spec is not None else None
     if not file:
         return None
     return git_provenance(repo_root(file))
@@ -168,14 +171,23 @@ def system_provenance() -> dict:
     return info
 
 
+#: Packages of a method, not of srbf: recorded when installed, but never imported for it.
+_METHOD_PACKAGES = ("flash_ansr",)
+
+
 def env_provenance() -> dict:
+    """The versions in use: srbf's own dependencies from the modules themselves; a method's package from the module
+    when the run has loaded it (the result file's provenance is taken after the adapter is built), else from the
+    installed package's metadata."""
+    import importlib
+    from importlib import metadata
     out = {}
     for mod in ("torch", "numpy", "scipy", "flash_ansr", "simplipy", "symbolic_data", "srbf"):
         try:
-            out[mod] = __import__(mod).__version__
+            module = sys.modules.get(mod) or (None if mod in _METHOD_PACKAGES else importlib.import_module(mod))
+            out[mod] = module.__version__ if module is not None else metadata.version(mod.replace("_", "-"))
         except Exception:
             out[mod] = "?"
-    import sys
     out["python"] = sys.version.split()[0]
     try:
         import torch

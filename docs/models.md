@@ -5,15 +5,16 @@ block. To enter a method of your own, see [Adding your method](adapters.md).
 
 | `type` | method | installation |
 |---|---|---|
-| `flash_ansr` | [Flash-ANSR](#flash-ansr) and its prior reference | `flash_ansr install <checkpoint>` |
+| `flash_ansr` | [Flash-ANSR](#flash-ansr) and its prior reference | `pip install "srbf[flash-ansr]"`, then download a checkpoint |
 | `pysr` | [PySR](#pysr) | `pip install pysr`, in an environment of its own if you like |
 | `subprocess`, `worker: operon` | [Operon](#operon) | `pip install pyoperon==0.6.1 scikit-learn`, in an environment of its own |
+| `subprocess`, `worker: rilsrols` | [RILS-ROLS](#rils-rols) | `scripts/envs/build_rilsrols_env.sh`, an environment of its own |
 | `nesymres` | [NeSymReS](#nesymres) | clone, patch, download weights |
 | `e2e` | [E2E](#e2e) | clone, patch, download weights |
 | `subprocess`, `worker: dso` | [DSR and uDSR\*](#dso) | `scripts/envs/build_dso_env.sh`: a conda environment with Python 3.7 |
 | `subprocess`, `worker: gpgomea` | [GP-GOMEA](#gp-gomea) | `scripts/envs/build_gpgomea_env.sh envs/gpgomea`: a conda environment of its own, compiled from source |
 | `subprocess`, `worker: qlattice` | [QLattice](#qlattice) | `scripts/envs/build_qlattice_env.sh envs/qlattice`: a virtual environment with Python 3.12 |
-| `lample_charton`, `brute_force` | [prior sampling and enumeration](#sampling-and-enumeration-baselines) | none |
+| `lample_charton`, `brute_force` | [prior sampling and enumeration](#sampling-and-enumeration-baselines) | `pip install "srbf[flash-ansr]"` (they fit constants with its refiner) |
 | `subprocess` | [any method, in its own environment](adapters.md) | yours |
 
 Two keys are common to every block. `config_provenance` states who chose the configuration
@@ -28,11 +29,12 @@ side they conflict, so give each its own virtual environment; srbf installs into
 ## Flash-ANSR
 
 ```bash
-flash_ansr install psaegert/flash-ansr-v25.0-T8-3M     # also: -T8-20M, -T8-120M
+pip install "srbf[flash-ansr]"
+hf download psaegert/flash-ansr-v25.0-T8-3M --local-dir "$SRBF_ROOT/models/psaegert/flash-ansr-v25.0-T8-3M"   # also: -T8-20M, -T8-120M
 ```
 
-The command comes with srbf and puts the checkpoint under
-`$FLASH_ANSR_ROOT/models/psaegert/flash-ansr-v25.0-T8-3M`. The configs
+The adapter needs `flash-ansr`, which srbf installs only with the `flash-ansr` extra, and `hf` (from
+`huggingface_hub`, which comes with it) puts the checkpoint where the configs look for it. The configs
 `configs/evaluation/scaling/flash-ansr-v25.0-T8-*_srbf.yaml` evaluate the three sizes on the whole
 suite along a ladder of 1 to 65,536 draws.
 
@@ -60,7 +62,7 @@ model_adapter:
 |---|---|---|
 | `model_path` | required | the checkpoint directory |
 | `evaluation_config` | required | a mapping, or the path of a YAML file that holds it |
-| `evaluation_config.generation_config` | required | `method` (`softmax_sampling`, or `prior_sampling` for the prior reference) and its `kwargs`; `draws` is the budget |
+| `evaluation_config.generation_config` | required | `method` (`softmax_sampling`, `prior_sampling` for the prior reference or `oracle` for the oracle) and its `kwargs`; `draws` is the budget |
 | `evaluation_config.n_restarts`, `refiner_p0_noise` | required | restarts of the constant fit and the distribution of its starting points |
 | `evaluation_config.refiner_method` | `curve_fit_lm` | the optimizer of the constant fit |
 | `evaluation_config.ranking` | required | how the prediction is chosen among the fitted candidates; see below. A `ranking` block directly under `model_adapter` replaces it |
@@ -87,6 +89,37 @@ The resolved ranking is stored in every result file. Unknown keys in the block a
 candidates are drawn from the training prior that ships beside the checkpoint
 (`catalog_train.yaml`) and then fitted and ranked like any other. It measures what the prior alone
 is worth (`configs/evaluation/scaling/flash-ansr-v25.0-T8-prior_srbf.yaml`).
+
+**The oracle.** With `generation_config.method: oracle` the model is not used either: the one candidate
+is the problem's ground truth, in the model's own emission format (a fittable literal is a
+`<constant>` for the refiner, a pow exponent or root index stays spelled), fitted and ranked like any
+other. Its budget is the refiner's restarts (`configs/evaluation/scaling/flash-ansr-v25.0-T8-oracle_srbf.yaml`,
+1 to 1,024). It is the ceiling of the fitting stage and runs only where a ground truth exists. The
+judge is strict for the oracle as for every method: where the refitted law comes back in another form,
+a constant factor or a root spelled differently, that is another structure.
+
+## Flash-ANSR + PySR
+
+The adapter type `flash_ansr_hybrid` evaluates flash-ansr's hybrid (`flash_ansr.hybrid`, flash-ansr >= 0.19,
+`pip install srbf[hybrid]`): Flash-ANSR draws and fits candidates, its best `k_seeds` seed PySR's
+populations, PySR's hall of fame is priced the way Flash-ANSR prices its own candidates, and Flash-ANSR's
+ranking picks the prediction from the combined pool.
+
+```yaml
+model_adapter:
+  type: flash_ansr_hybrid
+  flash_ansr: {type: flash_ansr, model_path: "{{ROOT}}/models/flash-ansr-v25.0-T8-20M", ...}   # a full flash_ansr block
+  hybrid:
+    rungs: [[512, 16], [1024, 64], [2048, 256], [4096, 512], [8192, 1024]]   # (draws, PySR iterations) per budget
+    k_seeds: 100
+    snapshot_dir: "{{ROOT}}/snapshots/hybrid"   # one generation pass per problem serves every budget of the ladder
+  pysr: {warmup: true}
+```
+
+The budget is a pair: Flash-ANSR's draws and PySR's iterations, paired so that both stages take the same time on
+the reference machine (r* = 0.5; `flash_ansr.hybrid.R_STAR_LADDER`); the axis is labelled by the draws. The hybrid
+can also run by the clock (`hybrid: {budget_s: T, ratio: r}`: Flash-ANSR gets (1 - r) T of wall time, PySR the
+rest), which is how the ratio was chosen.
 
 ## PySR
 
@@ -169,6 +202,85 @@ and division.
 
 The worker stores the whole Pareto front in the `front` column. `configs/evaluation/scaling/operon_fastsrb.yaml`
 sweeps the evaluations in doublings from 2^10 up to about 100 s per problem on the reference machine.
+
+## RILS-ROLS
+
+```bash
+PYTHON=python3.12 scripts/envs/build_rilsrols_env.sh envs/rilsrols     # needs a C++17 compiler; about a minute
+```
+
+RILS-ROLS (Kartelj and Djukanović, Journal of Big Data, 2023) is iterated local search over expression trees. From
+the best expression so far it perturbs the tree, runs a local search from every perturbation, and fits the linear
+coefficients of every candidate by ordinary least squares. It ranks candidates by a product of R², RMSE and size.
+srbf runs release 1.6.7 (`kartelj/rils-rols`, MIT licence), the release its authors submitted to SRBench, as
+`worker: rilsrols` in an environment of its own.
+
+The build script creates a Python 3.12 environment from the pinned packages in
+`scripts/envs/rilsrols-requirements.txt` (numpy 1.26.4 as in SRBench's environment for the method, the others at
+their releases of the submission's date), downloads the source release from PyPI, checks its hash and compiles it.
+RILS-ROLS compiles with `-march=native`, so build the environment on each machine that runs it.
+
+The configuration is the one RILS-ROLS's first author committed for running it as a benchmark baseline (his
+SRBench submission), without the hyperparameter grid that the benchmark's maintainers later searched around it:
+- expressions of at most 50 nodes;
+- the sample size chosen by the method, which on up to 10,000 points takes them all;
+- the size penalty at its default, 0.001.
+
+```yaml
+model_adapter:
+  type: subprocess
+  worker: rilsrols
+  python: "{{ROOT}}/envs/rilsrols/bin/python"
+  config_provenance: author_blessed
+  simplipy_engine: acj-5-4-llm
+  timeout: 4800
+  options:
+    max_fit_calls: 1048576
+```
+
+| key | default | meaning |
+|---|---|---|
+| `options.max_fit_calls` | `1000000` | fitness evaluations of whole expressions, the local search's included: the budget |
+| `options.seed` | `0` | mixed with a hash of the problem's data into the run's seed |
+| `options.config` | none | settings that replace the configuration's; for side experiments only, which are then `harness_tuned` |
+| `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
+
+RILS-ROLS stops by itself after 3,600 s, a guard the ladder does not reach. The worker records a fit that runs
+600 s past that as the problem's error. Set srbf's `timeout` above both, as above, so that srbf does not restart
+the worker for such a fit.
+
+**Operators.** RILS-ROLS's operators are fixed in its code and cannot be chosen: `+ - * /`, `sin cos exp log sqrt`
+and the square, all among the benchmark's operators. It has no `tan`, no inverse or hyperbolic functions, no `abs`
+and no other powers or roots. Its starting constants are -1, 0, 0.5, 1, 2, π and 10; every other constant comes from
+least squares.
+
+**One change to the source.** RILS-ROLS prints its model's constants with six decimals, so that 6.674e-11 reads as
+0 and every constant loses most of its digits. The build script changes that in one place
+(`scripts/envs/patch_rilsrols.py`): the constants of the final model are printed with every digit. RILS-ROLS writes
+a constant within 1e-12 of an integer as that integer, and the change keeps that rule except where the integer is
+0, where it would turn a division by a small constant into a division by zero. The search compares candidates by
+their printed form too, so that printing stays as it is and only the model handed back at the end changes. On the
+same data and seed, the changed and the unchanged build take the same steps and return the same model.
+
+**What to know when reading the results:**
+- The prediction is the method's own answer: its final model after sympy's simplification, with every constant at
+  full precision and in srbf's variable names. RILS-ROLS gives the simplification two seconds and otherwise returns
+  the model as it printed it; a fit whose `fit_time` exceeds the search's own `total_time` by two seconds took that
+  path. When the simplified model holds a function the benchmark does not read, the worker writes the model as
+  printed instead and sets `answer_form` to `unsimplified`. `model_string` keeps the model as RILS-ROLS printed it.
+- RILS-ROLS drops every least-squares coefficient smaller than 1e-12 in magnitude, so on a law whose values are
+  that small it returns a constant.
+- It evaluates without protected operators, as srbf does. The `string_deviation` column records the largest
+  deviation of the written prediction from the method's own values on the support points, relative to the largest
+  of those values.
+- It does not stop early: a fit spends its whole budget, also after it has fit the data exactly. The `fit_calls`
+  column records what a fit spent, a few calls more than the budget.
+- Every fit runs in a process forked for it, on one thread. The same data and seed give the same answer on the same
+  machine.
+
+`configs/evaluation/scaling/rilsrols_fastsrb.yaml` sweeps the fitness evaluations in doublings from 2^6, the first
+power of two above the method's first step (scoring the perturbations of its starting model), up to 2^21, about
+100 s per problem on the reference machine.
 
 ## NeSymReS
 
@@ -496,7 +608,8 @@ expression from the model's own predictions in `string_deviation` and `string_de
 ## Sampling and enumeration baselines
 
 `lample_charton` fits expressions sampled from a generative `symbolic-data` catalog and
-`brute_force` enumerates them. Neither has weights. Both need `simplipy_engine` and a `catalog` to
+`brute_force` enumerates them. Neither has weights, and both fit their constants with flash-ansr's refiner
+(`pip install "srbf[flash-ansr]"`). Both need `simplipy_engine` and a `catalog` to
 draw from; this is the adapter's own key and unrelated to `data_source.catalog`, which names the
 expressions being evaluated.
 

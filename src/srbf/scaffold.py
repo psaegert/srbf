@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from flash_ansr.utils.paths import get_root
+from srbf.paths import ROOT_ENV_VAR, get_root
 
 _NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -64,7 +64,7 @@ CONFIG_TEMPLATE = '''# %NAME% on the srbf suite.
 #   srbf check -c %CONFIG_NAME%              # a few real problems end to end, before the long run
 #   srbf run   -c %CONFIG_NAME% -v           # the suite (--experiment fastsrb for one catalog)
 #   srbf analyze -c %CONFIG_NAME% -o report  # the standardized report
-# {{ROOT}} is FLASH_ANSR_ROOT; {catalog} is filled in per experiment. See docs/adapters.md.
+# {{ROOT}} is SRBF_ROOT; {catalog} is filled in per experiment. See docs/adapters.md.
 suite: srbf                        # every srbf catalog; or a list, e.g. [fastsrb, feynman]
 run:
   data_source:
@@ -90,7 +90,7 @@ run:
 
 REQUIREMENTS_TEMPLATE = '''# The environment %NAME%'s worker runs in (the config's python:). Pin what the method needs;
 # srbf is NOT installed here. Create it with
-#   python -m venv "$FLASH_ANSR_ROOT/envs/%NAME%" && "$FLASH_ANSR_ROOT/envs/%NAME%/bin/pip" install -r %REQ_PATH%
+#   python -m venv "$SRBF_ROOT/envs/%NAME%" && "$SRBF_ROOT/envs/%NAME%/bin/pip" install -r %REQ_PATH%
 numpy
 '''
 
@@ -176,7 +176,7 @@ def scaffold_adapter(name: str, *, directory: str | None = None, python: str | N
         config_name = config_path.relative_to(root).as_posix()
         requirements_ref = requirements_path.relative_to(root).as_posix()
     else:
-        base = Path(directory) if directory else Path(os.environ.get("FLASH_ANSR_ROOT") or ".") / "adapters"
+        base = Path(directory) if directory else Path(os.environ.get(ROOT_ENV_VAR) or ".") / "adapters"
         adapter_dir = base / name
         worker_path = adapter_dir / "worker.py"
         config_path = adapter_dir / "config.yaml"
@@ -199,7 +199,7 @@ def scaffold_adapter(name: str, *, directory: str | None = None, python: str | N
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
     # {{ROOT}} belongs to the config language; a command the user pastes into a shell gets the real path
-    env_dir = python_ref.rsplit("/bin/python", 1)[0].replace("{{ROOT}}", os.environ.get("FLASH_ANSR_ROOT") or ".") if python is None else None
+    env_dir = python_ref.rsplit("/bin/python", 1)[0].replace("{{ROOT}}", os.environ.get(ROOT_ENV_VAR) or ".") if python is None else None
     steps = [f"write your method into fit() in {_from_cwd(worker_path)}"]
     if env_dir is not None:
         steps.append(f"create its environment: python -m venv \"{env_dir}\" && \"{env_dir}/bin/pip\" install -r {requirements_ref}"

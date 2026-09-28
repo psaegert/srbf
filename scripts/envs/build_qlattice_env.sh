@@ -2,7 +2,7 @@
 # Build the environment the QLattice worker runs in (src/srbf/worker/models/qlattice_worker.py,
 # docs/models.md#qlattice).
 #
-#   scripts/envs/build_qlattice_env.sh PREFIX          e.g. scripts/envs/build_qlattice_env.sh "$FLASH_ANSR_ROOT/envs/qlattice"
+#   scripts/envs/build_qlattice_env.sh PREFIX          e.g. scripts/envs/build_qlattice_env.sh "$SRBF_ROOT/envs/qlattice"
 #
 # QLattice is distributed as the Python package feyn (Abzu ApS; CC BY-NC-ND 4.0: research and other
 # non-commercial use). feyn 3.5.0 ships a compiled core (_qepler) as manylinux wheels for CPython 3.8 to 3.13

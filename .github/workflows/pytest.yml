@@ -5,19 +5,22 @@ on:
 
 name: pytest
 
-# srbf depends one-way on flash-ansr (published on PyPI). `pip install -e .` resolves the
-# `flash-ansr` pin and the runtime deps from PyPI; pytest is added separately. The heavy optional
-# baselines (PySR/Julia, sympy for E2E/NeSymReS) are kept OUT of CI: the eval tests mock or skip those
-# adapter paths. Some eval tests need provisioned assets (models, skeleton-pool fixtures) under
-# FLASH_ANSR_ROOT and skip when absent.
+# srbf does not depend on flash-ansr: only the adapters built on it (flash_ansr, flash_ansr_hybrid) and the two
+# refining baselines (lample_charton, brute_force) import it, from the `flash-ansr` extra. The suite therefore runs
+# twice: without flash-ansr (its tests skip, and everything else must pass without it) and with it. The heavy
+# optional baselines (PySR/Julia, sympy for E2E/NeSymReS) are kept OUT of CI: the eval tests mock or skip those
+# adapter paths. Some eval tests need provisioned assets (models, skeleton-pool fixtures) under SRBF_ROOT and skip
+# when absent.
 
 jobs:
   pytest:
+    name: pytest (${{ matrix.python-version }}, ${{ matrix.flash-ansr && 'with' || 'without' }} flash-ansr)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.12", "3.13"]
+        flash-ansr: [true, false]
 
     steps:
       - uses: actions/checkout@v6.0.1
@@ -30,9 +33,14 @@ jobs:
       - name: Install srbf + test deps
         run: |
           python -m pip install --upgrade pip
-          pip install -e '.[analysis]'
+          pip install -e '.[analysis${{ matrix.flash-ansr && ',flash-ansr' || '' }}]'
           pip install pytest pytest-cov
           pip install -r docs/requirements.txt   # tests/test_docs.py builds the documentation strictly
+
+      - name: flash-ansr is absent
+        if: ${{ !matrix.flash-ansr }}
+        run: |
+          python -c "import importlib.util, sys; sys.exit('flash-ansr was installed' if importlib.util.find_spec('flash_ansr') else 0)"
 
       - name: Fetch FastSRB benchmark
         run: |
@@ -42,6 +50,6 @@ jobs:
 
       - name: Run tests
         env:
-          FLASH_ANSR_ROOT: ${{ github.workspace }}
+          SRBF_ROOT: ${{ github.workspace }}
         run: |
           pytest tests

@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|meier|8|2|0"]={"0":["abs exp / - - cos + / -8.601 x1 0.2596 asinh / / cos / -9.059 x2 exp x2 -0.2851 asin x1 exp neg x2",0],"1":["/ * / / / x1 x2 x2 abs x2 0.0007106 x2",0]};})();

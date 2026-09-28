@@ -115,10 +115,11 @@ def test_a_ladder_counting_evaluations_samples_or_epochs_is_read_like_any_other(
     _write(tmp_path, "toy", "evals_004096.pkl", _snapshot([["+", "x1", "x2"]]))
     _write(tmp_path, "toy", "samples_000512.pkl", _snapshot([["*", "x1", "x2"]]))
     _write(tmp_path, "toy", "epochs_00016.pkl", _snapshot([["*", "x1", "x1"]]))
+    _write(tmp_path, "toy", "restarts_000008.pkl", _snapshot([["-", "x1", "x2"]]))  # the oracle's restarts
     _write(tmp_path, "toy", "notes_000001.pkl", _snapshot([["+", "x1", "x2"]]))     # not a rung file
     out = str(tmp_path / "t.csv")
     report = build_table([ResultTree("m", 1, str(tmp_path / "tree"))], out, engine=ENGINE, workers=1, log=None)
-    assert report.files == 3 and sorted(_col(_read(out)[1:], "rung")) == ["16", "4096", "512"]
+    assert report.files == 4 and sorted(_col(_read(out)[1:], "rung")) == ["16", "4096", "512", "8"]
 
 
 def test_an_unreadable_file_is_reported_and_left_out(tmp_path):
@@ -137,3 +138,50 @@ def test_tree_and_index_specs_parse_as_the_command_line_takes_them():
     assert parse_index_bases(["e2e=0", "nesymres=1"]) == {"e2e": 0, "nesymres": 1}
     with pytest.raises(ValueError, match="METHOD=FIRST"):
         parse_index_bases(["e2e"])
+
+
+def test_a_new_worker_does_not_change_the_judge(tmp_path, monkeypatch):
+    """The judge fingerprint names the srbf source the judge runs; the out-of-process workers are not part of it,
+    so adding a baseline worker keeps every cached judgment, while a change to judging code discards them."""
+    import srbf
+    from srbf.table import judge_fingerprint
+    pkg = tmp_path / "srbf"
+    (pkg / "worker" / "models").mkdir(parents=True)
+    (pkg / "__init__.py").write_text("")
+    (pkg / "result_processing.py").write_text("JUDGE = 1\n")
+    (pkg / "worker" / "models" / "one_worker.py").write_text("X = 1\n")
+    monkeypatch.setattr(srbf, "__file__", str(pkg / "__init__.py"))
+    before = judge_fingerprint("acj-5-4-llm")
+    (pkg / "worker" / "models" / "another_worker.py").write_text("Y = 2\n")
+    (pkg / "worker" / "models" / "one_worker.py").write_text("X = 3\n")
+    (pkg / "rungs.py").write_text("RUNG_PREFIXES = ('choices', 'another_unit')\n")   # a new budget unit
+    assert judge_fingerprint("acj-5-4-llm") == before
+    (pkg / "result_processing.py").write_text("JUDGE = 2\n")
+    assert judge_fingerprint("acj-5-4-llm") != before
+
+
+def test_sympy_spellings_in_a_stored_prediction_are_read_the_engine_way(tmp_path, engine):
+    """E2E and NeSymReS printed through SymPy: sqrt(u) and Abs(u). The engine spells rootn(u, 2) and abs(u), and read
+    the bare tokens as unknown, so such a prediction had no description length and could never match its ground truth."""
+    x = np.linspace(0.5, 2.0, 16)
+    snap = _snapshot([["sqrt", "*", "x1", "x2"], ["abs", "x1"]])
+    snap["skeleton"] = [["rootn", "*", "x1", "x2", "<constant>"], ["abs", "x1"]]
+    snap["ground_truth_prefix"] = [["rootn", "*", "x1", "x2", "2"], ["abs", "x1"]]
+    y = [np.sqrt(x * x), np.abs(x)]
+    for key in ("y", "y_pred", "y_val", "y_pred_val"):
+        snap[key] = [v.copy() for v in y]
+    snap["predicted_expression_prefix"] = [["sqrt", "*", "x1", "x2"], ["Abs", "x1"]]
+    snap["predicted_skeleton_prefix"] = [["sqrt", "*", "x1", "x2"], ["Abs", "x1"]]
+    path = _write(tmp_path, "toy", "choices_000001.pkl", snap)
+    rows = judge_result_file(path, method="m", engine=engine)
+    assert _col(rows, "predicted_mdl") != ["", ""] and "" not in _col(rows, "predicted_mdl")   # priced
+    assert _col(rows, "symbolic_recovery") == [1, 1]
+
+
+def test_a_prediction_the_spelling_cannot_walk_stays_as_written_and_the_file_is_judged(tmp_path, engine):
+    """SymPy's conjugate is outside the engine's vocabulary: the walk that rewrites sqrt cannot place its argument.
+    Such a prediction stays as written (unreadable, as before); the other problems of the file are judged."""
+    snap = _snapshot([["+", "x1", "x2"], ["sqrt", "conjugate", "x1"]])
+    path = _write(tmp_path, "toy", "choices_000001.pkl", snap)
+    rows = judge_result_file(path, method="m", engine=engine)
+    assert len(rows) == 2 and _col(rows, "symbolic_recovery")[0] == 1

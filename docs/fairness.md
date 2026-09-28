@@ -27,9 +27,11 @@ carries a label for who chose it, and the labels are shown wherever methods are 
 Seconds depend on the machine, its GPU and whatever shares it. Published times therefore come from
 one reference machine that runs one problem at a time with nothing else on it, on a fixed subset of
 the suite: 262 problems, stratified by catalog, the same instances for every method and every
-budget. The subset estimates the pooled mean of the whole suite, because each catalog's problems
-are weighted by the catalog's full size. A fit that returns no prediction does not enter the mean
-time; how often that happens is a metric of its own, the success rate.
+budget. The results explorer averages each catalog's mean time over the catalogs like every other
+number it shows (a random-effects average, see
+[the site's guide](https://psaegert.github.io/srbf/guide.html#averaging)), so no catalog decides the
+time on its own. A fit that returns no prediction does not enter the mean time; how often that happens
+is a metric of its own, the success rate.
 
 Three scripts in the repository implement the protocol. They expect a config with one experiment
 per catalog and a sweep named `ladder`, like the configs under `configs/evaluation/scaling/`:
@@ -95,12 +97,18 @@ The configs in the repository are labeled as follows, and a test keeps them that
 - **Operon:** `author_blessed`: the configuration its first author published for running it as a benchmark
   baseline, without its hyperparameter search. Its library defaults differ: one objective and no local
   search, which no benchmark run by its authors has used.
+- **RILS-ROLS:** `author_blessed`: the configuration its first author committed for running it as a
+  benchmark baseline (his SRBench submission), without the hyperparameter grid that the benchmark's
+  maintainers searched around it. It differs from the library's defaults in the sample size, which it
+  lets the method choose; on up to 10,000 points the method takes them all, as the default does.
 - **Flash-ANSR, every size:** `author_blessed`. For these entries the method's authors and the
   benchmark's maintainers are the same people, which is exactly what the label discloses. Any
   method's authors get the same slot on the same terms.
 - **The prior reference:** `author_blessed`, like the Flash-ANSR entries whose configuration it
   shares. It samples expressions from Flash-ANSR's training prior without a model and passes them
   through the same refinement and ranking.
+- **The oracle:** `author_blessed` on the same grounds. It passes the problem's ground truth through
+  the same refinement and ranking, so it is a ceiling for the fitting stage, not a competitor.
 - **GP-GOMEA:** `author_blessed`: the configuration its first author committed for running it as a
   benchmark baseline (SRBench 2021), without the hyperparameter grid that the benchmark's maintainers
   searched around it. Its library defaults differ: they run the interleaved multistart scheme, which

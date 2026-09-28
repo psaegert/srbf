@@ -44,6 +44,8 @@ EXPECTED_PROVENANCE = {
     # a shipped worker whose configuration its first author published for benchmarking (Operon: his SRBench
     # 2024/25 submission without its tuning layer), rather than the library's own defaults
     "subprocess:operon": "author_blessed",
+    # RILS-ROLS: its first author's SRBench 2.0 submission, without the grid the benchmark's maintainers searched
+    "subprocess:rilsrols": "author_blessed",
     # a shipped worker's arms, most specific first ("<type>:<worker>:<options.arm>", then "<type>:<worker>"): DSO's
     # uDSR* runs the configuration its authors published for benchmarking it (the uDSR paper's Table 3), DSR the
     # regression defaults DSO ships

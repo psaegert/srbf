@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|pagie|128|2|0"]={"0":["+ tanh + cosh asinh asinh / asinh + cosh cosh x2 -1.46 0.5741 -1.017 tanh / asinh asinh + cosh sinh x1 -1.051 1.163",0]};})();
