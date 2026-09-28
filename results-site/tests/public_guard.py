@@ -33,7 +33,11 @@ from pathlib import Path
 from typing import Any
 
 SITE = Path(__file__).resolve().parents[1]
-PUBLIC_METHODS = {"e2e", "nesymres-100M", "PySR", "T8-3M", "T8-20M", "T8-120M", "T8-20M-pysr", "prior"}
+PUBLIC_METHODS = {"e2e", "nesymres-100M", "PySR", "T8-3M", "T8-20M", "T8-120M", "prior"}
+# Methods with results that are withheld from the public page: the key checks below catch their keys, these their names
+# in the texts. T8-20M-pysr ranked its candidates with the old score while every other Flash-ANSR arm uses the two-part
+# code; it returns once its re-run under the two-part code lands.
+WITHHELD_NAMES = {r"T8-20M-pysr": "a method withheld from the public page", r"T8-20M \+ PySR": "a method withheld from the public page"}
 # the metric floor: the site's first release's 21 metrics under the schema-2 keys (symbolic_recovery there = skeleton_match_raw here,
 # prediction_success_rate = success), plus the release's own headline metrics
 REQUIRED_METRICS = {
@@ -209,7 +213,7 @@ def selftest() -> list[str]:
 
 def main() -> int:
     failures = selftest()
-    banned = banned_patterns()
+    banned = {**banned_patterns(), **WITHHELD_NAMES}
     for page in sorted(p for p in SITE.glob("*.html") if not p.name.endswith(".local.html")):
         html = page.read_text(encoding="utf-8")
         for needle in ("private/", "index.local", "results.local", "explorer.local"):
