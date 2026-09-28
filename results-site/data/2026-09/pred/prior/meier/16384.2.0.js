@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["prior|meier|16384|2|0"]={"0":["/ * x1 * x2 * - - + x1 atan + x1 + x2 0.08 x2 0.1 * - x2 0.01 inv + x1 x2 2",0],"1":["neg + * 0.3 * inv pow x2 3 inv - + x2 + / 0.837 x1 0.002 inv pow x1 3 10",0]};})();

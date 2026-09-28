@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|koza|1024|2|0"]={"0":["sin * / tanh / sinh * - sinh abs x1 1.179 - sinh abs sinh x1 1.447 0.9849 0.9895 x1",0],"1":["atan asinh * cos sinh * x1 -1.245 asin * * x1 x1 cos * x1 -1.544",0]};})();

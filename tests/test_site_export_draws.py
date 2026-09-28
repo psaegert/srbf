@@ -1,6 +1,6 @@
-"""Every model is run twice with different seeds (two uncalibrated draws). A cell pools the draws that are COMPLETE for
-that catalog and rung, and only those: a draw still running is not a random subset of the problems. Rows are keyed by
-(draw, row), so a paired contrast pairs a problem with itself within a draw and never across draws."""
+"""Every method is run twice on every problem (two runs, "draws" in the rows). The problem is the unit (owner
+2026-09-27): a problem's value is the mean of the runs it has, every problem weighs the same, and a cell is complete once
+every problem has at least one run. Two methods are compared on a problem over every combination of their runs."""
 import importlib.util
 import os
 
@@ -21,32 +21,31 @@ def _draw(d, hits, n=4):
     return {(d, i): _row(success=1.0, numeric_recovery_val=1.0 if i in hits else 0.0) for i in range(n)}
 
 
-def test_a_cell_pools_the_complete_draws_only():
-    both = {**_draw(1, {0, 1}), **_draw(2, {0, 1, 2})}
+def test_a_problem_averages_its_runs_and_every_problem_weighs_one():
+    both = {**_draw(1, {0, 1}), **_draw(2, {0, 1, 2})}                                   # problem values 1, 1, 1/2, 0
     cell = export.summarize_cell(both, 4)
-    assert cell["state"] == "complete" and cell["d"] == 2 and cell["n"] == 8
-    assert cell["m"]["numeric_recovery_val"] == [5, 8]
-    one_running = {**_draw(1, {0, 1}), **dict(list(_draw(2, {0, 1, 2}).items())[:3])}   # draw 2 has 3 of 4 problems
+    assert cell["state"] == "complete" and cell["d"] == 2 and cell["n"] == 4
+    assert cell["m"]["numeric_recovery_val"] == [4, 2.5, 2.25]                         # problems, sum, sum of squares
+    one_running = {**_draw(1, {0, 1}), **dict(list(_draw(2, {0, 1, 2}).items())[:3])}   # run 2 has 3 of 4 problems
     cell = export.summarize_cell(one_running, 4)
     assert cell["state"] == "complete" and cell["d"] == 1 and cell["n"] == 4
-    assert cell["m"]["numeric_recovery_val"] == [2, 4]                                  # draw 1 alone
+    assert cell["m"]["numeric_recovery_val"] == [4, 2.5, 2.25]                         # the fourth problem has its one run
+    split = {**dict(list(_draw(1, {0}).items())[:2]), **dict(list(_draw(2, {3}).items())[2:])}   # each run half: every problem has one
+    assert export.summarize_cell(split, 4)["state"] == "complete"
     none = {**dict(list(_draw(1, {0, 1}).items())[:2]), **dict(list(_draw(2, {0, 1, 2}).items())[:3])}
     cell = export.summarize_cell(none, 4)
-    assert cell["state"] == "partial" and cell["d"] == 1 and cell["n"] == 3               # the fullest draw, marked partial
-    assert export.summarize_cell(_draw(1, {0}), None)["d"] == 1                          # no expected count: every draw counts
+    assert cell["state"] == "partial" and cell["n"] == 3                                  # the fourth problem has no run yet
+    assert export.summarize_cell(_draw(1, {0}), None)["d"] == 1                          # no expected count: every problem counts
 
 
-def test_a_paired_contrast_pairs_within_a_draw_and_skips_a_running_one():
-    a = {**_draw(1, {0, 1}), **_draw(2, {0, 1, 2})}
-    b = {**_draw(1, {1, 2}), **dict(list(_draw(2, {0}).items())[:2])}                    # b's draw 2 is running
+def test_two_methods_are_compared_on_a_problem_over_every_combination_of_their_runs():
+    a = {**_draw(1, {0, 1}), **_draw(2, {0, 1, 2})}                                      # values 1, 1, 1/2, 0
+    b = {**_draw(1, {1, 2}), **dict(list(_draw(2, {0}).items())[:2])}                    # values 1/2, 1/2, 1, 0 (run 2 running)
     pc = export.paired_cell(a, b, 4)
-    assert pc["n"] == 4                                                                   # draw 1 only, four problems
-    assert pc["m"]["numeric_recovery_val"] == [1, 1, 1, 1]                                # n11, n10, n01, n00 of draw 1
-    b_done = {**_draw(1, {1, 2}), **_draw(2, {0})}
-    pc = export.paired_cell(a, b_done, 4)
-    assert pc["n"] == 8 and pc["m"]["numeric_recovery_val"] == [2, 3, 1, 2]
+    assert pc["n"] == 4
+    assert pc["m"]["numeric_recovery_val"] == [4, 0.5, 0.75, 2, 1]                     # differences 1/2, 1/2, -1/2, 0
     rk = export.rank_pair_cell(a, b, 4)
-    assert rk[0] == 4
+    assert rk[0] == 4 and rk[3:5] == [0.5, 0.75]                                        # the rate's superiority, second rank key
 
 
 def test_progress_counts_finished_catalog_rungs_per_draw_against_the_plan(tmp_path):
@@ -59,14 +58,16 @@ def test_progress_counts_finished_catalog_rungs_per_draw_against_the_plan(tmp_pa
             ("a", 2): _draw(1, set(), n=4)}
     assert export.status_of(rows, {"a": 4}, plan) == [2, 3]
     assert export.status_of(rows, {"a": 4}, None) == [2, None]                  # no plan: no total, never a guess
+    assert export.progress_of(rows, {"a": 4}, plan) == {"1": [1, 2], "2": [1, 1]}   # per budget: draw 2 of rung 1 is open
+    assert export.progress_of(rows, {"a": 4}, None) == {"1": [1, None], "2": [1, None]}
+    assert export.progress_of({}, {"a": 4}, plan) == {"1": [0, 2], "2": [0, 1]}    # a planned budget without data is shown
     assert export.planned_cells(str(tmp_path / "none"), "hyb", lambda r: True) is None
 
 
 def test_a_cell_does_not_depend_on_the_order_its_rows_were_read_in():
-    # both draws half done: a tie for the fullest draw, decided by the draw number, not by which draw was read first
     d1 = {(1, i): _row(success=1.0, numeric_recovery_val=1.0, log10_fvu_val=0.1 * (i + 1)) for i in range(2)}
     d2 = {(2, i): _row(success=1.0, numeric_recovery_val=0.0, log10_fvu_val=1.0 / (i + 3)) for i in range(2)}
     first, second = export.summarize_cell({**d1, **d2}, 4), export.summarize_cell({**d2, **d1}, 4)
-    assert first == second and first["m"]["numeric_recovery_val"] == [2, 2]            # draw 1 stands in
+    assert first == second and first["m"]["numeric_recovery_val"] == [2, 1.0, 0.5] and first["state"] == "partial"
     rows = {(1, i): _row(success=1.0, log10_fvu_val=v) for i, v in enumerate([0.1, 1e16, -1e16, 0.3])}
     assert export.summarize_cell(rows, 4) == export.summarize_cell(dict(reversed(list(rows.items()))), 4)

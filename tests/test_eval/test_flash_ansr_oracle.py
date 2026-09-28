@@ -3,9 +3,11 @@ to the model, and only in oracle mode. Every other method sees exactly what it s
 import numpy as np
 import pytest
 
-import flash_ansr.utils.generation as generation
 from srbf.core import EvaluationSample
 from srbf.model_adapters import FlashANSRAdapter
+
+pytest.importorskip("flash_ansr", reason="the Flash-ANSR oracle is flash-ansr's (pip install 'srbf[flash-ansr]')")
+import flash_ansr.utils.generation as generation  # noqa: E402
 
 LAW = ["+", "*", "2.5", "pow", "x1", "2", "sin", "x2"]
 

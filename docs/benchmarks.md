@@ -62,9 +62,11 @@ uniformly here.
 | `soose-wc` | 200 | 1 to 3 | the same skeletons with up to three constants | Biggio et al. 2021; MIT |
 | `soose-fc` | 200 | 1 to 3 | the same skeletons with every constant slot filled | Biggio et al. 2021; MIT |
 
-`erbench-syneq` holds four fifths of all expressions. A number pooled over the whole suite is therefore
-close to a number on that one catalog, which is why the [results explorer](https://psaegert.github.io/srbf/)
-lets you choose the catalogs a number is pooled over, and why per-catalog tables matter.
+`erbench-syneq` holds four fifths of all expressions. A number pooled over all expressions is therefore
+close to a number on that one catalog. The [results explorer](https://psaegert.github.io/srbf/) averages
+over catalogs instead, each weighted about equally
+([how](https://psaegert.github.io/srbf/guide.html#averaging)), lets you choose the catalogs, and shows
+per-catalog tables.
 
 The catalog specifications reproduce formulas, sampling ranges and variable names from the cited
 sources. Full attributions are in

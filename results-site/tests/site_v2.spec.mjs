@@ -19,42 +19,23 @@ async function pick(page, trigger, key) {
   await expect(page.locator('.v2picker')).toHaveCount(0);
 }
 const VIEWS = ['curves', 'table', 'matrix', 'dist', 'ranks', 'paired'];
-// the 2026-07 site's 21 metrics under their schema-2 keys: none may be missing from a release
+// the metric floor: the 20 metrics every release carries (those of the site's first release, under schema-2 keys)
 const LEGACY_METRICS = ['numeric_recovery_val', 'expr_length_ratio', 'log10_fvu_val', 'log10_fvu_fit', 'numeric_recovery_fit', 'success',
   'skeleton_match_raw', 'f1_score', 'precision_score', 'recall_score', 'edit_distance_norm', 'zss_edit_distance', 'expr_length_ratio_abserr',
   'predicted_skeleton_prefix_length', 'skeleton_length', 'n_constants_ratio', 'n_constants_delta', 'total_nestedness_delta', 'predicted_log_prob',
-  'predicted_score'];   // fit_time is NOT here: the 2026-07 site published an as-run wall clock, this release publishes none
+  'predicted_score'];   // fit_time is NOT here: the first release published an as-run wall clock, this one publishes none
 
-test('the newest release is the default and renders its curves', async ({ page }) => {
+test('the explorer\'s page opens on the explorer and renders its curves', async ({ page }) => {
   const errors = collectErrors(page);
-  await page.goto('/');
+  await page.goto('/explorer.html');
   await expect(page.locator(V2)).toBeVisible();
-  await expect(page.locator('#results-explorer')).toBeHidden();
   await expect(page.locator(V2 + ' svg.v2chart').first()).toBeVisible();
-  await expect(page.locator('#release-switch a[aria-current="true"]')).toHaveAttribute('data-release', '2026-09');
+  await expect(page.locator('#release-switch')).toHaveCount(0);   // one release: nothing to switch
   expect(errors).toEqual([]);
 });
 
-test('the release switch reaches the 2026-07 explorer and back', async ({ page }) => {
-  const errors = collectErrors(page);
-  await page.goto('/');
-  await page.locator('#release-switch a[data-release="2026-07"]').click();
-  await expect(page.locator('#results-explorer')).toBeVisible();
-  await expect(page.locator(V2)).toBeHidden();
-  await expect(page.locator('#results-plot .main-svg').first()).toBeVisible();
-  await page.locator('#release-switch a[data-release="2026-09"]').click();
-  await expect(page.locator(V2 + ' svg.v2chart').first()).toBeVisible();
-  expect(errors).toEqual([]);
-});
-
-test('a 2026-07 deep link still opens the 2026-07 explorer', async ({ page }) => {
-  await page.goto('/?view=curves&bench=FastSRB');
-  await expect(page.locator('#results-explorer')).toBeVisible();
-  await expect(page.locator(V2)).toBeHidden();
-});
-
-test('the metric registry carries every 2026-07 metric and the new headline ones', async ({ page }) => {
-  await page.goto('/');
+test('the metric registry carries its floor and the headline metrics', async ({ page }) => {
+  await page.goto('/explorer.html');
   const keys = await page.evaluate(() => window.RESULTS_V2.metrics.map((m) => m.key));
   for (const k of LEGACY_METRICS.concat(['symbolic_recovery', 'mdl_ratio', 'r2_val'])) { expect(keys, k).toContain(k); }
   expect(keys.length).toBeGreaterThanOrEqual(24);
@@ -65,7 +46,7 @@ test('the metric registry carries every 2026-07 metric and the new headline ones
 for (const view of VIEWS) {
   test(`the ${view} view renders from a deep link without errors or overflow`, async ({ page }) => {
     const errors = collectErrors(page);
-    await page.goto(`/?release=2026-09&v=${view}&f=log10_fvu_val&r=32`);
+    await page.goto(`/explorer.html?release=2026-09&v=${view}&f=log10_fvu_val&r=32`);
     await expect(page.locator(V2 + ' .v2tab.active')).toHaveAttribute('data-view', view);
     const content = page.locator(V2 + ' .v2view svg.v2chart, ' + V2 + ' .v2view table');
     await expect(content.first()).toBeVisible({ timeout: 15000 });
@@ -77,7 +58,7 @@ for (const view of VIEWS) {
 
 test('pooled medians load their histograms on demand', async ({ page }) => {
   const errors = collectErrors(page);
-  await page.goto('/?release=2026-09&v=table&p=log10_fvu_val,mdl_ratio&s=median');
+  await page.goto('/explorer.html?release=2026-09&v=table&p=log10_fvu_val,mdl_ratio&s=median');
   await expect(page.locator(V2 + ' table')).toBeVisible();
   await expect.poll(async () => page.evaluate(() => Object.keys((window.RESULTS_V2_HIST || {})['2026-09'] || {}).length), { timeout: 15000 }).toBeGreaterThanOrEqual(2);
   await expect.poll(async () => (await page.locator(V2 + ' table tbody td').allTextContents()).filter((t) => /^-?\d/.test(t.trim())).length, { timeout: 15000 }).toBeGreaterThan(0);
@@ -86,7 +67,7 @@ test('pooled medians load their histograms on demand', async ({ page }) => {
 
 test('the paired view loads its contrasts and shows a baseline selector', async ({ page }) => {
   const errors = collectErrors(page);
-  await page.goto('/?release=2026-09&v=paired&p=numeric_recovery_val');
+  await page.goto('/explorer.html?release=2026-09&v=paired&p=numeric_recovery_val');
   await expect(page.locator(V2 + ' select.v2base')).toBeVisible({ timeout: 15000 });
   await expect.poll(async () => page.evaluate(() => Object.keys((window.RESULTS_V2_PAIRED || {})['2026-09'] || {}).length), { timeout: 15000 }).toBeGreaterThanOrEqual(1);
   await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toBeVisible();
@@ -95,20 +76,20 @@ test('the paired view loads its contrasts and shows a baseline selector', async 
 
 test('catalog and method controls change the pooled charts', async ({ page }) => {
   const errors = collectErrors(page);
-  await page.goto('/?release=2026-09&v=curves');
+  await page.goto('/explorer.html?release=2026-09&v=curves');
   const count = page.locator(V2 + ' .v2catcount');
   const before = await count.textContent();
   await page.locator(V2 + ' button[data-act="phys"]').click();
   await expect(count).not.toHaveText(before);
   await page.locator(V2 + ' button[data-act="none"]').click();
-  await expect(page.locator(V2 + ' svg.v2chart').first()).toContainText('no catalog selected');
+  await expect(page.locator(V2 + ' svg.v2chart').first()).toContainText('no problem set selected');
   await page.locator(V2 + ' button[data-act="all"]').click();
   await expect(count).toHaveText(before);
   expect(errors).toEqual([]);
 });
 
 test('the view state round-trips through the URL', async ({ page }) => {
-  await page.goto('/?release=2026-09&v=matrix&f=mdl_ratio&r=16&c=phys&s=mean&pool=own&thin=1&ci=0');   // pool= and thin= are old links: read, ignored
+  await page.goto('/explorer.html?release=2026-09&v=matrix&f=mdl_ratio&r=16&c=phys&s=mean&pool=own&thin=1&ci=0');   // pool= and thin= are old links: read, ignored
   await expect(page.locator(V2 + ' .v2tab.active')).toHaveAttribute('data-view', 'matrix');
   await expect(page.locator(V2 + ' .v2focus')).toHaveAttribute('data-k', 'mdl_ratio');
   await expect(page.locator(V2 + ' select.v2rung')).toHaveValue('16');
@@ -122,14 +103,14 @@ test('the view state round-trips through the URL', async ({ page }) => {
 });
 
 test('terms and metric help open a floating explanation', async ({ page }) => {
-  await page.goto('/?release=2026-09&v=table');
+  await page.goto('/explorer.html?release=2026-09&v=table');
   await page.locator(V2 + ' .v2metrics .v2help').first().click();
   await expect(page.locator('.v2pop')).toBeVisible();
-  await expect(page.locator('.v2pop')).toContainText('Share of problems');
+  await expect(page.locator('.v2pop')).toContainText('The share of problems');
   await page.keyboard.press('Escape');
   await expect(page.locator('.v2pop')).toHaveCount(0);
   await page.locator(V2 + ' .v2view .v2term[data-term="complete"]').first().click();
-  await expect(page.locator('.v2pop')).toContainText('EVERY selected catalog');
+  await expect(page.locator('.v2pop')).toContainText('every problem of the problem sets you selected');
 });
 
 // A published time is a CALIBRATED time. Seconds measured wherever a unit happened to run are not comparable
@@ -137,20 +118,19 @@ test('terms and metric help open a floating explanation', async ({ page }) => {
 const hasRefTiming = (page) => page.evaluate(() => Object.keys(window.RESULTS_V2.timing || {})
   .some((k) => Object.keys(window.RESULTS_V2.timing[k]).length));
 
-// A chart on the time axis says so at every width: the visible label shortens to "fit time (s, ref)" on a narrow
-// screen, so the calibration itself is asserted on the aria-label, which is width-independent.
+// A chart on the time axis says so at every width: the visible label shortens to "time (s)" on a narrow screen, so
+// the calibration itself is asserted on the aria-label, which is width-independent.
 async function calibrated(chart) {
-  await expect(chart).toContainText('fit time');
-  await expect(chart).toHaveAttribute('aria-label', /reference machine/);
+  await expect(chart).toContainText(/time (per problem )?\(s/);
+  await expect(chart).toHaveAttribute('aria-label', /timed on one workstation/);
 }
 
 test('a time axis needs one calibrated method, and an uncalibrated one costs only its own points', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/explorer.html');
   const axis = page.locator(V2 + ' .v2plot .v2xsel').first();
   if (!await hasRefTiming(page)) {
     await expect(axis).toHaveAttribute('data-k', 'rung');                 // the budget, never an uncalibrated time
-    await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).not.toContainText('fit time');
-    await expect(page.locator('#results-headline-v2')).not.toContainText('fit time');
+    await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).not.toContainText(/time (per problem )?\(s/);
     await axis.click();
     await expect(page.locator('.v2pickitem[data-k="time"]')).toBeDisabled();
     await page.keyboard.press('Escape');
@@ -160,10 +140,17 @@ test('a time axis needs one calibrated method, and an uncalibrated one costs onl
   }
   // whatever the state, nothing anywhere may say a time was measured "as run"
   expect(await page.content()).not.toContain('as run');
+  // the headline on the home page follows the same rule
+  const timed = await hasRefTiming(page);
+  await page.goto('/');
+  const head = page.locator('#results-headline-v2 svg.v2chart').first();
+  await expect(head).toBeVisible();
+  if (timed) { await calibrated(head); } else { await expect(page.locator('#results-headline-v2')).not.toContainText(/time (per problem )?\(s/); }
+  expect(await page.content()).not.toContain('as run');
 });
 
 test('the release publishes no as-run wall clock', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/explorer.html');
   const banned = await page.evaluate(() => {
     const D = window.RESULTS_V2, ban = ['fit_time', 'generation_time'], hits = [];
     for (const k of ban) {
@@ -183,11 +170,11 @@ test('the release publishes no as-run wall clock', async ({ page }) => {
   expect(banned, 'the payload carries an as-run wall-clock metric').toEqual([]);
 });
 
-test('the candidate axis names itself and is offered beside time', async ({ page }) => {
+test('the budget axis names itself and is offered beside time', async ({ page }) => {
   const errors = collectErrors(page);
-  await page.goto('/?release=2026-09&v=curves');
+  await page.goto('/explorer.html?release=2026-09&v=curves');
   await pick(page, page.locator(V2 + ' .v2plot .v2xsel').first(), 'rung');
-  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('candidates');
+  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('budget');
   // a method whose budget is not a candidate count has no position on this axis and is named instead of dropped silently
   const seconds = await page.evaluate(() => (window.RESULTS_V2.methods || []).filter((m) => (m.budget || 'candidates') !== 'candidates' && window.RESULTS_V2.cells[m.key] && Object.keys(window.RESULTS_V2.cells[m.key]).length).map((m) => m.label));
   for (const label of seconds) { await expect(page.locator(V2 + ' .v2view')).toContainText(label); }
@@ -198,7 +185,7 @@ test('the candidate axis names itself and is offered beside time', async ({ page
   expect(errors).toEqual([]);
 });
 
-test('the headline stands above the explorer with its two fixed charts', async ({ page }) => {
+test('the home page holds the headline\'s two fixed charts, and the explorer its own page', async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto('/');
   const head = page.locator('#results-headline-v2');
@@ -207,31 +194,39 @@ test('the headline stands above the explorer with its two fixed charts', async (
   await expect(head.locator('svg.v2chart')).toHaveCount(2);
   await expect(head.locator('svg.v2chart').first()).toContainText(await hasRefTiming(page) ? 'Recovery vs time' : 'Recovery vs budget');
   if (await hasRefTiming(page)) { await calibrated(head.locator('svg.v2chart').first()); }
-  else { await expect(head.locator('svg.v2chart').first()).toContainText('candidates'); }
+  else { await expect(head.locator('svg.v2chart').first()).toContainText('budget'); }
   // the second headline chart is the trade-off: description length on x, fit error on y
   await expect(head.locator('svg.v2chart').nth(1)).toContainText('Fit vs length');
   await expect(head.locator('svg.v2chart').nth(1)).toContainText('MDL Ratio');   // the metric's own name, as everywhere else
   await expect(head.locator('svg.v2chart').nth(1)).toContainText('FVU');
-  // fixed: the explorer's own controls do not move it
-  await page.locator(V2 + ' button[data-act="none"]').click();
-  await expect(head.locator('svg.v2chart').first()).not.toContainText('no catalog selected');
+  // fixed: no control on the home page, and the page's address stays its own
+  await expect(page.locator(V2)).toHaveCount(0);
+  await expect(page.locator('.explore-cta a')).toHaveAttribute('href', 'explorer.html');
+  expect(new URL(page.url()).search).toBe('');
+  // and the explorer's page has no headline
+  await page.goto('/explorer.html');
+  await expect(page.locator(V2 + ' svg.v2chart').first()).toBeVisible();
+  await expect(page.locator('#results-headline-v2')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
-test('the headline belongs to the 2026-09 release only', async ({ page }) => {
-  await page.goto('/?release=2026-07');
-  await expect(page.locator('#results-headline-v2')).toBeHidden();
+test('a link to a view of the explorer on the home page opens the explorer\'s page with the same settings', async ({ page }) => {
+  const q = '?release=2026-09&v=ranks&x=rung&r=16';
+  await page.goto('/' + q);
+  await expect(page).toHaveURL(/\/explorer\.html\?/);
+  await expect(page.locator(V2 + ' .v2tab.active')).toHaveAttribute('data-view', 'ranks');
 });
 
-test('the public page carries no private overlay', async ({ page }) => {
-  await page.goto('/');
-  expect(await page.evaluate(() => typeof window.RESULTS_V2_PRIVATE)).toBe('undefined');
-  const html = await page.content();
-  expect(html).not.toContain('private/');
+test('the public pages carry no private overlay', async ({ page }) => {
+  for (const url of ['/', '/explorer.html']) {
+    await page.goto(url);
+    expect(await page.evaluate(() => typeof window.RESULTS_V2_PRIVATE), url).toBe('undefined');
+    expect(await page.content(), url).not.toContain('private/');
+  }
 });
 
 test('every method says how it picks the prediction it submits', async ({ page }) => {
-  await page.goto('/?release=2026-09&v=curves');
+  await page.goto('/explorer.html?release=2026-09&v=curves');
   const withData = await page.evaluate(() => (window.RESULTS_V2.methods || []).filter((m) => window.RESULTS_V2.cells[m.key] && Object.keys(window.RESULTS_V2.cells[m.key]).length));
   expect(withData.length).toBeGreaterThan(0);
   for (const m of withData) { expect(m.selection, m.key).toBeTruthy(); }
@@ -243,33 +238,33 @@ test('every method says how it picks the prediction it submits', async ({ page }
 });
 
 test('the view that shows tables is called Tables', async ({ page }) => {
-  await page.goto('/?release=2026-09&v=curves');
+  await page.goto('/explorer.html?release=2026-09&v=curves');
   await expect(page.locator(V2 + ' .v2tab[data-view="table"]')).toHaveText('Tables');
+  await page.goto('/');                                                   // the visual abstract on the home page says so too
   await expect(page.locator('#va')).toContainText('Tables');
 });
 
 test('the mean is the default statistic, and the median stays one click away', async ({ page }) => {
-  await page.goto('/?release=2026-09&v=curves&p=log10_fvu_val');
+  await page.goto('/explorer.html?release=2026-09&v=curves&p=log10_fvu_val');
   await expect(page.locator(V2 + ' input[name="v2stat"][value="mean"]')).toBeChecked();
-  await expect(page.locator('#results-headline-v2 .v2hlsub')).toContainText('mean');
   const chart = page.locator(V2 + ' .v2view svg.v2chart').first();
-  const headline = page.locator('#results-headline-v2 svg.v2chart').first();
   await expect(chart).toBeVisible();
-  await expect(headline).toBeVisible();   // drawn from the cell sums: a mean needs no histogram
-  // switching the statistic moves the data, never the wording, here or in the headline
-  const xLabel = async (svg) => (await svg.locator('text').allTextContents()).find((t) => t.includes('fit time'));
+  // switching the statistic moves the data, never the wording
+  const xLabel = async (svg) => (await svg.locator('text').allTextContents()).find((t) => /^time (per problem )?\(s/.test(t));
   const before = await xLabel(chart);
-  const headBefore = await headline.textContent();
   await page.locator(V2 + ' input[name="v2stat"][value="median"]').check();
   await expect(chart).not.toContainText('loading', { timeout: 15000 });
   expect(await xLabel(chart)).toBe(before);
-  expect(await headline.textContent()).toBe(headBefore);
+  // the headline shows the mean, drawn from the cell sums: a mean needs no histogram
+  await page.goto('/');
+  await expect(page.locator('#results-headline-v2 .v2hlsub')).toContainText('mean');
+  await expect(page.locator('#results-headline-v2 svg.v2chart').first()).toBeVisible();
 });
 
 test('each display carries only the controls it can use', async ({ page }) => {
   const shown = () => page.evaluate(() => [...document.querySelectorAll('#results-explorer-v2 [data-uses]')]
     .filter((e) => !e.hidden).flatMap((e) => e.dataset.uses.split(' ')));
-  await page.goto('/?release=2026-09&v=curves');
+  await page.goto('/explorer.html?release=2026-09&v=curves');
   const curves = await shown();
   for (const k of ['stat', 'ci']) { expect(curves, k).toContain(k); }
   for (const k of ['pool', 'thin']) { expect(curves, k).not.toContain(k); }   // a pooled number is complete or absent: nothing to switch
@@ -291,7 +286,7 @@ test('each display carries only the controls it can use', async ({ page }) => {
 test('every plot carries its own two axes, and plots are added and removed', async ({ page }) => {
   const errors = collectErrors(page);
   await page.setViewportSize({ width: 1600, height: 1100 });
-  await page.goto('/?release=2026-09&v=curves&p=time~numeric_recovery_val');
+  await page.goto('/explorer.html?release=2026-09&v=curves&p=time~numeric_recovery_val');
   const cards = page.locator(V2 + ' .v2plot');
   await expect(cards).toHaveCount(1);
   await expect(cards.first().locator('.v2ysel')).toHaveAttribute('data-k', 'numeric_recovery_val');
@@ -314,7 +309,7 @@ test('every plot carries its own two axes, and plots are added and removed', asy
 
 test('a metric carries one name and one definition wherever it appears', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 1100 });
-  await page.goto('/?release=2026-09&v=curves&p=time~numeric_recovery_val');
+  await page.goto('/explorer.html?release=2026-09&v=curves&p=time~numeric_recovery_val');
   const M = await page.evaluate(() => (window.RESULTS_V2.metrics || []).find((m) => m.key === 'numeric_recovery_val'));
   // the plot header, the picker entry and the table column all use the registry label: one plain name, no
   // parenthesized qualifier (the abbreviation lives in the short name, the definition in the hint)
@@ -334,23 +329,26 @@ test('a metric carries one name and one definition wherever it appears', async (
 
 test('every chart names both of its axes', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 1100 });
-  await page.goto('/?release=2026-09&v=curves&p=rung~numeric_recovery_val,mdl_ratio~log10_fvu_val');
   const labels = async (svg) => (await svg.locator('text').allTextContents()).join(' | ');
-  const charts = page.locator('svg.v2chart');
-  await expect(charts.first()).toBeVisible();
-  const n = await charts.count();
-  expect(n).toBeGreaterThanOrEqual(4);   // two headline panels and two plots
-  for (let i = 0; i < n; i++) {
-    const t = await labels(charts.nth(i));
-    expect(t, `chart ${i} x label`).toMatch(/fit time per problem|MDL Ratio|candidates per problem/);   // a budget or a metric, never an uncalibrated time
-    expect(t, `chart ${i} y label`).toMatch(/Numeric Recovery|log10 FVU/);
+  // the explorer's two plots, then the home page's two headline charts
+  for (const url of ['/explorer.html?release=2026-09&v=curves&p=rung~numeric_recovery_val,mdl_ratio~log10_fvu_val', '/']) {
+    await page.goto(url);
+    const charts = page.locator('svg.v2chart');
+    await expect(charts.first()).toBeVisible();
+    const n = await charts.count();
+    expect(n, url).toBeGreaterThanOrEqual(2);
+    for (let i = 0; i < n; i++) {
+      const t = await labels(charts.nth(i));
+      expect(t, `${url} chart ${i} x label`).toMatch(/time per problem|MDL Ratio|budget per problem/);   // a budget or a metric, never an uncalibrated time
+      expect(t, `${url} chart ${i} y label`).toMatch(/Numeric Recovery|log10 FVU/);
+    }
   }
 });
 
 test('the picker lists every metric in columns and filters', async ({ page }) => {
   const errors = collectErrors(page);
   await page.setViewportSize({ width: 1600, height: 1100 });
-  await page.goto('/?release=2026-09&v=curves&p=time~numeric_recovery_val');
+  await page.goto('/explorer.html?release=2026-09&v=curves&p=time~numeric_recovery_val');
   const all = await page.evaluate(() => (window.RESULTS_V2.metrics || []).length);
   await page.locator(V2 + ' .v2plot .v2xsel').click();
   const picker = page.locator('.v2picker');
@@ -368,7 +366,7 @@ test('the picker lists every metric in columns and filters', async ({ page }) =>
 test('the picker lists plain names, and the filter still answers to the dropped qualifier', async ({ page }) => {
   const errors = collectErrors(page);
   await page.setViewportSize({ width: 1600, height: 1100 });
-  await page.goto('/?release=2026-09&v=curves&p=time~numeric_recovery_val');
+  await page.goto('/explorer.html?release=2026-09&v=curves&p=time~numeric_recovery_val');
   await page.locator(V2 + ' .v2plot .v2ysel').click();
   const picker = page.locator('.v2picker');
   await expect(picker).toBeVisible();
@@ -385,7 +383,7 @@ test('the picker lists plain names, and the filter still answers to the dropped 
 
 test('a long plot title wraps onto more lines; no title is cut to an ellipsis', async ({ page }) => {
   const errors = collectErrors(page);
-  const url = '/?release=2026-09&v=curves&p=time~symbolic_recovery_mask_none,symbolic_recovery_mask_none~edit_distance_norm';
+  const url = '/explorer.html?release=2026-09&v=curves&p=time~symbolic_recovery_mask_none,symbolic_recovery_mask_none~edit_distance_norm';
   const read = () => page.locator(V2 + ' .v2plothead .v2picklab').evaluateAll((els) => els.map((el) => {
     const cs = getComputedStyle(el);
     return { text: el.textContent, nowrap: cs.whiteSpace === 'nowrap', clipped: el.scrollWidth > el.clientWidth + 1,
@@ -396,10 +394,6 @@ test('a long plot title wraps onto more lines; no title is cut to an ellipsis', 
   await page.goto(url);
   await expect(page.locator(V2 + ' .v2plothead .v2picklab')).toHaveCount(4);
   for (const l of await read()) { expect(l.nowrap, l.text).toBe(false); expect(l.clipped, l.text).toBe(false); }
-  // the method tiles follow the same rule
-  const tiles = await page.locator(V2 + ' .v2tile b').evaluateAll((els) => els.map((el) => getComputedStyle(el).whiteSpace === 'nowrap' || el.scrollWidth > el.clientWidth + 1));
-  expect(tiles.length).toBeGreaterThan(0);
-  expect(tiles.filter(Boolean)).toEqual([]);
   // narrow: the long names take a second line instead of an ellipsis
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(url);
@@ -417,7 +411,7 @@ const FIXTURE = readFileSync(new URL('./fixtures/sealed_fixture.js', import.meta
 test('a method is added with its key, and a key that does not fit adds nothing', async ({ page }) => {
   const errors = collectErrors(page);
   await page.addInitScript({ content: FIXTURE });
-  await page.goto('/?release=2026-09&v=curves');
+  await page.goto('/explorer.html?release=2026-09&v=curves');
   const methods = page.locator(V2 + ' .v2methods .v2meth');
   await expect(methods.first()).toBeVisible();
   const before = await methods.count();
@@ -438,7 +432,7 @@ test('a method is added with its key, and a key that does not fit adds nothing',
 test('an untimed method leaves the time axis standing and is named under it', async ({ page }) => {
   const errors = collectErrors(page);
   await page.addInitScript({ content: FIXTURE });
-  await page.goto('/?release=2026-09&v=curves');
+  await page.goto('/explorer.html?release=2026-09&v=curves');
   test.skip(!await hasRefTiming(page), 'no reference timing in this release yet');
   await page.locator(V2 + ' .v2addmopen').click();
   await page.locator(V2 + ' .v2addmkey').fill(FIXTURE_KEY);
@@ -449,17 +443,17 @@ test('an untimed method leaves the time axis standing and is named under it', as
 
   await pick(page, page.locator(V2 + ' .v2plot .v2xsel').first(), 'time');
   const chart = page.locator(V2 + ' .v2view svg.v2chart').first();
-  await calibrated(chart);                                            // the axis stands, on the reference machine
+  await calibrated(chart);                                            // the axis stands, timed on the workstation
   await expect(chart).toContainText('E2E');                           // and the calibrated methods are still drawn
   await expect(chart, 'an untimed method must not be drawn on a calibrated axis').not.toContainText('Fixture Method');
   await expect(page.locator(V2 + ' .v2view'), 'and it must be named, not dropped in silence').toContainText('Fixture Method');
-  await expect(page.locator(V2 + ' .v2view .v2hint').first()).toContainText(/reference-machine time/);
+  await expect(page.locator(V2 + ' .v2view .v2hint').first()).toContainText(/ha(s|ve) not been timed yet/);
   expect(errors).toEqual([]);
 });
 
 test('an untimed method changes nothing else on the time axis', async ({ page }) => {
   await page.addInitScript({ content: FIXTURE });
-  await page.goto('/?release=2026-09&v=curves');
+  await page.goto('/explorer.html?release=2026-09&v=curves');
   test.skip(!await hasRefTiming(page), 'no reference timing in this release yet');
   await pick(page, page.locator(V2 + ' .v2plot .v2xsel').first(), 'time');
   const chart = page.locator(V2 + ' .v2view svg.v2chart').first();
@@ -476,9 +470,9 @@ test('an untimed method changes nothing else on the time axis', async ({ page })
 });
 
 test('the page says nothing about what it does not show', async ({ page }) => {
-  await page.goto('/?release=2026-09&v=curves');
+  await page.goto('/explorer.html?release=2026-09&v=curves');
   // the control is plain, and neither it nor the payload names anything the release does not publish
-  await expect(page.locator(V2 + ' .v2addmopen')).toHaveText('add method');
+  await expect(page.locator(V2 + ' .v2addmopen')).toHaveText('open a method with a key');
   const html = await page.content();
   expect(html).not.toMatch(/private|sealed|decrypt|password/i);
 });
@@ -486,7 +480,7 @@ test('the page says nothing about what it does not show', async ({ page }) => {
 test('the interval is a band by default, and crosses are a separate switch', async ({ page }) => {
   const errors = collectErrors(page);
   await page.setViewportSize({ width: 1600, height: 1100 });
-  await page.goto('/?release=2026-09&v=curves&p=rung~numeric_recovery_val,mdl_ratio~log10_fvu_val');
+  await page.goto('/explorer.html?release=2026-09&v=curves&p=rung~numeric_recovery_val,mdl_ratio~log10_fvu_val');
   // one shape for both kinds of x axis: the band is drawn from the interval boxes, so a trade-off plot gets a
   // two-dimensional region rather than a bar through each point
   const shapes = () => page.evaluate(() => [...document.querySelectorAll('#results-explorer-v2 .v2plot svg.v2chart')].map((s) => ({
@@ -510,7 +504,7 @@ test('the interval is a band by default, and crosses are a separate switch', asy
 
 test('a chart is drawn at the width it is given', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
-  await page.goto('/?release=2026-09&v=curves');
+  await page.goto('/');
   const chart = page.locator('#results-headline-v2 svg.v2chart').first();
   await expect(chart).toBeVisible();
   const box = await chart.boundingBox();
@@ -523,7 +517,7 @@ test('a display of one chart is drawn at the width it is shown, not stretched fr
   await page.setViewportSize({ width: 1600, height: 1000 });
   const stretch = () => page.evaluate(() => [...document.querySelectorAll('#results-explorer-v2 .v2main svg.v2chart')].map((s) => s.getBoundingClientRect().width / s.viewBox.baseVal.width));
   for (const view of ['dist', 'dist&dm=ecdf', 'dist&dm=cats', 'dist&dm=ladder', 'dist&dmetric=numeric_recovery_val', 'ranks']) {
-    await page.goto('/?release=2026-09&v=' + view);
+    await page.goto('/explorer.html?release=2026-09&v=' + view);
     await expect(page.locator(V2 + ' .v2main svg.v2chart').first()).toBeVisible();
     // 1 unit = 1 px: drawn at a grid cell's width and stretched to the column, 12 px of label grew to 20 px
     await expect.poll(async () => { const r = await stretch(); return r.length && r.every((x) => Math.abs(x - 1) < 0.02); }, { message: view }).toBe(true);
@@ -537,7 +531,7 @@ test('a method marked as the ceiling is drawn dashed in the page ink, legend inc
     const body = (await response.text()).replace('"key":"prior",', '"key":"prior","dash":true,"ink":true,');
     await route.fulfill({ response, body });
   });
-  await page.goto('/?release=2026-09&v=curves&p=rung~numeric_recovery_val');   // the budget axis: the prior has no reference time
+  await page.goto('/explorer.html?release=2026-09&v=curves&p=rung~numeric_recovery_val');   // the budget axis: the prior has no reference time
   const chart = page.locator(V2 + ' .v2main svg.v2chart').first();
   await expect(chart).toBeVisible();
   const drawn = await chart.evaluate((svg) => {
@@ -555,10 +549,26 @@ test('a method marked as the ceiling is drawn dashed in the page ink, legend inc
   expect(drawn.otherDashed, 'no other method is dashed').toBe(0);
 });
 
+test('a headline chart keeps its title and its y label off the frame', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto('/');
+  await expect(page.locator('.headline-v2 svg.v2chart').first()).toBeVisible();
+  const gaps = await page.evaluate(() => [...document.querySelectorAll('.headline-v2 svg.v2chart')].map((svg) => {
+    const box = svg.getBoundingClientRect(), title = svg.querySelector('text.ct').getBoundingClientRect();
+    const ylabel = [...svg.querySelectorAll('text')].find((t) => (t.getAttribute('transform') || '').includes('rotate(-90)'));
+    return { top: title.top - box.top, left: ylabel ? ylabel.getBoundingClientRect().left - box.left : null };
+  }));
+  expect(gaps.length).toBe(2);
+  for (const g of gaps) {
+    expect(g.top, 'room above the title').toBeGreaterThanOrEqual(12);
+    expect(g.left, 'room left of the y label').toBeGreaterThanOrEqual(8);
+  }
+});
+
 // ---- Distribution: a distribution is what the view shows, in four readings ------------------------------------
 test('the distribution view opens on histograms of a continuous metric', async ({ page }) => {
   const errors = collectErrors(page);
-  await page.goto('/?release=2026-09');
+  await page.goto('/explorer.html?release=2026-09');
   await page.locator(V2 + ' .v2tab[data-view="dist"]').click();
   const chart = page.locator(V2 + ' .v2view svg.v2chart').first();
   await expect(chart).toBeVisible({ timeout: 15000 });
@@ -572,17 +582,17 @@ test('the distribution view opens on histograms of a continuous metric', async (
   expect(await chart.locator('rect[fill-opacity="0.28"]').count()).toBe(panels);
   await expect(chart).toContainText(/n = [\d,]+ of [\d,]+/);
   // a bin taller than the shared scale is a broken bar with its share beside it: no arrow that could point at the panel above
-  if (await chart.locator('path.v2break').count()) { await expect(chart).toContainText(/\d+ % in (this|the outermost) bin/); }
+  if (await chart.locator('path.v2break').count()) { await expect(chart).toContainText(/\d+ % in (this|the (left|right)-most) bin/); }
   await expect(chart).not.toContainText('\u25b2');
   expect(errors).toEqual([]);
 });
 
 test('every reading of a distribution draws, and the choice travels in the link', async ({ page }) => {
   const errors = collectErrors(page);
-  await page.goto('/?release=2026-09&v=dist&dm=log10_fvu_val');
+  await page.goto('/explorer.html?release=2026-09&v=dist&dm=log10_fvu_val');
   const chart = page.locator(V2 + ' .v2view svg.v2chart').first();
   await expect(chart).toBeVisible({ timeout: 15000 });
-  for (const [mode, label] of [['ecdf', /cumulative distribution/], ['cats', /per catalog/], ['rungs', /along the ladder|median, middle half/], ['hist', /one histogram per method/]]) {
+  for (const [mode, label] of [['ecdf', /cumulative distribution/], ['cats', /per problem set/], ['rungs', /by budget|median, middle half/], ['hist', /one histogram per method/]]) {
     await page.locator(V2 + ` .v2viewbar button[data-set="dmode:${mode}"]`).click();
     await expect(page.locator(V2 + ` .v2viewbar button[data-set="dmode:${mode}"]`)).toHaveAttribute('aria-pressed', 'true');
     await expect(chart).toHaveAttribute('aria-label', label);
@@ -591,14 +601,14 @@ test('every reading of a distribution draws, and the choice travels in the link'
     expect(overflow, mode).toBeLessThanOrEqual(0);
   }
   // the cumulative curves can be read out of all laws: a method that leaves laws unanswered then ends below 100 %
-  await page.goto('/?release=2026-09&v=dist&dm=log10_fvu_val&dv=ecdf&dn=all');
+  await page.goto('/explorer.html?release=2026-09&v=dist&dm=log10_fvu_val&dv=ecdf&dn=all');
   await expect(page.locator(V2 + ' .v2viewbar button[data-set="dnorm:all"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator(V2 + ' .v2view')).toContainText('ends below 100');
   expect(errors).toEqual([]);
 });
 
 test('the budget of a snapshot is stepped on the display itself', async ({ page }) => {
-  await page.goto('/?release=2026-09&v=dist&dm=log10_fvu_val&r=16');
+  await page.goto('/explorer.html?release=2026-09&v=dist&dm=log10_fvu_val&r=16');
   const sel = page.locator(V2 + ' .v2viewbar select[data-state="rung"]');
   await expect(sel).toHaveValue('16');
   await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('at budget 16');
@@ -613,22 +623,84 @@ test('the budget of a snapshot is stepped on the display itself', async ({ page 
   await expect(page.locator(V2 + ' .v2viewbar select[data-state="rung"]')).toHaveValue('8');
 });
 
-test('a rate is shown per catalog, with a way to a distribution', async ({ page }) => {
-  await page.goto('/?release=2026-09&v=dist&dm=numeric_recovery_val&r=16');
-  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toHaveAttribute('aria-label', /per catalog/);
+test('a rate is shown per problem set, with a way to a distribution', async ({ page }) => {
+  await page.goto('/explorer.html?release=2026-09&v=dist&dm=numeric_recovery_val&r=16');
+  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toHaveAttribute('aria-label', /per problem set/);
   await expect(page.locator(V2 + ' .v2viewbar button[data-set^="dmode:"]')).toHaveCount(0);   // no reading applies to a hit-or-miss
   await page.locator(V2 + ' .v2view button[data-set="dmetric:log10_fvu_val"]').click();
   await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toHaveAttribute('aria-label', /one histogram per method/);
 });
 
+// A button group must show its labels: clicking works even when a style clips the buttons to a sliver, so the test
+// measures them (a progress bar's class once shared the group's name and cut every group to 9 px).
+test('every button group shows its labels in full, each on one line', async ({ page }) => {
+  for (const url of ['/explorer.html?release=2026-09&v=dist&r=16', '/explorer.html?release=2026-09&v=dist&dv=ecdf&r=16', '/explorer.html?release=2026-09&v=dist&dv=rungs&r=16',
+    '/explorer.html?release=2026-09&v=preds', '/explorer.html?release=2026-09&v=ranks&x=rung&r=16']) {
+    await page.goto(url);
+    const btns = page.locator(V2 + ' .v2segbtn');
+    await expect(btns.first()).toBeVisible({ timeout: 15000 });
+    const boxes = await btns.evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(), g = e.closest('.v2seg').getBoundingClientRect();
+      return { text: e.innerText.trim(), h: r.height, clipped: g.height + 0.5 < r.height || r.right > g.right + 0.5, fits: e.scrollWidth <= e.clientWidth + 1 }; }));
+    expect(boxes.length).toBeGreaterThan(1);
+    for (const b of boxes) {
+      expect(b.text.length).toBeGreaterThan(0); expect(b.h).toBeGreaterThanOrEqual(20); expect(b.h, b.text + ' wraps').toBeLessThanOrEqual(32);   // one line of 13 px text
+      expect(b.clipped, b.text).toBe(false); expect(b.fits, b.text).toBe(true);
+    }
+  }
+});
+
+// A link that carries the explorer's state, and a reload (the address carries the state after every change), open
+// the page at its top: the release's title stays clear of the sticky navigation bar.
+test('a link or a reload leaves the release title in view', async ({ page }) => {
+  await page.goto('/explorer.html?release=2026-09&v=dist&r=16&ok=90');
+  const title = page.locator(V2 + ' h2').first();
+  await expect(title).toContainText('Release 2026-09', { timeout: 15000 });
+  const clear = () => page.evaluate(() => {
+    const h = document.querySelector('.site-header').getBoundingClientRect().bottom;
+    const t = document.querySelector('#results-explorer-v2 h2').getBoundingClientRect().top;
+    return { y: Math.round(window.scrollY), clear: t >= h };
+  });
+  await page.waitForTimeout(500);
+  expect(await clear()).toEqual({ y: 0, clear: true });
+  await page.reload();
+  await expect(title).toContainText('Release 2026-09', { timeout: 15000 });
+  await page.waitForTimeout(500);
+  expect(await clear()).toEqual({ y: 0, clear: true });
+});
+
+// ---- Averaging over problem sets -------------------------------------------------------------------------------------
+// The explorer's own averaging (random effects over problem sets) against the reference, scripts/site_random_effects.py,
+// on the cases the reference wrote (scripts/site_random_effects_fixture.py): the page's code is cut out and run as it is.
+test('the explorer averages over problem sets exactly as the reference does', () => {
+  const src = readFileSync(new URL('../explorer_v2.js', import.meta.url), 'utf8');
+  const a = src.indexOf('  var EPS_VAR = '), b = src.indexOf('  function binVal(');
+  expect(a).toBeGreaterThan(0); expect(b).toBeGreaterThan(a);
+  const core = new Function(src.slice(a, b) + '\nreturn { reCombine: reCombine, holm: holm };')();
+  const cases = JSON.parse(readFileSync(new URL('./fixtures/random_effects_cases.json', import.meta.url), 'utf8'));
+  expect(cases.length).toBeGreaterThan(40);
+  const close = (x, y) => Math.abs(x - y) <= 1e-6 * Math.max(1, Math.abs(y));
+  const off = [];
+  cases.forEach((c, i) => {
+    const got = core.reCombine(c.sets, c.scale);
+    if (c.out === null) { if (got !== null) { off.push(i + ': expected nothing'); } return; }
+    if (got.S !== c.out.S) { off.push(i + ': S ' + got.S + ' vs ' + c.out.S); }
+    for (const k of ['mu', 'lo', 'hi', 'tau2', 'p', 'piLo', 'piHi']) {
+      const want = c.out[k], have = got[k];
+      if (want === null ? have !== null : !close(have, want)) { off.push(i + ' ' + c.scale + ': ' + k + ' ' + have + ' vs ' + want); }
+    }
+  });
+  expect(off).toEqual([]);
+  expect(core.holm([0.01, 0.04, 0.03]).map((x) => +x.toFixed(6))).toEqual([0.03, 0.06, 0.06]);
+});
+
 // ---- Ranks ---------------------------------------------------------------------------------------------------------
 test('the ranks view places the methods, names what it ranks on and how it holds them equal', async ({ page }) => {
   const errors = collectErrors(page);
-  await page.goto('/?release=2026-09&v=ranks&x=rung&r=16');
+  await page.goto('/explorer.html?release=2026-09&v=ranks&x=rung&r=16');
   const chart = page.locator(V2 + ' .v2view svg.v2rankchart');
   await expect(chart).toBeVisible({ timeout: 15000 });
-  await expect(chart).toHaveAttribute('aria-label', /Mean rank on .* budget 16/);
-  await expect(chart).toContainText('critical difference');
+  await expect(chart).toHaveAttribute('aria-label', /Average place on .* budget 16/);
+  await expect(page.locator(V2 + ' .v2view')).toContainText('pairwise tests');   // pairs are tested one by one, not by a critical difference
   await expect(page.locator(V2 + ' .v2viewbar .v2tag-primary')).toBeVisible();
   // mean ranks: one per ranked method, each within [1, k], and they sum to k (k + 1) / 2 as ranks must
   const ranks = await page.locator(V2 + ' .v2ranktable tbody tr td:nth-child(3)').allTextContents();
@@ -638,12 +710,12 @@ test('the ranks view places the methods, names what it ranks on and how it holds
   for (const v of vals) { expect(v).toBeGreaterThanOrEqual(1); expect(v).toBeLessThanOrEqual(k); }
   expect(Math.abs(vals.reduce((a, b) => a + b, 0) - k * (k + 1) / 2)).toBeLessThan(0.02 * k);
   expect(vals.slice().sort((a, b) => a - b)).toEqual(vals);   // the standings are in order
-  // head to head: k x k, and a pair's two shares plus their ties make 100 %
+  // head to head: k x k, and a pair's two shares make 100 % (a tie counts half to each)
   await expect(page.locator(V2 + ' .v2h2h tbody tr')).toHaveCount(k);
   const cell = (r, c) => page.locator(V2 + ` .v2h2h tbody tr:nth-child(${r}) td:nth-child(${c + 1})`).textContent();
-  const num = (t) => parseFloat(t), tied = (t) => parseFloat(t.split('%')[1]);
+  const num = (t) => parseFloat(t);
   const ab = await cell(1, 2), ba = await cell(2, 1);
-  expect(Math.abs(num(ab) + num(ba) + tied(ab) - 100)).toBeLessThan(1.6);
+  expect(Math.abs(num(ab) + num(ba) - 100)).toBeLessThan(0.15);
   // the standings along the ladder
   await expect(page.locator(V2 + ' .v2view svg.v2chart').last()).toContainText('Comparisons won');
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -652,11 +724,11 @@ test('the ranks view places the methods, names what it ranks on and how it holds
 });
 
 test('ranks follow the selection: another metric, fewer methods, fewer catalogs', async ({ page }) => {
-  await page.goto('/?release=2026-09&v=ranks&x=rung&r=16');
+  await page.goto('/explorer.html?release=2026-09&v=ranks&x=rung&r=16');
   const rows = page.locator(V2 + ' .v2ranktable tbody tr');
   await expect(rows.first()).toBeVisible({ timeout: 15000 });
   const k = await rows.count();
-  const laws = () => page.locator(V2 + ' .v2view').textContent().then((t) => +t.match(/within each of ([\d,]+) problems/)[1].replace(/,/g, ''));
+  const laws = () => page.locator(V2 + ' .v2view').textContent().then((t) => +t.match(/on ([\d,]+) problems from/)[1].replace(/,/g, ''));
   const all = await laws();
   await page.locator(V2 + ' button[data-act="phys"]').click();
   await expect.poll(laws).toBeLessThan(all);
@@ -676,7 +748,7 @@ test('ranks follow the selection: another metric, fewer methods, fewer catalogs'
 });
 
 test('ranks hold the methods equal on reference-machine time when it exists', async ({ page }) => {
-  await page.goto('/?release=2026-09&v=ranks&x=time');
+  await page.goto('/explorer.html?release=2026-09&v=ranks&x=time');
   if (!(await hasRefTiming(page))) { test.skip(); }
   const chart = page.locator(V2 + ' .v2view svg.v2rankchart');
   await expect(chart).toBeVisible({ timeout: 15000 });
@@ -706,13 +778,13 @@ test('a pooled number appears only where a method has finished every selected ca
       window.FIXTURE_CAT = cat; })();`;
     await route.fulfill({ response: res, body: (await res.text()) + add });
   });
-  await page.goto('/?release=2026-09&v=table&rows=rungs&p=numeric_recovery_val&x=rung');
+  await page.goto('/explorer.html?release=2026-09&v=table&rows=rungs&p=numeric_recovery_val&x=rung');
   await expect(page.locator(V2 + ' .v2methods')).toContainText('Fixture just begun');
   const row16 = page.locator(V2 + ' .v2table tbody tr').filter({ has: page.locator('td:first-child', { hasText: /^16$/ }) });
   await expect(row16).toBeVisible({ timeout: 15000 });
   // the others are still pooled over everything, and the newcomer shows nothing at all
   const all = await page.evaluate(() => window.RESULTS_V2.catalogs.length);
-  expect(+(await row16.locator('td:nth-child(2)').textContent()).match(/\((\d+) catalogs\)/)[1]).toBe(all);
+  expect(+(await row16.locator('td:nth-child(2)').textContent()).match(/\((\d+) problem sets\)/)[1]).toBe(all);
   await expect(row16.locator('td').last()).toHaveText('');
   await expect(page.locator(V2 + ' .v2view svg circle[fill="var(--surface)"]')).toHaveCount(0);   // no hollow markers anywhere
   // narrowed to the catalog it HAS finished, it is complete there and gets its number
@@ -721,10 +793,10 @@ test('a pooled number appears only where a method has finished every selected ca
   await page.locator(V2 + ` .v2cats input[data-c="${cat}"]`).check();
   await expect(row16.locator('td').last()).not.toHaveText('');
   // and it is ranked there, but not over the whole selection
-  await page.goto('/?release=2026-09&v=ranks&x=rung&r=16&c=all');
+  await page.goto('/explorer.html?release=2026-09&v=ranks&x=rung&r=16&c=all');
   await expect(page.locator(V2 + ' .v2ranktable')).toBeVisible({ timeout: 15000 });
   await expect(page.locator(V2 + ' .v2ranktable')).not.toContainText('Fixture just begun');
-  await expect(page.locator(V2 + ' .v2view')).toContainText(/Fixture just begun ha(s|ve) not finished every selected catalog/);
+  await expect(page.locator(V2 + ' .v2view')).toContainText(/Fixture just begun (is|are) not ranked: (it has|they have) not finished all selected problem sets/);
 });
 
 
@@ -740,7 +812,7 @@ test('a method without outcomes against another sits out of the ranking instead 
       window.FIXTURE_PAIR = key.split('|'); })();`;
     await route.fulfill({ response: res, body: (await res.text()) + cut });
   });
-  await page.goto('/?release=2026-09&v=ranks&x=rung&r=16&c=all');
+  await page.goto('/explorer.html?release=2026-09&v=ranks&x=rung&r=16&c=all');
   const table = page.locator(V2 + ' .v2ranktable').first();
   await expect(table).toBeVisible({ timeout: 15000 });
   const pair = await page.evaluate(() => window.FIXTURE_PAIR.map((k) => window.RESULTS_V2.methods.filter((m) => m.key === k)[0].label));
@@ -749,7 +821,7 @@ test('a method without outcomes against another sits out of the ranking instead 
   expect(ranked.length).toBe(1);                                   // one of the two is ranked with everybody else
   expect(names.length).toBeGreaterThanOrEqual(2);
   const out = pair.filter((label) => ranked.indexOf(label) < 0)[0];
-  await expect(page.locator(V2 + ' .v2view')).toContainText(out + ' carries no pairwise outcomes against all of the other selected methods at budget 16 and sits out.');
+  await expect(page.locator(V2 + ' .v2view')).toContainText(out + ' is not ranked: it has no results on the same problems as all other selected methods at budget 16.');
   const vals = (await table.locator('tbody tr td:nth-child(3)').allTextContents()).map(Number);
   expect(Math.abs(vals.reduce((a, b) => a + b, 0) - vals.length * (vals.length + 1) / 2)).toBeLessThan(0.02 * vals.length);
 });
@@ -763,7 +835,7 @@ test('outcomes at a time limit that compared another rung than the method sits o
       window.FIXTURE_STALE = a; })();`;
     await route.fulfill({ response: res, body: (await res.text()) + stale });
   });
-  await page.goto('/?release=2026-09&v=ranks&x=time&c=all');
+  await page.goto('/explorer.html?release=2026-09&v=ranks&x=time&c=all');
   if (!(await hasRefTiming(page))) { test.skip(); }
   const table = page.locator(V2 + ' .v2ranktable').first();
   await expect(table).toBeVisible({ timeout: 15000 });
@@ -771,13 +843,13 @@ test('outcomes at a time limit that compared another rung than the method sits o
   const names = (await table.locator('tbody tr td:first-child').allTextContents()).map((n) => n.trim());
   expect(names).not.toContain(label);
   expect(names.length).toBeGreaterThanOrEqual(2);
-  await expect(page.locator(V2 + ' .v2view')).toContainText(new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ' carries no pairwise outcomes against all of the other selected methods at [\\d.]+ s per problem and sits out'));
+  await expect(page.locator(V2 + ' .v2view')).toContainText(new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ' is not ranked: it has no results on the same problems as all other selected methods at [\\d.]+ s per problem'));
 });
 
 // ---- design contract (2026-09-20): hints, labels, axes, the pinned column, the header ---------------------------
 test('no hint opens empty, in any display', async ({ page }) => {
   for (const view of VIEWS) {
-    await page.goto(`/?release=2026-09&v=${view}&c=all`);
+    await page.goto(`/explorer.html?release=2026-09&v=${view}&c=all`);
     await expect(page.locator(V2 + ' .v2tab.active')).toHaveAttribute('data-view', view);
     await page.waitForTimeout(600);
     await page.evaluate(() => document.querySelectorAll('.explorer-v2 details').forEach((d) => { d.open = true; }));   // collapsed sections hold hints too
@@ -803,12 +875,12 @@ test('no hint opens empty, in any display', async ({ page }) => {
 });
 
 test('the text of an option selects the option: hints never sit inside a label', async ({ page }) => {
-  await page.goto('/?release=2026-09&v=curves');
+  await page.goto('/explorer.html?release=2026-09&v=curves');
   await page.locator(V2 + ' label', { hasText: /^\s*median\s*$/ }).click();
   await expect(page.locator(V2 + ' input[name="v2stat"][value="median"]')).toBeChecked();
   await expect(page.locator('.v2pop')).toHaveCount(0);
   for (const view of VIEWS) {
-    await page.goto(`/?release=2026-09&v=${view}`);
+    await page.goto(`/explorer.html?release=2026-09&v=${view}`);
     await expect(page.locator(V2 + ' .v2tab.active')).toHaveAttribute('data-view', view);
     await expect(page.locator(V2 + ' label .v2term, ' + V2 + ' label .v2help, ' + V2 + ' button .v2term, ' + V2 + ' .v2lab .v2term'), view).toHaveCount(0);
   }
@@ -817,7 +889,7 @@ test('the text of an option selects the option: hints never sit inside a label',
 test('axis ticks are round values with room between their labels', async ({ page }) => {
   await page.setViewportSize({ width: 1360, height: 1000 });
   for (const view of ['curves', 'dist', 'ranks', 'paired']) {
-    await page.goto(`/?release=2026-09&v=${view}&c=all`);
+    await page.goto(`/explorer.html?release=2026-09&v=${view}&c=all`);
     await expect(page.locator(V2 + ' .v2tab.active')).toHaveAttribute('data-view', view);
     await expect(page.locator('.explorer-v2 svg.v2chart').first()).toBeVisible({ timeout: 15000 });
     await page.waitForTimeout(800);
@@ -851,7 +923,7 @@ test('axis ticks are round values with room between their labels', async ({ page
 test('a chart hugs its data: neither a reference line nor a snapped axis leaves it mostly empty', async ({ page }) => {
   await page.setViewportSize({ width: 1360, height: 1000 });
   for (const view of ['curves', 'paired']) {
-    await page.goto(`/?release=2026-09&v=${view}&c=all`);
+    await page.goto(`/explorer.html?release=2026-09&v=${view}&c=all`);
     await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toBeVisible({ timeout: 15000 });
     await page.waitForTimeout(800);
     const fills = await page.evaluate(() => [...document.querySelectorAll('.explorer-v2 svg.v2chart')].map((svg, ci) => {
@@ -869,7 +941,7 @@ test('a chart hugs its data: neither a reference line nor a snapped axis leaves 
 test('the pinned first column of a wide table sits flush left at any scroll position', async ({ page }) => {
   await page.setViewportSize({ width: 900, height: 900 });
   for (const view of ['table', 'matrix', 'ranks']) {
-    await page.goto(`/?release=2026-09&v=${view}&c=all`);
+    await page.goto(`/explorer.html?release=2026-09&v=${view}&c=all`);
     const wrap = page.locator(V2 + ' .v2view .v2table-wrap').last();
     await expect(wrap).toBeVisible({ timeout: 15000 });
     const gaps = await wrap.evaluate((w) => {
@@ -891,18 +963,15 @@ test('the page names itself once: the bar carries the name, the title says what 
   await expect(page.locator('.site-header .brand')).toContainText(name);
   await expect(page.locator('.site-header .brand .brand-mark')).toHaveCount(0);   // the icon already reads "srbf"
   await expect(page.locator('main h1')).not.toContainText(name);
-  await expect(page.locator('main h1')).toHaveText('Benchmark results');
+  await expect(page.locator('main h1')).toHaveText('One standard for comparing symbolic regression methods');
 });
 
-test('prose follows the release on screen', async ({ page }) => {
-  await page.goto('/?release=2026-09');
-  await expect(page.locator('#about h3', { hasText: 'Pooling and intervals' })).toBeVisible();
-  await expect(page.locator('#about h3', { hasText: 'Provenance' })).toBeHidden();
-  await expect(page.locator('#about h3', { hasText: 'Who chose each configuration' })).toBeVisible();
-  await page.goto('/?release=2026-07');
-  await expect(page.locator('#about h3', { hasText: 'Provenance' })).toBeVisible();
-  await expect(page.locator('#about h3', { hasText: 'Pooling and intervals' })).toBeHidden();
-  await expect(page.locator('#paired h3', { hasText: 'The noise margin' })).toBeVisible();
+test('the guide explains the results from scratch', async ({ page }) => {
+  await page.goto('/guide.html');
+  for (const h of ['Problems', 'Checking a prediction', 'Budgets and time', 'Why some points are missing', 'Problems without a usable formula', 'Intervals']) {
+    await expect(page.locator('#about h3', { hasText: new RegExp('^' + h + '$') })).toBeVisible();
+  }
+  await expect(page.locator('[data-for]')).toHaveCount(0);   // one release: no text is written for another one
 });
 
 // ---- how much of a point is there ---------------------------------------------------------------------------------
@@ -912,10 +981,13 @@ async function withHalfAnswered(page) {
   await page.route('**/data/2026-09/results.js', async (route) => {
     const res = await route.fetch();
     const add = `;(function () { var D = window.RESULTS_V2;
-      // its answers have a token F1 of 0.8; the laws it failed are counted at 0, and the cell says how many those are
-      var mk = function (k) { return { state: 'complete', n: 100, ok: k, e: { n_constants_ratio: 42 }, w: { f1_score: 100 - k }, m: {
-        numeric_recovery_val: [10, 100], success: [k, 100], mdl_ratio: [k, k, 1.5 * k, 2.5 * k], log10_fvu_val: [k, k, -2 * k, 5 * k],
-        f1_score: [100, 100, 0.8 * k, 0.64 * k], n_constants_ratio: [40, 40, 44, 50] } }; };
+      // 100 problems, one run each, k of them answered. Its answers have a token F1 of 0.8; the problems it failed are
+      // counted at 0, and the answered-only reading ("a") leaves them out. A rate is [problems, sum, sum of squares], any
+      // other metric [problems with a value, with a finite value, sum, sum of squares], a ratio on log2.
+      var L = Math.log2(1.5), C = Math.log2(1.1);
+      var mk = function (k) { return { state: 'complete', n: 100, d: 1, ok: k, e: { n_constants_ratio: 42 }, m: {
+        numeric_recovery_val: [100, 10, 10], success: [100, k, k], mdl_ratio: [k, k, L * k, L * L * k], log10_fvu_val: [k, k, -2 * k, 5 * k],
+        f1_score: [100, 100, 0.8 * k, 0.64 * k], n_constants_ratio: [40, 40, 40 * C, 40 * C * C] }, a: { f1_score: [k, k, 0.8 * k, 0.64 * k] } }; };
       D.methods.push({ key: 'fixture-half', label: 'Fixture half answered', param: 'draws', budget: 'candidates', color: '#555555', group: 'baseline', provenance: 'upstream_default', selection: '' });
       D.cells['fixture-half'] = {}; D.catalogs.forEach(function (c) { D.cells['fixture-half'][c.key] = { '16': mk(50), '32': mk(95) }; });
       D.status['fixture-half'] = [2, 2]; })();`;
@@ -923,7 +995,7 @@ async function withHalfAnswered(page) {
   });
 }
 const HOLLOW = 'circle[fill="var(--surface)"]';
-const HALF = '/?release=2026-09&m=fixture-half&x=rung&s=mean&p=rung~mdl_ratio,rung~f1_score,rung~n_constants_ratio,rung~numeric_recovery_val';
+const HALF = '/explorer.html?release=2026-09&m=fixture-half&x=rung&s=mean&p=rung~mdl_ratio,rung~f1_score,rung~n_constants_ratio,rung~numeric_recovery_val';
 async function setThreshold(page, value) {
   await page.locator(V2 + ' .v2valid').fill(String(value));
   await expect(page.locator(V2 + ' .v2validout')).toHaveText(value + ' % of the problems');
@@ -938,7 +1010,7 @@ test('a point that rests on too few problems is drawn hollow, and the reader set
   // the default threshold is 90 %: half of the laws is too few, 95 % is enough
   await expect(page.locator(V2 + ' .v2valid')).toHaveValue('90');
   await expect(plot(0).locator(HOLLOW)).toHaveCount(1);
-  await expect(plot(0).locator(HOLLOW + ' title')).toHaveText(/@ 16.*50 % of the problems have a value/);
+  await expect(plot(0).locator(HOLLOW + ' title')).toHaveText(/at budget 16.*50 % of the problems have a value/);
   await expect(page.locator(V2 + ' .v2hollownote')).toContainText('fewer than 90 % of the problems');
   // a metric with a worst value counts every law, and so does a rate: never hollow
   await expect(plot(1).locator('svg circle')).toHaveCount(2);
@@ -955,14 +1027,15 @@ test('a point that rests on too few problems is drawn hollow, and the reader set
   await setThreshold(page, 0);   // off
   await expect(page.locator(V2 + ' .v2view ' + HOLLOW)).toHaveCount(0);
   await expect(page.locator(V2 + ' .v2hollownote')).toHaveCount(0);
-  // the two fixed charts above do not follow the control: they keep the default
-  await expect(page.locator('#results-headline-v2 ' + HOLLOW).first()).toBeVisible();
-  await expect(page.locator('#results-headline-v2')).toContainText('fewer than 90 % of the problems');
   // a link carries the threshold
   await page.goto(HALF + '&v=curves&ok=40');
   await expect(page.locator(V2 + ' .v2valid')).toHaveValue('40');
   await expect(plot(0).locator('svg circle')).toHaveCount(2);
   await expect(plot(0).locator(HOLLOW)).toHaveCount(0);
+  // the headline's two fixed charts on the home page do not follow the control: they keep the default
+  await page.goto('/');
+  await expect(page.locator('#results-headline-v2 ' + HOLLOW).first()).toBeVisible();
+  await expect(page.locator('#results-headline-v2')).toContainText('fewer than 90 % of the problems');
   expect(errors, errors.join('\n')).toEqual([]);
 });
 
@@ -986,7 +1059,7 @@ test('R² has no floor and is read by its median', async ({ page }) => {
   const errors = collectErrors(page);
   const asked = [];
   page.on('request', (r) => { if (r.url().includes('/hist/')) { asked.push(r.url().split('/hist/')[1]); } });
-  await page.goto('/?release=2026-09&v=curves&x=rung&s=mean&p=rung~r2_val');
+  await page.goto('/explorer.html?release=2026-09&v=curves&x=rung&s=mean&p=rung~r2_val');
   const reg = await page.evaluate(() => { const D = window.RESULTS_V2; const m = D.metrics.filter((x) => x.key === 'r2_val')[0];
     return { label: m.label, via: m.median_via, lo: m.hist.lo, ranks: D.rank_keys, paired: D.paired_keys,
       worst: D.metrics.filter((x) => x.worst !== undefined).map((x) => x.key + '=' + x.worst).sort() }; });
@@ -1020,7 +1093,7 @@ test('R² has no floor and is read by its median', async ({ page }) => {
 test('a failed prediction counts the worst value, or is left out: the reader chooses', async ({ page }) => {
   const errors = collectErrors(page);
   await withHalfAnswered(page);
-  await page.goto('/?release=2026-09&m=fixture-half&x=rung&s=mean&band=0&p=rung~f1_score,rung~mdl_ratio&v=table&rows=rungs');
+  await page.goto('/explorer.html?release=2026-09&m=fixture-half&x=rung&s=mean&band=0&p=rung~f1_score,rung~mdl_ratio&v=table&rows=rungs');
   const row = (r) => page.locator(V2 + ' .v2table tbody tr').filter({ has: page.locator('td:first-child', { hasText: new RegExp('^' + r + '$') }) });
   const f1 = (r) => row(r).locator('td').nth(2);
   // counted, the default: half of the laws at 0.8 and half at 0
@@ -1042,39 +1115,39 @@ test('a failed prediction counts the worst value, or is left out: the reader cho
   await page.locator(V2 + ' .v2impute').check();
   await expect(plot.locator(HOLLOW)).toHaveCount(0);
   // a link carries the choice, and a display without such a metric does not offer it
-  await page.goto('/?release=2026-09&m=fixture-half&x=rung&s=mean&band=0&p=rung~f1_score&v=table&rows=rungs&imp=0');
+  await page.goto('/explorer.html?release=2026-09&m=fixture-half&x=rung&s=mean&band=0&p=rung~f1_score&v=table&rows=rungs&imp=0');
   await expect(page.locator(V2 + ' .v2impute')).not.toBeChecked();
   await expect(f1(16)).toHaveText(/0\.800/);
-  await page.goto('/?release=2026-09&m=fixture-half&x=rung&s=mean&p=rung~mdl_ratio&v=table&rows=rungs');
+  await page.goto('/explorer.html?release=2026-09&m=fixture-half&x=rung&s=mean&p=rung~mdl_ratio&v=table&rows=rungs');
   await expect(page.locator(V2 + ' .v2impute')).toBeHidden();
   expect(errors, errors.join('\n')).toEqual([]);
 });
 
 test('leaving failed predictions out is exact for the median, the distribution and a paired contrast', async ({ page }) => {
   const errors = collectErrors(page);
-  // the release's own numbers: a method that answers under half of the laws has a median overlap of 0 when its
-  // failures count, and the median of its answers when they do not
-  const low = await page.goto('/?release=2026-09&v=table&rows=rungs&x=rung&s=median&band=0&p=rung~f1_score').then(() => page.evaluate(() => {
+  // the release's own numbers: for a method that answers under half of the problems, the median overlap is lower when
+  // its failures count (at 0) than when they are left out, and left out it rests on too few problems (hollow)
+  const low = await page.goto('/explorer.html?release=2026-09&v=table&rows=rungs&x=rung&s=median&band=0&p=rung~f1_score').then(() => page.evaluate(() => {
     const D = window.RESULTS_V2; let best = null;
     D.methods.forEach((m) => { const per = D.cells[m.key] || {}; let n = 0, ok = 0; Object.keys(per).forEach((c) => { const x = per[c]['1']; if (x) { n += x.n; ok += x.ok; } }); if (n && ok / n < 0.45 && (!best || ok / n < best.share)) { best = { key: m.key, share: ok / n }; } });
     return best; }));
   test.skip(!low, 'no method of this release has a prediction for under half of the problems');
-  const url = (extra) => '/?release=2026-09&rows=rungs&x=rung&s=median&band=0&p=rung~f1_score&m=' + low.key + extra;
+  const url = (extra) => '/explorer.html?release=2026-09&rows=rungs&x=rung&s=median&band=0&p=rung~f1_score&m=' + low.key + extra;
   const first = () => page.locator(V2 + ' .v2table tbody tr').first().locator('td').nth(2);
   await page.goto(url('&v=table&imp=1'));
   await expect(first()).toHaveText(/\d/, { timeout: 15000 });
-  expect(parseFloat((await first().textContent()).replace(/^[≤≥○ ]+/, ''))).toBeLessThan(0.05);
+  const counted0 = parseFloat((await first().textContent()).replace(/^[≤≥○ ]+/, ''));
   await page.locator(V2 + ' .v2impute').uncheck();
   await expect(first()).toHaveText(/○/);
-  expect(parseFloat((await first().textContent()).replace(/^[≤≥○ ]+/, ''))).toBeGreaterThan(0.3);
+  expect(parseFloat((await first().textContent()).replace(/^[≤≥○ ]+/, ''))).toBeGreaterThan(counted0);
   // the distribution loses exactly the laws that were filled in
   await page.goto(url('&v=dist&dm=f1_score&dv=hist&r=1&imp=1'));   // the choice is remembered, so the link states it
-  await expect(page.locator(V2 + ' .v2view')).toContainText('Every problem: a failed prediction sits at 0', { timeout: 15000 });
+  await expect(page.locator(V2 + ' .v2view')).toContainText('All problems: a problem without a usable formula counts as 0', { timeout: 15000 });
   await page.locator(V2 + ' .v2impute').uncheck();
-  await expect(page.locator(V2 + ' .v2view')).toContainText('Successful predictions only');
+  await expect(page.locator(V2 + ' .v2view')).toContainText("Only problems where the method's formula has a value are counted");
   // a paired contrast is then taken over the laws both methods answered
   const other = await page.evaluate((k) => window.RESULTS_V2.methods.filter((m) => m.key !== k && window.RESULTS_V2.cells[m.key] && Object.keys(window.RESULTS_V2.cells[m.key]).length)[0].key, low.key);
-  await page.goto('/?release=2026-09&v=paired&x=rung&p=rung~f1_score&m=' + low.key + ',' + other + '&b=' + other + '&imp=1');
+  await page.goto('/explorer.html?release=2026-09&v=paired&x=rung&p=rung~f1_score&m=' + low.key + ',' + other + '&b=' + other + '&imp=1');
   await expect(page.locator(V2 + ' .v2view')).toContainText(/\d/, { timeout: 15000 });
   const counted = await page.locator(V2 + ' .v2view').innerText();
   await page.locator(V2 + ' .v2impute').uncheck();
@@ -1084,15 +1157,16 @@ test('leaving failed predictions out is exact for the median, the distribution a
 
 test('symbolic recovery is asked at three levels of masking, each implying the one before it', async ({ page }) => {
   const errors = collectErrors(page);
-  await page.goto('/?release=2026-09&v=table&rows=rungs&x=rung&p=rung~symbolic_recovery,rung~symbolic_recovery_mask_fittable,rung~symbolic_recovery_mask_none');
+  await page.goto('/explorer.html?release=2026-09&v=table&rows=rungs&x=rung&p=rung~symbolic_recovery,rung~symbolic_recovery_mask_fittable,rung~symbolic_recovery_mask_none');
   const seen = await page.evaluate(() => {
     const D = window.RESULTS_V2; let cells = 0, missing = 0, broken = 0, strict = 0;
     Object.keys(D.cells).forEach((m) => Object.keys(D.cells[m]).forEach((c) => Object.keys(D.cells[m][c]).forEach((r) => {
       const x = D.cells[m][c][r].m, all = x.symbolic_recovery, exp = x.symbolic_recovery_mask_fittable, num = x.symbolic_recovery_mask_none;
       cells += 1;
       if (!all || !exp || !num) { missing += 1; return; }
-      if (!(num[0] <= exp[0] && exp[0] <= all[0] && num[0] <= x.numeric_recovery_val[0] && exp[1] === all[1] && num[1] === all[1])) { broken += 1; }
-      if (exp[0] < all[0]) { strict += 1; }
+      // a rate is [problems, sum, sum of squares]: the same problems, and each level's hits within the one before it
+      if (!(num[1] <= exp[1] && exp[1] <= all[1] && num[1] <= x.numeric_recovery_val[1] && exp[0] === all[0] && num[0] === all[0])) { broken += 1; }
+      if (exp[1] < all[1]) { strict += 1; }
     })));
     const labels = D.metrics.filter((m) => m.key.indexOf('symbolic_recovery') === 0).map((m) => m.label);
     return { cells, missing, broken, strict, labels };
@@ -1110,7 +1184,7 @@ test('symbolic recovery is asked at three levels of masking, each implying the o
 });
 
 test('metric names say Prediction and Ground Truth, in title caps, and single-expression properties sit apart', async ({ page }) => {
-  await page.goto('/?release=2026-09');
+  await page.goto('/explorer.html?release=2026-09');
   const reg = await page.evaluate(() => window.RESULTS_V2.metrics.map((m) => ({ key: m.key, label: m.label, short: m.short, group: m.group })));
   const small = ['of', 'the', 'to', 'as', 'a', 'and', 'log10', 'log2', 'vNRR', 'fNRR'];
   for (const m of reg) {
@@ -1138,7 +1212,7 @@ test('metric names say Prediction and Ground Truth, in title caps, and single-ex
 test.describe('the picker on a touch tablet', () => {
   test.use({ viewport: { width: 820, height: 1180 }, hasTouch: true, isMobile: true });
   test('opening it does not put the cursor into the search field', async ({ page }) => {
-    await page.goto('/?release=2026-09&v=curves&p=time~numeric_recovery_val');
+    await page.goto('/explorer.html?release=2026-09&v=curves&p=time~numeric_recovery_val');
     expect(await page.evaluate(() => window.matchMedia('(pointer: coarse)').matches)).toBe(true);   // the premise of this test
     await page.locator(`${V2} .v2plothead .v2pick[data-axis="y"]`).first().tap();
     await expect(page.locator('.v2picker')).toBeVisible();
@@ -1146,7 +1220,7 @@ test.describe('the picker on a touch tablet', () => {
   });
   test('it stays open when the on-screen keyboard takes height away, and closes when the width changes', async ({ page }) => {
     const errors = collectErrors(page);
-    await page.goto('/?release=2026-09&v=curves&p=time~numeric_recovery_val');
+    await page.goto('/explorer.html?release=2026-09&v=curves&p=time~numeric_recovery_val');
     await page.locator(`${V2} .v2plothead .v2pick[data-axis="y"]`).first().tap();
     const picker = page.locator('.v2picker');
     await expect(picker).toBeVisible();
@@ -1175,7 +1249,7 @@ test('a redraw under an open picker does not close it', async ({ page }) => {
   // a median metric needs its histogram, which arrives late here: the redraw lands while the menu is open
   await page.route('**/data/2026-09/hist/**', async (route) => { await new Promise((r) => setTimeout(r, 1500)); await route.continue(); });
   const arrived = page.waitForResponse((r) => r.url().includes('/hist/') && r.status() === 200);
-  await page.goto('/?release=2026-09&v=curves&p=time~r2_val', { waitUntil: 'domcontentloaded' });   // `load` would wait for the histogram
+  await page.goto('/explorer.html?release=2026-09&v=curves&p=time~r2_val', { waitUntil: 'domcontentloaded' });   // `load` would wait for the histogram
   const trigger = page.locator(`${V2} .v2plothead .v2pick[data-axis="y"]`).first();
   await trigger.click();
   const picker = page.locator('.v2picker');
@@ -1195,7 +1269,7 @@ test('a redraw under an open picker does not close it', async ({ page }) => {
 test('the axis swap trades the two metrics of a plot; a budget plot keeps its plain vs', async ({ page }) => {
   const errors = collectErrors(page);
   await page.setViewportSize({ width: 1400, height: 900 });
-  await page.goto('/?release=2026-09&v=curves&p=log10_fvu_val~numeric_recovery_val,time~numeric_recovery_val');
+  await page.goto('/explorer.html?release=2026-09&v=curves&p=log10_fvu_val~numeric_recovery_val,time~numeric_recovery_val');
   const heads = page.locator(`${V2} .v2plothead`);
   await expect(heads).toHaveCount(2);
   const tradeoff = heads.nth(0), budget = heads.nth(1);
@@ -1224,16 +1298,19 @@ test('the axis swap trades the two metrics of a plot; a budget plot keeps its pl
   expect(errors).toEqual([]);
 });
 
-test('the release has one home: a title and its update time in the headline roles, then Protocol and Progress', async ({ page }) => {
+test('the release has one home: a title and its update time in the headline roles, then one line of progress', async ({ page }) => {
   const errors = collectErrors(page);
-  await page.goto('/?release=2026-09&v=curves');
+  // one role each: the title and its caption compute exactly like the headline's on the home page
+  const style = (sel) => page.locator(sel).first().evaluate((el) => { const c = getComputedStyle(el); return [c.fontSize, c.fontWeight, c.color, c.textTransform, c.letterSpacing].join(' '); });
+  await page.goto('/');
+  await expect(page.locator('.headline-v2 .v2hltitle')).toBeVisible();
+  const [hlTitle, hlSub] = [await style('.headline-v2 .v2hltitle'), await style('.headline-v2 .v2hlsub')];
+  await page.goto('/explorer.html?release=2026-09&v=curves');
   const head = page.locator(V2 + ' .v2relhead');
   await expect(head).toHaveCount(1);
   await expect(head.locator('h2.v2hltitle')).toHaveText(/^Release 2026-09/);
-  // one role each: the title and its caption compute exactly like the headline's
-  const style = (sel) => page.locator(sel).first().evaluate((el) => { const c = getComputedStyle(el); return [c.fontSize, c.fontWeight, c.color, c.textTransform, c.letterSpacing].join(' '); });
-  expect(await style(V2 + ' .v2relhead .v2hltitle')).toBe(await style('.headline-v2 .v2hltitle'));
-  expect(await style(V2 + ' .v2relhead .v2hlsub')).toBe(await style('.headline-v2 .v2hlsub'));
+  expect(await style(V2 + ' .v2relhead .v2hltitle')).toBe(hlTitle);
+  expect(await style(V2 + ' .v2relhead .v2hlsub')).toBe(hlSub);
   // the update time: the caption of the title, with its offset in the markup and a time zone on screen
   const rel = await page.evaluate(() => window.RESULTS_V2.release);
   const upd = head.locator('.v2hlsub .v2updated');
@@ -1245,19 +1322,101 @@ test('the release has one home: a title and its update time in the headline role
     await expect(upd).toHaveText(/\b20\d\d\b.* · (just now|\d+ (minute|minutes|hour|hours|days) ago)$/);
   }
   await expect(page.locator(V2 + ' .v2updated')).toHaveCount(1);                  // one place for the time
-  await expect(page.locator(V2)).not.toContainText(/generated|benchmark release/i); // the switch above names the release
-  // Protocol and Progress are named in the one label style
-  const status = page.locator(V2 + ' section.v2status');
-  await expect(status.locator('h3')).toHaveText(/^Progress/);
-  await expect(status.locator('h3 .v2help')).toHaveCount(1);                      // what is counted, on a ?
-  await expect(page.locator(V2 + ' details.v2release > summary')).toHaveText('Protocol');
-  expect(await style(V2 + ' details.v2release > summary')).toBe(await style(V2 + ' section.v2status h3'));
-  // every method tile lives in the Progress block, and none counts more finished than planned
-  const tiles = await page.locator(V2 + ' .v2tile').count();
-  expect(tiles).toBeGreaterThan(0);
-  await expect(status.locator('.v2tile')).toHaveCount(tiles);
-  await expect(status.locator('.v2tile').first()).toContainText(/\d+ \/ \d+$/);                 // finished / planned
-  const over = await page.evaluate(() => Object.values(window.RESULTS_V2.status).filter((s) => s[1] != null && s[0] > s[1]).length);
-  expect(over).toBe(0);
+  await expect(page.locator(V2)).not.toContainText(/(?<!machine-)generated|benchmark release/i); // the release head above names the release
+  // then one line of progress: the counts the exporter decided, and the way to the Progress page
+  const line = page.locator(V2 + ' .v2progline');
+  const summary = await page.evaluate(() => window.RESULTS_V2.summary);
+  if (summary) {
+    await expect(line).toHaveCount(1);
+    await expect(line.locator('.v2kicker')).toHaveText('Progress');
+    for (const [n, word] of [[summary.finished.length, 'finished'], [summary.in_progress.length, 'in progress'], [summary.scheduled.length, 'scheduled']]) {
+      if (n) { await expect(line).toContainText(new RegExp(n + ' (methods? )?' + word)); } else { await expect(line).not.toContainText(word); }
+    }
+    await expect(line.locator('a')).toHaveAttribute('href', 'progress.html');
+  } else {
+    await expect(line).toHaveCount(0);                                              // data without a summary: no line
+  }
+  await expect(page.locator(V2 + ' .v2tile')).toHaveCount(0);                       // the details live on the Progress page
+  await expect(page.locator(V2 + ' details.v2release')).toHaveCount(0);             // the protocol lives on the guide
   expect(errors).toEqual([]);
+});
+
+// Every text the 2026-09 page shows or offers (hints, popovers, tooltips, labels, the protocol), in every view and
+// mode, uses the reader's words, not the pipeline's. The same list as copy_lint.py's BANNED_V2, which checks the prose.
+const PIPELINE_WORDS = [/\bcatalogs?\b/i, /\brungs?\b/i, /\bdraws? (\d|per\b|of\b)|\b(\d+|two|its|their|one|per|of|over|the) draws?\b/i,
+  /\bpooled\b|\bpooling\b/i, /reference[- ]machine/i, /\bladder\b/i, /\bcanon\b|canonical form/i, /\bstrat(um|a)\b|stratified/i,
+  /\bmu\b/i];
+test('every text of the 2026-09 explorer uses the reader\'s words', async ({ page }) => {
+  test.setTimeout(120_000);
+  const urls = ['v=curves&x=time', 'v=curves&x=rung', 'v=table&rows=rungs', 'v=table&rows=cats', 'v=matrix',
+    'v=dist&dm=log10_fvu_val&dv=hist', 'v=dist&dm=log10_fvu_val&dv=ecdf', 'v=dist&dm=log10_fvu_val&dv=cats',
+    'v=dist&dm=log10_fvu_val&dv=rungs', 'v=dist&dm=numeric_recovery_val&dv=cats', 'v=ranks&x=rung&r=16', 'v=ranks&x=time', 'v=paired', 'v=preds'];
+  const found = [];
+  for (const u of [...urls, 'home']) {   // every display of the explorer, then the home page's headline
+    if (u === 'home') {
+      await page.goto('/');
+      await expect(page.locator('#results-headline-v2 svg.v2chart').first()).toBeVisible();
+    } else {
+      await page.goto('/explorer.html?release=2026-09&' + u);
+      await expect(page.locator(V2 + ' .v2view')).toBeVisible();
+      await expect(page.locator(V2 + ' .v2view')).not.toContainText('loading', { timeout: 15000 });
+    }
+    const texts = await page.evaluate(() => {
+      const roots = ['#results-headline-v2', '#results-explorer-v2'].map((s) => document.querySelector(s)).filter(Boolean);
+      const out = roots.map((r) => r.textContent);
+      roots.forEach((r) => r.querySelectorAll('[data-help], [title], [aria-label]').forEach((e) =>
+        ['data-help', 'title', 'aria-label'].forEach((a) => { if (e.getAttribute(a)) { out.push(e.getAttribute(a)); } })));
+      return out;
+    });
+    for (const t of texts) {
+      for (const w of PIPELINE_WORDS) {
+        const m = t.match(w);
+        if (m) { found.push(`${u}: ${w} … ${t.slice(Math.max(0, m.index - 50), m.index + 50).replace(/\s+/g, ' ')} …`); }
+      }
+    }
+  }
+  expect([...new Set(found)]).toEqual([]);
+});
+
+// ---- Predictions: the formulas themselves ---------------------------------------------------------------------------
+test('the predictions view shows one problem: its true formula, and one row per method with its formula', async ({ page }) => {
+  const errors = collectErrors(page);
+  const wrap = (key, obj) => `window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"][${JSON.stringify(key)}]=${JSON.stringify(obj)};})();`;
+  const truth = {}, preds = {};
+  for (let i = 0; i < 100; i++) { truth[String(i)] = '* x1 x2'; preds[String(i)] = ['+ x1 1.5', 0]; }
+  preds['0'] = ['* x1 x2', 3];           // recovered, numerically and in structure
+  preds['1'] = null;                     // no usable formula
+  preds['2'] = ['sqrt x1 x2', 0];        // a token outside the vocabulary: shown as written, never an error
+  await page.route('**/data/2026-09/results.js', async (route) => {
+    const res = await route.fetch();
+    await route.fulfill({ response: res, body: (await res.text()) + ';(function(){var D=window.RESULTS_V2;D.pred={"T8-20M":{"feynman|16":[1]}};D.pred_block=500;})();' });
+  });
+  await page.route('**/pred/truth/feynman.0.js', (route) => route.fulfill({ contentType: 'text/javascript', body: wrap('truth|feynman|0', truth) }));
+  await page.route('**/pred/T8-20M/feynman/16.1.0.js', (route) => route.fulfill({ contentType: 'text/javascript', body: wrap('T8-20M|feynman|16|1|0', preds) }));
+  await page.goto('/explorer.html?release=2026-09&v=preds&ps=feynman&r=16&pr=1&pn=1&m=T8-20M,prior');
+  const rows = page.locator(V2 + ' .v2predtable tbody tr');
+  await expect(rows).toHaveCount(2, { timeout: 15000 });                                   // one row per shown method
+  await expect(page.locator(V2 + ' .v2predtruth .katex')).toHaveCount(1);                  // the true formula, typeset
+  await expect(rows.nth(0).locator('td.v2predf .katex')).toHaveCount(1);                   // the method's formula, typeset
+  await expect(rows.nth(0).locator('.v2predmark')).toHaveText(['numeric', 'structure']);
+  await expect(rows.nth(1)).toContainText(/not finished yet|not run at budget 16/);         // a method without this run says so
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="next problem"]').click();
+  await expect(rows.nth(0).locator('td.v2predf')).toHaveText('no usable formula');
+  expect(page.url()).toContain('pn=2');
+  await page.locator(V2 + ' .v2predprob').fill('3');
+  await page.locator(V2 + ' .v2predprob').press('Enter');
+  await expect(rows.nth(0).locator('td.v2predf code')).toHaveText('sqrt x1 x2');
+  await expect(page.locator(V2 + ' .v2predof')).toHaveText('of 100');
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+  expect(errors).toEqual([]);
+});
+
+test('without published formulas the predictions view says so', async ({ page }) => {
+  await page.route('**/data/2026-09/results.js', async (route) => {
+    const res = await route.fetch();
+    await route.fulfill({ response: res, body: (await res.text()) + ';(function(){var D=window.RESULTS_V2;D.pred={};})();' });
+  });
+  await page.goto('/explorer.html?release=2026-09&v=preds');
+  await expect(page.locator(V2 + ' .v2view')).toContainText('The formulas are not published in this release yet.');
 });

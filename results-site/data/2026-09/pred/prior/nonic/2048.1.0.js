@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["prior|nonic|2048|1|0"]={"0":["* x1 + inv pow - + cosh x1 / 2 3 * 1.9 x1 1.815 0.6",0]};})();

@@ -479,7 +479,7 @@ def runs_from_config(config: str, *, model: str | None = None, warn: Any = None)
     """
     import pickle
 
-    from flash_ansr.utils.paths import substitute_root_path
+    from srbf.paths import substitute_root_path
 
     from srbf.config import extract_run_section, load_run_config, select_experiment
     from srbf.sweep import resolve_sweeps

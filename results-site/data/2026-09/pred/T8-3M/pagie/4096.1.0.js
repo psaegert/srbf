@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-3M|pagie|4096|1|0"]={"0":["+ atan / * 50 abs * x1 x2 + pow + x1 x2 2 100 0.6",0]};})();

@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["nesymres-100M|pagie|128|2|0"]={"0":["- * 7.042 cos / sin * * 0.586 x1 x2 * x1 x2 5.101",0]};})();

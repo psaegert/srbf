@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-3M|meier|1|1|0"]={"0":null,"1":["/ pow x1 5 * 6e-05 * x2 + asin x2 / x1 + * x2 - inv x1 1.1 / tanh x1 x1",0]};})();

@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["prior|jin|16|1|0"]={"0":["neg * x1 * abs x2 * + x1 / x2 2 + x1 * x2 - x1 / * 3 x2 2",0],"1":["+ x1 + cosh x1 7",0],"2":["+ x2 atan / x2 3",0],"3":["5",0],"4":["- * 2 sinh 4.6 100",0],"5":["/ 0.3 cosh + x1 cos x1",0]};})();

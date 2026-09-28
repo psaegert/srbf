@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-3M|physo-astro|16|1|0"]={"0":["/ * 0.8 atan / abs x1 sinh sinh x1 pow x1 / 4 3",0],"1":["+ * 14.2 x1 + inv pow x1 / 1 24 + pow x1 3.126 * tanh x1 - + x1 pow x1 3 / * 71 inv pow x1 0.056 9",0]};})();

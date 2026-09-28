@@ -9,7 +9,7 @@ torch, NumPy or Julia it was built against.
 
 ```bash
 pip install srbf
-export FLASH_ANSR_ROOT=$PWD/bench
+export SRBF_ROOT=$PWD/bench
 srbf new mymethod                                     # bench/adapters/mymethod/: worker.py, config.yaml, requirements.txt, test_worker.py
 python -m venv bench/envs/mymethod
 bench/envs/mymethod/bin/pip install -r bench/adapters/mymethod/requirements.txt

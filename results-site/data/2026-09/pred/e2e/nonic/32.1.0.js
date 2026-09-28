@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["e2e|nonic|32|1|0"]={"0":["* - * -1.795 pow + + * 0.05293 x1 * 0.05816 tan - * 0.6536 x1 0.6758 0.1608 2 0.04493 + - * -13.21 x1 * 0.3071 exp * 5.251 x1 0.302",0]};})();
