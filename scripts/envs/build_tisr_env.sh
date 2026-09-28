@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the environment the TiSR worker runs in (src/srbf/worker/models/tisr_worker.py, docs/models.md#tisr).
 #
-#   scripts/envs/build_tisr_env.sh <prefix>          e.g. scripts/envs/build_tisr_env.sh "$FLASH_ANSR_ROOT/envs/tisr"
+#   scripts/envs/build_tisr_env.sh <prefix>          e.g. scripts/envs/build_tisr_env.sh "$SRBF_ROOT/envs/tisr"
 #
 # What it builds, all inside <prefix> (nothing outside it is written except uv's cache):
 #

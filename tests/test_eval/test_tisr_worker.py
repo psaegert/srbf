@@ -246,7 +246,7 @@ def _tisr_python():
     explicit = os.environ.get("SRBF_TISR_PYTHON")
     if explicit:
         return explicit
-    root = os.environ.get("FLASH_ANSR_ROOT")
+    root = os.environ.get("SRBF_ROOT")
     return os.path.join(root, "envs", "tisr", "bin", "python") if root else None
 
 
@@ -274,7 +274,7 @@ print("FIT " + json.dumps({"error": out["error"], "deviations": [m["string_devia
 def test_the_stand_in_reports_what_the_real_environment_reports(tmp_path):
     python = _tisr_python()
     if not python or not os.path.isfile(python):
-        pytest.skip("no TiSR environment (scripts/envs/build_tisr_env.sh; SRBF_TISR_PYTHON or FLASH_ANSR_ROOT)")
+        pytest.skip("no TiSR environment (scripts/envs/build_tisr_env.sh; SRBF_TISR_PYTHON or SRBF_ROOT)")
     script = tmp_path / "real.py"
     script.write_text(REAL_RUN)
     done = subprocess.run([python, str(script), str(Path(w.__file__))], capture_output=True, text=True, timeout=1800,
