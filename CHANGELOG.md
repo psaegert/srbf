@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Results site: a curve on the time axis follows its method's budgets.** The chart re-sorted every series by x, so on
+  the time axis points were joined in the order of their measured times. Where a larger budget was timed faster than a
+  smaller one (PySR at 1 and 2 iterations: 2.58 and 2.03 s per problem; E2E at 4 and 8 candidates), the line dipped
+  through a point out of budget order. Series keep the order their budgets come in; the band already followed the
+  path. A site test checks that every headline curve visits its points in increasing budget order.
+
 ### Changed
 - **Results site: the hybrid shown is Flash-ANSR T8-120M + PySR.** It replaces Flash-ANSR T8-20M + PySR on the page
   (`T8-120M-pysr` in the exporter's methods and the public guard's list). The 20M hybrid keeps its entry in a lighter
