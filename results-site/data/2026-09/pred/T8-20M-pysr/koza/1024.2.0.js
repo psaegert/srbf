@@ -1,1 +1,0 @@
-window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-20M-pysr|koza|1024|2|0"]={"0":["* x1 * cos x1 * pow cos tan x1 2 cos * x1 cos * cos tan * 1.03 x1 - x1 * x1 cos x1",0],"1":["pow - x1 pow x1 3 2",1]};})();

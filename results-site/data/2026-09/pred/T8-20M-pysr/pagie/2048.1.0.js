@@ -1,1 +1,0 @@
-window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-20M-pysr|pagie|2048|1|0"]={"0":["+ * 1.006 tanh pow atan pow abs x2 1.498 2.561 pow tanh / + abs x1 pow abs tanh - abs x1 0.28 1.969 1.23 3.265",0]};})();

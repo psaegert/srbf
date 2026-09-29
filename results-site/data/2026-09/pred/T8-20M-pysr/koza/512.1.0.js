@@ -1,1 +1,0 @@
-window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-20M-pysr|koza|512|1|0"]={"0":["sin sin sin sinh / * 51 sin * 3.44 tan sin / sin sin tan x1 1.01 173",0],"1":["pow - abs x1 pow abs x1 3.001 2",1]};})();
