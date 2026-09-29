@@ -149,6 +149,32 @@ test('a time axis needs one calibrated method, and an uncalibrated one costs onl
   expect(await page.content()).not.toContain('as run');
 });
 
+test('a curve walks its method\'s budgets in order, also on the time axis', async ({ page }) => {
+  // On the time axis a larger budget can be timed faster than a smaller one (PySR at 1 and 2 iterations: 2.58 and 2.03 s
+  // per problem on the reference machine). The line walks the method's ladder in budget order, never re-sorted by time:
+  // sorted by time, PySR's first point was joined after its 8-iteration point and the curve dipped.
+  await page.goto('/');
+  const head = page.locator('#results-headline-v2 svg.v2chart').first();
+  await expect(head).toBeVisible();
+  const series = await head.evaluate((svg) => [...svg.querySelectorAll('polyline')].map((pl) => {
+    const col = pl.getAttribute('stroke');
+    const verts = pl.getAttribute('points').trim().split(/\s+/).map((q) => q.split(',').map(Number));
+    const dots = [...svg.querySelectorAll('circle')].filter((c) => c.getAttribute('stroke') === col).map((c) => {
+      const m = (c.querySelector('title') || { textContent: '' }).textContent.match(/ at budget (\d+)/);
+      return { x: +c.getAttribute('cx'), y: +c.getAttribute('cy'), b: m ? +m[1] : NaN };
+    });
+    return { col, verts, dots };
+  }));
+  expect(series.length).toBeGreaterThan(1);
+  for (const sr of series) {
+    const budgets = sr.dots.map((d) => d.b);
+    expect(budgets.every((b) => Number.isFinite(b)), `every point names its budget (${sr.col})`).toBe(true);
+    expect(budgets.every((b, i) => i === 0 || b > budgets[i - 1]), `points in budget order (${sr.col}): ${budgets.join(', ')}`).toBe(true);
+    expect(sr.verts.length).toBe(sr.dots.length);
+    sr.verts.forEach(([x, y], i) => { expect(Math.abs(x - sr.dots[i].x) + Math.abs(y - sr.dots[i].y)).toBeLessThan(0.2); });
+  }
+});
+
 test('the release publishes no as-run wall clock', async ({ page }) => {
   await page.goto('/explorer.html');
   const banned = await page.evaluate(() => {
