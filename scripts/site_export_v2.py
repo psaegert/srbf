@@ -56,8 +56,14 @@ METHODS = [
     ("T8-20M", "Flash-ANSR T8-20M", "draws", "#3e9b4a", "flash-ansr", "author_blessed", None, None),
     ("T8-120M", "Flash-ANSR T8-120M", "draws", "#1b5e20", "flash-ansr", "author_blessed", None, None),
     # the hybrid: a rung is a pair (D draws, I iterations) chosen so that both halves take the same time on the reference
-    # machine; the ladder is labelled by its draws
-    ("T8-20M-pysr", "Flash-ANSR T8-20M + PySR", "draws", "#7b1fa2", "hybrid", "author_blessed", "hybrid",
+    # machine; the ladder is labelled by its draws. The release shows the 120M hybrid (owner 2026-09-29); the 20M one,
+    # which it replaces, keeps its entry (a lighter purple) for local exports.
+    ("T8-120M-pysr", "Flash-ANSR T8-120M + PySR", "draws", "#7b1fa2", "hybrid", "author_blessed", "hybrid",
+     "Flash-ANSR T8-120M generates candidate formulas, and up to 100 of those with the best Flash-ANSR score become PySR's starting population. "
+     "PySR's best formulas then join Flash-ANSR's candidates, and Flash-ANSR's rule picks one. At a budget of B, Flash-ANSR generates B "
+     "candidates and PySR runs as many iterations as take the same time on our timing workstation, so each budget costs about twice "
+     "what Flash-ANSR alone spends at it."),
+    ("T8-20M-pysr", "Flash-ANSR T8-20M + PySR", "draws", "#b07cc6", "hybrid", "author_blessed", "hybrid",
      "Flash-ANSR T8-20M generates candidate formulas, and up to 100 of those with the best Flash-ANSR score become PySR's starting population. "
      "PySR's best formulas then join Flash-ANSR's candidates, and Flash-ANSR's rule picks one. At a budget of B, Flash-ANSR generates B "
      "candidates and PySR runs as many iterations as take the same time on our timing workstation, so each budget costs about twice "
@@ -94,11 +100,12 @@ SCHEDULED = [
 # Where two methods share a component at different versions, the release says so (Protocol, "Versions").
 # The hybrid's sentence is part of a payload only when the hybrid is: a method withheld from the public page is not named
 # there either.
+_HYBRID_PYSR = ("PySR 2.4.0, with SymbolicRegression.jl 2.4.2. The settings it uses have the same defaults "
+                "in both PySR versions. Between these versions, the release notes of both packages list performance improvements, "
+                "packaging fixes and optional additions, and no change to the search at the settings used here. ")
 RELEASE_VERSIONS = ("PySR: version 2.3.0, with SymbolicRegression.jl 2.4.0. ",
-                    ("T8-20M-pysr", "The PySR part of Flash-ANSR T8-20M + PySR: PySR 2.4.0, "
-                     "with SymbolicRegression.jl 2.4.2. The settings it uses have the same defaults "
-                     "in both PySR versions. Between these versions, the release notes of both packages list performance improvements, "
-                     "packaging fixes and optional additions, and no change to the search at the settings used here. "),
+                    ("T8-120M-pysr", "The PySR part of Flash-ANSR T8-120M + PySR: " + _HYBRID_PYSR),
+                    ("T8-20M-pysr", "The PySR part of Flash-ANSR T8-20M + PySR: " + _HYBRID_PYSR),
                     "Simplification: SimpliPy (a formula-simplification library), with its rule set acj-5-4-llm.")
 
 

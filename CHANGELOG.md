@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Results site: the hybrid shown is Flash-ANSR T8-120M + PySR.** It replaces Flash-ANSR T8-20M + PySR on the page
+  (`T8-120M-pysr` in the exporter's methods and the public guard's list). The 20M hybrid keeps its entry in a lighter
+  purple for local exports and stays admissible to the guard. Like every method, the 120M hybrid shows a rung once that
+  rung is complete, and on the time axis once the reference machine has timed it.
+
 ## [0.21.0] - 2026-09-28
 
 ### Added
