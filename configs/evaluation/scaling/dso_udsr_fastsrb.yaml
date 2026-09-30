@@ -19,7 +19,8 @@ run:
     simplipy_engine: acj-5-4-llm
     timeout: 7200
     options:
-      threads: all              # every method gets the whole reference machine (owner 2026-09-30)
+      # no threads option: uDSR* runs in DSO's default configuration (reward pool n_cores_batch 1), timed with the whole
+      # machine available (owner 2026-09-30: "one config, the default one")
       arm: udsr
       n_samples: !sweep
         name: ladder

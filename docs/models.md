@@ -439,8 +439,9 @@ method; its docstring gives the details.
   GP-meld's check of it looks at one of these operators, as in the authors' own code, so GP-meld breeds such
   expressions.
 - The option `threads` sets DSO's reward pool (`n_cores_batch`, the processes that compute the rewards of each
-  batch's new expressions, their constant fits included). The default 1 is DSO's own, no pool. The benchmark's
-  configs set `threads: all`, so DSO gets the whole machine, as every method does. DSO pins its TensorFlow session to
+  batch's new expressions, their constant fits included). The default 1 is DSO's own, no pool. DSR's benchmark
+  config sets `threads: all`, so DSR gets the whole machine, as every method does. uDSR* runs in DSO's default
+  configuration, its one configuration, with the whole machine available to it. DSO pins its TensorFlow session to
   one thread itself. GP-meld's own evaluation pool (`parallel_eval`) stays off: it sends every new expression
   through the pool and back, and made uDSR* slower in every run we timed.
 
