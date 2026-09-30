@@ -1456,6 +1456,31 @@ test('the predictions view shows one problem: its true formula, and one row per 
   expect(errors).toEqual([]);
 });
 
+test('the true formula comes with its canonical form: different, the same, or none', async ({ page }) => {
+  const errors = collectErrors(page);
+  const wrap = (key, obj) => `window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"][${JSON.stringify(key)}]=${JSON.stringify(obj)};})();`;
+  const truth = {}, preds = {};
+  for (let i = 0; i < 100; i++) { truth[String(i)] = ['* x1 x1', 'pow x1 2']; preds[String(i)] = ['+ x1 1.5', 0]; }
+  truth['1'] = ['* x1 x2', '* x1 x2'];   // the canonical form is the stated one
+  truth['2'] = ['bad', null];            // the engine cannot read it
+  await page.route('**/data/2026-09/results.js', async (route) => {
+    const res = await route.fetch();
+    await route.fulfill({ response: res, body: (await res.text()) + ';(function(){var D=window.RESULTS_V2;D.pred={"T8-20M":{"feynman|16":[1]}};D.pred_block=500;})();' });
+  });
+  await page.route('**/pred/truth/feynman.0.js', (route) => route.fulfill({ contentType: 'text/javascript', body: wrap('truth|feynman|0', truth) }));
+  await page.route('**/pred/T8-20M/feynman/16.1.0.js', (route) => route.fulfill({ contentType: 'text/javascript', body: wrap('T8-20M|feynman|16|1|0', preds) }));
+  await page.goto('/explorer.html?release=2026-09&v=preds&ps=feynman&r=16&pr=1&pn=1&m=T8-20M');
+  const canon = page.locator(V2 + ' .v2predcanon');
+  await expect(canon.locator('.katex')).toHaveCount(1, { timeout: 15000 });               // x1*x1 -> x1^2, typeset
+  await expect(canon.locator('.v2help')).toHaveCount(1);                                  // what the form is, one ? away
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="next problem"]').click();
+  await expect(canon).toContainText('the same as stated');
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="next problem"]').click();
+  await expect(canon).toContainText('none: the engine cannot read this formula');
+  await expect(page.locator(V2 + ' .v2predtruth').first()).toContainText('bad');               // the stated formula is still shown
+  expect(errors).toEqual([]);
+});
+
 test('without published formulas the predictions view says so', async ({ page }) => {
   await page.route('**/data/2026-09/results.js', async (route) => {
     const res = await route.fetch();
