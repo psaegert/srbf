@@ -57,6 +57,24 @@ METHODS = [
     ("operon", "Operon", "evaluations", "#4010f0", "baseline", "author_blessed", "operon",
      "Operon evolves a population of formulas, as a genetic algorithm does, and fits the numbers in every candidate as it goes. "
      "It returns the formula its own rule picks from the best ones found, a rule that weighs error against length."),
+    # The other baselines (owner 2026-09-30), each with the whole reference machine where it can use it. Their colours are
+    # chosen one by one as the farthest from every colour before them, for full and colour-deficient vision.
+    ("gpgomea", "GP-GOMEA", "evaluations", "#11aaff", "baseline", "author_blessed", "gpgomea",
+     "GP-GOMEA evolves a population of formulas and learns which of their parts belong together, so that it recombines "
+     "them as whole units. It returns its best formula, with an intercept and a slope fitted by least squares."),
+    ("dsr", "DSR", "samples", "#885577", "baseline", "upstream_default", "dsr",
+     "Deep Symbolic Regression: a neural network learns on the problem itself, by trial and error, to write formulas that "
+     "fit better. It returns the formula that fits the given points best among all it wrote."),
+    ("udsr", "uDSR*", "samples", "#cc22aa", "baseline", "author_blessed", "udsr",
+     "Unified Deep Symbolic Regression as publicly released: DSR combined with an evolutionary search and polynomial "
+     "fitting. It returns the formula that fits the given points best among all it tried. The asterisk: the paper's "
+     "version also uses a pre-trained network and a step from AI Feynman, which were never released."),
+    ("rilsrols", "RILS-ROLS", "fit calls", "#9944ff", "baseline", "author_blessed", "rilsrols",
+     "RILS-ROLS searches locally around its current formula and fits the numbers in each candidate by ordinary least "
+     "squares. It returns the final formula of its search, which weighs error against size."),
+    ("qlattice", "QLattice", "epochs", "#ff5577", "baseline", "author_blessed", "qlattice",
+     "QLattice draws formulas as graphs from a distribution it learns, and moves that distribution towards the ones that "
+     "fit. It returns the best formula by its own ranking, which weighs error against the number of parameters."),
     ("T8-3M", "Flash-ANSR T8-3M", "draws", "#8fcf8a", "flash-ansr", "author_blessed", None, None),
     ("T8-20M", "Flash-ANSR T8-20M", "draws", "#3e9b4a", "flash-ansr", "author_blessed", None, None),
     ("T8-120M", "Flash-ANSR T8-120M", "draws", "#1b5e20", "flash-ansr", "author_blessed", None, None),
@@ -101,6 +119,8 @@ SCHEDULED = [
      "polynomial fitting. The asterisk: the paper's version also uses a pre-trained network and a step from AI Feynman, "
      "which were never released."),
     ("rilsrols", "RILS-ROLS", "A local search over formulas that fits their numbers by ordinary least squares."),
+    ("qlattice", "QLattice", "Draws formulas as graphs from a distribution it learns, and moves that distribution towards "
+     "the ones that fit."),
     ("oracle", "Oracle", "A reference, not a method: it is given the true formula with its constants blanked out (exponents "
      "are kept) and only fits the constants, the way Flash-ANSR does. It shows how well Flash-ANSR's fitting does when it is "
      "given the true form.")]
@@ -115,6 +135,11 @@ RELEASE_VERSIONS = ("PySR: version 2.3.0, with SymbolicRegression.jl 2.4.0. ",
                     ("T8-20M-pysr", "The PySR part of Flash-ANSR T8-20M + PySR: " + _HYBRID_PYSR),
                     ("operon", "Operon: pyoperon 0.6.1, in the configuration its first author uses to run it as a benchmark "
                                "baseline. "),
+                    ("gpgomea", "GP-GOMEA: the original implementation at the commit SRBench 2021 ran (6a92cb6), in its first "
+                                "author's 2021 configuration. "),
+                    ("dsr", "DSR and uDSR*: DSO 3.0.0 (deep-symbolic-optimization), with three fixes srbf documents. "),
+                    ("rilsrols", "RILS-ROLS: version 1.6.7, the release its authors submitted to SRBench. "),
+                    ("qlattice", "QLattice: feyn 3.5.0 (community edition, for non-commercial use). "),
                     "Simplification: SimpliPy (a formula-simplification library), with its rule set acj-5-4-llm.")
 
 
