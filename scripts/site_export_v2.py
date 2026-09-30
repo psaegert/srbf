@@ -52,6 +52,11 @@ METHODS = [
     ("PySR", "PySR", "iterations", "#d62728", "baseline", "upstream_default", "pysr",
      "PySR evolves a population of formulas, as a genetic algorithm does. It keeps the best formula of every length found "
      "so far and returns the one its own rule picks from these, a rule that weighs error against length."),
+    # Operon (owner 2026-09-30): pyoperon 0.6.1 in its first author's benchmark configuration; the budget counts evaluations.
+    # Its colour is the one farthest from every other method's, for full and for colour-deficient vision (indigo).
+    ("operon", "Operon", "evaluations", "#4010f0", "baseline", "author_blessed", "operon",
+     "Operon evolves a population of formulas, as a genetic algorithm does, and fits the numbers in every candidate as it goes. "
+     "It returns the formula its own rule picks from the best ones found, a rule that weighs error against length."),
     ("T8-3M", "Flash-ANSR T8-3M", "draws", "#8fcf8a", "flash-ansr", "author_blessed", None, None),
     ("T8-20M", "Flash-ANSR T8-20M", "draws", "#3e9b4a", "flash-ansr", "author_blessed", None, None),
     ("T8-120M", "Flash-ANSR T8-120M", "draws", "#1b5e20", "flash-ansr", "author_blessed", None, None),
@@ -108,6 +113,8 @@ _HYBRID_PYSR = ("PySR 2.4.0, with SymbolicRegression.jl 2.4.2. The settings it u
 RELEASE_VERSIONS = ("PySR: version 2.3.0, with SymbolicRegression.jl 2.4.0. ",
                     ("T8-120M-pysr", "The PySR part of Flash-ANSR T8-120M + PySR: " + _HYBRID_PYSR),
                     ("T8-20M-pysr", "The PySR part of Flash-ANSR T8-20M + PySR: " + _HYBRID_PYSR),
+                    ("operon", "Operon: pyoperon 0.6.1, in the configuration its first author uses to run it as a benchmark "
+                               "baseline. "),
                     "Simplification: SimpliPy (a formula-simplification library), with its rule set acj-5-4-llm.")
 
 
