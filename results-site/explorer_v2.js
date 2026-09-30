@@ -128,7 +128,7 @@
   var withData = function (m) { return D.cells[m.key] && Object.keys(D.cells[m.key]).length; };
   var VALID_DEFAULT = 90;
   var DEFAULTS = function () {
-    return { view: "curves", cats: CATS.slice(), methods: D.methods.filter(withData).map(function (m) { return m.key; }),
+    return { view: "curves", cats: CATS.slice(), methods: D.methods.filter(function (m) { return withData(m) && !m.off; }).map(function (m) { return m.key; }),
       plots: D.metrics.filter(function (m) { return m.tier === "main"; }).map(function (m) { return { x: defaultAxis(), y: m.key }; }),
       focus: "numeric_recovery_val", stat: "mean", band: true, cross: false, xaxis: anyTime() ? "time" : "rung", rung: 64, base: null, tier: "main", q: "", rows: "rungs", pset: null, prun: 1, pprob: 0,
       // the Distribution view reads a continuous metric by default (a rate has no distribution over problems), the Ranks
@@ -140,7 +140,7 @@
       impute: true };
   };
   var state = DEFAULTS();
-  var LS = "srbf-v2-" + REL + ".8";   // bumped whenever a default changes (.2 time axis, .3 mean, .4 bands, .5 per-view metrics, .6 complete pools only, .7 hollow markers, .8 failed predictions counted or left out), so a saved state cannot pin the old one
+  var LS = "srbf-v2-" + REL + ".9";   // bumped whenever a default changes (.2 time axis, .3 mean, .4 bands, .5 per-view metrics, .6 complete pools only, .7 hollow markers, .8 failed predictions counted or left out, .9 methods marked off start unchecked), so a saved state cannot pin the old one
   var rungChosen = false;   // a budget from a link or from storage is kept; otherwise the first render picks one that has data
   function loadState() {
     try { var s = JSON.parse(localStorage.getItem(LS) || "null"); if (s) { rungChosen = s.rung !== undefined; Object.keys(state).forEach(function (k) { if (s[k] !== undefined) { state[k] = s[k]; } }); } } catch (e) { /* no storage */ }

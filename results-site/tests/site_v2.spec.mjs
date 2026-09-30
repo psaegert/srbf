@@ -557,7 +557,8 @@ test('a method marked as the ceiling is drawn dashed in the page ink, legend inc
     const body = (await response.text()).replace('"key":"prior",', '"key":"prior","dash":true,"ink":true,');
     await route.fulfill({ response, body });
   });
-  await page.goto('/explorer.html?release=2026-09&v=curves&p=rung~numeric_recovery_val');   // the budget axis: the prior has no reference time
+  // the budget axis (the prior has no reference time), the prior named in the link (it starts unchecked by default)
+  await page.goto('/explorer.html?release=2026-09&v=curves&p=rung~numeric_recovery_val&m=prior,T8-3M,T8-20M,T8-120M,e2e,PySR');
   const chart = page.locator(V2 + ' .v2main svg.v2chart').first();
   await expect(chart).toBeVisible();
   const drawn = await chart.evaluate((svg) => {
@@ -573,6 +574,25 @@ test('a method marked as the ceiling is drawn dashed in the page ink, legend inc
   expect(drawn.keyDash, 'the legend key is dashed').toBeTruthy();
   expect(drawn.dashedLines, 'the line is dashed in the ink').toBeGreaterThan(0);
   expect(drawn.otherDashed, 'no other method is dashed').toBe(0);
+});
+
+test('a method marked off starts unchecked, and its checkbox shows it', async ({ page }) => {
+  // owner 2026-09-30: the prior is off by default (METHOD_STYLE "off" in the exporter)
+  await page.route('**/data/2026-09/results.js*', async (route) => {
+    const response = await route.fetch();
+    const text = await response.text();
+    const body = text.includes('"off":true') ? text : text.replace('"key":"prior",', '"key":"prior","off":true,');
+    await route.fulfill({ response, body });
+  });
+  await page.goto('/explorer.html?release=2026-09&v=curves&p=rung~numeric_recovery_val');
+  const chart = page.locator(V2 + ' .v2main svg.v2chart').first();
+  await expect(chart).toBeVisible();
+  const box = page.locator(V2 + ' .v2methods input[type=checkbox][data-m="prior"]');
+  await expect(box).not.toBeChecked();
+  await expect(chart.locator('text.leg', { hasText: 'Flash-ANSR prior' })).toHaveCount(0);
+  await expect(page.locator(V2 + ' .v2methods input[type=checkbox][data-m="T8-20M"]')).toBeChecked();
+  await box.check();
+  await expect(page.locator(V2 + ' .v2main svg.v2chart').first().locator('text.leg', { hasText: 'Flash-ANSR prior' })).toHaveCount(1);
 });
 
 test('a headline chart keeps its title and its y label off the frame', async ({ page }) => {

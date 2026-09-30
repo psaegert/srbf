@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Results site: the Flash-ANSR prior starts unchecked in the explorer.** A method can be marked `off` in the exporter's
+  `METHOD_STYLE`; the explorer leaves it out of its default selection, and a link naming it or its checkbox shows it.
+  The prior is the first such method. The headline charts are unchanged. Saved explorer settings start over once
+  (storage key .9), so an earlier visit cannot keep the old default.
+
 ### Fixed
 - **Results site: a curve on the time axis follows its method's budgets.** The chart re-sorted every series by x, so on
   the time axis points were joined in the order of their measured times. Where a larger budget was timed faster than a
