@@ -551,19 +551,18 @@ test('a display of one chart is drawn at the width it is shown, not stretched fr
 });
 
 test('a method marked as the ceiling is drawn dashed in the page ink, legend included', async ({ page }) => {
-  // mark the prior as the oracle is marked (dash, ink), in the payload as it is served
+  // mark E2E as the oracle is marked (dash, ink), in the payload as it is served (the oracle itself is not public)
   await page.route('**/data/2026-09/results.js*', async (route) => {
     const response = await route.fetch();
-    const body = (await response.text()).replace('"key":"prior",', '"key":"prior","dash":true,"ink":true,');
+    const body = (await response.text()).replace('"key":"e2e",', '"key":"e2e","dash":true,"ink":true,');
     await route.fulfill({ response, body });
   });
-  // the budget axis (the prior has no reference time), the prior named in the link (it starts unchecked by default)
-  await page.goto('/explorer.html?release=2026-09&v=curves&p=rung~numeric_recovery_val&m=prior,T8-3M,T8-20M,T8-120M,e2e,PySR');
+  await page.goto('/explorer.html?release=2026-09&v=curves&p=rung~numeric_recovery_val&m=T8-3M,T8-20M,T8-120M,e2e,PySR');
   const chart = page.locator(V2 + ' .v2main svg.v2chart').first();
   await expect(chart).toBeVisible();
   const drawn = await chart.evaluate((svg) => {
     const ink = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
-    const label = [...svg.querySelectorAll('text.leg')].find((t) => t.textContent === 'Flash-ANSR prior');
+    const label = [...svg.querySelectorAll('text.leg')].find((t) => t.textContent === 'E2E 93M');
     const key = label && label.previousElementSibling;
     const lines = [...svg.querySelectorAll('polyline')].filter((l) => l.getAttribute('stroke') === ink);
     return { ink, keyDash: key && key.getAttribute('stroke-dasharray'), keyStroke: key && key.getAttribute('stroke'),
@@ -577,22 +576,21 @@ test('a method marked as the ceiling is drawn dashed in the page ink, legend inc
 });
 
 test('a method marked off starts unchecked, and its checkbox shows it', async ({ page }) => {
-  // owner 2026-09-30: the prior is off by default (METHOD_STYLE "off" in the exporter)
+  // METHOD_STYLE "off" in the exporter (the prior had it; since 2026-09-30 the prior is private): mark E2E off here
   await page.route('**/data/2026-09/results.js*', async (route) => {
     const response = await route.fetch();
-    const text = await response.text();
-    const body = text.includes('"off":true') ? text : text.replace('"key":"prior",', '"key":"prior","off":true,');
+    const body = (await response.text()).replace('"key":"e2e",', '"key":"e2e","off":true,');
     await route.fulfill({ response, body });
   });
   await page.goto('/explorer.html?release=2026-09&v=curves&p=rung~numeric_recovery_val');
   const chart = page.locator(V2 + ' .v2main svg.v2chart').first();
   await expect(chart).toBeVisible();
-  const box = page.locator(V2 + ' .v2methods input[type=checkbox][data-m="prior"]');
+  const box = page.locator(V2 + ' .v2methods input[type=checkbox][data-m="e2e"]');
   await expect(box).not.toBeChecked();
-  await expect(chart.locator('text.leg', { hasText: 'Flash-ANSR prior' })).toHaveCount(0);
+  await expect(chart.locator('text.leg', { hasText: 'E2E 93M' })).toHaveCount(0);
   await expect(page.locator(V2 + ' .v2methods input[type=checkbox][data-m="T8-20M"]')).toBeChecked();
   await box.check();
-  await expect(page.locator(V2 + ' .v2main svg.v2chart').first().locator('text.leg', { hasText: 'Flash-ANSR prior' })).toHaveCount(1);
+  await expect(page.locator(V2 + ' .v2main svg.v2chart').first().locator('text.leg', { hasText: 'E2E 93M' })).toHaveCount(1);
 });
 
 test('a headline chart keeps its title and its y label off the frame', async ({ page }) => {
@@ -1439,7 +1437,7 @@ test('the predictions view shows one problem: its true formula, and one row per 
   });
   await page.route('**/pred/truth/feynman.0.js', (route) => route.fulfill({ contentType: 'text/javascript', body: wrap('truth|feynman|0', truth) }));
   await page.route('**/pred/T8-20M/feynman/16.1.0.js', (route) => route.fulfill({ contentType: 'text/javascript', body: wrap('T8-20M|feynman|16|1|0', preds) }));
-  await page.goto('/explorer.html?release=2026-09&v=preds&ps=feynman&r=16&pr=1&pn=1&m=T8-20M,prior');
+  await page.goto('/explorer.html?release=2026-09&v=preds&ps=feynman&r=16&pr=1&pn=1&m=T8-20M,T8-120M');
   const rows = page.locator(V2 + ' .v2predtable tbody tr');
   await expect(rows).toHaveCount(2, { timeout: 15000 });                                   // one row per shown method
   await expect(page.locator(V2 + ' .v2predtruth .katex')).toHaveCount(1);                  // the true formula, typeset
