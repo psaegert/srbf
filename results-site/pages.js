@@ -64,7 +64,7 @@
       '<span class="v2plab">Results</span><span class="v2segs" aria-hidden="true"' + (perKnown ? "" : ' style="--n:1"') + '>' + runs + '</span><span class="v2pnum">' + st[0] + '<small> / ' + (st[1] == null ? "?" : st[1]) + '</small></span>' +
       '<span class="v2plab">Times</span><span class="v2segs" aria-hidden="true">' + times + '</span><span class="v2pnum">' + timed + '<small> / ' + n + '</small></span>' +
       '<span class="v2paxis" aria-hidden="true"><span>' + (n ? budgets[0].toLocaleString() : "") + '</span><span>' + (n > 1 ? budgets[n - 1].toLocaleString() : "") + '</span></span>' +
-      ((S.summary.more_budgets || []).indexOf(m.key) >= 0 ? '<span class="v2pmore">Every budget run so far is in. Larger budgets, up to about ' + (S.summary.ladder_top_s || 100) + ' s per problem, are still to come.</span>' : "") + "</div>";
+      ((S.summary.more_budgets || []).indexOf(m.key) >= 0 ? '<span class="v2pmore">Every budget run so far is in. Larger budgets, up to about ' + (S.summary.ladder_top_s || 1000).toLocaleString() + ' s per problem, are still to come.</span>' : "") + "</div>";
   }
   var sum = S.summary, html = "";
   var finished = sum.finished.map(function (k) { return BY[k]; }).filter(Boolean);
@@ -72,8 +72,8 @@
     html += '<div class="v2done"><span class="v2lab">Finished</span>' + finished.map(function (m) {
       var b = budgetsOf(m);
       var end = (S.summary.ladder || {})[m.key] || {};
-      var why = end.reason ? " " + end.reason : end.end === "reached" ? " Its ladder has reached about " + (S.summary.ladder_top_s || 100) + " s per problem, where it ends." : "";
-      return '<span class="v2chip" data-m="' + esc(m.key) + '" title="' + esc(m.label + ": both runs on every problem set and a measured time, at every budget from " + b[0].toLocaleString() + " to " + b[b.length - 1].toLocaleString() + "." + why) + '">' + swatch(m) + esc(m.label) + "</span>";
+      var why = end.reason ? " " + end.reason : end.end === "reached" ? " Its ladder has reached about " + (S.summary.ladder_top_s || 1000).toLocaleString() + " s per problem, where it ends." : "";
+      return '<span class="v2chip" data-m="' + esc(m.key) + '" title="' + esc(m.label + (b.length ? ": both runs on every problem set and a measured time, at every budget from " + b[0].toLocaleString() + " to " + b[b.length - 1].toLocaleString() + "." : ".") + why) + '">' + swatch(m) + esc(m.label) + "</span>";
     }).join("") + "</div>";
   }
   var going = sum.in_progress.map(function (k) { return BY[k]; }).filter(Boolean);

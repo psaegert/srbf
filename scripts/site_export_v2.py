@@ -159,15 +159,15 @@ PARAM_LABEL = {"candidates per bag": "budget: candidate formulas", "beam width":
                "restarts": "budget: fitting attempts"}
 RUNGS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
 E2E_DEFAULT_MAX_RUNG = 256   # E2E is reported at its default settings only
-# Where a method's ladder ends. Budgets double up to about LADDER_TOP_S seconds per problem on the reference machine;
-# the ladder has reached its end at the doubling nearest that on a log scale, i.e. once a measured time is at least
-# LADDER_TOP_S / sqrt(2) (the next doubling would land further from it). A method that cannot run a larger budget ends
-# earlier, for the reason given here. Until its ladder has ended, a method stays in progress even when every run
-# planned so far is in.
-LADDER_TOP_S = 100.0
+# Where a method's ladder ends. Every method's budgets double up to about LADDER_TOP_S seconds per problem on the
+# reference machine, where the time axis ends; the ladder has reached its end at the doubling nearest that on a log
+# scale, i.e. once a measured time is at least LADDER_TOP_S / sqrt(2) (the next doubling would land further from it).
+# A method that cannot run a larger budget ends earlier, for the reason given here. Until its ladder has ended, a
+# method stays in progress even when every run planned so far is in.
+LADDER_TOP_S = 1000.0
 LADDER_END = {"e2e": "E2E runs at its default settings, which allow at most 256 candidates per bag."}
 # Budgets taken out of a method's plan on purpose; they no longer count as open runs.
-PLAN_DROPPED = {"T8-3M": {65536}, "T8-20M": {65536}, "T8-120M": {65536}}   # stopped once the ladder had passed 100 s
+PLAN_DROPPED = {"T8-3M": {65536}, "T8-20M": {65536}, "T8-120M": {65536}}   # stopped; larger budgets come with a later model
 CATALOG_GROUPS = {
     "physics": ["fastsrb", "feynman", "feynman-bonus", "srsd-dummy", "erbench-phybench", "erbench-densities", "physo-astro", "physo-class"],
     "classical": ["nguyen", "keijzer", "korns", "koza", "livermore", "livermore2", "vladislavleva", "jin", "neat", "pagie", "poly", "nonic", "sine", "meier", "r-rationals", "constant", "grammarvae"],
@@ -867,7 +867,8 @@ def progress_summary(methods: list[dict[str, Any]], status: dict[str, list[int |
     Progress page both show. Finished: every planned run has its results, every budget of the plan a measured time, and
     the ladder has reached its end (ladder_end). In progress: every other published method; `more_budgets` names those
     whose planned runs and times are all in but whose ladder goes on. Scheduled: SCHEDULED's methods the release does
-    not carry yet."""
+    not carry yet. In progress runs from the least advanced method to the most: by its largest measured time per problem
+    (none first), so the Progress page shows the methods furthest from the end first."""
     finished: list[str] = []
     in_progress: list[str] = []
     more: list[str] = []
@@ -884,6 +885,8 @@ def progress_summary(methods: list[dict[str, Any]], status: dict[str, list[int |
         if planned_in and not end:
             more.append(m["key"])
     carried = {m["key"] for m in methods}
+    reach = {k: max([v for v in (timing.get(k) or {}).values() if isinstance(v, (int, float))], default=0.0) for k in in_progress}
+    in_progress = sorted(in_progress, key=lambda k: reach[k])   # stable: equal reach keeps the method order
     return {"finished": finished, "in_progress": in_progress, "more_budgets": more, "ladder": ends,
             "ladder_top_s": LADDER_TOP_S,
             "scheduled": [{"label": label, "note": note} for key, label, note in SCHEDULED if key not in carried]}
