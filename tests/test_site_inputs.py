@@ -97,3 +97,14 @@ def test_the_catalog_description_lengths_cover_the_suite_at_the_timing_subsets_s
     subset = json.loads((root / "configs" / "timing" / "timing_subset.json").read_text())["catalogs"]
     assert sorted(mu) == sorted(SRBF_CATALOGS) == sorted(subset)
     assert {c: len(v) for c, v in mu.items()} == {c: int(m["size"]) for c, m in subset.items()}
+
+
+
+def test_rung_files_of_any_width_are_found(tmp_path) -> None:
+    """Operon's and the other evaluation ladders' files carry seven digits (evals_0001024.pkl): the site read none of them."""
+    (tmp_path / "fastsrb").mkdir()
+    for name in ("evals_0001024.pkl", "evals_0002048.pkl", "choices_001024.pkl", "epochs_00004.pkl", "notes.txt"):
+        (tmp_path / "fastsrb" / name).write_text("")
+    assert site_timing.rungs_in(tmp_path, "evals_{rung:07d}.pkl") == [1024, 2048]
+    assert site_timing.rungs_in(tmp_path, "choices_{rung:06d}.pkl") == [1024]
+    assert site_timing.rungs_in(tmp_path, "epochs_{rung:05d}.pkl") == [4]
