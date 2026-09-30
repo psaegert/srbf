@@ -19,6 +19,7 @@ run:
     simplipy_engine: acj-5-4-llm
     timeout: 7200
     options:
+      threads: all              # every method gets the whole reference machine (owner 2026-09-30)
       arm: udsr
       n_samples: !sweep
         name: ladder

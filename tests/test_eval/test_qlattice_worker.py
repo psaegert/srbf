@@ -366,3 +366,17 @@ def test_a_real_fit_returns_a_string_that_computes_the_model():
                 state=w.load({"n_epochs": 1}))
     assert out["extra"]["epochs"] == 1 and out["extra"]["string_deviation"] < 1e-12
     assert out["extra"]["string_deviation_val"] < 1e-12 and "v1" in out["expression"] and "x0" not in out["expression"]
+
+
+def test_threads_are_a_resource_default_one_and_all_means_every_cpu(fake):
+    import os
+    out = _fit(w.load({"n_epochs": 1}))
+    assert fake.calls["fit_models"][-1]["threads"] == 1 and out["extra"]["threads"] == 1
+    out = _fit(w.load({"n_epochs": 1, "threads": "all"}))
+    cpus = len(os.sched_getaffinity(0))
+    assert fake.calls["fit_models"][-1]["threads"] == cpus == out["extra"]["threads"]
+    out = _fit(w.load({"n_epochs": 1, "threads": 3}))
+    assert fake.calls["fit_models"][-1]["threads"] == 3 == out["extra"]["threads"]
+    for bad in (0, -1, "auto", 2.5, True):
+        with pytest.raises(ValueError, match="threads"):
+            w.load({"threads": bad})

@@ -48,6 +48,14 @@ Three patches to DSO v3.0.0 are applied in :func:`load`, each the smallest chang
   iteration (1,000 expressions for DSR, 500 + 25 x 500 = 13,000 for uDSR*), so it is rounded up to whole
   iterations. A run stops early once an expression fits the training data to a normalized MSE below 1e-12.
 * ``seed`` (int, 0): mixed with a hash of the problem's data into the run's seed.
+* ``threads`` (int or ``"all"``, 1): DSO's reward pool (``training.n_cores_batch``: processes that compute the
+  rewards of each batch's new expressions, their constant fits included), a resource, not a search setting. 1 is
+  DSO's default, no pool; ``"all"`` is every CPU this process may run on (the benchmark's runs, owner 2026-09-30:
+  every method gets the whole reference machine). The worker stops the pool after each fit (DSO's ``finish``, which
+  the worker's loop does not call, would). DSO pins its TensorFlow session to one thread itself (``core.py``); that
+  is left as it is. GP-meld's own evaluation pool (``gp_meld.parallel_eval``, sized by DSO at every CPU) stays off:
+  it sends every new expression through the pool and back, and made uDSR* fits slower in every run we timed; a
+  config can switch it on, and the worker stops that pool too.
 * ``max_seconds`` (float, 3600): a wall-clock guard checked after each iteration, set far above any budget of the
   ladders. When it passes, the best expression so far is returned and ``guard_hit`` is set.
 * ``warmup`` (bool, true): run a small throwaway fit in :func:`load`, so that the one-time compilation of DSO's
@@ -67,8 +75,6 @@ complexity and reward over every expression evaluated (``front``).
 """
 import os
 
-for _variable in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):  # before numpy: one thread
-    os.environ.setdefault(_variable, "1")
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 
 import copy  # noqa: E402
@@ -205,15 +211,27 @@ def merge(base, override):
     return out
 
 
-def build_config(arm, X, y, *, n_samples, seed, overrides=None):
+def resolve_threads(value):
+    """The ``threads`` option as a count: an int >= 1, or ``"all"`` = the CPUs this process may run on."""
+    if value == "all":
+        try:
+            return len(os.sched_getaffinity(0))
+        except AttributeError:   # no affinity call on this platform
+            return os.cpu_count() or 1
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError("threads must be an int >= 1 or 'all', got %r" % (value,))
+    return value
+
+
+def build_config(arm, X, y, *, n_samples, seed, overrides=None, threads=1):
     """The DeepSymbolicOptimizer config of one fit: the arm's configuration, the operators, the data (a tuple, so
-    DSO names the task ``regression`` and its seed shift is fixed), the budget and the seed."""
+    DSO names the task ``regression`` and its seed shift is fixed), the budget, the seed and the reward pool (``threads``)."""
     if arm not in ARMS:
         raise ValueError("options.arm must be one of %s, got %r" % (", ".join(ARMS), arm))
     config = merge(ARM_CONFIGS[arm], {
         "experiment": {"logdir": None, "seed": int(seed)},
         "task": {"function_set": OPERATORS + TERMINALS[arm]},
-        "training": {"n_samples": int(n_samples)},
+        "training": {"n_samples": int(n_samples), "n_cores_batch": int(threads)},
     })
     config = merge(config, overrides)
     config["task"]["dataset"] = (X, y)
@@ -359,7 +377,7 @@ def load(options):
     patches = apply_patches(modules)
     state = {"arm": arm, "n_samples": int(options.get("n_samples", 2_000_000)), "seed": int(options.get("seed", 0)),
              "max_seconds": float(options.get("max_seconds", 3600.0)), "config": dict(options.get("config") or {}),
-             "modules": modules, "patches": patches}
+             "threads": resolve_threads(options.get("threads", 1)), "modules": modules, "patches": patches}
     if options.get("warmup", True):
         warmup_fit(state)
     return state
@@ -409,7 +427,9 @@ def fit(x, y, *, x_val, variables, meta, options, state):
     Y = np.asarray(y, dtype=np.float64).ravel()
     names = list(variables)
     seed = run_seed(X, Y, state["seed"])
-    config = build_config(state["arm"], X, Y, n_samples=state["n_samples"], seed=seed, overrides=state["config"])
+    threads = state.get("threads", 1)
+    config = build_config(state["arm"], X, Y, n_samples=state["n_samples"], seed=seed, overrides=state["config"],
+                          threads=threads)
     modules = state["modules"]
     Program = modules["Program"]
 
@@ -427,7 +447,9 @@ def fit(x, y, *, x_val, variables, meta, options, state):
     expression = infix(best.traversal, names)
     fit_time = time.perf_counter() - started   # the search and its answer; the bookkeeping below is not timed
 
-    extra = {"arm": state["arm"], "seed": seed, "n_samples": state["n_samples"], "nevals": int(trainer.nevals),
+    close_pools(model)
+    extra = {"arm": state["arm"], "seed": seed, "n_samples": state["n_samples"], "threads": threads,
+             "nevals": int(trainer.nevals),
              "iterations": int(trainer.iteration), "reward": float(best.r), "traversal": token_sequence(best.traversal, names),
              "model_complexity": float(best.complexity), "model_length": len(best.traversal),
              "early_stop": bool((best.evaluate or {}).get("success")), "guard_hit": guard_hit,
@@ -456,6 +478,18 @@ def fit(x, y, *, x_val, variables, meta, options, state):
     del model, trainer, best
     gc.collect()
     return {"expression": expression, "fit_time": fit_time, "extra": extra}
+
+
+def close_pools(model):
+    """DSO's reward pool (``model.pool``; its ``finish``, which the worker's loop does not call, would close it) and,
+    when a config switches it on, GP-meld's evaluation pool (bound into ``gp_controller.toolbox.cmap``; DSO never
+    closes it): stopped after the fit, so their processes do not outlive it."""
+    gp = getattr(model, "gp_controller", None)
+    cmap = getattr(getattr(gp, "toolbox", None), "cmap", None)
+    for pool in (getattr(model, "pool", None), getattr(cmap, "__self__", None)):
+        if pool is not None and hasattr(pool, "terminate") and hasattr(pool, "join"):
+            pool.terminate()
+            pool.join()
 
 
 def _comb(n, k):

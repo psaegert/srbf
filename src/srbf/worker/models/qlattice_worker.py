@@ -9,7 +9,7 @@ srbench_2025 branch, experiment/methods/qlattice/regressor.py): their own epoch 
 ``auto_run`` with a wall-clock stop and without the stype inference that later feyn versions added to ``auto_run``),
 200 epochs, at most 10 edges per model, models ranked by feyn's ``wide_parsimony`` criterion, squared error, every
 input numerical. srbf sets only what it sets for every method: the operators (the benchmark's operators as far as
-QLattice has them), the budget (a count of epochs), the seed and one thread. See docs/models.md.
+QLattice has them), the budget (a count of epochs), the seed and the threads. See docs/models.md.
 
 One change to the authors' loop, a crash fix: feyn 3.5.0's ``validate_data`` indexes ``stypes`` and fails on the
 ``None`` the loop passes, which feyn 3.0.1 (the version the authors submitted with) accepted. The worker passes an
@@ -24,6 +24,10 @@ empty dict there, which states the same thing (no semantic types: every column n
 * ``seed`` (int, 0): mixed with a hash of the problem's data into the run's seed (``feyn.QLattice(random_seed=...)``
   seeds Python's, numpy's and the core's generators), so a problem's fit is reproducible and two draws of a law
   (fresh data) get different seeds.
+* ``threads`` (int or ``"all"``, 1): the threads feyn fits its models on (``fit_models(threads=...)``, the core's
+  own thread pool). A resource, not a search setting. The authors' "auto" is the machine's cores minus one; ``"all"``
+  is every CPU this process may run on (the benchmark's runs, owner 2026-09-30: every method gets the whole
+  reference machine).
 * ``max_time`` (int, 3600): the authors' wall-clock stop in seconds (SIGALRM, as in their loop; SRBench's limit).
   When it fires, the best models so far are returned and ``hit_time_guard`` is set. A guard: the ladder never
   reaches it.
@@ -52,18 +56,14 @@ deviation of the string from the model's own predictions on the support and vali
 (``string_deviation``, ``string_deviation_val``; relative to ``max(1, max |prediction|)``) and the other models the
 method returned (``diverse``). The model's own predictions are not returned: srbf evaluates the string.
 """
+import hashlib
+import logging
+import math
 import os
+import signal
+import time
 
-for _variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
-    os.environ.setdefault(_variable, "1")   # one thread, before numpy loads
-
-import hashlib  # noqa: E402
-import logging  # noqa: E402
-import math  # noqa: E402
-import signal  # noqa: E402
-import time  # noqa: E402
-
-import numpy as np  # noqa: E402
+import numpy as np
 
 # The benchmark's operators as QLattice has them (feyn's function names): + and * natively, pow as squared, rootn
 # as sqrt, inv as inverse, and exp, log, tanh; linear is the affine node through which QLattice places constants
@@ -88,7 +88,7 @@ AUTHOR_CONFIG = {
     "sample_weights": None,
     "function_names": None,      # every function feyn has; srbf's operators replace it (FUNCTIONS)
     "starting_models": None,
-    "threads": 1,                # the authors' "auto" is the machine's cores minus one; srbf fits on one thread
+    "threads": 1,                # the authors' "auto" is the cores minus one; the `threads` option (a resource) sets it
 }
 DEFAULT_EPOCHS = 200
 
@@ -125,14 +125,27 @@ def run_seed(x, y, seed=0):
     return int.from_bytes(h.digest()[:4], "little") & 0x7FFFFFFF
 
 
-def build_params(n_epochs, config=None):
+def resolve_threads(value):
+    """The ``threads`` option as a count: an int >= 1, or ``"all"`` = the CPUs this process may run on."""
+    if value == "all":
+        try:
+            return len(os.sched_getaffinity(0))
+        except AttributeError:   # no affinity call on this platform
+            return os.cpu_count() or 1
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError("threads must be an int >= 1 or 'all', got %r" % (value,))
+    return value
+
+
+def build_params(n_epochs, config=None, threads=1):
     config = dict(config or {})
     unknown = sorted(set(config) - set(AUTHOR_CONFIG))
     if unknown:
         raise ValueError("config may replace %s; not %s" % (", ".join(sorted(AUTHOR_CONFIG)), ", ".join(unknown)))
     if int(n_epochs) < 1:
         raise ValueError("n_epochs must be at least 1, got %r" % n_epochs)
-    return {**AUTHOR_CONFIG, "function_names": list(FUNCTIONS), **config, "n_epochs": int(n_epochs)}
+    return {**AUTHOR_CONFIG, "function_names": list(FUNCTIONS), "threads": int(threads), **config,
+            "n_epochs": int(n_epochs)}
 
 
 # -- the authors' loop -------------------------------------------------------------------------------------------
@@ -364,8 +377,9 @@ def core_limits():
 
 def load(options):
     state = {"n_epochs": int(options.get("n_epochs", DEFAULT_EPOCHS)), "seed": int(options.get("seed", 0)),
-             "max_time": int(options.get("max_time", TIME_GUARD)), "config": dict(options.get("config") or {})}
-    build_params(state["n_epochs"], state["config"])      # a bad option fails at start, not per problem
+             "max_time": int(options.get("max_time", TIME_GUARD)), "config": dict(options.get("config") or {}),
+             "threads": resolve_threads(options.get("threads", 1))}
+    build_params(state["n_epochs"], state["config"], state["threads"])   # a bad option fails at start
     _require_feyn()
     state["limits"] = core_limits()
     return state
@@ -389,8 +403,8 @@ def fit(x, y, *, x_val, variables, meta, options, state):
     names = list(variables)
     columns = ["x%d" % j for j in range(X.shape[1])]   # feyn's column names: no ':' and never the output's name
     seed = run_seed(X, Y, state["seed"])
-    params = build_params(state["n_epochs"], state.get("config"))
-    extra = {"seed": seed, "n_epochs": params["n_epochs"]}
+    params = build_params(state["n_epochs"], state.get("config"), state.get("threads", 1))
+    extra = {"seed": seed, "n_epochs": params["n_epochs"], "threads": params["threads"]}
 
     data = pd.DataFrame({**{column: X[:, j] for j, column in enumerate(columns)}, OUTPUT: Y})
     ql = feyn.QLattice(random_seed=seed)

@@ -338,3 +338,46 @@ def test_the_front_keeps_the_non_dominated_valid_expressions():
     front = w.pareto_front(progs, ["v1", "v2"])
     assert [(e["expression"], e["reward"]) for e in front] == [("v1", 0.2), ("(v1 + v2)", 0.9)]
     assert list(w.pareto_mask(np.array([[1, 0], [0, 1], [1, 1], [0, 1]]))) == [True, True, False, True]
+
+
+def test_threads_are_a_resource_default_one_and_all_means_every_cpu(fake_dso):
+    import os
+    X, y = _data()
+    for arm in ("dsr", "udsr"):
+        one = w.build_config(arm, X, y, n_samples=1000, seed=0)
+        assert one["training"]["n_cores_batch"] == 1 and not one["gp_meld"].get("parallel_eval", False)
+        four = w.build_config(arm, X, y, n_samples=1000, seed=0, threads=4)
+        assert four["training"]["n_cores_batch"] == 4
+        assert not four["gp_meld"].get("parallel_eval", False)     # GP-meld's pool stays off (slower, measured)
+        assert {k: v for k, v in four.items() if k not in ("training", "gp_meld", "task")} == \
+            {k: v for k, v in one.items() if k not in ("training", "gp_meld", "task")}
+    Optimizer.programs = [P1, P2]
+    state = w.load({"arm": "dsr", "n_samples": 2000, "threads": "all"})
+    out = w.fit(X, y, x_val=[], variables=["v1", "v2"], meta={}, options={}, state=state)
+    cpus = len(os.sched_getaffinity(0))
+    assert Optimizer.instances[-1].config["training"]["n_cores_batch"] == cpus == out["extra"]["threads"]
+    for bad in (0, -1, "many", 2.5, True):
+        with pytest.raises(ValueError, match="threads"):
+            w.load({"arm": "dsr", "threads": bad})
+
+
+def test_the_pools_are_stopped_after_a_fit():
+    class Pool:
+        def __init__(self):
+            self.calls = []
+
+        def map(self, f, xs):
+            return list(map(f, xs))
+
+        def terminate(self):
+            self.calls.append("terminate")
+
+        def join(self):
+            self.calls.append("join")
+
+    reward, gp_eval = Pool(), Pool()
+    model = types.SimpleNamespace(pool=reward, gp_controller=types.SimpleNamespace(toolbox=types.SimpleNamespace(cmap=gp_eval.map)))
+    w.close_pools(model)
+    assert reward.calls == gp_eval.calls == ["terminate", "join"]
+    w.close_pools(types.SimpleNamespace(pool=None, gp_controller=types.SimpleNamespace(toolbox=types.SimpleNamespace(cmap=map))))
+    w.close_pools(types.SimpleNamespace(pool=None, gp_controller=None))           # no pools: nothing to stop
