@@ -79,7 +79,9 @@ METHODS = [
      "attempts, each from new random starting values.")]
 # How a method is drawn when its colour alone is not the point: the oracle is the ceiling, a dashed line in the ink colour
 # of the page (black, or white in the dark theme), like the ground truth's own reference line.
-METHOD_STYLE: dict[str, dict[str, bool]] = {"oracle": {"dash": True, "ink": True}}
+# "off": the explorer leaves the method unchecked by default (owner 2026-09-30: the prior); a link that names it, or its
+# checkbox, shows it. The headline charts are not affected.
+METHOD_STYLE: dict[str, dict[str, bool]] = {"oracle": {"dash": True, "ink": True}, "prior": {"off": True}}
 # Scheduled (owner 2026-09-26): methods whose srbf worker is merged but which the release does not carry yet, shown on
 # the Progress page as one line of names, a sentence each on hover. A method leaves the line once the release carries
 # it (its key among the published methods), so each key here is the one the method will have in METHODS. Only the
