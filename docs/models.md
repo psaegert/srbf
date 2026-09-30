@@ -198,7 +198,9 @@ and division.
 - Operon searches in single precision (float32).
 - It always returns its model as `a * f(x) + b`, with a weight on every variable. On a law without such constants
   that shape rarely matches the ground truth symbol for symbol, so its numeric recovery is the comparable rate.
-- One search runs on one thread: more threads make a run irreproducible.
+- The option `threads` sets how many threads a search runs on (default 1, the author's and pyoperon's own). The
+  benchmark's configs set `threads: all`, so Operon gets the whole machine, as every method does. With more than one
+  thread the evaluation budget is counted in parallel and a run is not reproducible exactly.
 
 The worker stores the whole Pareto front in the `front` column. `configs/evaluation/scaling/operon_fastsrb.yaml`
 sweeps the evaluations in doublings from 2^10 up to about 100 s per problem on the reference machine.
