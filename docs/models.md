@@ -444,6 +444,11 @@ method; its docstring gives the details.
   configuration, its one configuration, with the whole machine available to it. DSO pins its TensorFlow session to
   one thread itself. GP-meld's own evaluation pool (`parallel_eval`) stays off: it sends every new expression
   through the pool and back, and made uDSR* slower in every run we timed.
+- DSO forks its reward pool anew for every fit, from a process that already runs TensorFlow's and the numerical
+  libraries' threads, and a forked process can then wait forever on a lock one of those threads held. DSR's config
+  therefore uses srbf's hang policy ([Adapters](adapters.md)), as PySR's does: a problem whose worker stops using the
+  CPU for 60 seconds, or runs 30 times longer than the run's median problem, is tried once more in a fresh worker,
+  and a second hang fails it. Every hang is logged.
 
 The worker stores the Pareto front of complexity against reward over every expression evaluated in the `front`
 column, and the expressions and iterations used in `nevals` and `iterations`.
