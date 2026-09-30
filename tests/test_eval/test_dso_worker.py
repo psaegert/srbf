@@ -8,12 +8,18 @@ The stand-in mirrors the real attributes: ``DeepSymbolicOptimizer(config)`` with
 ``task.regression.polyfit.inverse_function_map``.
 """
 import copy
+import os
+import signal
+import sys
+import time
 import types
 
 import numpy as np
 import pytest
 
 from srbf.worker.models import dso_worker as w
+
+REAL_RUN_IN_CHILD = w.run_in_child   # the stand-in tests run fits in-process; the fork tests use the real one
 
 
 class Token:
@@ -157,6 +163,8 @@ def fake_dso(monkeypatch):
     Program.clear_cache()
     modules = _modules()
     monkeypatch.setattr(w, "_require_dso", lambda: modules)
+    monkeypatch.setattr(w, "run_in_child", lambda func, *args, timeout=None, **kwargs: func(*args, **kwargs))
+    monkeypatch.setattr(w, "_cache_numba", lambda cache_dir=None: None)
     return modules
 
 
@@ -381,3 +389,87 @@ def test_the_pools_are_stopped_after_a_fit():
     assert reward.calls == gp_eval.calls == ["terminate", "join"]
     w.close_pools(types.SimpleNamespace(pool=None, gp_controller=types.SimpleNamespace(toolbox=types.SimpleNamespace(cmap=map))))
     w.close_pools(types.SimpleNamespace(pool=None, gp_controller=None))           # no pools: nothing to stop
+
+
+# ---- one process per fit (2026-09-30: DSO's reward pool, forked in a process that had run fits, hung DSR)
+
+def _answer(value):
+    return {"value": value, "pid": os.getpid(), "array": np.arange(3.0)}
+
+
+def _fail():
+    raise ValueError("the child failed on purpose")
+
+
+def _die():
+    os.kill(os.getpid(), signal.SIGKILL)
+
+
+def _sleep_with_a_grandchild(pid_file):
+    grandchild = os.fork()
+    if grandchild == 0:
+        time.sleep(120)
+        os._exit(0)
+    with open(pid_file, "w") as f:
+        f.write(str(grandchild))
+    time.sleep(120)
+
+
+def _gone(pid):
+    try:
+        with open("/proc/%d/stat" % pid) as f:
+            return f.read().rsplit(")", 1)[1].split()[0] == "Z"   # a zombie waiting for init is gone too
+    except OSError:
+        return True
+
+
+def test_a_fit_runs_in_a_child_process_and_its_answer_comes_back():
+    out = REAL_RUN_IN_CHILD(_answer, "x", timeout=60)
+    assert out["value"] == "x" and out["pid"] != os.getpid() and list(out["array"]) == [0.0, 1.0, 2.0]
+
+
+def test_a_child_that_raises_fails_the_fit_with_its_traceback():
+    with pytest.raises(RuntimeError, match="the child failed on purpose"):
+        REAL_RUN_IN_CHILD(_fail, timeout=60)
+
+
+def test_a_child_that_dies_fails_the_fit_with_the_signal():
+    with pytest.raises(RuntimeError, match="died without an answer .killed by signal 9"):
+        REAL_RUN_IN_CHILD(_die, timeout=60)
+
+
+def test_a_child_past_its_time_is_killed_with_its_own_children(tmp_path):
+    pid_file = tmp_path / "grandchild.pid"
+    started = time.monotonic()
+    with pytest.raises(RuntimeError, match="did not finish within 2 s"):
+        REAL_RUN_IN_CHILD(_sleep_with_a_grandchild, str(pid_file), timeout=2)
+    assert time.monotonic() - started < 30
+    grandchild = int(pid_file.read_text())
+    deadline = time.monotonic() + 10
+    while not _gone(grandchild) and time.monotonic() < deadline:
+        time.sleep(0.1)
+    assert _gone(grandchild)
+
+
+def test_the_worker_forks_every_fit_and_returns_the_childs_answer(fake_dso, monkeypatch):
+    monkeypatch.setattr(w, "run_in_child", REAL_RUN_IN_CHILD)
+    X, y = _data()
+    state = w.load({"arm": "dsr", "n_samples": 2000, "warmup": False})
+    before = len(Optimizer.instances)
+    out = w.fit(X, y, x_val=[], variables=["v1", "v2"], meta={}, options={}, state=state)
+    assert out["expression"] == w.infix(P2.traversal, ["v1", "v2"]) and out["extra"]["reward"] == pytest.approx(0.9)
+    assert len(Optimizer.instances) == before   # the optimizer was built in the child, not here
+
+
+def test_numba_functions_are_cached_on_disk_and_not_compiled_here(tmp_path, monkeypatch):
+    numba = pytest.importorskip("numba")
+    module = types.ModuleType("dso.stand_in_for_the_cache_test")
+
+    @numba.njit
+    def twice(a):
+        return 2 * a
+
+    module.twice = twice
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    assert w._cache_numba(str(tmp_path)) == str(tmp_path)
+    assert type(twice._cache).__name__ != "NullCache" and not twice.signatures   # cached from now on, nothing compiled

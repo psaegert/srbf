@@ -63,6 +63,19 @@ Three patches to DSO v3.0.0 are applied in :func:`load`, each the smallest chang
 * ``config`` (dict, none): settings merged over the arm's configuration (lists replace). For side experiments
   only, such as reproducing a published configuration; published results never set it.
 
+**One process per fit.** Every fit runs in a child process forked from the worker, and its answer comes back through a
+pipe. DSO builds its reward pool with ``fork`` inside every fit (``DeepSymbolicOptimizer.setup``), and a process that
+has run a fit carries TensorFlow's global thread pools and numba's GNU OpenMP threads (DSO's parallel ``subroutines``,
+``parents_siblings`` among them); forking from it is unsafe: numba ends a forked child that enters its OpenMP layer
+("fork() called from a process already using GNU OpenMP, this is unsafe"), a reward-pool process that dies loses its
+task, and ``Pool.map`` then waits forever. That hung DSR on the reference machine (2026-09-30, rung 1,000, after 17
+catalogs). The worker itself imports DSO and applies the patches but never builds a graph or runs a jitted function,
+so each fit's child starts single-threaded, forks its pool before it runs anything parallel, and exits after the fit.
+numba's compiled functions are cached on disk (a temporary directory per worker): the warm-up child compiles them once,
+and every later child loads them, so no fit pays for compilation. A child dies with the worker (``PR_SET_PDEATHSIG``);
+one that dies or exceeds ``max_seconds`` plus 15 minutes fails its problem, with the reason, and the worker stays up.
+``fit_time`` is measured inside the child and does not include the fork.
+
 The prediction is DSO's own answer, the expression with the highest reward (inverse normalized RMSE on the
 training data) of the whole run, printed from its token sequence at full precision (DSO prints LINEAR's
 coefficients to six digits) in the variable names srbf handed over. DSO evaluates in float64 without protected
@@ -77,10 +90,19 @@ import os
 
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 
+import atexit  # noqa: E402
 import copy  # noqa: E402
+import ctypes  # noqa: E402
 import gc  # noqa: E402
 import hashlib  # noqa: E402
+import pickle  # noqa: E402
+import select  # noqa: E402
+import shutil  # noqa: E402
+import signal  # noqa: E402
+import sys  # noqa: E402
+import tempfile  # noqa: E402
 import time  # noqa: E402
+import traceback  # noqa: E402
 
 import numpy as np  # noqa: E402
 
@@ -367,6 +389,146 @@ def pareto_front(programs, names):
 
 
 # ---------------------------------------------------------------------------------------------------------------
+# one process per fit
+
+FIT_TIMEOUT_MARGIN_S = 900.0   # a fit child is killed after max_seconds plus this: its own guard acts between iterations
+
+
+def _die_with_parent():
+    """Linux: this process gets SIGKILL when its parent (the worker) dies, so no fit outlives the worker."""
+    try:
+        ctypes.CDLL(None, use_errno=True).prctl(1, int(signal.SIGKILL))   # PR_SET_PDEATHSIG = 1
+    except Exception:  # noqa: BLE001 - not Linux: the worker's own cleanup still applies
+        pass
+
+
+def _descendants(pid):
+    """Every live descendant of ``pid``, from /proc (children before grandchildren)."""
+    children = {}
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit():
+            continue
+        try:
+            with open("/proc/%s/stat" % entry) as f:
+                ppid = int(f.read().rsplit(")", 1)[1].split()[1])
+        except (OSError, IndexError, ValueError):
+            continue
+        children.setdefault(ppid, []).append(int(entry))
+    out, stack = [], [pid]
+    while stack:
+        for child in children.get(stack.pop(), []):
+            out.append(child)
+            stack.append(child)
+    return out
+
+
+def _kill_tree(pid):
+    for victim in [pid] + _descendants(pid):
+        try:
+            os.kill(victim, signal.SIGKILL)
+        except OSError:
+            pass
+
+
+def _describe(status):
+    if os.WIFSIGNALED(status):
+        return "killed by signal %d" % os.WTERMSIG(status)
+    return "exit status %d" % os.WEXITSTATUS(status)
+
+
+def run_in_child(func, *args, timeout=None, **kwargs):
+    """``func(*args, **kwargs)`` in a forked child process; its return value comes back pickled through a pipe. An
+    exception in the child, a child that dies without an answer, or one that runs past ``timeout`` seconds (killed,
+    with its descendants) raises RuntimeError here, with the reason."""
+    for stream in (sys.stdout, sys.stderr):   # nothing buffered here may be written twice, once by the child
+        try:
+            stream.flush()
+        except Exception:  # noqa: BLE001
+            pass
+    read_fd, write_fd = os.pipe()
+    pid = os.fork()
+    if pid == 0:   # the child: never returns
+        status = 1
+        try:
+            os.close(read_fd)
+            _die_with_parent()
+            try:
+                payload = ("ok", func(*args, **kwargs))
+            except BaseException:  # noqa: BLE001 - the parent reports it
+                payload = ("error", traceback.format_exc(limit=12))
+            data = pickle.dumps(payload, protocol=pickle.HIGHEST_PROTOCOL)
+            view = memoryview(data)
+            while view:
+                view = view[os.write(write_fd, view):]
+            status = 0
+        finally:
+            for stream in (sys.stdout, sys.stderr):
+                try:
+                    stream.flush()
+                except Exception:  # noqa: BLE001
+                    pass
+            os._exit(status)
+    os.close(write_fd)
+    chunks, timed_out = [], False
+    deadline = None if timeout is None else time.monotonic() + float(timeout)
+    try:
+        while True:
+            wait = None if deadline is None else max(0.0, deadline - time.monotonic())
+            ready, _, _ = select.select([read_fd], [], [], wait)
+            if not ready:
+                timed_out = True
+                break
+            chunk = os.read(read_fd, 1 << 20)
+            if not chunk:
+                break
+            chunks.append(chunk)
+    except BaseException:   # interrupted while waiting: the child and its pool go too
+        _kill_tree(pid)
+        os.waitpid(pid, 0)
+        raise
+    finally:
+        os.close(read_fd)
+    if timed_out:
+        _kill_tree(pid)
+        os.waitpid(pid, 0)
+        raise RuntimeError("the fit process did not finish within %.0f s and was killed" % float(timeout))
+    _, status = os.waitpid(pid, 0)
+    if not chunks:
+        raise RuntimeError("the fit process died without an answer (%s)" % _describe(status))
+    try:
+        kind, value = pickle.loads(b"".join(chunks))
+    except Exception:  # noqa: BLE001 - a child killed while it wrote its answer
+        raise RuntimeError("the fit process died while it wrote its answer (%s)" % _describe(status))
+    if kind == "error":
+        raise RuntimeError("the fit process failed:\n" + value)
+    return value
+
+
+def _cache_numba(cache_dir=None):
+    """numba's on-disk cache for every jitted function DSO has loaded, in ``cache_dir`` (a new temporary directory,
+    removed at exit, when None). Nothing is compiled here: the first child to call a function compiles and stores
+    it, every later child loads it. Returns the directory, or None without numba."""
+    try:
+        from numba.core import config as numba_config
+        from numba.core.dispatcher import Dispatcher
+    except ImportError:
+        return None
+    if cache_dir is None:
+        cache_dir = tempfile.mkdtemp(prefix="srbf-dso-numba-")
+        atexit.register(shutil.rmtree, cache_dir, True)
+    numba_config.CACHE_DIR = cache_dir
+    seen = set()
+    for name, module in list(sys.modules.items()):
+        if not (name == "dso" or name.startswith("dso.")) or module is None:
+            continue
+        for value in list(vars(module).values()):
+            if isinstance(value, Dispatcher) and id(value) not in seen:
+                seen.add(id(value))
+                value.enable_caching()
+    return cache_dir
+
+
+# ---------------------------------------------------------------------------------------------------------------
 # the protocol
 
 def load(options):
@@ -375,9 +537,11 @@ def load(options):
         raise ValueError("options.arm must be one of %s, got %r" % (", ".join(ARMS), arm))
     modules = _require_dso()
     patches = apply_patches(modules)
+    numba_cache = _cache_numba()
     state = {"arm": arm, "n_samples": int(options.get("n_samples", 2_000_000)), "seed": int(options.get("seed", 0)),
              "max_seconds": float(options.get("max_seconds", 3600.0)), "config": dict(options.get("config") or {}),
-             "threads": resolve_threads(options.get("threads", 1)), "modules": modules, "patches": patches}
+             "threads": resolve_threads(options.get("threads", 1)), "modules": modules, "patches": patches,
+             "numba_cache": numba_cache}
     if options.get("warmup", True):
         warmup_fit(state)
     return state
@@ -388,7 +552,8 @@ WARMUP = {"training": {"n_samples": 1, "batch_size": 20}, "gp_meld": {"populatio
 
 
 def warmup_fit(state):
-    """One small throwaway fit with the arm's configuration, outside any timed fit."""
+    """One small throwaway fit with the arm's configuration, outside any timed fit. It runs in a child like every fit,
+    so it leaves the worker without TensorFlow or OpenMP threads, and it stores numba's compiled functions."""
     rng = np.random.RandomState(0)
     X = rng.uniform(1.0, 2.0, size=(32, 2))
     small = dict(state, config=merge(state["config"], WARMUP), max_seconds=float("inf"))
@@ -423,6 +588,14 @@ def info(state):
 
 
 def fit(x, y, *, x_val, variables, meta, options, state):
+    """One fit, in a child process of its own (see "One process per fit" above)."""
+    guard = float(state["max_seconds"])   # infinite for the warm-up
+    return run_in_child(fit_here, x, y, x_val=x_val, variables=variables, meta=meta, options=options, state=state,
+                        timeout=guard + FIT_TIMEOUT_MARGIN_S if np.isfinite(guard) else None)
+
+
+def fit_here(x, y, *, x_val, variables, meta, options, state):
+    """One fit in this process (the child's side of :func:`fit`)."""
     X = np.asarray(x, dtype=np.float64)
     Y = np.asarray(y, dtype=np.float64).ravel()
     names = list(variables)

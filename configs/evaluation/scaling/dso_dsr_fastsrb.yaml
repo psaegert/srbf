@@ -17,6 +17,7 @@ run:
     config_provenance: upstream_default
     simplipy_engine: acj-5-4-llm
     timeout: 7200
+    hang_after_idle_s: 120      # a fit whose process tree idles 2 min is a hang: retried once in a fresh worker
     options:
       threads: all              # every method gets the whole reference machine (owner 2026-09-30)
       arm: dsr
