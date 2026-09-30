@@ -277,8 +277,9 @@ same data and seed, the changed and the unchanged build take the same steps and 
   of those values.
 - It does not stop early: a fit spends its whole budget, also after it has fit the data exactly. The `fit_calls`
   column records what a fit spent, a few calls more than the budget.
-- Every fit runs in a process forked for it, on one thread. The same data and seed give the same answer on the same
-  machine.
+- Every fit runs in a process forked for it. RILS-ROLS has no parallelism, so a fit runs on one thread; the
+  benchmark's configs set `threads: all` as for every method, and the worker caps no library's thread pool. The same
+  data and seed give the same answer on the same machine.
 
 `configs/evaluation/scaling/rilsrols_fastsrb.yaml` sweeps the fitness evaluations in doublings from 2^6, the first
 power of two above the method's first step (scoring the perturbations of its starting model), up to 2^21, about
@@ -437,7 +438,11 @@ method; its docstring gives the details.
 - The prior that keeps the polynomial token out of `sin cos tan abs` and the even powers binds the RNN only:
   GP-meld's check of it looks at one of these operators, as in the authors' own code, so GP-meld breeds such
   expressions.
-- One search runs on one thread, and its result depends only on the problem's data and the seed.
+- The option `threads` sets DSO's reward pool (`n_cores_batch`, the processes that compute the rewards of each
+  batch's new expressions, their constant fits included). The default 1 is DSO's own, no pool. The benchmark's
+  configs set `threads: all`, so DSO gets the whole machine, as every method does. DSO pins its TensorFlow session to
+  one thread itself. GP-meld's own evaluation pool (`parallel_eval`) stays off: it sends every new expression
+  through the pool and back, and made uDSR* slower in every run we timed.
 
 The worker stores the Pareto front of complexity against reward over every expression evaluated in the `front`
 column, and the expressions and iterations used in `nevals` and `iterations`.
@@ -476,7 +481,8 @@ The configuration is the one GP-GOMEA's first author committed for running it as
 baseline (SRBench 2021), without the hyperparameter grid that SRBench's maintainers searched around it:
 - GP-GOMEA with the linkage-tree FOS, linear scaling and ephemeral random constants;
 - the interleaved multistart scheme off, population 500, initial tree height 4, elitism 1;
-- one thread.
+- one thread, which the option `threads` raises: the benchmark's configs set `threads: all`, so GP-GOMEA gets the
+  whole machine, as every method does.
 
 The interleaved multistart scheme is the authors' way to run GP-GOMEA without choosing a population
 size. It is off because the first author turned it off in his benchmark configuration.
@@ -530,8 +536,9 @@ powers and roots, `abs`, `tan`, or the inverse and hyperbolic functions. It expr
   symbol for symbol. Its numeric recovery is the comparable rate.
 - The budget is checked between generations, so a run overshoots it by up to one generation (about
   10,000 evaluations at the start of a run). The `evaluations` column records what a fit spent.
-- Every fit runs in a process forked for it, on one thread, and starts the random number
-  generators as a fresh process would. The same data and seed give the same answer.
+- Every fit runs in a process forked for it and starts the random number generators as a fresh process would. On
+  one thread the same data and seed give the same answer; with more (`threads`, GP-GOMEA's `parallel`) the
+  evaluation count races and a run is not reproducible exactly.
 
 The worker also stores GP-GOMEA's own printed model in the `model_string` column.
 `configs/evaluation/scaling/gpgomea_fastsrb.yaml` sweeps the evaluations in doublings, from 2^14,
@@ -601,7 +608,8 @@ empty mapping there, which states the same thing, every input numerical.
 - QLattice's `exp`, `log`, square root, square and `1/u` are protected: the model clips their argument. Where a
   clip is active at a support or validation point, the prediction writes it out with `abs`, so that the expression
   computes the model's own prediction; the `protections` column names these functions.
-- One search runs on one thread, and its result depends only on the problem's data and the seed.
+- The option `threads` sets the threads feyn fits its models on (the authors' "auto" is the cores minus one). The
+  benchmark's configs set `threads: all`, so QLattice gets the whole machine, as every method does.
 
 The worker stores the other models the method returned in the `diverse` column, and the largest deviation of the
 expression from the model's own predictions in `string_deviation` and `string_deviation_val`.
