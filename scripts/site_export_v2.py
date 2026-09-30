@@ -424,8 +424,9 @@ Expressions = dict[tuple[str, str, int, int], dict[int, list[Any] | None]]
 
 def load_expressions(root: str, keys: list[str]) -> tuple[Expressions, dict[str, dict[int, str]]]:
     """(pred, truth): pred[(method, catalog, rung, draw)][row] = [expression, flags] for the methods in `keys`, and
-    truth[catalog][row] = the ground truth's expression. Both are empty when the rows carry no expressions (a table
-    written before `srbf table` stored them)."""
+    truth[catalog][row] = the ground truth's expression as the benchmark states it, unrounded (the page rounds it; the
+    canonical form is computed from it). Both are empty when the rows carry no expressions (a table written before
+    `srbf table` stored them)."""
     pred: Expressions = defaultdict(dict)
     truth: dict[str, dict[int, str]] = defaultdict(dict)
     want = set(keys)
@@ -443,7 +444,7 @@ def load_expressions(root: str, keys: list[str]) -> tuple[Expressions, dict[str,
                 cat, row = r[at["catalog"]], int(r[at["row"]])
                 gt = r[at["ground_truth_expression"]]
                 if gt and row not in truth[cat]:
-                    truth[cat][row] = round_prefix(gt)
+                    truth[cat][row] = gt
                 if r[at["model"]] not in want:
                     continue
                 expr = r[at["predicted_expression"]] if r[at["success"]] in ("1", "1.0") else ""
@@ -454,10 +455,43 @@ def load_expressions(root: str, keys: list[str]) -> tuple[Expressions, dict[str,
     return pred, truth
 
 
+def canonical_truths(truth: dict[str, dict[int, str]], engine_name: str, cache_path: str | None,
+                     engine: Any = None) -> dict[str, str | None]:
+    """Every ground truth in its canonical form: the SimpliPy engine the judge uses (`srbf table`'s default engine)
+    simplifies the expression WITH its numbers -- the judge's first step (srbf.result_processing._judged_form, then it
+    masks the numbers). Returns {prefix as stated: canonical prefix, or None where the engine refuses it}. Cached in
+    `cache_path` per simplipy version and engine: a form depends on nothing else."""
+    import simplipy
+    tag = f"{getattr(simplipy, '__version__', '?')}|{engine_name}"
+    cache: dict[str, Any] = {}
+    if cache_path and os.path.exists(cache_path):
+        try:
+            loaded = json.load(open(cache_path))
+            cache = loaded.get("forms", {}) if loaded.get("tag") == tag else {}
+        except (OSError, ValueError):
+            cache = {}
+    todo = sorted({e for rows in truth.values() for e in rows.values() if e and e not in cache})
+    if todo:
+        engine = engine if engine is not None else simplipy.SimpliPyEngine.load(engine_name, install=True)
+        for e in todo:
+            try:
+                form = engine.simplify(e.split())
+                cache[e] = " ".join(map(str, form)) if form is not None else None
+            except Exception:  # noqa: BLE001 - an expression the engine refuses has no canonical form; shown as stated
+                cache[e] = None
+        if cache_path:
+            tmp = cache_path + ".tmp"
+            with open(tmp, "w") as fh:
+                json.dump({"tag": tag, "forms": cache}, fh)
+            os.replace(tmp, cache_path)
+    return cache
+
+
 def write_predictions(out_dir: str, rel: str, pred: Expressions, truth: dict[str, dict[int, str]],
-                      sizes: dict[str, int]) -> dict[str, dict[str, list[int]]]:
+                      sizes: dict[str, int], canonical: dict[str, str | None] | None = None) -> dict[str, dict[str, list[int]]]:
     """Write the Predictions view's files next to the release; returns the index the page reads:
-    {method: {"catalog|rung": [the runs whose files exist]}}. A run still in progress is left out."""
+    {method: {"catalog|rung": [the runs whose files exist]}}. A run still in progress is left out. A ground truth is
+    written as [as stated, canonical form] (both rounded for the page; the canonical form None where there is none)."""
     def put(path: str, key: str, obj: Any) -> None:
         text = "window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R[%s]=R[%s]||{};R[%s][%s]=%s;})();\n" % (
             json.dumps(rel), json.dumps(rel), json.dumps(rel), json.dumps(key), json.dumps(obj, separators=(",", ":")))
@@ -480,8 +514,12 @@ def write_predictions(out_dir: str, rel: str, pred: Expressions, truth: dict[str
         index[m].setdefault(f"{c}|{r}", []).append(d)
         for b, chunk in blocks(got).items():
             put(os.path.join(out_dir, "pred", m, c, f"{r}.{d}.{b}.js"), f"{m}|{c}|{r}|{d}|{b}", chunk)
-    for c, formulas in sorted(truth.items()):
+    for c, stated in sorted(truth.items()):
         if c in sizes:
+            formulas: dict[int, list[str | None]] = {}
+            for i, e in stated.items():
+                form = (canonical or {}).get(e)
+                formulas[i] = [round_prefix(e), round_prefix(form) if form else None]
             for b, chunk in blocks(formulas).items():
                 put(os.path.join(out_dir, "pred", "truth", f"{c}.{b}.js"), f"truth|{c}|{b}", chunk)
     # A method this release no longer holds leaves no files behind: a withheld method would otherwise stay published.
@@ -926,6 +964,7 @@ def main() -> None:
     ap.add_argument("out")
     ap.add_argument("--title", default=None)
     ap.add_argument("--notes", default="")
+    ap.add_argument("--engine", default="acj-5-4-llm", help="the SimpliPy engine the judge used (srbf table's default): the ground truths' canonical forms")
     ap.add_argument("--sizes", default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results-site", "data", "catalog_mu.json"),
                     help="every catalog's ground-truth description lengths (scripts/catalog_mu.py; default: results-site/data/catalog_mu.json)")
     ap.add_argument("--site-dir", default=None, help="results-site directory (default: two levels above out.js); base paths are relative to it")
@@ -1082,7 +1121,8 @@ def main() -> None:
     payload, hists, paired = build(public, rel_base(out_dir, site_dir))
     pred, truth = load_expressions(a.root, public)
     pred = {k: v for k, v in pred.items() if usable(k[0], k[2])}   # the budgets the release publishes, and no others
-    payload["pred"] = write_predictions(out_dir, a.release, pred, truth, sizes)
+    canonical = canonical_truths(truth, a.engine, os.path.join(a.root, "canonical_truth_cache.json"))
+    payload["pred"] = write_predictions(out_dir, a.release, pred, truth, sizes, canonical)
     payload["pred_block"] = PRED_BLOCK
     ranks = leagues([(ka, kb) for i, ka in enumerate(public) for kb in public[i + 1:]], public, payload["rank_keys"])
     write_set(payload, hists, paired, ranks, a.out, out_dir, "RESULTS_V2", f"public release {a.release}")

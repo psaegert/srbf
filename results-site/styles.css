@@ -516,6 +516,7 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 /* Predictions: one problem at a time, the true formula above one row per method; a long formula scrolls in its cell */
 .explorer-v2 .v2predtruth { display: flex; align-items: baseline; gap: 12px; margin: 12px 0 14px; flex-wrap: wrap; }
 .explorer-v2 .v2predtruthf { font-size: 1.15em; overflow-x: auto; max-width: 100%; }
+.explorer-v2 .v2predcanon { margin-top: -6px; }
 .explorer-v2 .v2predtable td, .explorer-v2 .v2predtable thead th { text-align: left; vertical-align: middle; }
 .explorer-v2 .v2predtable td { padding-top: 10px; padding-bottom: 10px; }
 .explorer-v2 .v2predtable td.v2predf { max-width: 60em; overflow-x: auto; }

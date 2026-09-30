@@ -1205,6 +1205,16 @@
     return (f & 1 ? '<span class="v2tag v2predmark" title="Numeric Recovery: reproduces the held-out points almost exactly">numeric</span>' : "") +
       (f & 2 ? '<span class="v2tag v2predmark" title="Symbolic Recovery: Structure: the same form as the true formula once numbers are ignored">structure</span>' : "");
   }
+  // The true formula as the benchmark states it, and its canonical form: what SimpliPy, the engine the judge uses, makes of
+  // it with its numbers kept -- the form Symbolic Recovery compares a prediction with once the numbers are masked. A
+  // release written before the canonical forms shipped holds the stated formula alone.
+  function predTruth(gt, wait) {
+    var stated = Array.isArray(gt) ? gt[0] : gt, canon = Array.isArray(gt) ? gt[1] : undefined;
+    var html = '<div class="v2predtruth"><span class="v2lab">true formula</span><span class="v2predtruthf">' + (gt === undefined ? wait : typeset(stated)) + "</span></div>";
+    if (canon === undefined) { return html; }
+    return html + '<div class="v2predtruth v2predcanon"><span class="v2lab">canonical form ' + help("The true formula simplified by SimpliPy, the engine the judge uses, with its numbers kept. Symbolic Recovery compares a prediction with this form once the numbers are masked (the stricter versions keep exponents, or all numbers).", "What is the canonical form?") +
+      '</span><span class="v2predtruthf">' + (canon === null ? '<span class="v2predna">none: the engine cannot read this formula</span>' : canon === stated ? '<span class="v2hint">the same as stated</span>' : typeset(canon)) + "</span></div>";
+  }
   function renderPreds(shown) {   // one problem at a time: the true formula, then one row per method
     var P = D.pred || {}, B = D.pred_block || 500;
     if (!Object.keys(P).length) { return '<p class="v2hint">The formulas are not published in this release yet.</p>'; }
@@ -1242,7 +1252,7 @@
     return bar + '<p class="v2hint">The formula each method returned for one problem of ' + esc(c) + ", at budget " + r + ", run " + run +
       ". Step through the problems with \u25c0 \u25b6 or type a number. Numbers are rounded to 4 significant digits, and variables are named by their input column (x\u2081 is the first). " +
       "The column \u201crecovered\u201d says whether the formula passes Numeric Recovery (numeric) and Symbolic Recovery: Structure (structure). The problem sets to choose from are the ones selected in the side panel.</p>" +
-      '<div class="v2predtruth"><span class="v2lab">true formula</span><span class="v2predtruthf">' + (gt === undefined ? wait : typeset(gt)) + "</span></div>" +
+      predTruth(gt, wait) +
       '<div class="v2table-wrap"><table class="v2table v2predtable"><thead><tr><th>method</th><th>recovered</th><th>its formula</th></tr></thead><tbody>' + rows + "</tbody></table></div>";
   }
 
