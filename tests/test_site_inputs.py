@@ -99,7 +99,6 @@ def test_the_catalog_description_lengths_cover_the_suite_at_the_timing_subsets_s
     assert {c: len(v) for c, v in mu.items()} == {c: int(m["size"]) for c, m in subset.items()}
 
 
-
 def test_rung_files_of_any_width_are_found(tmp_path) -> None:
     """Operon's and the other evaluation ladders' files carry seven digits (evals_0001024.pkl): the site read none of them."""
     (tmp_path / "fastsrb").mkdir()
