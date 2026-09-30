@@ -310,6 +310,7 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 .explorer-v2 .v2pbar { display: block; height: 9px; background: var(--line); border-radius: 2px; overflow: hidden; }
 .explorer-v2 .v2pbar i { display: block; height: 100%; background: var(--accent); }
 .explorer-v2 .v2paxis { grid-column: 2; display: flex; justify-content: space-between; margin-top: -3px; font-size: 11px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.explorer-v2 .v2pmore { grid-column: 1 / -1; font-size: 12px; color: var(--ink-soft); line-height: 1.45; margin-top: 2px; }
 /* the finished methods: names on one line */
 .explorer-v2 .v2done { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 10px 0 14px; }
 .explorer-v2 .v2chip { display: inline-flex; align-items: center; font-size: 13.5px; color: var(--ink); }
