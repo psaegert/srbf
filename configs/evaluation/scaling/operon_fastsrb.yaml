@@ -17,6 +17,7 @@ run:
     simplipy_engine: acj-5-4-llm
     timeout: 7200
     options:
+      threads: all              # every method gets the whole reference machine (owner 2026-09-30)
       max_evaluations: !sweep
         name: ladder
         values: [1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608]
