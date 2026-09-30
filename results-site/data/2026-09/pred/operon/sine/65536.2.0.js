@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|sine|65536|2|0"]={"0":["+ 0.225 * 1.001 + atan sinh sinh sin - 2.631 * 0.8775 x1 sinh * cosh exp sin * cosh * -0.7276 x1 tanh * 0.1693 x1 * -0.01549 x1",0]};})();

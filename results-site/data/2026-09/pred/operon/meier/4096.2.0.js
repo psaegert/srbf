@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|meier|4096|2|0"]={"0":["+ -0.1494 * -0.1881 tan exp sinh abs exp * -0.4343 x1",0],"1":["+ 914.6 * 0.1045 / - 0.5125 * 1.748 x1 * * -0.119 x2 * * -0.1211 x2 -1.382",0]};})();
