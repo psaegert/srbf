@@ -35,6 +35,12 @@ from srbf.config import load_config, select_experiment
 from srbf.sweep import Sweep
 
 
+THREAD_CAPS = ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS",
+               "BLIS_NUM_THREADS")
+"""Environment variables that cap a library's thread pool; the timed runs get none of them (every method gets the
+whole reference machine)."""
+
+
 def _sweep_representer(dumper: Any, data: Any) -> Any:
     body = {"values": list(data.values)}
     if data.name is not None:
@@ -175,7 +181,11 @@ def main() -> int:
     print(f"{len(plan)} units: {len(experiments)} catalogs x {len(ladder)} rungs {ladder}; root {a.root}; host {host}; "
           f"config {config_path}; budget {a.budget_hours or 'none'} h", flush=True)
     env = dict(os.environ, PYTHONUNBUFFERED="1")
-    env.setdefault("OMP_NUM_THREADS", "1")
+    # Every method gets the whole machine (owner 2026-09-30): the harness caps no thread pool. A cap inherited from
+    # the caller's environment is dropped too; a method that wants per-process limits (Flash-ANSR's refinement
+    # workers pin their own BLAS pools) sets them itself.
+    for cap in THREAD_CAPS:
+        env.pop(cap, None)
     rung_seconds: dict[int, float] = {}          # rung -> wall seconds of its finished units (this run and earlier ones)
     for m in marks.glob("*.done"):
         parts = m.read_text().split()
