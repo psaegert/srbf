@@ -545,12 +545,21 @@ powers and roots, `abs`, `tan`, or the inverse and hyperbolic functions. It expr
 - Every fit runs in a process forked for it and starts the random number generators as a fresh process would. On
   one thread the same data and seed give the same answer; with more (`threads`, GP-GOMEA's `parallel`) the
   evaluation count races and a run is not reproducible exactly.
+- GP-GOMEA evaluates a formula only when a change reaches a part of the tree that the formula uses. Once
+  every member of the population expresses the same formula, nothing it changes is evaluated: generations go
+  on, the evaluation count stands still, and the answer does not change. The run moves on only when the unused
+  parts have become identical too, which makes GP-GOMEA start a new population. A budget that a run reaches
+  before its population settles costs a fraction of a second; one above that point waits out at least one such
+  stall, ten seconds or more on the reference machine. Between 2^16 and 2^18 evaluations more and more runs stall, and the time per
+  problem grows about tenfold per doubling of the budget.
 
 The worker also stores GP-GOMEA's own printed model in the `model_string` column.
 `configs/evaluation/scaling/gpgomea_fastsrb.yaml` sweeps the evaluations in doublings, from 2^14,
 the first power of two above the cost of one generation, up to about 100 s per problem on the
-reference machine. `configs/evaluation/panels/gpgomea_srbench2021_feynman.yaml` runs the
-configuration that SRBench 2021 published its GP-GOMEA results with, on the Feynman catalogs.
+reference machine. Between 2^16 and 2^18 it takes quarter steps (2^16.25, 2^16.5, ...), so that its
+points stay about evenly spaced in time where the stalls set in.
+`configs/evaluation/panels/gpgomea_srbench2021_feynman.yaml` runs the configuration that SRBench 2021
+published its GP-GOMEA results with, on the Feynman catalogs.
 
 ## QLattice
 
