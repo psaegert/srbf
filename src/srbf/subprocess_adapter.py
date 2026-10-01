@@ -466,7 +466,8 @@ class SubprocessAdapter(EvaluationModelAdapter):
         Forwarded verbatim to the worker's ``load``/``fit``.
     timeout : float, optional
         Seconds per problem; on expiry the worker is killed, the problem recorded as an error and
-        the worker restarted (``max_restarts`` times over the run). None = unlimited.
+        the worker restarted (``max_restarts`` times in a row: the count starts over whenever the worker
+        answers a problem). None = unlimited.
     drop_unused_variables : bool
         Accepted so that existing configs keep loading, and ignored: a method sees every column of a
         problem, and choosing the relevant ones is part of what is evaluated.
@@ -559,8 +560,8 @@ class SubprocessAdapter(EvaluationModelAdapter):
         self._process = process
 
     def _recover(self, reason: str) -> None:
-        """After a crash or timeout: restart within the budget, else mark the worker dead so the
-        remaining problems fail fast instead of hanging."""
+        """After a crash or timeout: restart within the budget (failures in a row), else mark the worker dead
+        so the remaining problems fail fast instead of hanging."""
         if self._process is not None:
             self._process.kill()
             self._process = None
@@ -638,6 +639,10 @@ class SubprocessAdapter(EvaluationModelAdapter):
             try:
                 reply = self._process.request(payload, self.timeout, overdue_s=limit)
                 self._answered_s.append(time.monotonic() - started)
+                # A worker that answers works: the crash budget guards against one that cannot run at all, so it
+                # counts failures in a row. Over the whole run, two slow problems anywhere in a catalog would
+                # leave every later problem unattempted and recorded as failed.
+                self._restarts = 0
                 break
             except WorkerTimeout as exc:
                 if not policy:                           # no hang policy: the historical timeout handling
