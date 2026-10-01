@@ -691,6 +691,16 @@
   // hidden method keeps an entry, dotted, so that it can be brought back.
   function ghostLabels(ghosts) { return ghosts.map(function (m) { return m.label + (m.local ? " (local)" : ""); }); }
   function ghostSeries(m) { return { key: m.key, label: m.label + (m.local ? " (local)" : ""), color: baseColorOf(m), dash: !!m.dash }; }
+  // A legend keeps one order, the methods' own: a method stays in its place whether it is shown, faded or hidden, so
+  // cycling one never moves the others.
+  function legendEntries(series, ghosts) {
+    var pos = {};
+    D.methods.forEach(function (m, i) { pos[m.key] = i; });
+    var at = function (e) { return pos[e.sr.key] === undefined ? D.methods.length : pos[e.sr.key]; };
+    return series.map(function (sr) { return { sr: sr, gone: false }; })
+      .concat(ghosts.map(function (m) { return { sr: ghostSeries(m), gone: true }; }))
+      .sort(function (a, b) { return at(a) - at(b); });
+  }
   function legendItem(sr, lx, ly, cycle, gone) {
     var vis = gone ? "hidden" : sr.key ? visOf(sr.key) : "full", lab = esc(sr.label);
     var mark = '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 20) + '" y2="' + ly + '" stroke="' + sr.color + '"' + (gone ? ' stroke-width="2" stroke-dasharray="2 3"' : ' stroke-width="3"' + dashOf(sr)) + "/>";
@@ -741,8 +751,7 @@
       s += ciSVG(pts, col, xs, y, function (v) { return v; }, cl);
       s += '<polyline fill="none" stroke="' + col + '" stroke-width="2"' + dashOf(sr) + ' points="' + pts.map(function (p) { return xs(p.x).toFixed(1) + "," + y(cl(p.v)).toFixed(1); }).join(" ") + '"/>';
       pts.forEach(function (p) { s += '<circle cx="' + xs(p.x).toFixed(1) + '" cy="' + y(cl(p.v)).toFixed(1) + '" r="3.2" fill="' + (p.hollow ? "var(--surface)" : col) + '" stroke="' + col + '" stroke-width="1.5"><title>' + esc(p.title) + '</title></circle>'; }); });
-    series.forEach(function (sr) { s += legendItem(sr, lx, ly, opts.cycle); ly += 20; });
-    ghosts.forEach(function (m) { s += legendItem(ghostSeries(m), lx, ly, opts.cycle, true); ly += 20; });
+    legendEntries(series, ghosts).forEach(function (e) { s += legendItem(e.sr, lx, ly, opts.cycle, e.gone); ly += 20; });
     return s + "</svg>";
   }
   // x positions. The budget axis is the method's own ladder. The time axis is seconds per problem, always from
@@ -782,8 +791,7 @@
       s += '<polyline fill="none" stroke="' + col + '" stroke-width="1.6" stroke-opacity="0.65"' + dashOf(sr) + ' points="' + sr.pts.map(function (p) { return xs(clx(p.x)).toFixed(1) + "," + y(cly(p.v)).toFixed(1); }).join(" ") + '"/>';
       sr.pts.forEach(function (p) { s += '<circle cx="' + xs(clx(p.x)).toFixed(1) + '" cy="' + y(cly(p.v)).toFixed(1) + '" r="3.2" fill="' + (p.hollow ? "var(--surface)" : col) + '" stroke="' + col + '" stroke-width="1.5"><title>' + esc(p.title) + "</title></circle>"; });
     });
-    opts.series.forEach(function (sr) { s += legendItem(sr, lx, ly, opts.cycle); ly += 20; });
-    ghosts.forEach(function (m) { s += legendItem(ghostSeries(m), lx, ly, opts.cycle, true); ly += 20; });
+    legendEntries(opts.series, ghosts).forEach(function (e) { s += legendItem(e.sr, lx, ly, opts.cycle, e.gone); ly += 20; });
     return s + "</svg>";
   }
   function frontChart(xm, ym, shown, title, aria, xlabel, ylabel, legend) {
