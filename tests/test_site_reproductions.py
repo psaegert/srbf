@@ -112,3 +112,36 @@ def test_every_published_number_shows_where_it_comes_from() -> None:
                     # the file is pinned to a commit, and the code reads that same commit
                     sha = re.search(r"/([0-9a-f]{40})/", src["file"]).group(1)
                     assert sha in src["code"] and "read_feather" in src["code"]
+
+
+_FIG_SPEC = importlib.util.spec_from_file_location(
+    "read_published_figures", os.path.join(os.path.dirname(__file__), "..", "scripts", "read_published_figures.py"))
+figures = importlib.util.module_from_spec(_FIG_SPEC)
+_FIG_SPEC.loader.exec_module(figures)       # PyMuPDF is imported only when a figure is read
+
+
+def test_every_number_read_from_a_figure_shows_arithmetic_that_holds_and_a_reading_to_rerun() -> None:
+    import re
+    seen = 0
+    for m in _rows()["compared"]:
+        for row in m["rows"]:
+            for src in row.get("sources") or []:
+                rd = src.get("reading")
+                if not rd:
+                    continue
+                seen += 1
+                assert rd["script"] in figures.READINGS
+                # "(a − b) / (c − b) = v": the shown arithmetic gives the shown value
+                a, b, c, b2, v = map(float, re.search(
+                    r"\(([\d.]+) − ([\d.]+)\) /\s+\(([\d.]+) −\s+([\d.]+)\) = ([\d.]+)", rd["text"]).groups())
+                assert b == b2 and abs((a - b) / (c - b) - v) < 5e-5
+                if row["test"]["kind"] == "rate":
+                    assert row["test"]["rate"] == v                       # the test uses the value read
+                if row["test"]["kind"] == "count":
+                    assert abs(v * row["test"]["n"] - row["test"]["k"]) < 0.01   # a whole number of laws
+    assert seen == 3
+
+
+def test_the_figure_reading_is_linear_between_the_two_labelled_positions() -> None:
+    assert figures.linear(0.0, 159.225, 1.0, 261.869, 248.068) == pytest.approx(0.8655, abs=5e-5)
+    assert figures.linear(0.0, 145.636, 1.0, 90.065, 94.340) * 52 == pytest.approx(48.0, abs=0.01)

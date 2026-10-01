@@ -188,6 +188,13 @@ def sources_html(row: dict[str, Any], base: Path) -> str:
             parts.append(f'<figure class="repro-source"><a href="{esc(href)}" target="_blank" rel="noopener">'
                          f'<img src="{esc(href)}" width="{w}" height="{h}" loading="lazy" alt="{esc(src["caption"])}" />'
                          f'</a><figcaption>{esc(src["caption"])}</figcaption></figure>')
+        if "reading" in src:
+            rd = src["reading"]
+            parts.append(f'<p class="repro-codecap">How the number was read from the figure:</p>'
+                         f'<p class="repro-reading-text">{esc(rd["text"])}</p>'
+                         f'<p class="repro-codecap">To read it again from the paper\'s own PDF, which the script '
+                         f'downloads and checks:</p><pre class="repro-code"><code>pip install pymupdf\n'
+                         f'python scripts/read_published_figures.py {esc(rd["script"])}</code></pre>')
         if "code" in src:
             parts.append(f'<p class="repro-codecap">The published results file '
                          f'(<a href="{esc(src["file"])}" target="_blank" rel="noopener">pinned on GitHub</a>) and the '

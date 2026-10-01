@@ -21,7 +21,7 @@ compared:
       - what: Feynman laws with test R² above 0.99
         published:
           value: 86.6 %
-          where: Fig. 5, noise 0, mean of 10 seeds per law (read from the figure)
+          where: Fig. 5, noise 0, mean of 10 seeds per law, read from the figure's drawing (below)
           protocol: >-
             SRBench's data for 119 of the laws, split 75/25 into training and test points. E2E's model reads 200
             points at a time (a bag) and proposes candidate formulas for each bag: up to 100 bags with 10 candidates
@@ -36,9 +36,16 @@ compared:
         sources:
           - image: reproductions/sources/e2e_fig5.png
             caption: >-
-              Fig. 5 of the paper. The compared share is the noise-0 marker (×) of “Ours” in the accuracy panel,
-              read from the figure.
-        test: {kind: rate, rate: 0.866}
+              Fig. 5 of the paper. Circled: the marker read, the noise-0 marker (×) of “Ours” in the accuracy panel.
+              Dashed: the axis positions 0.0 and 1.0 it is read against.
+            reading:
+              script: e2e-fig5
+              text: >-
+                The figure is a vector drawing, so every marker has exact coordinates on the page, in points. The
+                axis's tick lines for 0.0 and 1.0 are at x = 159.225 and 261.869; the noise-0 marker of “Ours” (the
+                colour of the legend's 0.0 entry) is centred at x = 248.068. Its value is (248.068 − 159.225) /
+                (261.869 − 159.225) = 0.8655, shown rounded as 86.6 %.
+        test: {kind: rate, rate: 0.8655}
 
   - method: GP-GOMEA
     source:
@@ -63,8 +70,8 @@ compared:
         sources:
           - image: reproductions/sources/srbench2021_fig8.png
             caption: >-
-              Fig. 8 of SRBench 2021: GP-GOMEA's noise-0 marker in the Feynman panel. The exact share comes from the
-              benchmark's published results file, computed as below.
+              Fig. 8 of SRBench 2021, for orientation: GP-GOMEA is a row of the Feynman panel. The compared share is
+              not read from this figure; it is computed from the benchmark's published results file, below.
           - file: https://github.com/cavalab/srbench/blob/e5ded4715ed5721703353d3500a2fdb99004faf1/results/ground-truth_results.feather
             code: |-
               import pandas as pd
@@ -94,8 +101,17 @@ compared:
         sources:
           - image: reproductions/sources/nesymres_fig3.png
             caption: >-
-              Fig. 3 of the paper. In the AI Feynman panel, the NeSymReS line has one point per beam width, from 1
-              to 256; the point for beam width 32 reads 48 of 52.
+              Fig. 3 of the paper. Circled: the marker read, NeSymReS at beam width 32 in the AI Feynman panel.
+              Dashed: the gridlines 0.0 and 1.0 it is read against.
+            reading:
+              script: nesymres-fig3
+              text: >-
+                The figure is a vector drawing, so every marker has exact coordinates on the page, in points. The
+                panel's gridlines for 0.0 and 1.0 are at y = 145.636 and 90.065 (y grows downwards). The NeSymReS
+                line has nine markers, one per beam width from 1 to 256 (the paper's Table 1) in order of time; the
+                sixth, beam width 32, is centred at y = 94.340. Its value is (94.340 − 145.636) / (90.065 −
+                145.636) = 0.9231, which is 48.00 of the 52 laws. All nine markers read as whole numbers of laws (45, 47, 45, 47, 48, 48, 48, 48 and
+                50), which confirms both the reading and the 52.
         test: {kind: count, k: 48, n: 52}
         note: >-
           The released model is not the one the paper's figures report: the paper used a model pre-trained on 10
@@ -113,7 +129,15 @@ compared:
         sources:
           - image: reproductions/sources/nesymres_fig8.png
             caption: >-
-              Fig. 8 of the paper, the same for the R² measure; the point for beam width 32 reads 49 of 52.
+              Fig. 8 of the paper. Circled: NeSymReS at beam width 32 in the AI Feynman panel. Dashed: the
+              gridlines 0.0 and 1.0.
+            reading:
+              script: nesymres-fig8
+              text: >-
+                Read as for Fig. 3: the gridlines for 0.0 and 1.0 are at y = 364.651 and 312.263, and the sixth
+                NeSymReS marker (beam width 32) is centred at y = 315.285. Its value is (315.285 − 364.651) /
+                (312.263 − 364.651) = 0.9423, which is 49.00 of the 52 laws. All nine markers read as whole numbers of
+                laws (48, 49, 48, 49, 49, 49, 50, 50 and 51).
         test: {kind: count, k: 49, n: 52}
 
   - method: Operon
@@ -139,8 +163,8 @@ compared:
         sources:
           - image: reproductions/sources/srbench2021_fig8.png
             caption: >-
-              Fig. 8 of SRBench 2021: Operon's noise-0 marker in the Feynman panel. The exact share comes from the
-              benchmark's published results file, computed as below.
+              Fig. 8 of SRBench 2021, for orientation: Operon is a row of the Feynman panel. The compared share is
+              not read from this figure; it is computed from the benchmark's published results file, below.
           - file: https://github.com/cavalab/srbench/blob/e5ded4715ed5721703353d3500a2fdb99004faf1/results/ground-truth_results.feather
             code: |-
               import pandas as pd

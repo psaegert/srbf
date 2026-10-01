@@ -266,6 +266,7 @@ html[data-theme="dark"] #va {
 .repro-source { margin: 0; }
 .repro-source img { display: block; width: 100%; max-width: 34rem; height: auto; border: 1px solid var(--line); border-radius: var(--r-ctl); background: #fff; }
 .topic .repro-codecap { margin: 0 0 .3rem; }
+.topic .repro-reading-text { margin: 0 0 .6rem; font-size: .9rem; }
 .repro-code { margin: 0; padding: .6rem .8rem; overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-ctl); font-size: 12px; line-height: 1.5; }
 .repro-code code { font-family: "JetBrains Mono", ui-monospace, monospace; white-space: pre; }
 .metric h4 { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin: 0 0 .4rem; font-size: .96rem; font-weight: 650; color: var(--ink); }
