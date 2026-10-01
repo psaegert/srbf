@@ -877,6 +877,23 @@ test('a headline legend keeps its order while a method cycles: shown, hidden, fa
   }
 });
 
+test('on a phone a legend tap keeps the page where it is: the tapped name stays under the finger', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  const charts = page.locator('.headline-v2 svg.v2chart');
+  expect(await charts.count()).toBeGreaterThan(1);
+  const last = charts.nth((await charts.count()) - 1);           // a chart far below the first one
+  const item = last.locator('[data-cycle]').nth(2), k = await item.getAttribute('data-cycle');
+  await item.scrollIntoViewIfNeeded();
+  const y0 = (await item.boundingBox()).y, s0 = await page.evaluate(() => window.scrollY);
+  expect(s0).toBeGreaterThan(400);
+  await item.click();
+  const again = last.locator('[data-cycle="' + k + '"]');
+  await expect(again).toHaveAttribute('data-vis', /.+/);
+  expect(Math.abs((await again.boundingBox()).y - y0)).toBeLessThan(2);
+  expect(await page.evaluate(() => document.activeElement && document.activeElement.closest('svg') === [...document.querySelectorAll('.headline-v2 svg.v2chart')].pop())).toBe(true);
+});
+
 test('in the explorer a box cycles its method: shown, hidden, faded; the faded opacity is set beside them', async ({ page }) => {
   await page.goto('/explorer.html?release=2026-09&v=curves&p=rung~numeric_recovery_val');
   const box = (k) => page.locator(V2 + ' .v2methods input[type=checkbox][data-m="' + k + '"]');

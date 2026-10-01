@@ -973,14 +973,26 @@
     } finally { HL_DRAWING = false; }
   }
   if (headRoot) {   // the headline's legend: a click or Enter on a name cycles that method for this visit
-    var cycleHeadline = function (k) { hlVis[k] = nextVis(hlVisOf(k)); renderHeadline(); var again = headRoot.querySelector('[data-cycle="' + k + '"]'); if (again && again.focus) { again.focus(); } };
+    // The headline is drawn again with the new state. The entry that was clicked stays where it was on the screen, and
+    // the focus goes to the same entry of the same chart: focusing another chart's entry scrolled the page to that
+    // chart (on a phone, where the charts are stacked, to the top).
+    var cycleHeadline = function (g) {
+      var k = g.getAttribute("data-cycle"), charts = Array.prototype.slice.call(headRoot.querySelectorAll("svg.v2chart"));
+      var at = charts.indexOf(g.closest("svg")), top = g.getBoundingClientRect().top;
+      hlVis[k] = nextVis(hlVisOf(k)); renderHeadline();
+      var chart = headRoot.querySelectorAll("svg.v2chart")[at], sel = '[data-cycle="' + k + '"]';
+      var again = (chart && chart.querySelector(sel)) || headRoot.querySelector(sel);
+      if (!again) { return; }
+      window.scrollBy(0, again.getBoundingClientRect().top - top);
+      if (again.focus) { try { again.focus({ preventScroll: true }); } catch (err) { again.focus(); } }
+    };
     headRoot.addEventListener("click", function (e) {
-      var g = e.target.closest ? e.target.closest("[data-cycle]") : null; if (g) { cycleHeadline(g.getAttribute("data-cycle")); return; }
+      var g = e.target.closest ? e.target.closest("[data-cycle]") : null; if (g) { cycleHeadline(g); return; }
       if (e.target.closest && e.target.closest("[data-hlreset]")) { hlVis = {}; renderHeadline(); }
     });
     headRoot.addEventListener("keydown", function (e) {
       if (e.key !== "Enter" && e.key !== " ") { return; }
-      var g = e.target.closest ? e.target.closest("[data-cycle]") : null; if (g) { e.preventDefault(); cycleHeadline(g.getAttribute("data-cycle")); }
+      var g = e.target.closest ? e.target.closest("[data-cycle]") : null; if (g) { e.preventDefault(); cycleHeadline(g); }
     });
   }
 
