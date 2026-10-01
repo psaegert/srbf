@@ -435,49 +435,53 @@ def fit(x, y, *, x_val, variables, meta, options, state):
 
     started = time.perf_counter()
     model = modules["DeepSymbolicOptimizer"](config)
-    model.setup()
-    trainer = model.trainer
-    guard_hit = False
-    while not trainer.done:
-        model.train_one_step()
-        if not trainer.done and time.perf_counter() - started > state["max_seconds"]:
-            guard_hit = True
-            break
-    best = trainer.p_r_best
-    expression = infix(best.traversal, names)
-    fit_time = time.perf_counter() - started   # the search and its answer; the bookkeeping below is not timed
-
-    close_pools(model)
-    extra = {"arm": state["arm"], "seed": seed, "n_samples": state["n_samples"], "threads": threads,
-             "nevals": int(trainer.nevals),
-             "iterations": int(trainer.iteration), "reward": float(best.r), "traversal": token_sequence(best.traversal, names),
-             "model_complexity": float(best.complexity), "model_length": len(best.traversal),
-             "early_stop": bool((best.evaluate or {}).get("success")), "guard_hit": guard_hit,
-             "unique_expressions": len(Program.cache)}
-    nmse = (best.evaluate or {}).get("nmse_test")
-    extra["nmse_train"] = None if nmse is None else float(nmse)
-    extra["string_deviation"] = string_deviation(expression, names, X, best.execute(X))
-    gp = getattr(model, "gp_controller", None)
-    if gp is not None:
-        log = list(gp.algorithm.logbook)
-        extra["gp_offspring"] = int(sum(record["nevals"] for record in log))
-        extra["gp_new_expressions"] = int(sum(record["uncached_size"] for record in log))
-    if "poly" in config["task"]["function_set"]:
-        degree = int(config["task"]["poly_optimizer_params"]["degree"])
-        # DSO's least squares needs a row per monomial; with fewer rows LINEAR is the constant 1
-        extra["linear_underdetermined"] = _comb(X.shape[1] + degree, degree) > X.shape[0]
     try:
-        extra["front"] = pareto_front(list(Program.cache.values()), names)
-    except Exception:  # noqa: BLE001 - persistence is best-effort
-        pass
+        model.setup()
+        trainer = model.trainer
+        guard_hit = False
+        while not trainer.done:
+            model.train_one_step()
+            if not trainer.done and time.perf_counter() - started > state["max_seconds"]:
+                guard_hit = True
+                break
+        best = trainer.p_r_best
+        expression = infix(best.traversal, names)
+        fit_time = time.perf_counter() - started   # the search and its answer; the bookkeeping below is not timed
 
-    Program.clear_cache()
-    sess = getattr(model, "sess", None)
-    if sess is not None:
-        sess.close()
-    del model, trainer, best
-    gc.collect()
-    return {"expression": expression, "fit_time": fit_time, "extra": extra}
+        extra = {"arm": state["arm"], "seed": seed, "n_samples": state["n_samples"], "threads": threads,
+                 "nevals": int(trainer.nevals),
+                 "iterations": int(trainer.iteration), "reward": float(best.r), "traversal": token_sequence(best.traversal, names),
+                 "model_complexity": float(best.complexity), "model_length": len(best.traversal),
+                 "early_stop": bool((best.evaluate or {}).get("success")), "guard_hit": guard_hit,
+                 "unique_expressions": len(Program.cache)}
+        nmse = (best.evaluate or {}).get("nmse_test")
+        extra["nmse_train"] = None if nmse is None else float(nmse)
+        extra["string_deviation"] = string_deviation(expression, names, X, best.execute(X))
+        gp = getattr(model, "gp_controller", None)
+        if gp is not None:
+            log = list(gp.algorithm.logbook)
+            extra["gp_offspring"] = int(sum(record["nevals"] for record in log))
+            extra["gp_new_expressions"] = int(sum(record["uncached_size"] for record in log))
+        if "poly" in config["task"]["function_set"]:
+            degree = int(config["task"]["poly_optimizer_params"]["degree"])
+            # DSO's least squares needs a row per monomial; with fewer rows LINEAR is the constant 1
+            extra["linear_underdetermined"] = _comb(X.shape[1] + degree, degree) > X.shape[0]
+        try:
+            extra["front"] = pareto_front(list(Program.cache.values()), names)
+        except Exception:  # noqa: BLE001 - persistence is best-effort
+            pass
+
+        return {"expression": expression, "fit_time": fit_time, "extra": extra}
+    finally:
+        # Whatever the search raises, its processes and session go with it: a pool left behind outlives the fit, one per
+        # failed problem, and its children keep the worker's socket open if the worker dies.
+        close_pools(model)
+        Program.clear_cache()
+        sess = getattr(model, "sess", None)
+        if sess is not None:
+            sess.close()
+        del model
+        gc.collect()
 
 
 def close_pools(model):
