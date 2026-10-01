@@ -157,7 +157,6 @@ FLASH_ANSR_SELECTION = ("A neural network generates candidate formulas from the 
 PARAM_LABEL = {"candidates per bag": "budget: candidate formulas", "beam width": "budget: beam width",
                "iterations": "budget: search iterations", "draws": "budget: candidate formulas",
                "restarts": "budget: fitting attempts"}
-RUNGS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
 E2E_DEFAULT_MAX_RUNG = 256   # E2E is reported at its default settings only
 # Where a method's ladder ends. Every method's budgets double up to about LADDER_TOP_S seconds per problem on the
 # reference machine, where the time axis ends; the ladder has reached its end at the doubling nearest that on a log
@@ -852,6 +851,18 @@ def rung_within(timing: dict[str, Any], key: str, budget: float, have: set[int])
     return max(fits) if fits else None
 
 
+def usable(key: str, r: int) -> bool:
+    """Whether the release publishes method ``key`` at budget ``r``: any budget it was run at -- a method's ladder is in
+    its own unit (DSO samples in batches of 1,000 expressions, so its ladder doubles from 1,000) -- and E2E only up to its
+    default."""
+    return r >= 1 and not (key == "e2e" and r > E2E_DEFAULT_MAX_RUNG)
+
+
+def published_rungs(rungs: Any) -> list[int]:
+    """The budgets the explorer steps through: every published budget with data, in order."""
+    return sorted({int(r) for r in rungs})
+
+
 # ---- status / catalogs / timing ---------------------------------------------------------------------------------
 def planned_cells(root: str, ukey: str | None, publishes: Any) -> set[tuple[int, str, int]] | None:
     """Every (draw, catalog, rung) a method's run plan holds: the unit lists in the root (`units_<ukey>_d<draw>.txt`, or
@@ -996,9 +1007,6 @@ def main() -> None:
     cats = catalog_meta(a.sizes, present)
     sizes = {c["key"]: c["laws"] for c in cats}
 
-    def usable(key: str, r: int) -> bool:
-        return r in RUNGS and not (key == "e2e" and r > E2E_DEFAULT_MAX_RUNG)
-
     def contrasts(pairs: list[tuple[str, str]], paired: dict[str, Any]) -> None:
         for ka, kb in pairs:
             for (c, r), rows_a in sorted(data.get(ka, {}).items(), key=lambda kv: kv[0]):   # a fixed order, whatever the table's
@@ -1086,7 +1094,7 @@ def main() -> None:
                                "updated": dt.datetime.now().astimezone().isoformat(timespec="minutes"),   # with its offset: shown in the reader's time zone
                                "scoring": "Every method is allowed to return one formula per problem, its prediction, and picks it by its own rule. The ? after a method's name describes that rule; the label beside it says who chose the method's settings.",
                                "judge": "Every prediction is checked the same way against the true formula. Numeric Recovery: it reproduces the 512 held-out points almost exactly (FVU at most 2^-23: a typical error of at most 0.035 % of the true values' spread). Symbolic Recovery: once both formulas are simplified into a standard form, they are identical when their numbers are ignored (so x^2 matches x^3; stricter versions also check exponents and all numbers)."},
-                   "catalogs": cats, "rungs": RUNGS, "nb": NB, "metrics": listed, "paired_keys": PAIRED_KEYS, "rank_keys": [k for k in RANK_KEYS if k in {m["key"] for m in listed}],
+                   "catalogs": cats, "rungs": published_rungs(r for per in cells.values() for by_rung in per.values() for r in by_rung), "nb": NB, "metrics": listed, "paired_keys": PAIRED_KEYS, "rank_keys": [k for k in RANK_KEYS if k in {m["key"] for m in listed}],
                    # budget: what one rung of the ladder buys. "candidates" is a count a generative method draws;
                    # PySR's rungs are search iterations, which have no place on the candidate axis of the site.
                    "methods": [{"key": k, "label": l, "param": PARAM_LABEL.get(p, p), "budget": p if p in ("iterations", "seconds", "restarts") else "candidates",
