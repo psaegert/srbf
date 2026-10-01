@@ -506,6 +506,12 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 .explorer-v2 .leg.v2leggone { fill: var(--ink-faint); font-style: italic; }
 .explorer-v2 .v2faderow .v2fade { width: 120px; accent-color: var(--accent); }
 .explorer-v2 .v2faderow .v2fadeval { min-width: 3.2em; font-variant-numeric: tabular-nums; }
+/* a faded method's row is visibly lighter than a shown one (its box, colour and name); a hidden one fainter still */
+.explorer-v2 .v2meth.v2faded input[type=checkbox] { opacity: .45; }
+.explorer-v2 .v2meth.v2faded .v2swatch { opacity: .4; }
+.explorer-v2 .v2meth.v2faded .v2mname { color: var(--ink-soft); font-weight: 500; }
+.explorer-v2 .v2meth.v2hidden .v2swatch { opacity: .25; filter: grayscale(1); }
+.explorer-v2 .v2meth.v2hidden .v2mname { color: var(--ink-faint); font-weight: 400; }
 .explorer-v2 .v2viewbar .v2pick { max-width: 100%; border-color: var(--line); background: var(--surface); font-weight: 600; }
 .explorer-v2 .v2distwide { max-width: 980px; }
 .explorer-v2 .v2one { grid-template-columns: minmax(0, 980px); }

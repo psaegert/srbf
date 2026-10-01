@@ -124,22 +124,21 @@
   // Three states per method (owner 2026-10-01): shown, faded, hidden. The headline starts every visit at its own default
   // -- the four methods below shown, every other one faded -- and a click on a name in its legend cycles that method,
   // shown -> hidden -> faded -> shown; nothing of it is stored. The explorer keeps its own states, in its method boxes
-  // (the same cycle), with an adjustable opacity for the faded ones, and leaves the headline alone. A faded method is
-  // drawn in its colour at that opacity everywhere its colour is drawn.
-  var FULL_DEFAULT = ["T8-120M", "T8-120M-pysr", "PySR", "gpgomea"], HL_FADE = 0.3, FADE_DEFAULT = 0.3;
+  // (the same cycle), with an adjustable strength for the faded ones, and leaves the headline alone. A faded method is
+  // drawn in its colour blended into the chart's background (so 20 % of the colour, 80 % background), still opaque: an
+  // overlap of its own line and points does not darken, and it is drawn behind every shown method.
+  var FULL_DEFAULT = ["T8-120M", "T8-120M-pysr", "PySR", "gpgomea"], HL_FADE = 0.2, FADE_DEFAULT = 0.2;
   var hlVis = {}, HL_DRAWING = false;
   function hlVisOf(k) { return hlVis[k] || (FULL_DEFAULT.indexOf(k) >= 0 ? "full" : "dim"); }
   function exVisOf(k) { return state.methods.indexOf(k) < 0 ? "hidden" : (state.dim || []).indexOf(k) >= 0 ? "dim" : "full"; }
   function visOf(k) { return HL_DRAWING ? hlVisOf(k) : exVisOf(k); }
   function nextVis(v) { return v === "full" ? "hidden" : v === "hidden" ? "dim" : "full"; }
   function alphaOf(k) { return visOf(k) === "dim" ? (HL_DRAWING ? HL_FADE : state.fade) : 1; }
-  function withAlpha(c, a) {
-    var h = String(c).trim();
-    if (/^#[0-9a-f]{3}$/i.test(h)) { h = "#" + h.slice(1).split("").map(function (x) { return x + x; }).join(""); }
-    return /^#[0-9a-f]{6}$/i.test(h) ? h + ("0" + Math.round(a * 255).toString(16)).slice(-2) : "color-mix(in srgb, " + h + " " + Math.round(a * 100) + "%, transparent)";
-  }
+  function tint(c, a) { return "color-mix(in srgb, " + String(c).trim() + " " + Math.round(a * 100) + "%, var(--surface))"; }
+  function isFaded(sr) { return !!(sr && sr.key) && visOf(sr.key) === "dim"; }
+  function behind(list) { return list.filter(isFaded).concat(list.filter(function (sr) { return !isFaded(sr); })); }   // faded first, so shown ones draw on top
   function baseColorOf(m) { return userColors[m.key] || (m.ink ? ink() : m.color); }
-  function colorOf(m) { var c = baseColorOf(m), a = alphaOf(m.key); return a < 1 ? withAlpha(c, a) : c; }
+  function colorOf(m) { var c = baseColorOf(m), a = alphaOf(m.key); return a < 1 ? tint(c, a) : c; }
   function dashOf(sr) { return sr && sr.dash ? ' stroke-dasharray="7 4"' : ""; }
   function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;"); }
   function term(key, text) { return '<span class="v2term" data-term="' + key + '" role="button" tabindex="0">' + text + "</span>"; }
@@ -738,11 +737,11 @@
     // A series' points come in its method's budget order and the line keeps it: on a time axis a larger budget can be
     // timed faster than a smaller one (PySR at 1 and 2 iterations: 2.58 and 2.03 s), and re-sorting by x joined the
     // points in time order, a dip that is not in the data. The band follows the same path (ciSVG).
-    series.forEach(function (sr) { var col = sr.color, pts = sr.pts; var cl = function (v) { return Math.min(ymax, Math.max(ymin, v)); };
+    behind(series).forEach(function (sr) { var col = sr.color, pts = sr.pts; var cl = function (v) { return Math.min(ymax, Math.max(ymin, v)); };
       s += ciSVG(pts, col, xs, y, function (v) { return v; }, cl);
       s += '<polyline fill="none" stroke="' + col + '" stroke-width="2"' + dashOf(sr) + ' points="' + pts.map(function (p) { return xs(p.x).toFixed(1) + "," + y(cl(p.v)).toFixed(1); }).join(" ") + '"/>';
-      pts.forEach(function (p) { s += '<circle cx="' + xs(p.x).toFixed(1) + '" cy="' + y(cl(p.v)).toFixed(1) + '" r="3.2" fill="' + (p.hollow ? "var(--surface)" : col) + '" stroke="' + col + '" stroke-width="1.5"><title>' + esc(p.title) + '</title></circle>'; });
-      s += legendItem(sr, lx, ly, opts.cycle); ly += 20; });
+      pts.forEach(function (p) { s += '<circle cx="' + xs(p.x).toFixed(1) + '" cy="' + y(cl(p.v)).toFixed(1) + '" r="3.2" fill="' + (p.hollow ? "var(--surface)" : col) + '" stroke="' + col + '" stroke-width="1.5"><title>' + esc(p.title) + '</title></circle>'; }); });
+    series.forEach(function (sr) { s += legendItem(sr, lx, ly, opts.cycle); ly += 20; });
     ghosts.forEach(function (m) { s += legendItem(ghostSeries(m), lx, ly, opts.cycle, true); ly += 20; });
     return s + "</svg>";
   }
@@ -777,13 +776,13 @@
     s += '<text x="' + ((L + W - R) / 2).toFixed(0) + '" y="' + (H - B + 32) + '" class="tick" text-anchor="middle">' + esc(opts.xlabel) + "</text>";
     s += '<text transform="translate(' + YLABEL_X + ',' + ((T + H - B) / 2).toFixed(0) + ') rotate(-90)" class="tick" text-anchor="middle">' + esc(opts.ylabel) + "</text>";
     var ly = nr ? H - B + 46 : T + 6, lx = nr ? L : W - R + LEG_GAP;
-    opts.series.forEach(function (sr) {
+    behind(opts.series).forEach(function (sr) {
       var col = sr.color;
       s += ciSVG(sr.pts, col, xs, y, clx, cly);
       s += '<polyline fill="none" stroke="' + col + '" stroke-width="1.6" stroke-opacity="0.65"' + dashOf(sr) + ' points="' + sr.pts.map(function (p) { return xs(clx(p.x)).toFixed(1) + "," + y(cly(p.v)).toFixed(1); }).join(" ") + '"/>';
       sr.pts.forEach(function (p) { s += '<circle cx="' + xs(clx(p.x)).toFixed(1) + '" cy="' + y(cly(p.v)).toFixed(1) + '" r="3.2" fill="' + (p.hollow ? "var(--surface)" : col) + '" stroke="' + col + '" stroke-width="1.5"><title>' + esc(p.title) + "</title></circle>"; });
-      s += legendItem(sr, lx, ly, opts.cycle); ly += 20;
     });
+    opts.series.forEach(function (sr) { s += legendItem(sr, lx, ly, opts.cycle); ly += 20; });
     ghosts.forEach(function (m) { s += legendItem(ghostSeries(m), lx, ly, opts.cycle, true); ly += 20; });
     return s + "</svg>";
   }
@@ -1242,10 +1241,13 @@
     [0, 0.25, 0.5, 0.75, 1].forEach(function (g) { s += '<line x1="' + L + '" y1="' + y(g).toFixed(1) + '" x2="' + (W - R) + '" y2="' + y(g).toFixed(1) + '" class="grid' + (g === 0.5 ? " zero" : "") + '"/><text x="' + (L - 6) + '" y="' + (y(g) + 4).toFixed(1) + '" class="tick" text-anchor="end">' + (100 * g) + "%</text>"; });
     s += xAxisSVG(p, vr, xs, T, H - B, W, L, R);
     var ly = nr ? H - B + 50 : T + 6, lx = nr ? L : W - R + LEG_GAP;
-    series.forEach(function (sr) { var col = colorOf(sr.m), den = all ? sr.rows : sr.ph.n, cum = all && low ? sr.rows - sr.ph.n : 0, pts = [];
+    var lines = [], keys2 = [];
+    series.forEach(function (sr) { var col = colorOf(sr.m), den = all ? sr.rows : sr.ph.n, cum = all && low ? sr.rows - sr.ph.n : 0, pts = [], line = "";
       for (var b = 0; b < sr.ph.nb; b++) { var before = cum; cum += sr.ph.h[b]; if (b < vr.b0) { continue; } if (b > vr.b1) { break; } var x0 = vr.lo + (b - vr.b0) * vr.w; if (!pts.length) { pts.push(xs(x0).toFixed(1) + "," + y(before / den).toFixed(1)); } pts.push(xs(x0 + vr.w).toFixed(1) + "," + y(before / den).toFixed(1), xs(x0 + vr.w).toFixed(1) + "," + y(cum / den).toFixed(1)); }
-      s += '<polyline fill="none" stroke="' + col + '" stroke-width="2"' + dashOf(sr.m) + ' points="' + pts.join(" ") + '"><title>' + esc(sr.m.label + ": " + fiveText(p, sr.f) + "; " + Math.round(sr.ph.n).toLocaleString() + " of " + sr.rows.toLocaleString() + " problems have a value") + "</title></polyline>";
-      s += '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 20) + '" y2="' + ly + '" stroke="' + col + '" stroke-width="3"' + dashOf(sr.m) + '/><text x="' + (lx + 26) + '" y="' + (ly + 4) + '" class="leg">' + esc(sr.m.label + (sr.m.local ? " (local)" : "")) + "</text>"; ly += 20; });
+      line = '<polyline fill="none" stroke="' + col + '" stroke-width="2"' + dashOf(sr.m) + ' points="' + pts.join(" ") + '"><title>' + esc(sr.m.label + ": " + fiveText(p, sr.f) + "; " + Math.round(sr.ph.n).toLocaleString() + " of " + sr.rows.toLocaleString() + " problems have a value") + "</title></polyline>";
+      lines.push({ key: sr.m.key, line: line });
+      keys2.push('<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 20) + '" y2="' + ly + '" stroke="' + col + '" stroke-width="3"' + dashOf(sr.m) + '/><text x="' + (lx + 26) + '" y="' + (ly + 4) + '" class="leg' + (visOf(sr.m.key) === "dim" ? " v2legdim" : "") + '">' + esc(sr.m.label + (sr.m.local ? " (local)" : "")) + "</text>"); ly += 20; });
+    s += behind(lines).map(function (x) { return x.line; }).join("") + keys2.join("");
     return s + "</svg>" + '<p class="v2hint">' + (p.higher === true ? "Further right is better: a curve that stays low longer holds more of its problems at high values." : p.higher === false ? "Further left is better: a curve that rises early holds more of its problems at low values." : p.ideal !== undefined ? "Closer to " + p.ideal + " is better: a curve that rises steeply around " + p.ideal + " is the tighter one." : "") +
       (all ? " Out of all problems, a method that leaves problems without a prediction " + (low ? "starts above 0 %." : "ends below 100 %.") : "") + "</p>";
   }
@@ -1641,7 +1643,7 @@
       '<div class="v2row" data-uses="rung"><span class="v2lab">budget</span><select class="v2rung" aria-label="budget per problem">' + D.rungs.map(function (r) { return '<option value="' + r + '">' + r + '</option>'; }).join("") + '</select><span class="v2hint">in each method\u2019s own unit</span></div></div>' +
       // 2. what it is shown for
       '<div class="v2panel"><h3>Methods</h3><div class="v2methods">' + methList + '</div>' +
-      '<div class="v2row v2faderow"><span class="v2lab">faded at ' + help("A click on a method\u2019s box cycles it: shown (ticked), hidden (empty), faded (a dash). A faded method stays in every chart, drawn at this opacity, so the shown ones stand out.", "What does a box\u2019s dash mean?") + '</span><input type="range" class="v2fade" min="0.05" max="0.9" step="0.05" aria-label="opacity of faded methods"><output class="v2fadeval"></output></div>' +
+      '<div class="v2row v2faderow"><span class="v2lab">faded at ' + help("A click on a method\u2019s box cycles it: shown (ticked), hidden (empty), faded (a dash). A faded method stays in every chart, behind the shown ones, in its colour blended into the background: this much of the colour, the rest background.", "What does a box\u2019s dash mean?") + '</span><input type="range" class="v2fade" min="0.05" max="0.9" step="0.05" aria-label="how much of its colour a faded method keeps"><output class="v2fadeval"></output></div>' +
       '<div class="v2row v2addm"><button type="button" class="v2btn v2addmopen" data-act="add-method">open a method with a key</button>' +
       '<span class="v2addmbox" hidden><input type="text" class="v2addmkey" placeholder="key" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="key for a method shared with you">' +
       '<button type="button" class="v2btn" data-act="add-method-go">add</button></span>' +
@@ -1663,7 +1665,8 @@
   }
   function syncControls() {
     root.querySelectorAll(".v2cats input").forEach(function (i) { i.checked = state.cats.indexOf(i.dataset.c) >= 0; });
-    root.querySelectorAll(".v2methods input[type=checkbox]").forEach(function (i) { var v = exVisOf(i.dataset.m); i.checked = v === "full"; i.indeterminate = v === "dim"; i.title = v === "full" ? "shown (a click hides it)" : v === "dim" ? "faded (a click shows it)" : "hidden (a click fades it in)"; });
+    root.querySelectorAll(".v2methods input[type=checkbox]").forEach(function (i) { var v = exVisOf(i.dataset.m); i.checked = v === "full"; i.indeterminate = v === "dim"; i.title = v === "full" ? "shown (a click hides it)" : v === "dim" ? "faded (a click shows it)" : "hidden (a click fades it in)";
+      var row = i.closest(".v2meth"); if (row) { row.classList.toggle("v2faded", v === "dim"); row.classList.toggle("v2hidden", v === "hidden"); row.style.setProperty("--fade", String(state.fade)); } });
     var fd = root.querySelector(".v2fade"); if (fd && document.activeElement !== fd) { fd.value = String(state.fade); } var fo = root.querySelector(".v2fadeval"); if (fo) { fo.textContent = Math.round(100 * state.fade) + " %"; }
     root.querySelectorAll(".v2metrics input[type=checkbox]").forEach(function (i) { i.checked = plotMetrics().indexOf(i.dataset.p) >= 0; });
     var q = state.q.toLowerCase();
