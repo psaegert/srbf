@@ -159,6 +159,10 @@ when the worker's processes used less than `hang_idle_cpu_s` (1) CPU second in t
 A hung fit is stopped, the worker restarted without touching `max_restarts`, and the problem tried
 once more; `hang_log` names a file that records every such event.
 
+**Processes a worker starts.** The worker runs in a process group of its own. Stopping the worker
+stops every process it started, and srbf stops these groups when it exits. A worker that exits while
+a process it started is still running counts as a crash.
+
 ## Opening a pull request
 
 Inside an srbf checkout that is installed with `pip install -e .`, `srbf new mymethod --repo`
