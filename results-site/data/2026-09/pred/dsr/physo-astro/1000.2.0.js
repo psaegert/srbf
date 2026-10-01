@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["dsr|physo-astro|1000|2|0"]={"0":["/ 0.0002227 pow / - * / -202.3 - - * / - -202.8 + x1 x1 x1 x1 x1 x1 x1 x1 x1 2",0],"1":["- 2.492 + x1 * / abs x1 - -0.006258 neg / x1 pow + x1 x1 2 -2.39",0]};})();

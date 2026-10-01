@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["dsr|sine|1000|1|0"]={"0":["+ tanh rootn x1 2 - tanh - - tanh - 2.462 inv exp x1 x1 -1.849 0.6649",0]};})();
