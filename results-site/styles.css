@@ -246,6 +246,29 @@ html[data-theme="dark"] #va {
 @media (max-width: 820px) { .topic { grid-template-columns: minmax(0, 1fr); } }
 .metric { padding: .2rem 0 .3rem; margin: 0 0 .9rem; }
 .metric + .metric { border-top: 1px solid var(--line); padding-top: 1rem; }
+/* the Reproductions page: per method, a comparison's measure, a small table (published, then srbf's runs), one line
+   that reads it, and the settings on both sides */
+.repro-row { margin: 0 0 1.1rem; }
+.repro-row + .repro-row { border-top: 1px solid var(--line); padding-top: 1rem; }
+.topic .repro-src { font-size: .9rem; }
+.topic .repro-what { margin: 0 0 .5rem; color: var(--ink); font-size: .96rem; font-weight: 650; }
+.repro-scroll { overflow-x: auto; margin: 0 0 .6rem; }
+.repro-table { border-collapse: collapse; font-size: .92rem; font-variant-numeric: tabular-nums; }
+.repro-table th, .repro-table td { padding: .32rem 1.1rem .32rem 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.repro-table tbody th { font-weight: 600; color: var(--ink); white-space: nowrap; }
+.repro-table td { color: var(--ink-soft); }
+.repro-table td:last-child { white-space: nowrap; color: var(--ink); }
+.topic .repro-reading { margin: 0 0 .5rem; color: var(--ink); }
+.repro-protocol { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .3rem .9rem; margin: .4rem 0 0; }
+.repro-protocol dt { padding-top: .15rem; }
+.repro-protocol dd { margin: 0; max-width: none; overflow-wrap: anywhere; }
+.repro-sources { display: grid; gap: .7rem; margin: .8rem 0 0; }
+.repro-source { margin: 0; }
+.repro-source img { display: block; width: 100%; max-width: 34rem; height: auto; border: 1px solid var(--line); border-radius: var(--r-ctl); background: #fff; }
+.topic .repro-codecap { margin: 0 0 .3rem; }
+.topic .repro-reading-text { margin: 0 0 .6rem; font-size: .9rem; }
+.repro-code { margin: 0; padding: .6rem .8rem; overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-ctl); font-size: 12px; line-height: 1.5; }
+.repro-code code { font-family: "JetBrains Mono", ui-monospace, monospace; white-space: pre; }
 .metric h4 { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin: 0 0 .4rem; font-size: .96rem; font-weight: 650; color: var(--ink); }
 /* prose written for one benchmark release is shown with that release only */
 html[data-release="2026-09"] [data-for="2026-07"], html[data-release="2026-07"] [data-for="2026-09"] { display: none; }
@@ -283,11 +306,16 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 .explorer-v2 .v2kicker,
 .explorer-v2 .v2panel h3,
 .explorer-v2 .v2tile b,
-.v2pickgroup h5 {
+.v2pickgroup h5,
+.repro-table thead th,
+.repro-protocol dt {
   font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-faint);
 }
 .explorer-v2 p.v2hint,
-.headline-v2 .v2hlfig figcaption {
+.headline-v2 .v2hlfig figcaption,
+.topic .repro-note,
+.repro-source figcaption,
+.repro-protocol dd {
   font-size: 13px; line-height: 1.55; color: var(--ink-soft); max-width: 88ch; margin: 10px 0 0;
 }
 /* the release's own block: a title and one caption line in the headline's roles, then one line of progress (the

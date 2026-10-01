@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script>
+    // pre-paint: apply a manually chosen theme before the first render (Auto stores nothing)
+    (function () {
+      try {
+        var t = localStorage.getItem("srbf_theme");
+        if (t === "light" || t === "dark") { document.documentElement.setAttribute("data-theme", t); }
+      } catch (e) { /* storage blocked: Auto */ }
+    })();
+  </script>
+  <title>Reproductions · srbf</title>
+  <meta name="description" content="srbf's runs of each method next to the results its own publications report." />
+  <link rel="icon" type="image/svg+xml" href="srbf-icon.svg" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Reproductions · srbf" />
+  <meta property="og:description" content="srbf's runs of each method next to the results its own publications report." />
+  <meta property="og:url" content="https://psaegert.github.io/srbf/reproductions.html" />
+  <meta property="og:image" content="https://psaegert.github.io/srbf/srbf-social.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="./">
+        <img class="brand-icon" src="srbf-icon.svg" alt="srbf" width="26" height="26" />
+        <span class="brand-sub">Symbolic Regression Benchmark Framework</span>
+      </a>
+      <nav class="site-nav" aria-label="Pages">
+        <a href="explorer.html">Explorer</a>
+        <a href="progress.html">Progress</a>
+        <a href="guide.html">How to read</a>
+        <a href="metrics.html">Metrics</a>
+        <a href="reproductions.html" aria-current="page">Reproductions</a>
+      </nav>
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Theme"></button>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap">
+    <section class="hero page-hero">
+      <h1>Reproductions</h1>
+      <p class="lede">
+        srbf is a benchmark for symbolic regression: it runs every method on the same problems with the same
+        evaluation code. To check that it runs each method the way the method's authors do, this page sets srbf's
+        results next to the authors' own published results, from their papers or from benchmark runs they made
+        themselves, wherever the problems and settings can be matched. Each comparison comes with a test of the
+        difference. The terms and the tests are explained <a href="#how">below</a>.
+      </p>
+    </section>
+
+<!-- reproductions:begin -->
+<section id="compared" class="prose">
+<h2>Methods with a matching published result</h2>
+<section class="topic" id="repro-e2e"><h3>E2E</h3><div><p class="repro-src"><a href="https://arxiv.org/abs/2204.10532" target="_blank" rel="noopener">Kamienny, d&#x27;Ascoli, Lample and Charton, End-to-end symbolic regression with transformers, NeurIPS 2022</a></p>
+<div class="repro-row">
+<p class="repro-what">Feynman laws with test R² above 0.99</p>
+<div class="repro-scroll"><table class="repro-table">
+<thead><tr><th scope="col"></th><th scope="col">Result</th><th scope="col">p</th></tr></thead><tbody>
+<tr><th scope="row">Published</th><td>86.6 %</td><td></td></tr>
+<tr><th scope="row">srbf, run 1</th><td>104 of 120 (86.7 %, 95 % interval 79.4 to 91.6 %)</td><td>1.00</td></tr>
+<tr><th scope="row">srbf, run 2</th><td>103 of 120 (85.8 %, 95 % interval 78.5 to 91.0 %)</td><td>0.79</td></tr>
+</tbody></table></div>
+<p class="repro-reading">No significant difference.</p>
+<dl class="repro-protocol"><dt>Published</dt><dd>Fig. 5, noise 0, mean of 10 seeds per law, read from the figure&#x27;s drawing (below). SRBench&#x27;s data for 119 of the laws, split 75/25 into training and test points. E2E&#x27;s model reads 200 points at a time (a bag) and proposes candidate formulas for each bag: up to 100 bags with 10 candidates each, 1,000 candidates in all.</dd><dt>srbf</dt><dd>The 120 Feynman laws (the paper&#x27;s 119 and one law missing from SRBench&#x27;s data). srbf&#x27;s own runs of E2E at 256 candidates per bag. srbf&#x27;s runs use 512 training points, which are 3 bags, so 768 candidates in all, the closest of srbf&#x27;s settings to the paper&#x27;s 1,000. 512 fresh test points.</dd></dl>
+<div class="repro-sources"><figure class="repro-source"><a href="data/reproductions/sources/e2e_fig5.png" target="_blank" rel="noopener"><img src="data/reproductions/sources/e2e_fig5.png" width="1100" height="695" loading="lazy" alt="Fig. 5 of the paper. Circled: the marker read, the noise-0 marker (×) of “Ours” in the accuracy panel. Dashed: the axis positions 0.0 and 1.0 it is read against." /></a><figcaption>Fig. 5 of the paper. Circled: the marker read, the noise-0 marker (×) of “Ours” in the accuracy panel. Dashed: the axis positions 0.0 and 1.0 it is read against.</figcaption></figure><p class="repro-codecap">How the number was read from the figure:</p><p class="repro-reading-text">The figure is a vector drawing, so every marker has exact coordinates on the page, in points. The axis&#x27;s tick lines for 0.0 and 1.0 are at x = 159.225 and 261.869; the noise-0 marker of “Ours” (the colour of the legend&#x27;s 0.0 entry) is centred at x = 248.068. Its value is (248.068 − 159.225) / (261.869 − 159.225) = 0.8655, shown rounded as 86.6 %.</p><p class="repro-codecap">To read it again from the paper's own PDF, which the script downloads and checks:</p><pre class="repro-code"><code>pip install pymupdf
+python scripts/read_published_figures.py e2e-fig5</code></pre></div>
+</div>
+</div></section>
+<section class="topic" id="repro-gp-gomea"><h3>GP-GOMEA</h3><div><p class="repro-src"><a href="https://arxiv.org/abs/2107.14351" target="_blank" rel="noopener">La Cava et al., Contemporary Symbolic Regression Methods and their Relative Performance (SRBench 2021), NeurIPS Datasets and Benchmarks 2021</a></p>
+<div class="repro-row">
+<p class="repro-what">Feynman laws with test R² above 0.999</p>
+<div class="repro-scroll"><table class="repro-table">
+<thead><tr><th scope="col"></th><th scope="col">Result</th><th scope="col">p</th></tr></thead><tbody>
+<tr><th scope="row">Published</th><td>70.9 % of 928 fits</td><td></td></tr>
+<tr><th scope="row">srbf</th><td>83 of 116 (71.6 %, 95 % interval 62.8 to 79.0 %)</td><td>0.81</td></tr>
+</tbody></table></div>
+<p class="repro-reading">No significant difference. If srbf solved each problem with its published success rate, it would solve 82.2 of 116 on average.</p>
+<dl class="repro-protocol"><dt>Published</dt><dd>SRBench 2021&#x27;s published results, noise 0. GP-GOMEA&#x27;s first author, Virgolin, is a co-author of SRBench 2021. 116 laws, 8 fits each. Per fit, 10,000 training points and a 25,000-point test set; 1,000,000 evaluations (formulas scored on the data).</dd><dt>srbf</dt><dd>The 116 laws SRBench 2021 reports. SRBench 2021&#x27;s GP-GOMEA settings, 1,000,000 evaluations; 512 training and 512 test points; one fit per law. Settings: <a href="https://github.com/psaegert/srbf/blob/main/configs/evaluation/panels/gpgomea_srbench2021_feynman.yaml" target="_blank" rel="noopener"><code>configs/evaluation/panels/gpgomea_srbench2021_feynman.yaml</code></a>.</dd></dl>
+<div class="repro-sources"><figure class="repro-source"><a href="data/reproductions/sources/srbench2021_fig8.png" target="_blank" rel="noopener"><img src="data/reproductions/sources/srbench2021_fig8.png" width="1270" height="700" loading="lazy" alt="Fig. 8 of SRBench 2021, for orientation: GP-GOMEA is a row of the Feynman panel. The compared share is not read from this figure; it is computed from the benchmark&#x27;s published results file, below." /></a><figcaption>Fig. 8 of SRBench 2021, for orientation: GP-GOMEA is a row of the Feynman panel. The compared share is not read from this figure; it is computed from the benchmark&#x27;s published results file, below.</figcaption></figure><p class="repro-codecap">The published results file (<a href="https://github.com/cavalab/srbench/blob/e5ded4715ed5721703353d3500a2fdb99004faf1/results/ground-truth_results.feather" target="_blank" rel="noopener">pinned on GitHub</a>) and the computation:</p><pre class="repro-code"><code>import pandas as pd
+r = pd.read_feather(&quot;https://media.githubusercontent.com/media/cavalab/srbench/e5ded4715ed5721703353d3500a2fdb99004faf1/results/ground-truth_results.feather&quot;)
+r = r.query(&quot;algorithm == &#x27;GP-GOMEA&#x27; and data_group == &#x27;Feynman&#x27; and target_noise == 0&quot;)
+(r.r2_test &gt; 0.999).mean()  # 0.709: 658 of 928 fits</code></pre></div>
+</div>
+</div></section>
+<section class="topic" id="repro-nesymres"><h3>NeSymReS</h3><div><p class="repro-src"><a href="https://arxiv.org/abs/2106.06427" target="_blank" rel="noopener">Biggio, Bendinelli, Neitz, Lucchi and Parascandolo, Neural Symbolic Regression that Scales, ICML 2021</a></p>
+<div class="repro-row">
+<p class="repro-what">Feynman laws on which over 95 % of the test points are within 5 % of the true value</p>
+<div class="repro-scroll"><table class="repro-table">
+<thead><tr><th scope="col"></th><th scope="col">Result</th><th scope="col">p</th></tr></thead><tbody>
+<tr><th scope="row">Published</th><td>48 of 52 (92.3 %)</td><td></td></tr>
+<tr><th scope="row">srbf, run 1</th><td>36 of 52 (69.2 %, 95 % interval 55.7 to 80.1 %)</td><td>0.0052</td></tr>
+<tr><th scope="row">srbf, run 2</th><td>37 of 52 (71.2 %, 95 % interval 57.7 to 81.7 %)</td><td>0.0098</td></tr>
+</tbody></table></div>
+<p class="repro-reading">srbf&#x27;s runs succeed less often than the published ones.</p>
+<p class="repro-note">The released model is not the one the paper&#x27;s figures report: the paper used a model pre-trained on 10 million equations, and the release is pre-trained on 100 million. The published row and srbf&#x27;s runs therefore come from different models.</p>
+<dl class="repro-protocol"><dt>Published</dt><dd>Fig. 3, the paper&#x27;s main accuracy measure. The 52 laws with up to three variables, one fit each. The paper&#x27;s model, pre-trained on 10 million equations, with beam width 32 (the number of partial formulas the model keeps while it writes one).</dd><dt>srbf</dt><dd>The same 52 laws. The released model, pre-trained on 100 million equations; srbf&#x27;s own runs at beam width 32; 512 training and 512 test points.</dd></dl>
+<div class="repro-sources"><figure class="repro-source"><a href="data/reproductions/sources/nesymres_fig3.png" target="_blank" rel="noopener"><img src="data/reproductions/sources/nesymres_fig3.png" width="1340" height="397" loading="lazy" alt="Fig. 3 of the paper. Circled: the marker read, NeSymReS at beam width 32 in the AI Feynman panel. Dashed: the gridlines 0.0 and 1.0 it is read against." /></a><figcaption>Fig. 3 of the paper. Circled: the marker read, NeSymReS at beam width 32 in the AI Feynman panel. Dashed: the gridlines 0.0 and 1.0 it is read against.</figcaption></figure><p class="repro-codecap">How the number was read from the figure:</p><p class="repro-reading-text">The figure is a vector drawing, so every marker has exact coordinates on the page, in points. The panel&#x27;s gridlines for 0.0 and 1.0 are at y = 145.636 and 90.065 (y grows downwards). The NeSymReS line has nine markers, one per beam width from 1 to 256 (the paper&#x27;s Table 1) in order of time; the sixth, beam width 32, is centred at y = 94.340. Its value is (94.340 − 145.636) / (90.065 − 145.636) = 0.9231, which is 48.00 of the 52 laws. All nine markers read as whole numbers of laws (45, 47, 45, 47, 48, 48, 48, 48 and 50), which confirms both the reading and the 52.</p><p class="repro-codecap">To read it again from the paper's own PDF, which the script downloads and checks:</p><pre class="repro-code"><code>pip install pymupdf
+python scripts/read_published_figures.py nesymres-fig3</code></pre></div>
+</div>
+<div class="repro-row">
+<p class="repro-what">Feynman laws with test R² above 0.95</p>
+<div class="repro-scroll"><table class="repro-table">
+<thead><tr><th scope="col"></th><th scope="col">Result</th><th scope="col">p</th></tr></thead><tbody>
+<tr><th scope="row">Published</th><td>49 of 52 (94.2 %)</td><td></td></tr>
+<tr><th scope="row">srbf, run 1</th><td>43 of 52 (82.7 %, 95 % interval 70.3 to 90.6 %)</td><td>0.12</td></tr>
+<tr><th scope="row">srbf, run 2</th><td>46 of 52 (88.5 %, 95 % interval 77.0 to 94.6 %)</td><td>0.49</td></tr>
+</tbody></table></div>
+<p class="repro-reading">No significant difference.</p>
+<dl class="repro-protocol"><dt>Published</dt><dd>Fig. 8. The same 52 laws and model as above.</dd><dt>srbf</dt><dd>The same 52 laws. The released model, as above.</dd></dl>
+<div class="repro-sources"><figure class="repro-source"><a href="data/reproductions/sources/nesymres_fig8.png" target="_blank" rel="noopener"><img src="data/reproductions/sources/nesymres_fig8.png" width="1340" height="437" loading="lazy" alt="Fig. 8 of the paper. Circled: NeSymReS at beam width 32 in the AI Feynman panel. Dashed: the gridlines 0.0 and 1.0." /></a><figcaption>Fig. 8 of the paper. Circled: NeSymReS at beam width 32 in the AI Feynman panel. Dashed: the gridlines 0.0 and 1.0.</figcaption></figure><p class="repro-codecap">How the number was read from the figure:</p><p class="repro-reading-text">Read as for Fig. 3: the gridlines for 0.0 and 1.0 are at y = 364.651 and 312.263, and the sixth NeSymReS marker (beam width 32) is centred at y = 315.285. Its value is (315.285 − 364.651) / (312.263 − 364.651) = 0.9423, which is 49.00 of the 52 laws. All nine markers read as whole numbers of laws (48, 49, 48, 49, 49, 49, 50, 50 and 51).</p><p class="repro-codecap">To read it again from the paper's own PDF, which the script downloads and checks:</p><pre class="repro-code"><code>pip install pymupdf
+python scripts/read_published_figures.py nesymres-fig8</code></pre></div>
+</div>
+</div></section>
+<section class="topic" id="repro-operon"><h3>Operon</h3><div><p class="repro-src"><a href="https://arxiv.org/abs/2107.14351" target="_blank" rel="noopener">La Cava et al., Contemporary Symbolic Regression Methods and their Relative Performance (SRBench 2021), NeurIPS Datasets and Benchmarks 2021</a></p>
+<div class="repro-row">
+<p class="repro-what">Feynman laws with test R² above 0.999</p>
+<div class="repro-scroll"><table class="repro-table">
+<thead><tr><th scope="col"></th><th scope="col">Result</th><th scope="col">p</th></tr></thead><tbody>
+<tr><th scope="row">Published</th><td>85.2 % of 1,160 fits</td><td></td></tr>
+<tr><th scope="row">srbf</th><td>98 of 116 (84.5 %, 95 % interval 76.8 to 90.0 %)</td><td>0.80</td></tr>
+</tbody></table></div>
+<p class="repro-reading">No significant difference. If srbf solved each problem with its published success rate, it would solve 98.8 of 116 on average.</p>
+<dl class="repro-protocol"><dt>Published</dt><dd>SRBench 2021&#x27;s published results, noise 0. Operon&#x27;s first author, Burlacu, is a co-author of SRBench 2021. 116 laws, 10 fits each. Per fit, 10,000 training points and a 25,000-point test set; 1,000,000 evaluations (formulas scored on the data).</dd><dt>srbf</dt><dd>The 116 laws SRBench 2021 reports. SRBench 2021&#x27;s Operon settings, 1,000,000 evaluations; 512 training and 512 test points; one fit per law. Settings: <a href="https://github.com/psaegert/srbf/blob/main/configs/evaluation/panels/operon_srbench2021_feynman.yaml" target="_blank" rel="noopener"><code>configs/evaluation/panels/operon_srbench2021_feynman.yaml</code></a>.</dd></dl>
+<div class="repro-sources"><figure class="repro-source"><a href="data/reproductions/sources/srbench2021_fig8.png" target="_blank" rel="noopener"><img src="data/reproductions/sources/srbench2021_fig8.png" width="1270" height="700" loading="lazy" alt="Fig. 8 of SRBench 2021, for orientation: Operon is a row of the Feynman panel. The compared share is not read from this figure; it is computed from the benchmark&#x27;s published results file, below." /></a><figcaption>Fig. 8 of SRBench 2021, for orientation: Operon is a row of the Feynman panel. The compared share is not read from this figure; it is computed from the benchmark&#x27;s published results file, below.</figcaption></figure><p class="repro-codecap">The published results file (<a href="https://github.com/cavalab/srbench/blob/e5ded4715ed5721703353d3500a2fdb99004faf1/results/ground-truth_results.feather" target="_blank" rel="noopener">pinned on GitHub</a>) and the computation:</p><pre class="repro-code"><code>import pandas as pd
+r = pd.read_feather(&quot;https://media.githubusercontent.com/media/cavalab/srbench/e5ded4715ed5721703353d3500a2fdb99004faf1/results/ground-truth_results.feather&quot;)
+r = r.query(&quot;algorithm == &#x27;Operon&#x27; and data_group == &#x27;Feynman&#x27; and target_noise == 0&quot;)
+(r.r2_test &gt; 0.999).mean()  # 0.852: 988 of 1,160 fits</code></pre></div>
+</div>
+</div></section>
+<section class="topic" id="repro-qlattice"><h3>QLattice</h3><div><p class="repro-src"><a href="https://github.com/cavalab/srbench/tree/srbench_2025" target="_blank" rel="noopener">Imai Aldeia et al., Call for Action: Towards the Next Generation of Symbolic Regression Benchmarks (SRBench 2025), GECCO 2025 Companion</a></p>
+<div class="repro-row">
+<p class="repro-what">Test R² on six physics datasets, as a rank among the published fits: the share of the 30 published QLattice fits on the same dataset that score lower (ties count half). 0 is below all of them, 1 above all, 0.5 in the middle</p>
+<div class="repro-scroll"><table class="repro-table">
+<thead><tr><th scope="col"></th><th scope="col">Result</th><th scope="col">p</th></tr></thead><tbody>
+<tr><th scope="row">Published</th><td>30 fits per dataset (mean rank 0.50 by definition)</td><td></td></tr>
+<tr><th scope="row">srbf, 12 fits</th><td>mean rank 0.41</td><td>0.33</td></tr>
+</tbody></table></div>
+<p class="repro-reading">No significant difference.</p>
+<dl class="repro-protocol"><dt>Published</dt><dd>SRBench 2025&#x27;s published results (its first-principles track), with the settings QLattice&#x27;s developers submitted. SRBench&#x27;s own data, split and seeds; 200 epochs.</dd><dt>srbf</dt><dd>Six of the datasets, two seeds each (12 fits). srbf&#x27;s QLattice code, run inside SRBench&#x27;s protocol (SRBench&#x27;s data, split and seeds 769 and 860); 200 epochs.</dd></dl>
+<div class="repro-sources"><p class="repro-codecap">The published results file (<a href="https://github.com/cavalab/srbench/blob/dc3f6daa93bf10955df8775256a6f8644f38fd93/results/first-principles-tuning/results.feather" target="_blank" rel="noopener">pinned on GitHub</a>) and the computation:</p><pre class="repro-code"><code>import pandas as pd
+r = pd.read_feather(&quot;https://media.githubusercontent.com/media/cavalab/srbench/dc3f6daa93bf10955df8775256a6f8644f38fd93/results/first-principles-tuning/results.feather&quot;)
+r = r.query(&quot;algorithm == &#x27;QLattice&#x27;&quot;)
+r.groupby(&#x27;dataset&#x27;).r2_test.size()  # 30 fits on each dataset</code></pre></div>
+</div>
+</div></section>
+<section class="topic" id="repro-rils-rols"><h3>RILS-ROLS</h3><div><p class="repro-src"><a href="https://doi.org/10.1186/s40537-023-00743-2" target="_blank" rel="noopener">Kartelj and Djukanović, RILS-ROLS: robust symbolic regression via iterated local search and ordinary least squares, Journal of Big Data 10, 71 (2023)</a></p>
+<div class="repro-row">
+<p class="repro-what">Feynman laws with test R² above 0.999</p>
+<div class="repro-scroll"><table class="repro-table">
+<thead><tr><th scope="col"></th><th scope="col">Result</th><th scope="col">p</th></tr></thead><tbody>
+<tr><th scope="row">Published</th><td>78.2 % of 1,158 fits</td><td></td></tr>
+<tr><th scope="row">srbf</th><td>94 of 116 (81.0 %, 95 % interval 73.0 to 87.1 %)</td><td>0.16</td></tr>
+</tbody></table></div>
+<p class="repro-reading">No significant difference. If srbf solved each problem with its published success rate, it would solve 90.5 of 116 on average.</p>
+<dl class="repro-protocol"><dt>Published</dt><dd>The authors&#x27; published results (github.com/kartelj/rils-rols, paper_resources/srbench), noise 0. 116 laws, 10 fits each (two of the 1,160 are missing from the results), on SRBench&#x27;s data and 75/25 split; 1,000,000 fit calls (formulas fitted to the data).</dd><dt>srbf</dt><dd>The 116 laws of the paper, the ones SRBench 2021 reports. The authors&#x27; settings, 1,000,000 fit calls; 512 training and 512 test points; one fit per law. Settings: <a href="https://github.com/psaegert/srbf/blob/main/configs/evaluation/panels/rilsrols_paper_feynman.yaml" target="_blank" rel="noopener"><code>configs/evaluation/panels/rilsrols_paper_feynman.yaml</code></a>.</dd></dl>
+<div class="repro-sources"><figure class="repro-source"><a href="data/reproductions/sources/rilsrols_table6.png" target="_blank" rel="noopener"><img src="data/reproductions/sources/rilsrols_table6.png" width="1030" height="770" loading="lazy" alt="Table 6 of the paper prints 78.45 % for the Feynman laws at noise 0: each law&#x27;s median over its 10 fits, averaged over the laws. The per-fit share compared here comes from the authors&#x27; published results file, computed as below." /></a><figcaption>Table 6 of the paper prints 78.45 % for the Feynman laws at noise 0: each law&#x27;s median over its 10 fits, averaged over the laws. The per-fit share compared here comes from the authors&#x27; published results file, computed as below.</figcaption></figure><p class="repro-codecap">The published results file (<a href="https://github.com/kartelj/rils-rols/blob/54861c1c8dc4a521da6885bdcfdc54ecb7b38c31/paper_resources/srbench/feathers/ground-truth_results_rils-rols.feather" target="_blank" rel="noopener">pinned on GitHub</a>) and the computation:</p><pre class="repro-code"><code>import pandas as pd
+r = pd.read_feather(&quot;https://raw.githubusercontent.com/kartelj/rils-rols/54861c1c8dc4a521da6885bdcfdc54ecb7b38c31/paper_resources/srbench/feathers/ground-truth_results_rils-rols.feather&quot;)
+r = r.query(&quot;data_group == &#x27;Feynman&#x27; and target_noise == 0&quot;)
+(r.r2_test &gt; 0.999).mean()  # 0.782: 905 of 1,158 fits</code></pre></div>
+</div>
+</div></section>
+</section>
+<section id="not-compared" class="prose">
+<h2>Not compared yet</h2>
+<section class="topic" id="repro-dsr"><h3>DSR</h3><div><p class="repro-src"><a href="https://arxiv.org/abs/2107.14351" target="_blank" rel="noopener">La Cava et al., Contemporary Symbolic Regression Methods and their Relative Performance (SRBench 2021), NeurIPS Datasets and Benchmarks 2021</a></p><p>SRBench 2021 reports DSR on the Feynman laws: 22.6 % of its fits reach a test R² above 0.999, at 1,000,000 expressions per fit. srbf&#x27;s own runs of DSR use at most 16,000 expressions, so a comparison needs a run of srbf&#x27;s DSR at SRBench&#x27;s settings.</p></div></section>
+<section class="topic" id="repro-pysr"><h3>PySR</h3><div><p class="repro-src"><a href="https://github.com/cavalab/srbench/tree/srbench_2025" target="_blank" rel="noopener">Imai Aldeia et al., Call for Action: Towards the Next Generation of Symbolic Regression Benchmarks (SRBench 2025), GECCO 2025 Companion</a></p><p>SRBench 2025 reports PySR on the physics datasets QLattice is compared on above, 30 fits per dataset with 50 minutes each. A comparison needs a run of srbf&#x27;s PySR inside SRBench&#x27;s protocol, as for QLattice. PySR&#x27;s own paper evaluates it on empirical laws that are not among srbf&#x27;s problems.</p></div></section>
+<section class="topic" id="repro-udsr"><h3>uDSR*</h3><div><p class="repro-src"><a href="https://github.com/cavalab/srbench/tree/srbench_2025" target="_blank" rel="noopener">Imai Aldeia et al., Call for Action: Towards the Next Generation of Symbolic Regression Benchmarks (SRBench 2025), GECCO 2025 Companion</a></p><p>SRBench 2025 reports uDSR on twelve datasets of its black-box track, 30 fits per dataset. A comparison needs a run of srbf&#x27;s uDSR inside SRBench&#x27;s protocol. The uDSR paper&#x27;s own results use 2 million expressions per problem, and srbf runs uDSR* at 13,000. The asterisk marks that srbf runs uDSR as far as it was released: without the paper&#x27;s AI Feynman step (a pre-processing that splits a problem into simpler ones) and without pre-training.</p></div></section>
+</section>
+<!-- reproductions:end -->
+
+    <section id="how" class="prose">
+      <h2>How to read the comparisons</h2>
+
+      <section class="topic">
+        <h3>Problems and words</h3>
+        <div>
+          <p>
+            Most comparisons use the Feynman laws: 120 physics formulas from the AI Feynman database (Udrescu and
+            Tegmark, 2020), each to be found again from points sampled from it. SRBench is a benchmark that ran many
+            methods on these laws and published every result; SRBench 2021 reports 116 of them. A fit is one attempt of a method on one problem. A run
+            of srbf is one pass over all the problems; srbf ran some methods twice, each time on fresh points, and
+            each run is shown on its own. Budgets are counted in each method's own unit, named in its row.
+          </p>
+        </div>
+      </section>
+
+      <section class="topic">
+        <h3>The numbers</h3>
+        <div>
+          <p>
+            Each comparison uses the measure of the publication it is compared with, for example the share of laws
+            on which a formula reaches an R² above 0.999 on test points. srbf's share comes with a 95 % interval: a
+            range of plausible values for srbf's true success rate, built so that such intervals contain the true
+            rate about 95 % of the time.
+          </p>
+          <p>
+            Under each comparison is where the published number comes from: the figure or table of the
+            publication, or, where the number is computed from the authors' published results files, the file,
+            pinned to the version used, and the computation. A number read from a figure comes with the exact
+            positions it was read from and a script that reads it again from the paper's own PDF.
+          </p>
+        </div>
+      </section>
+
+      <section class="topic">
+        <h3>The p-value</h3>
+        <div>
+          <p>
+            p is the probability of a difference at least as large as the one shown if srbf succeeded exactly as
+            often as the published fits. Below 0.05, a difference this large would rarely arise by chance alone. A
+            large p means that no difference was found; it does not prove that the two numbers are equal. A
+            difference reaches p below 0.05 only above a certain size: about 4 to 5 percentage points where every
+            law's published share is known (116 laws), about 7 for E2E and about 15 to 17 for NeSymReS (52 laws).
+          </p>
+          <p>
+            How p is computed depends on what the publication reports. Where it lists every problem with its share
+            of successful fits, srbf's count is compared with the counts srbf would reach if it solved each problem
+            with that share. Where it reports one overall share, the test is an exact binomial test against that
+            share. Where it reports one fit per problem, the two counts are compared with Fisher's exact test; it
+            treats them as independent although they come from the same laws, which makes it more cautious than a
+            test that pairs the laws. Where srbf's fits are ranked among the published fits, their mean rank is
+            compared with the mean of ranks drawn uniformly at random. The per-problem, binomial and rank tests take
+            the published numbers as exact; Fisher's test treats both counts as samples. Every test is exact and
+            two-sided.
+          </p>
+        </div>
+      </section>
+
+      <section class="topic">
+        <h3>Points and noise</h3>
+        <div>
+          <p>
+            Except for QLattice, which ran inside SRBench's own protocol, srbf fits each problem on 512 points and
+            tests the formula on 512 fresh points from the same ranges, without noise. The publications often used more points and more fits per problem. Each comparison lists
+            the settings on both sides.
+          </p>
+        </div>
+      </section>
+    </section>
+    </div>
+
+    </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner">
+      <span><span class="brand-mark small">srbf</span> · Symbolic Regression Benchmark Framework</span>
+      <span>
+        Generated by <a href="https://srbf.readthedocs.io/" target="_blank" rel="noopener"><code>srbf.analysis</code></a>
+        · <a href="https://srbf.readthedocs.io/" target="_blank" rel="noopener">Docs</a>
+        · <a href="https://github.com/psaegert/srbf" target="_blank" rel="noopener">GitHub</a>
+        · <a href="https://pypi.org/project/srbf/" target="_blank" rel="noopener">PyPI</a>
+        · <a href="privacy.html">Privacy</a>
+      </span>
+    </div>
+  </footer>
+
+  <script src="theme.js" charset="utf-8"></script>
+</body>
+</html>
