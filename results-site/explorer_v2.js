@@ -1212,7 +1212,7 @@
     var stated = Array.isArray(gt) ? gt[0] : gt, canon = Array.isArray(gt) ? gt[1] : undefined;
     var html = '<div class="v2predtruth"><span class="v2lab">true formula</span><span class="v2predtruthf">' + (gt === undefined ? wait : typeset(stated)) + "</span></div>";
     if (canon === undefined) { return html; }
-    return html + '<div class="v2predtruth v2predcanon"><span class="v2lab">canonical form ' + help("The true formula simplified by SimpliPy, the engine the judge uses, with its numbers kept. Symbolic Recovery compares a prediction with this form once the numbers are masked (the stricter versions keep exponents, or all numbers).", "What is the canonical form?") +
+    return html + '<div class="v2predtruth v2predcanon"><span class="v2lab">simplified ' + help("The true formula simplified by SimpliPy, the engine the judge uses, with its numbers kept. Symbolic Recovery compares a prediction with this form once the numbers are masked (the stricter versions keep exponents, or all numbers).", "What is the simplified form?") +
       '</span><span class="v2predtruthf">' + (canon === null ? '<span class="v2predna">none: the engine cannot read this formula</span>' : canon === stated ? '<span class="v2hint">the same as stated</span>' : typeset(canon)) + "</span></div>";
   }
   function renderPreds(shown) {   // one problem at a time: the true formula, then one row per method

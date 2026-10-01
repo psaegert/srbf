@@ -1456,7 +1456,7 @@ test('the predictions view shows one problem: its true formula, and one row per 
   expect(errors).toEqual([]);
 });
 
-test('the true formula comes with its canonical form: different, the same, or none', async ({ page }) => {
+test('the true formula comes with its simplified form: different, the same, or none', async ({ page }) => {
   const errors = collectErrors(page);
   const wrap = (key, obj) => `window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"][${JSON.stringify(key)}]=${JSON.stringify(obj)};})();`;
   const truth = {}, preds = {};
@@ -1473,6 +1473,7 @@ test('the true formula comes with its canonical form: different, the same, or no
   const canon = page.locator(V2 + ' .v2predcanon');
   await expect(canon.locator('.katex')).toHaveCount(1, { timeout: 15000 });               // x1*x1 -> x1^2, typeset
   await expect(canon.locator('.v2help')).toHaveCount(1);                                  // what the form is, one ? away
+  expect(await canon.textContent()).not.toMatch(/\bcanon\b|canonical form/i);           // the reader's words, help included
   await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="next problem"]').click();
   await expect(canon).toContainText('the same as stated');
   await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="next problem"]').click();
