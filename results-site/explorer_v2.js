@@ -750,7 +750,7 @@
     behind(series).forEach(function (sr) { var col = sr.color, pts = sr.pts; var cl = function (v) { return Math.min(ymax, Math.max(ymin, v)); };
       s += ciSVG(pts, col, xs, y, function (v) { return v; }, cl);
       s += '<polyline fill="none" stroke="' + col + '" stroke-width="2"' + dashOf(sr) + ' points="' + pts.map(function (p) { return xs(p.x).toFixed(1) + "," + y(cl(p.v)).toFixed(1); }).join(" ") + '"/>';
-      pts.forEach(function (p) { s += '<circle cx="' + xs(p.x).toFixed(1) + '" cy="' + y(cl(p.v)).toFixed(1) + '" r="3.2" fill="' + (p.hollow ? "var(--surface)" : col) + '" stroke="' + col + '" stroke-width="1.5"><title>' + esc(p.title) + '</title></circle>'; }); });
+      pts.forEach(function (p) { s += markerSVG(xs(p.x), y(cl(p.v)), p, col); }); });
     legendEntries(series, ghosts).forEach(function (e) { s += legendItem(e.sr, lx, ly, opts.cycle, e.gone); ly += 20; });
     return s + "</svg>";
   }
@@ -789,7 +789,7 @@
       var col = sr.color;
       s += ciSVG(sr.pts, col, xs, y, clx, cly);
       s += '<polyline fill="none" stroke="' + col + '" stroke-width="1.6" stroke-opacity="0.65"' + dashOf(sr) + ' points="' + sr.pts.map(function (p) { return xs(clx(p.x)).toFixed(1) + "," + y(cly(p.v)).toFixed(1); }).join(" ") + '"/>';
-      sr.pts.forEach(function (p) { s += '<circle cx="' + xs(clx(p.x)).toFixed(1) + '" cy="' + y(cly(p.v)).toFixed(1) + '" r="3.2" fill="' + (p.hollow ? "var(--surface)" : col) + '" stroke="' + col + '" stroke-width="1.5"><title>' + esc(p.title) + "</title></circle>"; });
+      sr.pts.forEach(function (p) { s += markerSVG(xs(clx(p.x)), y(cly(p.v)), p, col); });
     });
     legendEntries(opts.series, ghosts).forEach(function (e) { s += legendItem(e.sr, lx, ly, opts.cycle, e.gone); ly += 20; });
     return s + "</svg>";
@@ -806,8 +806,8 @@
         if (!isFinite(sx.v) || !isFinite(sy.v)) { return; }
         var least = thin(sx) && (!thin(sy) || sx.share < sy.share) ? sx : sy;
         if (thin(sx) || thin(sy)) { thinDrawn = true; }
-        pts.push({ x: sx.v, xlo: sx.lo, xhi: sx.hi, v: sy.v, lo: sy.lo, hi: sy.hi, hollow: thin(sx) || thin(sy),
-          title: m.label + " @ " + r + ": " + fmt(xm, sx.v, sx.edge) + " " + xm.short + ", " + fmt(ym, sy.v, sy.edge) + " " + ym.short + ", " + Math.round(sy.n).toLocaleString() + " problems in " + sy.S + (sy.S === 1 ? " problem set" : " problem sets") + (least.share < 1 ? ", " + shareText(least) : "") });
+        pts.push({ x: sx.v, xlo: sx.lo, xhi: sx.hi, v: sy.v, lo: sy.lo, hi: sy.hi, hollow: thin(sx) || thin(sy), end: endsAt(m.key, r),
+          title: withEnd(m.key, r, m.label + " @ " + r + ": " + fmt(xm, sx.v, sx.edge) + " " + xm.short + ", " + fmt(ym, sy.v, sy.edge) + " " + ym.short + ", " + Math.round(sy.n).toLocaleString() + " problems in " + sy.S + (sy.S === 1 ? " problem set" : " problem sets") + (least.share < 1 ? ", " + shareText(least) : "")) });
         [sx.v, anyCI() ? sx.lo : sx.v, anyCI() ? sx.hi : sx.v].forEach(function (v) { if (isFinite(v)) { xmin = Math.min(xmin, v); xmax = Math.max(xmax, v); } });
         [sy.v, anyCI() ? sy.lo : sy.v, anyCI() ? sy.hi : sy.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
       });
@@ -838,6 +838,26 @@
   // ---- Curves ----------------------------------------------------------------------------------------------------
   var thinDrawn = false;   // set by a chart that drew a hollow point, so the block around it can say what that means
   function thinNote() { return "A hollow point is based on fewer than " + state.valid + " % of the problems"; }
+  // A method that cannot run a larger budget -- its defaults, a resource limit, a bug: the release says why
+  // (summary.ladder, "declared") -- ends its curve with a square. A ladder that reached the end of the time axis does not.
+  var endDrawn = false;   // set by a chart that drew a square, so the block around it can say what that means
+  function lastRung(key) {
+    var c = D.cells[key] || {}, mx = 0;
+    Object.keys(c).forEach(function (cat) { Object.keys(c[cat]).forEach(function (r) { mx = Math.max(mx, +r); }); });
+    return mx;
+  }
+  function ladderEnd(key) { var e = D.summary && D.summary.ladder && D.summary.ladder[key]; return e && e.end === "declared" ? e : null; }
+  function endsAt(key, r) { return !!ladderEnd(key) && r === lastRung(key); }
+  function withEnd(key, r, title) { return endsAt(key, r) ? title.replace(/\.?$/, ". ") + "Its largest budget: " + ladderEnd(key).reason : title; }
+  function endNote() { return "A square marks the largest budget a method can run; its tooltip says why"; }
+  function markerSVG(cx, cy, p, col) {
+    var fill = p.hollow ? "var(--surface)" : col, tip = "<title>" + esc(p.title) + "</title>";
+    if (p.end) {
+      endDrawn = true;
+      return '<rect x="' + (cx - 3).toFixed(1) + '" y="' + (cy - 3).toFixed(1) + '" width="6" height="6" fill="' + fill + '" stroke="' + col + '" stroke-width="1.5" class="v2end">' + tip + "</rect>";
+    }
+    return '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="3.2" fill="' + fill + '" stroke="' + col + '" stroke-width="1.5">' + tip + "</circle>";
+  }
   function curveChart(metric, shown, title, aria, legend) {
     var keys = shown.map(function (x) { return x.key; }), series = [], ymin = Infinity, ymax = -Infinity, pending = false, tmin = Infinity, tmax = -Infinity;
     var src = timeSource(keys);
@@ -846,7 +866,7 @@
         var st = stat(metric, m.key, r, use); if (!st) { return; } if (st.pending) { pending = true; return; } if (!isFinite(st.v)) { return; }
         var title = m.label + " at budget " + r + (state.xaxis === "time" ? " (" + x.toFixed(2) + " s per problem)" : "") + ": " + fmt(metric, st.v, st.edge) + " (95 % interval " + fmt(metric, st.lo) + " to " + fmt(metric, st.hi) + rangeText(metric, st) + "). " + problemsText(st, use) + (st.share < 1 ? "; " + shareText(st) : "") + ".";
         if (thin(st)) { thinDrawn = true; }
-        pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, hollow: thin(st), title: title });   // a budget has no interval: the candidate count is exact, and the measured time is within a pixel of its mean (0.4-1.1 px, measured)
+        pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, hollow: thin(st), end: endsAt(m.key, r), title: withEnd(m.key, r, title) });   // a budget has no interval: the candidate count is exact, and the measured time is within a pixel of its mean (0.4-1.1 px, measured)
         [st.v, anyCI() ? st.lo : st.v, anyCI() ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
         if (state.xaxis === "time") { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); } });
       if (pts.length) { series.push({ key: m.key, label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), dash: !!m.dash, pts: pts }); } });
@@ -919,11 +939,12 @@
         ? (many ? " count their budget in " : " counts its budget in ") + (off.every(function (m) { return m.budget === "iterations"; }) ? "search iterations" : "a unit of " + (many ? "their" : "its") + " own") + ", not in " + term("candidates", "candidates") + ", so " + (many ? "they are" : "it is") + " not drawn on this axis.</p>"
         : (many ? " have" : " has") + " not been " + term("time", "timed") + " yet, so " + (many ? "they are" : "it is") + " not drawn on the time axis.</p>");
     }).join("");
-    thinDrawn = false;
+    thinDrawn = false; endDrawn = false;
     var cards = inBlock(main, state.plots.length + 1, function () {
       return state.plots.map(function (p, i) { return plotCard(p, i, shown); }).join("");
     });
     if (thinDrawn) { note += '<p class="v2hint v2hollownote">' + term("valid", thinNote()) + ": on the others this metric has no value, because the method returned no usable formula or the value could not be computed.</p>"; }
+    if (endDrawn) { note += '<p class="v2hint v2endnote">' + endNote() + ".</p>"; }
     return note + '<div class="v2charts">' + cards + add + "</div>";
   }
 
@@ -951,7 +972,7 @@
         if (!shown.length) { return ghosts.length ? '<p class="v2hint">Every method is hidden. <button type="button" class="v2btn" data-hlreset="1">show the default again</button></p>' : '<p class="v2hint">No method has finished a budget in this release yet.</p>'; }
         var drawn = axisMethods(shown), off = offAxis(shown);
         var keys = drawn.map(function (m) { return m.key; }), src = timeSource(keys);
-        thinDrawn = false;
+        thinDrawn = false; endDrawn = false;
         var charts = HEADLINE.map(function (h) {
           var ms = (h.key ? [h.key] : [h.x, h.y]).map(function (k) { return METRIC[k]; });
           if (ms.some(function (m) { return !m; })) { return ""; }
@@ -968,7 +989,7 @@
                 (off.length > 1 ? "they are" : "it is") + " not in the first chart" : "")
             : "The x-axis is the budget per problem. " + term("time", "A time axis appears once a method shown has been timed") +
               ": seconds measured wherever a unit happened to run are not comparable between methods, so this release does not publish them") + "." +
-            (thinDrawn ? " " + term("valid", thinNote()) + "." : "") + "</p>";
+            (thinDrawn ? " " + term("valid", thinNote()) + "." : "") + (endDrawn ? " " + endNote() + "." : "") + "</p>";
       }); });
     } finally { HL_DRAWING = false; }
   }
