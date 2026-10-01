@@ -240,9 +240,12 @@ r = r.query(&quot;data_group == &#x27;Feynman&#x27; and target_noise == 0&quot;)
         <h3>Points and noise</h3>
         <div>
           <p>
-            Except for QLattice, which ran inside SRBench's own protocol, srbf fits each problem on 512 points and
-            tests the formula on 512 fresh points from the same ranges, without noise. The publications often used more points and more fits per problem. Each comparison lists
-            the settings on both sides.
+            In srbf's benchmark every method gets the same problems, 512 training points and 512 fresh test points
+            from the same ranges, and no noise. The comparisons on this page keep that and set only the method's own
+            settings and budget to the published ones. QLattice is the exception: its published result is on SRBench
+            datasets that are not among srbf's problems, so its comparison ran inside SRBench's own protocol. The
+            publications often used more points and more fits per problem; each comparison lists the settings on
+            both sides.
           </p>
         </div>
       </section>
