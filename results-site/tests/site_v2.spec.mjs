@@ -304,7 +304,7 @@ test('each display carries only the controls it can use', async ({ page }) => {
   // one budget, one metric, each chosen in one place: on the display's own bar, never repeated in the side panel
   for (const k of ['plots', 'xaxis', 'thin', 'focus', 'rung', 'rows']) { expect(matrix, k).not.toContain(k); }
   await expect(page.locator(V2 + ' .v2viewbar .v2viewpick')).toBeVisible();
-  await expect(page.locator(V2 + ' .v2viewbar select[data-state="rung"]')).toBeVisible();
+  await expect(page.locator(V2 + ' .v2viewbar input.v2pos')).toBeVisible();
   await page.locator(V2 + ' .v2tab[data-view="paired"]').click();
   await expect.poll(shown).toContain('base');
 });
@@ -651,20 +651,22 @@ test('every reading of a distribution draws, and the choice travels in the link'
   expect(errors).toEqual([]);
 });
 
-test('the budget of a snapshot is stepped on the display itself', async ({ page }) => {
+test('the budget of a snapshot is set on the display itself, on a slider and by its marks', async ({ page }) => {
   await page.goto('/explorer.html?release=2026-09&v=dist&dm=log10_fvu_val&r=16');
-  const sel = page.locator(V2 + ' .v2viewbar select[data-state="rung"]');
-  await expect(sel).toHaveValue('16');
-  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('at budget 16');
-  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label^="higher"]').click();
-  await expect(sel).toHaveValue('32');
-  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('at budget 32');
+  const val = page.locator(V2 + ' .v2viewbar .v2posval'), chart = page.locator(V2 + ' .v2view svg.v2chart').first();
+  await expect(val).toHaveText('16');
+  await expect(chart).toContainText('at budget 16');
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="larger budget"]').click();
+  await expect(val).toHaveText('32');
+  await expect(chart).toContainText('at budget 32');
   await expect(page.locator(V2 + ' select.v2rung')).toBeHidden();   // the budget has one place: the display's bar
-  await sel.selectOption('8');
-  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('at budget 8');
-  // the Catalogs matrix and the by-catalog table carry the same stepper
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="smaller budget"]').click();
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="smaller budget"]').click();
+  await expect(chart).toContainText('at budget 8');
+  // the Problem sets view and the by-problem-set table carry the same control, at the same budget
   await page.locator(V2 + ' .v2tab[data-view="matrix"]').click();
-  await expect(page.locator(V2 + ' .v2viewbar select[data-state="rung"]')).toHaveValue('8');
+  await expect(page.locator(V2 + ' .v2viewbar .v2posval')).toHaveText('8');
+  expect(new URL(page.url()).searchParams.get('r')).toBe('8');
 });
 
 test('a rate is shown per problem set, with a way to a distribution', async ({ page }) => {
@@ -735,6 +737,76 @@ test('the explorer averages over problem sets exactly as the reference does', ()
   });
   expect(off).toEqual([]);
   expect(core.holm([0.01, 0.04, 0.03]).map((x) => +x.toFixed(6))).toEqual([0.03, 0.06, 0.06]);
+});
+
+// ---- Positions between budgets -------------------------------------------------------------------------------------
+// Tables, problem sets and distributions read every method at one budget or one time, anywhere on a slider. Between two
+// budgets a method was run at, every sum of a problem set is blended in the logarithm of the position; nothing is
+// extrapolated. The page's code is cut out and run on a fixture with known sums.
+test('a method between two of its budgets is read by blending them in the logarithm of the position', () => {
+  const src = readFileSync(new URL('../explorer_v2.js', import.meta.url), 'utf8');
+  const a = src.indexOf('  // ---- positions between the budgets'), b = src.indexOf('  function hasRung(');
+  expect(a).toBeGreaterThan(0); expect(b).toBeGreaterThan(a);
+  const D = { cells: { A: { s: {
+    '1': { state: 'complete', d: 2, n: 100, ok: 90, m: { rate: [100, 10, 10] }, a: { f1: [90, 90, 45, 30] }, e: { f1: 90 } },
+    '4': { state: 'complete', d: 2, n: 100, ok: 98, m: { rate: [100, 30, 30] }, a: { f1: [98, 98, 70, 60] }, e: { f1: 98 } },
+    '16': { state: 'running', n: 3, m: {} } } } } };
+  const times = { 1: 0.5, 4: 2 };
+  const addHist = (acc, hc) => { hc.forEach((pt) => { acc[pt[0]] += pt[1]; }); };
+  const core = new Function('D', 'state', 'refTime', 'addHist', src.slice(a, b) + '\nBETWEEN = true;\nreturn { cell: cell, histCell: histCell, posText: posText };')(
+    D, { pm: 'budget', rung: 2, pt: null }, (m, r) => times[String(r)] || null, addHist);
+  const r9 = (xs) => xs.map((x) => +x.toFixed(9));
+  const mid = core.cell('A', 's', 2);                               // log 2 lies halfway between log 1 and log 4
+  expect(mid.between).toEqual([1, 4]);
+  expect(r9(mid.m.rate)).toEqual([100, 20, 20]);
+  expect(r9(mid.a.f1)).toEqual([94, 94, 57.5, 45]);
+  expect(+mid.ok.toFixed(9)).toBe(94); expect(+mid.e.f1.toFixed(9)).toBe(94);
+  expect(core.cell('A', 's', 4)).toBe(D.cells.A.s['4']);            // a budget it was run at reads exactly as measured
+  expect(core.cell('A', 's', 8)).toBeNull();                        // nothing is extrapolated; an unfinished budget is no point
+  expect(core.cell('A', 's', 0.5)).toBeNull();
+  expect(+core.cell('A', 's', Math.pow(4, 0.25)).m.rate[1].toFixed(9)).toBe(15);   // a quarter of the way
+  const byTime = core.cell('A', 's', 't1');                         // 1 s lies halfway between 0.5 s and 2 s on a log scale
+  expect(byTime.between).toEqual([1, 4]); expect(+byTime.m.rate[1].toFixed(9)).toBe(20);
+  expect(core.cell('A', 's', 't2')).toBe(D.cells.A.s['4']);
+  expect(core.cell('A', 's', 't4')).toBeNull();
+  expect(core.histCell({ nb: 3, cells: { A: { s: { 1: [[0, 10]], 4: [[2, 10]] } } } }, 'A', 's', 2)).toEqual([5, 0, 5]);
+  expect(core.posText(1448.15)).toBe('budget 1,448'); expect(core.posText('t2.5')).toBe('2.5 s per problem');
+});
+
+test('the slider reads every method between its budgets, marks it, and reads by time too', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/explorer.html?release=2026-09&v=matrix&m=T8-20M&r=1448');
+  const val = page.locator(V2 + ' .v2viewbar .v2posval');
+  await expect(val).toHaveText('1,448');
+  await expect(page.locator(V2 + ' .v2view')).toContainText('Interpolated: Flash-ANSR T8-20M between budgets 1,024 and 2,048.');
+  await expect(page.locator(V2 + ' .v2view .v2matrix .v2tween').first()).toBeVisible();   // and every such number carries the mark
+  const slider = page.locator(V2 + ' .v2viewbar input.v2pos');
+  await slider.evaluate((el) => { el.value = String(Math.round(0.37 * (+el.max))); el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); });
+  await expect.poll(() => new URL(page.url()).searchParams.get('r')).not.toBe('1448');
+  await page.locator(V2 + ' .v2viewbar button[data-set="pm:time"]').click();
+  await expect(val).toContainText(' s');
+  await expect(page.locator(V2 + ' .v2view')).toContainText('s per problem');
+  expect(new URL(page.url()).searchParams.get('pm')).toBe('time');
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="longer time"]').click();
+  expect(+new URL(page.url()).searchParams.get('pt')).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});
+
+test('a method outside the budgets it was run at has no value there, and says where it runs', async ({ page }) => {
+  await page.goto('/explorer.html?release=2026-09&v=matrix&m=e2e,T8-20M&r=1448');
+  await expect(page.locator(V2 + ' .v2view')).toContainText('E2E 93M has no value at budget 1,448 (it runs at budgets 1 to 256).');
+  for (const v of ['matrix', 'dist&dm=log10_fvu_val', 'dist&dm=numeric_recovery_val', 'table&rows=cats']) {   // by time, every note speaks in seconds
+    await page.goto('/explorer.html?release=2026-09&v=' + v + '&pm=time&pt=0.05');
+    await expect(page.locator(V2 + ' .v2posval')).toContainText(' s');
+    await expect(page.locator(V2 + ' .v2view')).not.toContainText(/budget t\d/);
+  }
+});
+
+test('displays that compare on finished budgets take the budget nearest the position', async ({ page }) => {
+  await page.goto('/explorer.html?release=2026-09&v=paired&r=1448&m=T8-20M,T8-120M');
+  await expect(page.locator(V2 + ' .v2view select[data-state="rung"]')).toHaveValue('1024');
+  await page.goto('/explorer.html?release=2026-09&v=ranks&x=rung&r=1448&m=T8-20M,T8-120M');
+  await expect(page.locator(V2 + ' .v2view select[data-state="rung"]')).toHaveValue('1024');
 });
 
 // ---- Ranks ---------------------------------------------------------------------------------------------------------
@@ -1392,7 +1464,7 @@ const PIPELINE_WORDS = [/\bcatalogs?\b/i, /\brungs?\b/i, /\bdraws? (\d|per\b|of\
   /\bmu\b/i];
 test('every text of the 2026-09 explorer uses the reader\'s words', async ({ page }) => {
   test.setTimeout(120_000);
-  const urls = ['v=curves&x=time', 'v=curves&x=rung', 'v=table&rows=rungs', 'v=table&rows=cats', 'v=matrix',
+  const urls = ['v=curves&x=time', 'v=curves&x=rung', 'v=table&rows=rungs', 'v=table&rows=cats', 'v=matrix', 'v=matrix&r=1448', 'v=table&rows=cats&r=1448', 'v=dist&pm=time&pt=2', 'v=matrix&pm=time&pt=0.5',
     'v=dist&dm=log10_fvu_val&dv=hist', 'v=dist&dm=log10_fvu_val&dv=ecdf', 'v=dist&dm=log10_fvu_val&dv=cats',
     'v=dist&dm=log10_fvu_val&dv=rungs', 'v=dist&dm=numeric_recovery_val&dv=cats', 'v=ranks&x=rung&r=16', 'v=ranks&x=time', 'v=paired', 'v=preds'];
   const found = [];

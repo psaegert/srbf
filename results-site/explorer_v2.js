@@ -92,6 +92,9 @@
     harness_tuned: "Settings: chosen by the benchmark's maintainers."
   };
   var TERMS = {
+    posbudget: "Every method is read at the budget set here, in its own unit. Where a method was run at that budget, its numbers are the measured ones. Between two budgets it was run at, they are interpolated by where the budget lies between the two on a logarithmic scale, and marked \u2248. Outside the budgets a method was run at, it has no value.",
+    postime: "Every method is read at the time per problem set here, on our timing workstation. Each budget a method was run at took a measured time; between two of them, its numbers are interpolated by where the time lies between theirs on a logarithmic scale, and marked \u2248. A method has no value at a time shorter than its smallest budget took or longer than its largest.",
+    between: "\u2248 marks a number read between two budgets a method was run at. Every sum over the problems is blended from the two budgets, in proportion to where the position lies between them on a logarithmic scale: a mean is the mean of the blended problems, and an interval is, if anything, a little too wide.",
     complete: "Each point is one method at one budget. Each method is run over its own range of budgets, and some runs are still in progress. A point appears only once the method has at least one finished run on every problem of the problem sets you selected (in the headline charts: all 29), so every point covers the same problems. Every problem is run twice, and its value is the average of its finished runs, so a point can rest partly on problems with one run so far. The page \u201cHow to read the results\u201d explains more, and how to see partial results by selecting fewer problem sets.",
     interval: "The 95 % interval shows how precisely a value is known on the problem sets you selected, from how much the problems within each set vary. It is about srbf's problem sets, not about problem sets in general: the range for one more problem set, in tables and tooltips, shows how far single sets spread. Bands shade the interval around each point and between neighbouring points; crosses draw it as bars through each point. You can show either, both or neither.",
     average: "First each problem's runs are averaged, then the problems of each problem set. Then the problem sets are averaged, each weighted by how precisely its own average is known, plus an allowance for how much problem sets differ from each other. Because they differ a lot, each counts about the same whatever its size, and a set of only a few problems counts less. A set of 5,000 problems therefore cannot decide the result on its own.",
@@ -106,7 +109,7 @@
     draw1: "Every method is run twice on each problem, each time on newly sampled points from the same ranges. This view shows one run's prediction at a time. Everywhere else a problem's value is the average of its finished runs, and a comparison sets every run of one method against every run of the other.",
     time: "Seconds per problem, measured for every method on the same workstation (16 CPU cores, one RTX 4090 GPU), one method at a time, on a fixed sample of 262 problems. Timings from the compute cluster that produces most of the results depend on which machine a job ran on, so they are never shown. A method that has not been timed on the workstation yet has no place on a time axis; it is named below the chart instead.",
     candidates: "The budget of the methods that generate candidate formulas: how many candidates they may generate per problem. NeSymReS is placed here by its beam width, the number of partial formulas its search keeps. PySR counts search iterations, which cannot be placed on this axis, so it appears on the time axis only.",
-    rungs: "A budget is how much search a method may spend on one problem, in the method's own unit: candidate formulas, beam width or search iterations. Budgets are powers of two (1, 2, 4, 8 and so on), each method over its own range, and each point on a curve is one of them. Because the units differ, the same budget number means different amounts of work for different methods; the time axis shows what each budget costs.",
+    rungs: "A budget is how much search a method may spend on one problem, in the method's own unit: candidate formulas, beam width or search iterations. Most methods double their budget (1, 2, 4, 8 and so on), each over its own range; a method that works in batches doubles from its batch (DSR samples 1,000 formulas at a time). Each point on a curve is one budget a method was run at. Because the units differ, the same budget number means different amounts of work for different methods; the time axis shows what each budget costs.",
     tbudget: "Each method is compared at its largest finished budget that takes at most this many seconds per problem on our timing workstation. A method is left out when it has not been timed yet, or when its smallest budget already takes longer. A hollow dot marks a method whose largest budget still stays under the limit: with more budget it might do better.",
     worstrank: "For every pair of methods and every problem: the chance that one does better than the other on the chosen metric, setting every run of one against every run of the other, with ties counting half. A method without a usable formula counts as worst, and on log10 FVU two predictions that both meet Numeric Recovery tie. These chances are averaged over problem sets like any value. A method's average place is 1 plus the chances that each other method does better than it: the place it takes on average. Only who is better counts, so a narrow win counts as much as a wide one.",
     winshare: "The chance that a method does better than another method on a problem, averaged over the other methods; a tie counts as half. 100 % means it beats every other method on every problem, and 50 % means it wins as often as it loses. Unlike the average place, it stays on the same 0 to 100 % scale when the number of methods changes; its value still depends on which methods are compared.",
@@ -133,7 +136,7 @@
       focus: "numeric_recovery_val", stat: "mean", band: true, cross: false, xaxis: anyTime() ? "time" : "rung", rung: 64, base: null, tier: "main", q: "", rows: "rungs", pset: null, prun: 1, pprob: 0,
       // the Distribution view reads a continuous metric by default (a rate has no distribution over problems), the Ranks
       // view the primary ranking metric; each display remembers its own
-      dmetric: "log10_fvu_val", dmode: "hist", dnorm: "ok", rmetric: (D.rank_keys || ["log10_fvu_val"])[0], tbudget: null,
+      dmetric: "log10_fvu_val", dmode: "hist", dnorm: "ok", rmetric: (D.rank_keys || ["log10_fvu_val"])[0], tbudget: null, pm: "budget", pt: null,
       // a point that rests on fewer than this share of the problems is drawn hollow
       valid: VALID_DEFAULT,
       // a metric whose range has a worst value: does a failed prediction count that value, or is it left out?
@@ -156,7 +159,9 @@
     if (q.has("band")) { state.band = q.get("band") !== "0"; any = true; }
     if (q.has("cross")) { state.cross = q.get("cross") !== "0"; any = true; }
     if (q.has("x")) { state.xaxis = q.get("x") === "time" ? "time" : "rung"; any = true; }
-    if (q.has("r")) { var r = parseInt(q.get("r"), 10); if (D.rungs.indexOf(r) >= 0) { state.rung = r; rungChosen = true; } any = true; }
+    if (q.has("r")) { var r = parseFloat(q.get("r")); if (r > 0) { state.rung = r; rungChosen = true; } any = true; }
+    if (q.has("pm")) { state.pm = q.get("pm") === "time" ? "time" : "budget"; any = true; }
+    if (q.has("pt")) { var pt = parseFloat(q.get("pt")); if (pt > 0) { state.pt = pt; } any = true; }
     if (q.has("dm") && METRIC[q.get("dm")]) { state.dmetric = q.get("dm"); any = true; }
     if (q.has("dv")) { state.dmode = q.get("dv"); any = true; }
     if (q.has("dn")) { state.dnorm = q.get("dn") === "all" ? "all" : "ok"; any = true; }
@@ -184,7 +189,9 @@
     state.methods = state.methods.filter(function (x) { return D.methods.some(function (mm) { return mm.key === x; }); });
     if (!METRIC[state.focus]) { state.focus = "numeric_recovery_val"; }
     if (!state.base || state.methods.indexOf(state.base) < 0) { state.base = state.methods[0] || null; }
-    if (D.rungs.indexOf(state.rung) < 0) { state.rung = 64; }
+    if (!(state.rung > 0)) { state.rung = 64; }
+    if (state.pm !== "time" || !anyTime()) { state.pm = "budget"; }
+    if (!(state.pt > 0)) { state.pt = null; }
     state.impute = state.impute !== false;
     state.valid = isFinite(state.valid) ? Math.min(100, Math.max(0, Math.round(state.valid))) : VALID_DEFAULT;
     return any;
@@ -207,7 +214,7 @@
     ["view", "bench", "baseline", "metric", "budget"].forEach(function (k) { q.delete(k); });   // never carry the retired 2026-07 explorer's keys
     q.set("release", REL); q.set("v", state.view); q.set("c", catsParam()); q.set("m", sharedMethods().join(",")); q.set("p", state.plots.map(plotKey).join(","));
     q.set("f", state.focus); q.set("s", state.stat); q.delete("pool"); q.delete("thin"); q.set("band", state.band ? "1" : "0"); q.set("cross", state.cross ? "1" : "0");
-    q.set("x", state.xaxis); q.set("r", String(state.rung)); if (state.base) { q.set("b", state.base); } q.set("rows", state.rows); q.set("ok", String(state.valid)); q.set("imp", state.impute ? "1" : "0");
+    q.set("x", state.xaxis); q.set("r", String(state.rung)); q.delete("pm"); q.delete("pt"); if (state.pm === "time" && state.pt) { q.set("pm", "time"); q.set("pt", String(state.pt)); } if (state.base) { q.set("b", state.base); } q.set("rows", state.rows); q.set("ok", String(state.valid)); q.set("imp", state.impute ? "1" : "0");
     ["dm", "dv", "dn", "rm", "t", "ps", "pr", "pn", "pp"].forEach(function (k) { q.delete(k); });   // a link carries only what its display reads
     if (state.view === "preds") { if (state.pset) { q.set("ps", state.pset); } q.set("pr", String(state.prun)); q.set("pn", String(state.pprob + 1)); }
     if (state.view === "dist") { q.set("dm", state.dmetric); q.set("dv", state.dmode); q.set("dn", state.dnorm); }
@@ -285,7 +292,56 @@
   }
 
   // ---- pooling ---------------------------------------------------------------------------------------------------
-  function cell(m, c, r) { var x = D.cells[m] && D.cells[m][c] && D.cells[m][c][String(r)]; return x && x.state === "complete" ? x : null; }
+  // ---- positions between the budgets a method was run at (owner 2026-10-01) ------------------------------------------
+  // Tables, problem sets and distributions read every method at one position: a budget, or a time per problem on our
+  // timing workstation ("t" + seconds). Where a method was run at that budget (or that time), its numbers are the
+  // measured ones. Between two budgets it was run at, they are interpolated, linearly in the logarithm of the budget (or
+  // of the time): every sum a problem set carries -- problems, values, squares -- is (1 - w) times the lower budget's plus
+  // w times the upper one's. A mean is then exactly the mean of every problem's interpolated value, and a spread is never
+  // smaller than that of the interpolated values (an interval is, if anything, too wide). A histogram is blended the same
+  // way. Outside the budgets a method was run at, nothing is extrapolated: the method has no value there.
+  var BETWEEN = false;   // on only while a display that reads at a position draws; everywhere else a budget is a budget a method was run at
+  function isTimePos(r) { return typeof r === "string" && r.charAt(0) === "t"; }
+  function posValue(r) { return isTimePos(r) ? parseFloat(r.slice(1)) : +r; }
+  function cellRaw(m, c, r) { var x = D.cells[m] && D.cells[m][c] && D.cells[m][c][String(r)]; return x && x.state === "complete" ? x : null; }
+  // the finished budgets of method m on problem set c, as [position, budget], by budget or by time, in order
+  function points(m, c, time) {
+    var cs = (D.cells[m] || {})[c] || {}, out = [];
+    Object.keys(cs).forEach(function (k) { if (cs[k].state !== "complete") { return; } var v = time ? refTime(m, k) : +k; if (v > 0) { out.push([v, +k]); } });
+    return out.sort(function (a, b) { return a[0] - b[0]; });
+  }
+  function bracket(m, c, r) {
+    var time = isTimePos(r), x = posValue(r), ps, i; if (!(x > 0)) { return null; }
+    ps = points(m, c, time);
+    for (i = 0; i < ps.length; i++) { if (Math.abs(ps[i][0] - x) <= 1e-9 * x) { return { r1: ps[i][1], r2: ps[i][1], w: 0 }; } }
+    for (i = 0; i + 1 < ps.length; i++) { if (ps[i][0] < x && x < ps[i + 1][0]) { return { r1: ps[i][1], r2: ps[i + 1][1], w: Math.log(x / ps[i][0]) / Math.log(ps[i + 1][0] / ps[i][0]) }; } }
+    return null;
+  }
+  function blendArr(a, b, w) { return a && b && a.length === b.length ? a.map(function (v, i) { return (1 - w) * v + w * b[i]; }) : null; }
+  function blendMap(A, B, w) { var out = {}; Object.keys(A || {}).forEach(function (k) { var x = Array.isArray(A[k]) ? blendArr(A[k], (B || {})[k], w) : (B || {})[k] !== undefined ? (1 - w) * A[k] + w * B[k] : null; if (x !== null) { out[k] = x; } }); return out; }
+  var BLENDED = {};
+  function cell(m, c, r) {
+    if (!isTimePos(r)) { var exact = cellRaw(m, c, r); if (exact || !BETWEEN) { return exact; } }
+    var b = bracket(m, c, r); if (!b) { return null; }
+    if (b.r1 === b.r2) { return cellRaw(m, c, b.r1); }
+    var key = m + "|" + c + "|" + r; if (BLENDED[key]) { return BLENDED[key]; }
+    var a = cellRaw(m, c, b.r1), z = cellRaw(m, c, b.r2), w = b.w;
+    return (BLENDED[key] = { state: "complete", d: Math.min(a.d || 1, z.d || 1), n: (1 - w) * a.n + w * z.n, ok: (1 - w) * (a.ok || 0) + w * (z.ok || 0),
+      m: blendMap(a.m, z.m, w), a: blendMap(a.a, z.a, w), e: blendMap(a.e, z.e, w), between: [b.r1, b.r2] });
+  }
+  function histCell(H, m, c, r) {
+    var cs = H.cells[m] && H.cells[m][c]; if (!cs) { return null; }
+    if (!isTimePos(r) && (cs[String(r)] || !BETWEEN)) { return cs[String(r)] || null; }
+    var b = bracket(m, c, r); if (!b) { return null; }
+    var h1 = cs[String(b.r1)]; if (b.r1 === b.r2) { return h1 || null; }
+    var h2 = cs[String(b.r2)]; if (!h1 || !h2) { return null; }
+    var a = new Array(H.nb).fill(0), z = new Array(H.nb).fill(0); addHist(a, h1, H.nb); addHist(z, h2, H.nb);
+    return a.map(function (v, i) { return (1 - b.w) * v + b.w * z[i]; });
+  }
+  function curPos() { return state.pm === "time" && state.pt ? "t" + state.pt : state.rung; }
+  function fmtSec(x) { return x >= 100 ? Math.round(x).toLocaleString() : x >= 10 ? x.toFixed(1).replace(/\.0$/, "") : x >= 1 ? x.toFixed(2).replace(/\.?0+$/, "") : String(+x.toPrecision(2)); }
+  function fmtBudget(x) { return x >= 10 ? Math.round(x).toLocaleString() : String(+x.toPrecision(3)); }
+  function posText(r) { return isTimePos(r) ? fmtSec(posValue(r)) + " s per problem" : "budget " + fmtBudget(+r); }
   function hasRung(m, r) { return CATS.some(function (c) { return cell(m, c, r); }); }
   function shownMethods() { return D.methods.filter(function (m) { return state.methods.indexOf(m.key) >= 0 && withData(m); }); }
   // A pooled number stands for the selected catalogs only if it holds ALL of their problems: a budget is shown
@@ -408,7 +464,7 @@
   function pooledHist(k, m, r, cs) {
     var H = histOf(histKey(k)); if (!H || !H.cells[m]) { return null; }
     var weigh = setWeights(k, m, r, cs), acc = new Array(H.nb).fill(0), N = 0, parts = [];
-    cs.forEach(function (c) { var hc = H.cells[m][c] && H.cells[m][c][String(r)]; if (!hc) { return; } var h = new Array(H.nb).fill(0); addHist(h, hc, H.nb); var tot = h.reduce(function (a, b) { return a + b; }, 0); if (tot > 0) { parts.push({ c: c, h: h, tot: tot, w: weigh(tot) }); N += tot; } });
+    cs.forEach(function (c) { var hc = histCell(H, m, c, r); if (!hc) { return; } var h = new Array(H.nb).fill(0); addHist(h, hc, H.nb); var tot = h.reduce(function (a, b) { return a + b; }, 0); if (tot > 0) { parts.push({ c: c, h: h, tot: tot, w: weigh(tot) }); N += tot; } });
     var W = parts.reduce(function (a, pt) { return a + pt.w; }, 0); if (!N || !W) { return null; }
     parts.forEach(function (pt) { for (var i = 0; i < H.nb; i++) { acc[i] += (pt.w / W) * pt.h[i] / pt.tot * N; } });
     return { h: acc, n: N, lo: H.lo, hi: H.hi, nb: H.nb, parts: parts, W: W };
@@ -461,7 +517,8 @@
   // a cell reports the fewest runs any of its problems has (c.d); a pooled statistic reports the fewest among its cells
   function stat(metric, m, r, cs) {
     var out = stat0(metric, m, r, cs);
-    if (out && !out.pending) { var ds = cs.map(function (c) { return cell(m, c, r); }).filter(Boolean).map(function (c) { return c.d || 1; }); out.d = ds.length ? Math.min.apply(null, ds) : 1; }
+    if (out && !out.pending) { var used = cs.map(function (c) { return cell(m, c, r); }).filter(Boolean), ds = used.map(function (c) { return c.d || 1; }); out.d = ds.length ? Math.min.apply(null, ds) : 1;
+      var tween = used.filter(function (c) { return c.between; }); if (tween.length) { out.between = tween[0].between; } }
     return out;
   }
   function stat0(metric, m, r, cs) {
@@ -863,15 +920,16 @@
 
   // ---- Table -----------------------------------------------------------------------------------------------------
   var lastTable = null;
-  var rangeShown = false;
+  var rangeShown = false, tweenShown = false;   // tweenShown: a table cell held a number between two budgets
   function cellText(st, p) { if (!st) { return ""; } if (st.pending) { return "…"; } if (thin(st)) { thinDrawn = true; } var pi = anyCI() && st.piLo !== null && st.piLo !== undefined; if (pi) { rangeShown = true; }
-    return (thin(st) ? '<span title="' + esc(shareText(st)) + '">' + THIN_MARK + "</span>" : "") + fmt(p, st.v, st.edge) + (anyCI() ? ' <span class="v2ci-txt">[' + fmt(p, st.lo) + ", " + fmt(p, st.hi) + "]</span>" : "") + (pi ? '<br><span class="v2ci-txt">one set: ' + fmt(p, st.piLo) + " to " + fmt(p, st.piHi) + "</span>" : ""); }
+    if (st.between) { tweenShown = true; }
+    return (st.between ? '<span class="v2tween" title="' + esc(tweenText(st.between)) + '">\u2248</span>' : "") + (thin(st) ? '<span title="' + esc(shareText(st)) + '">' + THIN_MARK + "</span>" : "") + fmt(p, st.v, st.edge) + (anyCI() ? ' <span class="v2ci-txt">[' + fmt(p, st.lo) + ", " + fmt(p, st.hi) + "]</span>" : "") + (pi ? '<br><span class="v2ci-txt">one set: ' + fmt(p, st.piLo) + " to " + fmt(p, st.piHi) + "</span>" : ""); }
   function renderTable(shown) {
     var plots = plotMetrics().map(function (k) { return METRIC[k]; }); var keys = shown.map(function (m) { return m.key; });
     if (!plots.length || !shown.length) { return '<p class="v2hint">Select at least one method and one metric.</p>'; }
     var head = '<tr><th>' + (state.rows === "cats" ? "problem set" : "budget") + '</th><th>problems</th>' + shown.map(function (m) { return '<th colspan="' + plots.length + '"><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + '</th>'; }).join("") + '</tr>' +
       '<tr><th></th><th></th>' + shown.map(function () { return plots.map(function (p) { return '<th>' + esc(mname(p)) + " " + mhelp(p) + '</th>'; }).join(""); }).join("") + '</tr>';
-    var body = "", rowsOut = []; thinDrawn = false; rangeShown = false;
+    var body = "", rowsOut = []; thinDrawn = false; rangeShown = false; tweenShown = false;
     var emit = function (label, nl, tds) { body += '<tr><td>' + esc(label) + '</td><td>' + esc(nl) + '</td>' + tds.map(function (x) { return '<td>' + x.t + '</td>'; }).join("") + '</tr>'; rowsOut.push([label, nl].concat(tds.map(function (x) { return x.raw; }))); };
     if (state.rows === "rungs") {
       D.rungs.forEach(function (r) { var cells = shown.map(function (m) { return { m: m, use: poolCats(m.key, r, keys) }; }); if (!cells.some(function (c) { return c.use.length; })) { return; }
@@ -879,7 +937,7 @@
         var tds = []; cells.forEach(function (c) { plots.forEach(function (p) { if (!c.use.length) { tds.push({ t: "", raw: "" }); return; } var st = stat(p, c.m.key, r, c.use); tds.push({ t: cellText(st, p), raw: st && !st.pending ? fmt(p, st.v, st.edge) : "" }); }); });
         emit(String(r), nl, tds); });
     } else {
-      var r = state.rung;
+      var r = curPos();
       state.cats.slice().sort(function (a, b) { return CAT[b].laws - CAT[a].laws; }).forEach(function (c) { if (!shown.some(function (m) { return cell(m.key, c, r); })) { return; }
         var tds = []; shown.forEach(function (m) { plots.forEach(function (p) { if (!cell(m.key, c, r)) { tds.push({ t: "", raw: "" }); return; } var st = stat(p, m.key, r, [c]); tds.push({ t: cellText(st, p), raw: st && !st.pending ? fmt(p, st.v, st.edge) : "" }); }); });
         emit(c, String(CAT[c].laws), tds); });
@@ -888,21 +946,21 @@
       rowsOut.push(["all selected", String(laws(state.cats))].concat(tds2.map(function (x) { return x.raw; })));
     }
     lastTable = { header: [state.rows === "cats" ? "problem set" : "budget", "problems"].concat(shown.reduce(function (a, m) { return a.concat(plots.map(function (p) { return m.label + " · " + mname(p); })); }, [])), rows: rowsOut };
-    var ctl = '<div class="v2row v2tablectl"><span class="v2lab">rows</span><label><input type="radio" name="v2rows" value="rungs"' + (state.rows === "rungs" ? " checked" : "") + '> every budget</label><label><input type="radio" name="v2rows" value="cats"' + (state.rows === "cats" ? " checked" : "") + '> problem sets at one budget</label>' + (state.rows === "cats" ? rungStepper(shown) : "") +
+    var ctl = '<div class="v2row v2tablectl"><span class="v2lab">rows</span><label><input type="radio" name="v2rows" value="rungs"' + (state.rows === "rungs" ? " checked" : "") + '> every budget</label><label><input type="radio" name="v2rows" value="cats"' + (state.rows === "cats" ? " checked" : "") + '> problem sets at one budget or time</label>' + (state.rows === "cats" ? posControl(shown) : "") +
       '<span class="v2spacer"></span><button type="button" class="v2btn" data-act="copy-tsv">copy as TSV</button><button type="button" class="v2btn" data-act="csv">download CSV</button></div>';
-    return ctl + '<div class="v2table-wrap"><table class="v2table"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div><p class="v2hint">' + (anyCI() ? "Brackets: the " + term("interval", "95 % interval") + ". " + (rangeShown ? "One set: " + term("setrange", "where one more problem set would fall") + ". " : "") : "") + term("regime", "How problems without a usable formula count") + ". " + (thinDrawn ? term("valid", "\u25cb marks a number based on fewer than " + state.valid + " % of the problems") + ". " : "") + term("complete", "A value appears once a method has results for all selected problem sets at that budget") + ".</p>";
+    return ctl + '<div class="v2table-wrap"><table class="v2table"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>' + (state.rows === "cats" ? tweenNote(shown, curPos()) : "") + '<p class="v2hint">' + (anyCI() ? "Brackets: the " + term("interval", "95 % interval") + ". " + (rangeShown ? "One set: " + term("setrange", "where one more problem set would fall") + ". " : "") : "") + term("regime", "How problems without a usable formula count") + ". " + (thinDrawn ? term("valid", "\u25cb marks a number based on fewer than " + state.valid + " % of the problems") + ". " : "") + term("complete", "A value appears once a method has results for all selected problem sets at that budget") + ".</p>";
   }
 
   // ---- Catalog matrix --------------------------------------------------------------------------------------------
   function accentRGB() { var v = (getComputedStyle(document.documentElement).getPropertyValue("--accent") || "#4f46e5").trim(); var m = v.match(/^#([0-9a-f]{6})$/i); if (!m) { return [79, 70, 229]; } return [parseInt(m[1].slice(0, 2), 16), parseInt(m[1].slice(2, 4), 16), parseInt(m[1].slice(4, 6), 16)]; }
   function renderMatrix(shown) {
-    var p = METRIC[state.focus], r = state.rung, rgb = accentRGB();
+    var p = METRIC[state.focus], r = curPos(), rgb = accentRGB();
     if (!shown.length) { return '<p class="v2hint">Select at least one method.</p>'; }
-    var bar = '<div class="v2viewbar"><span class="v2segwrap"><span class="v2lab">metric</span>' + pickButton("v2viewpick", 'data-axis="focus" aria-label="metric shown in the matrix"', p.key) + " " + mhelp(p) + "</span>" + rungStepper(shown) + "</div>";
+    var bar = '<div class="v2viewbar"><span class="v2segwrap"><span class="v2lab">metric</span>' + pickButton("v2viewpick", 'data-axis="focus" aria-label="metric shown in the matrix"', p.key) + " " + mhelp(p) + "</span>" + posControl(shown) + "</div>";
     var asked = shown; shown = withAt(shown, r);
     var cats = state.cats.slice().sort(function (a, b) { return CAT[b].laws - CAT[a].laws; }).filter(function (c) { return shown.some(function (m) { return cell(m.key, c, r); }); });
-    if (!cats.length) { return bar + '<p class="v2hint">Nothing finished at budget ' + r + " for this selection: step to another budget above.</p>"; }
-    var vals = {}, all = [], pending = false; thinDrawn = false;
+    if (!cats.length) { return bar + '<p class="v2hint">No selected method has a value at ' + esc(posText(r)) + " for this selection: move the budget or time above.</p>"; }
+    var vals = {}, all = [], pending = false; thinDrawn = false; tweenShown = false;
     cats.forEach(function (c) { vals[c] = {}; shown.forEach(function (m) { if (!cell(m.key, c, r)) { return; } var st = stat(p, m.key, r, [c]); if (st && st.pending) { pending = true; return; } if (st && isFinite(st.v)) { vals[c][m.key] = st; all.push(st.v); } }); });
     if (pending && !all.length) { return bar + '<p class="v2hint">Loading the distribution…</p>'; }
     var lo = Math.min.apply(null, all), hi = Math.max.apply(null, all), ideal = p.ideal === undefined ? (tfOf(p) === "log2" ? 0 : 1) : tfOf(p) === "log2" ? Math.log2(p.ideal) : p.ideal;
@@ -912,7 +970,7 @@
     var pooled = shown.map(function (m) { var use = poolCats(m.key, r); var st = use.length ? stat(p, m.key, r, use) : null; return '<td>' + (st && !st.pending ? cellText(st, p) : "") + '</td>'; }).join("");
     h += '<tr class="v2total"><td>all selected ' + help(TERMS.complete, "When is this row filled in?") + '</td><td>' + laws(state.cats).toLocaleString() + '</td>' + pooled + '</tr></tbody></table></div>';
     var thinHint = thinDrawn ? '<p class="v2hint v2hollownote">' + term("valid", "\u25cb marks a number based on fewer than " + state.valid + " % of the problems") + ".</p>" : "";
-    return bar + missingNote(asked, shown, "any selected problem set at budget " + r, r) + thinHint + '<p class="v2hint">' + esc(p.label) + " at budget " + r + ", one square per problem set; darker is better" + (p.higher === null && p.ideal !== undefined ? " (closer to " + p.ideal + ")" : "") + ". " + (p.kind === "cont" ? (statOf(p) === "mean" ? term("mean", "Means") : term("median", "Medians")) + (p.worst !== undefined && state.impute ? " over all problems; a problem without a usable formula counts as " + p.worst + "." : " over the problems where the method returned a usable formula.") : term("regime", "Every problem counts; a problem without a usable formula is a miss") + ".") + "</p>" + h;
+    return bar + missingNote(asked, shown, "any selected problem set at " + posText(r), r, true) + tweenNote(shown, r) + thinHint + '<p class="v2hint">' + esc(p.label) + " at " + posText(r) + ", one square per problem set; darker is better" + (p.higher === null && p.ideal !== undefined ? " (closer to " + p.ideal + ")" : "") + ". " + (p.kind === "cont" ? (statOf(p) === "mean" ? term("mean", "Means") : term("median", "Medians")) + (p.worst !== undefined && state.impute ? " over all problems; a problem without a usable formula counts as " + p.worst + "." : " over the problems where the method returned a usable formula.") : term("regime", "Every problem counts; a problem without a usable formula is a miss") + ".") + "</p>" + h;
   }
 
   // ---- controls that live on the display itself -----------------------------------------------------------------
@@ -936,7 +994,63 @@
   // the budgets a stepper offers: where a selected method has finished a selected catalog, or -- for a display that
   // pools -- every selected catalog
   function rungsWith(shown, whole) { return D.rungs.filter(function (r) { return shown.some(function (m) { return whole ? poolCats(m.key, r).length : state.cats.some(function (c) { return cell(m.key, c, r); }); }); }); }
-  function rungStepper(shown, whole) { return stepper("rung", state.rung, rungsWith(shown, whole), function (r) { return String(r); }, "budget " + help(TERMS.rungs, "What is a budget?"), "budget per problem"); }
+  function nearestOf(values, x) { var best = null; values.forEach(function (v) { if (best === null || Math.abs(Math.log(v / x)) < Math.abs(Math.log(best / x))) { best = v; } }); return best === null ? x : best; }
+  function rungStepper(shown, whole, cur) { return stepper("rung", cur !== undefined ? cur : state.rung, rungsWith(shown, whole), function (r) { return String(r); }, "budget " + help(TERMS.rungs, "What is a budget?"), "budget per problem"); }
+  // The position the per-method displays read every method at: a budget, or a time per problem, on a slider over the
+  // logarithm of the range the shown methods cover. Its marks: powers of two for budgets, 1, 2, 5 per decade for times.
+  // The slider rests on a mark or on a budget a method was run at when released within 1.5 % of the track from one.
+  var POS_STEPS = 1000;
+  function posRange(shown, time) {
+    var lo = Infinity, hi = -Infinity;
+    shown.forEach(function (m) { state.cats.forEach(function (c) { points(m.key, c, time).forEach(function (pt) { if (pt[0] < lo) { lo = pt[0]; } if (pt[0] > hi) { hi = pt[0]; } }); }); });
+    return isFinite(lo) ? (hi > lo ? [lo, hi] : [lo / 2, hi * 2]) : null;
+  }
+  function posMarks(lo, hi, time) {
+    var out = [], e, v;
+    if (!time) { for (e = Math.ceil(Math.log2(lo) - 1e-9); Math.pow(2, e) <= hi * (1 + 1e-9); e++) { out.push(Math.pow(2, e)); } return out; }
+    for (e = Math.floor(Math.log10(lo)); e <= Math.ceil(Math.log10(hi)); e++) { [1, 2, 5].forEach(function (k) { v = +(k * Math.pow(10, e)).toPrecision(3); if (v >= lo * (1 - 1e-9) && v <= hi * (1 + 1e-9)) { out.push(v); } }); }
+    return out;
+  }
+  function posRests(shown, lo, hi, time) {   // the marks and every position a shown method was run at
+    var seen = {}; posMarks(lo, hi, time).forEach(function (v) { seen[v] = 1; });
+    shown.forEach(function (m) { state.cats.forEach(function (c) { points(m.key, c, time).forEach(function (pt) { seen[pt[0]] = 1; }); }); });
+    return Object.keys(seen).map(Number).sort(function (a, b) { return a - b; });
+  }
+  function posLabel(x, time) { return time ? fmtSec(x) + " s" : fmtBudget(x); }
+  function posControl(shown) {
+    var time = state.pm === "time", rg = posRange(shown, time);
+    var mode = anyTime() ? seg("pm", state.pm, [["budget", "budget", "Each method at the same budget, in its own unit"], ["time", "time", "Each method at the same time per problem on our timing workstation"]], "at", "read every method at a budget or at a time")
+      : '<span class="v2segwrap"><span class="v2lab">at budget</span></span>';
+    var why = help(time ? TERMS.postime : TERMS.posbudget, time ? "How is a method read at a time?" : "How is a method read at a budget?");
+    if (!rg) { return mode + why + '<span class="v2hint">' + (time ? "No shown method has a measured time yet." : "No shown method has finished a selected problem set yet.") + "</span>"; }
+    var x = time ? state.pt : state.rung;
+    var marks = posMarks(rg[0], rg[1], time), prev = null, next = null, span = Math.log(rg[1] / rg[0]);
+    marks.forEach(function (v) { if (v < x * (1 - 1e-9)) { prev = v; } else if (v > x * (1 + 1e-9) && next === null) { next = v; } });
+    var at = function (v) { return Math.round(POS_STEPS * Math.log(v / rg[0]) / span); };
+    var btn = function (to, glyph, word) { return '<button type="button" class="v2stepbtn" ' + (to === null ? "disabled" : 'data-set="pos:' + to + '"') + ' aria-label="' + word + '">' + glyph + "</button>"; };
+    return mode + why + '<span class="v2step v2posstep">' + btn(prev, "◀", time ? "shorter time" : "smaller budget") +
+      '<input type="range" class="v2pos" min="0" max="' + POS_STEPS + '" step="1" value="' + at(x) + '" list="v2posmarks" data-lo="' + rg[0] + '" data-hi="' + rg[1] + '" data-rests="' + posRests(shown, rg[0], rg[1], time).join(",") +
+      '" aria-label="' + (time ? "time per problem" : "budget per problem") + '" aria-valuetext="' + esc(posLabel(x, time)) + '">' +
+      '<datalist id="v2posmarks">' + marks.map(function (v) { return '<option value="' + at(v) + '"></option>'; }).join("") + "</datalist>" +
+      '<output class="v2posval">' + esc(posLabel(x, time)) + "</output>" + btn(next, "▶", time ? "longer time" : "larger budget") + "</span>";
+  }
+  function settlePos(shown) {   // a position inside the range the shown methods cover: kept if it is, else the middle mark
+    var time = state.pm === "time", rg = posRange(shown, time); if (!rg) { return; }
+    var x = time ? state.pt : state.rung;
+    if (!(x >= rg[0] * (1 - 1e-9) && x <= rg[1] * (1 + 1e-9))) { var mk = posMarks(rg[0], rg[1], time); x = mk.length ? mk[Math.floor(mk.length / 2)] : +Math.sqrt(rg[0] * rg[1]).toPrecision(3); if (time) { state.pt = x; } else { state.rung = x; } }
+  }
+  function posFromSlider(t) {
+    var lo = +t.dataset.lo, hi = +t.dataset.hi, f = (+t.value) / POS_STEPS, best = null;
+    (t.dataset.rests || "").split(",").map(Number).forEach(function (v) { if (!(v > 0)) { return; } var d = Math.abs(Math.log(v / lo) / Math.log(hi / lo) - f); if (d < 0.015 && (best === null || d < best[0])) { best = [d, v]; } });
+    return best ? best[1] : +(lo * Math.pow(hi / lo, f)).toPrecision(4);
+  }
+  // which shown methods sit between two of their budgets at this position, and between which
+  function tweenText(between) { return "interpolated between budgets " + fmtBudget(between[0]) + " and " + fmtBudget(between[1]); }
+  function tweenNote(shown, r) {
+    var parts = [];
+    shown.forEach(function (m) { var x = null; state.cats.some(function (c) { x = cell(m.key, c, r); return !!x; }); if (x && x.between) { parts.push(esc(m.label) + " between budgets " + fmtBudget(x.between[0]) + " and " + fmtBudget(x.between[1])); } });
+    return parts.length ? '<p class="v2hint"><span class="v2tween">≈</span> ' + term("between", "Interpolated") + ": " + parts.join("; ") + ".</p>" : "";
+  }
   function bestRung(shown) {   // the largest budget that the most methods have finished
     var best = null, top = 0;
     D.rungs.forEach(function (r) { var n = shown.filter(function (m) { return poolCats(m.key, r).length; }).length; if (n && n >= top) { top = n; best = r; } });
@@ -945,12 +1059,27 @@
   function withAt(shown, r) { return shown.filter(function (m) { return state.cats.some(function (c) { return cell(m.key, c, r); }); }); }
   // a method missing at budget r either never runs there (outside the budgets its plan holds) or has not finished yet
   function notRun(m, r) { return !!(m.budgets && r !== undefined && m.budgets.indexOf(+r) < 0); }
-  function budgetRange(m) { return m.budgets.length > 1 ? "budgets " + m.budgets[0] + " to " + m.budgets[m.budgets.length - 1] : "budget " + m.budgets[0]; }
-  function missingNote(shown, present, what, r) {
-    var gone = shown.filter(function (m) { return present.indexOf(m) < 0; });
-    var never = gone.filter(function (m) { return notRun(m, r); }), open = gone.filter(function (m) { return !notRun(m, r); });
+  function budgetRange(m) { return m.budgets.length > 1 ? "budgets " + fmtBudget(m.budgets[0]) + " to " + fmtBudget(m.budgets[m.budgets.length - 1]) : "budget " + fmtBudget(m.budgets[0]); }
+  // at a position (a budget or a time anywhere on the slider): a method has no value outside the budgets it runs at,
+  // or, by time, outside the times its finished budgets took
+  function timesOf(m) { return (m.budgets || []).map(function (b) { return refTime(m.key, b); }).filter(function (t) { return t > 0; }); }
+  function outside(m, r) {
+    var x = posValue(r);
+    if (isTimePos(r)) { var ts = timesOf(m); return !ts.length || x < Math.min.apply(null, ts) * (1 - 1e-9) || x > Math.max.apply(null, ts) * (1 + 1e-9); }
+    return !!(m.budgets && m.budgets.length && (x < m.budgets[0] * (1 - 1e-9) || x > m.budgets[m.budgets.length - 1] * (1 + 1e-9)));
+  }
+  function outsideText(m, r) {
+    if (!isTimePos(r)) { return esc(m.label) + " has no value at " + esc(posText(r)) + " (it runs at " + budgetRange(m) + ")."; }
+    var ts = timesOf(m);
+    var lo = Math.min.apply(null, ts), hi = Math.max.apply(null, ts);
+    return esc(m.label) + (!ts.length ? " has no time measured on our timing workstation yet." : " has no value at " + esc(posText(r)) +
+      (hi > lo ? " (its budgets take " + fmtSec(lo) + " to " + fmtSec(hi) + " s per problem)." : " (its one timed budget takes " + fmtSec(lo) + " s per problem)."));
+  }
+  function missingNote(shown, present, what, r, atPos) {
+    var gone = shown.filter(function (m) { return present.indexOf(m) < 0; }), off = atPos ? outside : notRun;
+    var never = gone.filter(function (m) { return off(m, r); }), open = gone.filter(function (m) { return !off(m, r); });
     var names = function (ms) { return esc(ms.map(function (m) { return m.label; }).join(", ")); };
-    return (never.length ? '<p class="v2hint">' + never.map(function (m) { return esc(m.label) + " is not run at budget " + r + " (it runs at " + budgetRange(m) + ")."; }).join(" ") + "</p>" : "") +
+    return (never.length ? '<p class="v2hint">' + never.map(function (m) { return atPos ? outsideText(m, r) : esc(m.label) + " is not run at budget " + r + " (it runs at " + budgetRange(m) + ")."; }).join(" ") + "</p>" : "") +
       (open.length ? '<p class="v2hint">' + names(open) + (open.length > 1 ? " have" : " has") + " not finished " + what + ".</p>" : "");
   }
 
@@ -975,7 +1104,7 @@
     var cont = p.kind !== "rate";
     return '<div class="v2viewbar">' + '<span class="v2segwrap"><span class="v2lab">metric</span>' + pickButton("v2viewpick", 'data-axis="focus" aria-label="metric whose distribution is shown"', p.key) + " " + mhelp(p) + "</span>" +
       (cont ? seg("dmode", state.dmode, DMODES, "show", "how the distribution is drawn") : "") +
-      (cont && state.dmode === "rungs" ? "" : rungStepper(shown, cont && state.dmode !== "cats")) +
+      (cont && state.dmode === "rungs" ? "" : posControl(shown)) +
       (cont && state.dmode === "ecdf" ? seg("dnorm", state.dnorm, [["ok", "predicted problems", "100 % is every problem the method has a finite value for"], ["all", "all problems", "100 % is every problem in the pool: a problem without a prediction never enters the curve"]], "out of", "what the cumulative share is a share of") : "") +
       (cont && state.dmode === "rungs" ? seg("xaxis", state.xaxis, [["time", "time"], ["rung", "candidates"]].filter(function (o) { return o[0] !== "time" || anyTime(); }), "x axis", "what the budgets are drawn against") : "") + "</div>";
   }
@@ -995,9 +1124,9 @@
     var present = withAt(shown, r), nr = narrow(), W = wideWidth(), T = 46, R = 16;
     var cats = state.cats.slice().sort(function (a, b) { return CAT[b].laws - CAT[a].laws; }).filter(function (c) { return present.some(function (m) { return cell(m.key, c, r); }); });
     var swap = '<p class="v2hint">A rate is a hit or a miss on each run, so a histogram over problems would have only a few bars. This view shows how the rate varies between problem sets instead. ' + '<button type="button" class="v2btn" data-set="dmetric:log10_fvu_val">show the distribution of log10 FVU instead</button></p>';
-    if (!cats.length) { return swap + '<p class="v2hint">Nothing finished at budget ' + r + " for this selection: step to another budget above.</p>"; }
+    if (!cats.length) { return swap + '<p class="v2hint">No selected method has a value at ' + esc(posText(r)) + " for this selection: move the budget or time above.</p>"; }
     var rowH = Math.max(20, 7 * present.length + 8), B1 = 44 + 18 * present.length, Hh = T + cats.length * rowH + B1, Lw = nr ? 110 : 150;
-    var s = '<svg viewBox="0 0 ' + W + " " + Hh + '" class="v2chart v2dist v2distwide" role="img" aria-label="' + esc(p.label) + ' per problem set"><text x="' + Lw + '" y="' + TITLE_Y + '" class="ct">' + esc(p.label) + " per problem set at budget " + r + "</text>";
+    var s = '<svg viewBox="0 0 ' + W + " " + Hh + '" class="v2chart v2dist v2distwide" role="img" aria-label="' + esc(p.label) + ' per problem set"><text x="' + Lw + '" y="' + TITLE_Y + '" class="ct">' + esc(p.label) + " per problem set at " + posText(r) + "</text>";
     var xs = function (v) { return Lw + v * (W - Lw - R); };
     [0, 0.25, 0.5, 0.75, 1].forEach(function (g) { s += '<line x1="' + xs(g) + '" y1="' + T + '" x2="' + xs(g) + '" y2="' + (Hh - B1) + '" class="grid"/><text x="' + xs(g) + '" y="' + (Hh - B1 + 16) + '" class="tick" text-anchor="middle">' + (100 * g) + "%</text>"; });
     cats.forEach(function (c, i) { var yy = T + (i + 0.5) * rowH; s += '<text x="' + (Lw - 8) + '" y="' + (yy + 4) + '" class="tick" text-anchor="end">' + esc(c) + " · " + CAT[c].laws + "</text>";
@@ -1006,10 +1135,10 @@
         s += '<line x1="' + xs(st.lo).toFixed(1) + '" y1="' + yj.toFixed(1) + '" x2="' + xs(st.hi).toFixed(1) + '" y2="' + yj.toFixed(1) + '" stroke="' + col + '" stroke-width="2" stroke-opacity="0.4"/>';
         s += '<circle cx="' + xs(st.v).toFixed(1) + '" cy="' + yj.toFixed(1) + '" r="3.2" fill="' + col + '"><title>' + esc(m.label + " on " + c + ": " + fmt(p, st.v) + ", 95 % interval " + fmt(p, st.lo) + " to " + fmt(p, st.hi) + ", from " + Math.round(st.n).toLocaleString() + " problems") + "</title></circle>"; }); });
     var ly = Hh - B1 + 34; present.forEach(function (m) { s += '<circle cx="' + (Lw + 6) + '" cy="' + ly + '" r="4" fill="' + colorOf(m) + '"/><text x="' + (Lw + 16) + '" y="' + (ly + 4) + '" class="leg">' + esc(m.label + (m.local ? " (local)" : "")) + "</text>"; ly += 18; });
-    return swap + s + "</svg>" + '<p class="v2hint">One row per problem set, largest first; one dot per method with its ' + term("interval", "95 % interval") + ".</p>" + missingNote(shown, present, "any selected problem set at budget " + r, r);
+    return swap + s + "</svg>" + '<p class="v2hint">One row per problem set, largest first; one dot per method with its ' + term("interval", "95 % interval") + ".</p>" + missingNote(shown, present, "any selected problem set at " + posText(r), r, true) + tweenNote(present, r);
   }
   function renderDist(shown) {
-    var p = METRIC[state.dmetric], r = state.rung, keys = shown.map(function (m) { return m.key; });
+    var p = METRIC[state.dmetric], r = curPos(), keys = shown.map(function (m) { return m.key; });
     if (!shown.length) { return '<p class="v2hint">Select at least one method.</p>'; }
     var head = distHead(shown, p);
     if (p.kind === "rate") { return head + renderDistRate(shown, p, r); }
@@ -1020,11 +1149,11 @@
     shown.forEach(function (m) { var use = state.dmode === "cats" ? state.cats.filter(function (c) { return cell(m.key, c, r); }) : poolCats(m.key, r, keys); if (!use.length) { return; }
       var ph = pooledHist(p.key, m.key, r, use); if (!ph) { return; }
       var rows = use.reduce(function (a, c) { return a + cell(m.key, c, r).n; }, 0); series.push({ m: m, ph: ph, f: five(ph), use: use, laws: laws(use), rows: rows }); });
-    var gone = missingNote(shown, series.map(function (sr) { return sr.m; }), state.dmode === "cats" ? "any selected problem set at budget " + r : "all selected problem sets at budget " + r + ", so " + term("complete", "its distribution is not shown yet") + " (the problem sets it has finished are under \u201cby problem set\u201d)", r);
-    if (!series.length) { return head + '<p class="v2hint">No selected method has finished ' + (state.dmode === "cats" ? "any selected problem set" : "all selected problem sets") + " at budget " + r + " yet. Choose another budget above, or select fewer problem sets.</p>" + gone; }
+    var gone = missingNote(shown, series.map(function (sr) { return sr.m; }), state.dmode === "cats" ? "any selected problem set at " + posText(r) : "all selected problem sets at " + posText(r) + ", so " + term("complete", "its distribution is not shown yet") + " (the problem sets it has finished are under \u201cby problem set\u201d)", r, true);
+    if (!series.length) { return head + '<p class="v2hint">No selected method has finished ' + (state.dmode === "cats" ? "any selected problem set" : "all selected problem sets") + " at " + posText(r) + " yet. Choose another budget or time above, or select fewer problem sets.</p>" + gone; }
     var pooled = state.dmode !== "cats" ? " The problems are those of the selected problem sets (" + series[0].laws.toLocaleString() + "), the same for every method; the count under each histogram says on how many runs the method's formula has a value." : "";
     var body = state.dmode === "ecdf" ? distEcdf(series, p, r) : state.dmode === "cats" ? distCats(series, p, r) : distHists(series, p, r);
-    return head + body + '<p class="v2hint">' + (state.dmode === "cats" ? "" : (state.dmode === "ecdf" && state.dnorm === "all" ? "" : (p.worst !== undefined && state.impute ? "All problems: a problem without a usable formula counts as " + p.worst + "." : "Only problems where the method's formula has a value are counted.")) + pooled + " ") + term("median", "Medians are read from histograms with 128 bins") + "; values outside the shown range, including plus infinity, are counted in the outermost bins.</p>" + gone;
+    return head + body + tweenNote(series.map(function (sr) { return sr.m; }), r) + '<p class="v2hint">' + (state.dmode === "cats" ? "" : (state.dmode === "ecdf" && state.dnorm === "all" ? "" : (p.worst !== undefined && state.impute ? "All problems: a problem without a usable formula counts as " + p.worst + "." : "Only problems where the method's formula has a value are counted.")) + pooled + " ") + term("median", "Medians are read from histograms with 128 bins") + "; values outside the shown range, including plus infinity, are counted in the outermost bins.</p>" + gone;
   }
   function distHists(series, p, r) {
     var nr = narrow(), W = wideWidth(), R = 18, T = 52, ph0 = series[0].ph, vr = viewRange(series.map(function (sr) { return sr.ph; }));
@@ -1037,7 +1166,7 @@
     // than the mean lands in one bin) would flatten everything else, so it is cut at the scale and labelled instead.
     var top = 0; groups.forEach(function (g) { var v = g.filter(function (x) { return !x.edge; }).map(function (x) { return x.share; }).sort(function (a, b) { return b - a; }); if (v.length) { top = Math.max(top, v.length > 1 && v[0] > 1.6 * v[1] ? v[1] : v[0]); } });
     if (!top) { groups.forEach(function (g) { g.forEach(function (x) { top = Math.max(top, x.share); }); }); }
-    var s = '<svg viewBox="0 0 ' + W + " " + H + '" class="v2chart v2distwide" role="img" aria-label="' + esc(p.label) + ' distribution, one histogram per method"><text x="' + L + '" y="' + TITLE_Y + '" class="ct">' + esc(p.label) + " at budget " + r + "</text>";
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" class="v2chart v2distwide" role="img" aria-label="' + esc(p.label) + ' distribution, one histogram per method"><text x="' + L + '" y="' + TITLE_Y + '" class="ct">' + esc(p.label) + " at " + posText(r) + "</text>";
     s += xAxisSVG(p, vr, xs, T, H - 34 - gap + 6, W, L, R);
     series.forEach(function (sr, i) { var y0 = T + i * step, yb = y0 + panelH, col = colorOf(sr.m), pts = [], cl = [];
       var yOf = function (v) { return yb - Math.min(1, v / (top * 1.08)) * (panelH - 14); };
@@ -1060,7 +1189,7 @@
     var R = nr ? 18 : legendRight(series.map(function (sr) { return sr.m.label + (sr.m.local ? " (local)" : ""); }));
     var vr = viewRange(series.map(function (sr) { return sr.ph; })), all = state.dnorm === "all", low = p.higher === true;   // a problem without a prediction sits at the worse end
     var xs = function (x) { return L + (Math.min(vr.hi, Math.max(vr.lo, x)) - vr.lo) / (vr.hi - vr.lo) * (W - L - R); }, y = function (v) { return T + (1 - v) * (H - T - B); };
-    var s = '<svg viewBox="0 0 ' + W + " " + H + '" class="v2chart v2distwide" role="img" aria-label="' + esc(p.label) + ' cumulative distribution"><text x="' + (nr ? 10 : L) + '" y="' + TITLE_Y + '" class="ct">' + esc(nr ? p.short + " @ " + r + ": share at or below" : p.label + " at budget " + r + ": share of " + (all ? "all" : "predicted") + " problems at or below") + "</text>";
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" class="v2chart v2distwide" role="img" aria-label="' + esc(p.label) + ' cumulative distribution"><text x="' + (nr ? 10 : L) + '" y="' + TITLE_Y + '" class="ct">' + esc(nr ? p.short + " @ " + (isTimePos(r) ? fmtSec(posValue(r)) + " s" : fmtBudget(+r)) + ": share at or below" : p.label + " at " + posText(r) + ": share of " + (all ? "all" : "predicted") + " problems at or below") + "</text>";
     [0, 0.25, 0.5, 0.75, 1].forEach(function (g) { s += '<line x1="' + L + '" y1="' + y(g).toFixed(1) + '" x2="' + (W - R) + '" y2="' + y(g).toFixed(1) + '" class="grid' + (g === 0.5 ? " zero" : "") + '"/><text x="' + (L - 6) + '" y="' + (y(g) + 4).toFixed(1) + '" class="tick" text-anchor="end">' + (100 * g) + "%</text>"; });
     s += xAxisSVG(p, vr, xs, T, H - B, W, L, R);
     var ly = nr ? H - B + 50 : T + 6, lx = nr ? L : W - R + LEG_GAP;
@@ -1076,10 +1205,10 @@
     var cats = state.cats.slice().sort(function (a, b) { return CAT[b].laws - CAT[a].laws; });
     cats.forEach(function (c) { series.forEach(function (sr) { if (sr.use.indexOf(c) < 0) { return; } var ph = pooledHist(p.key, sr.m.key, r, [c]); if (!ph) { return; } (per[c] = per[c] || {})[sr.m.key] = ph; phs.push(ph); }); });
     cats = cats.filter(function (c) { return per[c]; });
-    if (!phs.length) { return '<p class="v2hint">No selected problem set has a finite value at budget ' + r + ".</p>"; }
+    if (!phs.length) { return '<p class="v2hint">No selected problem set has a finite value at ' + esc(posText(r)) + ".</p>"; }
     var vr = viewRange(phs), rowH = Math.max(22, 11 * series.length + 8), B = 44 + 18 * series.length, H = T + (cats.length + 1) * rowH + B;
     var xs = function (x) { return Lw + (Math.min(vr.hi, Math.max(vr.lo, x)) - vr.lo) / (vr.hi - vr.lo) * (W - Lw - R); };
-    var s = '<svg viewBox="0 0 ' + W + " " + H + '" class="v2chart v2distwide" role="img" aria-label="' + esc(p.label) + ' per problem set"><text x="' + Lw + '" y="' + TITLE_Y + '" class="ct">' + esc(p.label) + " per problem set at budget " + r + "</text>";
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" class="v2chart v2distwide" role="img" aria-label="' + esc(p.label) + ' per problem set"><text x="' + Lw + '" y="' + TITLE_Y + '" class="ct">' + esc(p.label) + " per problem set at " + posText(r) + "</text>";
     s += xAxisSVG(p, vr, xs, T, H - B, W, Lw, R);
     var row = function (label, i, get, bold) { var yy = T + (i + 0.5) * rowH;
       if (i % 2) { s += '<rect x="' + Lw + '" y="' + (yy - rowH / 2) + '" width="' + (W - Lw - R) + '" height="' + rowH + '" class="v2stripe"/>'; }
@@ -1145,10 +1274,10 @@
       var ptf = tfOf(p), dticks = ptf === "log2" ? logTicks(ymin, ymax, 2) : ptf === "log10" ? logTicks(ymin, ymax, 10) : linearTicks(ymin, ymax);
       var dtick = function (g) { return p.kind === "rate" ? (g > 0 ? "+" : "") + roundNum(100 * g) + " pp" : ptf === "log2" ? "× " + roundNum(Math.pow(2, g)) : ptf === "log10" ? "× " + roundNum(Math.pow(10, g)) : (g > 0 ? "+" : "") + roundNum(g); };
       return chartSVG({ title: title, aria: title, series: series, ymin: ymin, ymax: ymax, ticks: dticks, tick: dtick, ylabel: "", timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: 0 }); }); });
-    var r = state.rung, rows = "";
+    var r = nearestOf(rungsWith(shown, true), state.rung), rows = "";
     others.forEach(function (m) { rows += '<tr><td><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + '</td>' + plots.map(function (p) { var use = bothDone(m.key, base.key, r); var st = use.length ? pairedStat(p, m.key, base.key, r, use) : null; if (!st) { return '<td class="v2na">–</td><td class="v2na">–</td><td class="v2na">–</td>'; } var sig = st.p !== null && st.p < 0.05; return '<td' + (sig ? ' class="v2sig"' : "") + '>' + fmtDelta(p, st.v) + ' <span class="v2ci-txt">[' + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + ']</span></td><td>' + fmtP(st.p) + '</td><td class="v2hint">' + st.wins.toLocaleString() + " / " + st.losses.toLocaleString() + " of " + st.n.toLocaleString() + '</td>'; }).join("") + '</tr>'; });
     var anyRow = others.some(function (m) { return plots.some(function (p) { var use = bothDone(m.key, base.key, r); return use.length && pairedStat(p, m.key, base.key, r, use); }); });
-    var table = '<h3 class="v2h">At one budget</h3><div class="v2viewbar">' + rungStepper(shown, true) + "</div>" + (anyRow ? "" : '<p class="v2hint">No method has ' + term("complete", "finished all selected problem sets") + " at budget " + r + " together with the baseline yet. Choose another budget above, or select fewer problem sets.</p>") + '<div class="v2table-wrap"><table class="v2table"><thead><tr><th>method − ' + esc(base.label) + ', budget ' + r + '</th>' + plots.map(function (p) { return '<th colspan="3">' + esc(mname(p)) + " " + mhelp(p) + '</th>'; }).join("") + '</tr><tr><th></th>' + plots.map(function () { return '<th>Δ [95 %]</th><th>p</th><th>better / worse</th>'; }).join("") + '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    var table = '<h3 class="v2h">At one budget</h3><div class="v2viewbar">' + rungStepper(shown, true, r) + "</div>" + (anyRow ? "" : '<p class="v2hint">No method has ' + term("complete", "finished all selected problem sets") + " at budget " + r + " together with the baseline yet. Choose another budget above, or select fewer problem sets.</p>") + '<div class="v2table-wrap"><table class="v2table"><thead><tr><th>method − ' + esc(base.label) + ', budget ' + r + '</th>' + plots.map(function (p) { return '<th colspan="3">' + esc(mname(p)) + " " + mhelp(p) + '</th>'; }).join("") + '</tr><tr><th></th>' + plots.map(function () { return '<th>Δ [95 %]</th><th>p</th><th>better / worse</th>'; }).join("") + '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
       '<p class="v2hint">\u0394: the method\u2019s value minus the baseline\u2019s, with its 95 % interval; pp are percentage points, and ratios are compared as factors (\u00d7 0.5 means half). p: the probability of a difference at least this large if both methods were equally good, from ' + term("pairdiff", "a test over the problem sets") + '; for metrics other than rates it tests how often the method does better, not \u0394. Bold: p below 0.05, so the direction of the difference is unlikely to be chance; the \u0394 column shows its size. Better / worse: on how many problems the method does better or worse than the baseline on that metric; for a ratio, these counts say which is closer to 1. Choose the baseline above. <a href="paired.html">How paired comparisons work</a></p>';
     return ctl + '<div class="v2charts">' + charts.join("") + "</div>" + table;
   }
@@ -1223,7 +1352,7 @@
     if (sets.indexOf(state.pset) < 0) { state.pset = sets.indexOf("feynman") >= 0 ? "feynman" : sets[0]; }
     var c = state.pset, run = state.prun, n = CAT[c].laws;
     var budgets = D.rungs.filter(function (r) { return shown.some(function (m) { return (P[m.key] || {})[c + "|" + r]; }); });
-    if (budgets.length && budgets.indexOf(state.rung) < 0) { state.rung = budgets[budgets.length - 1]; }
+    if (budgets.length && budgets.indexOf(state.rung) < 0) { state.rung = nearestOf(budgets, state.rung); }
     var r = state.rung;
     state.pprob = Math.min(n - 1, Math.max(0, state.pprob));
     var i = state.pprob, blk = Math.floor(i / B);
@@ -1339,11 +1468,11 @@
     if (R.keys.indexOf(state.rmetric) < 0) { state.rmetric = R.keys[0]; }
     var timed = state.xaxis === "time" && anyTime(), budgets = timed ? rankSlots(R) : [];
     if (timed && budgets.indexOf(state.tbudget) < 0) { state.tbudget = bestBudget(R, shown) || budgets[0] || null; }
-    var slot = timed ? state.tbudget : String(state.rung), ki = R.keys.indexOf(state.rmetric), p = METRIC[state.rmetric];
+    var rr = nearestOf(rungsWith(shown, true), state.rung), slot = timed ? state.tbudget : String(rr), ki = R.keys.indexOf(state.rmetric), p = METRIC[state.rmetric];
     var head = '<div class="v2viewbar"><span class="v2segwrap"><span class="v2lab">ranked on</span>' + pickButton("v2viewpick", 'data-axis="focus" aria-label="metric the methods are ranked on"', p.key) + " " + mhelp(p) +
       (ki === 0 ? ' <span class="v2tag v2tag-primary" title="The ranking metric chosen before the results were read. Which time limit or budget to compare at depends on the use case.">primary</span>' : ' <span class="v2tag" title="For browsing; the primary ranking metric is log10 FVU on the held-out points.">exploratory</span>') + "</span>" +
       seg("xaxis", timed ? "time" : "rung", [["time", "the same time", "Each method at its largest finished budget that fits within the time limit per problem"], ["rung", "the same budget", "Each method at the same budget number, in its own unit: a rough comparison, since the units differ"]].filter(function (o) { return o[0] !== "time" || anyTime(); }), "every method at", "what the methods are held equal on") +
-      (timed ? stepper("tbudget", state.tbudget, budgets, function (b) { return slotSeconds(R, b) + " s"; }, "time limit " + help(TERMS.tbudget, "How is the time limit applied?"), "time limit per problem") : rungStepper(shown, true)) + "</div>";
+      (timed ? stepper("tbudget", state.tbudget, budgets, function (b) { return slotSeconds(R, b) + " s"; }, "time limit " + help(TERMS.tbudget, "How is the time limit applied?"), "time limit per problem") : rungStepper(shown, true, rr)) + "</div>";
     if (shown.length < 2) { return head + '<p class="v2hint">Select at least two methods to rank.</p>'; }
     if (slot === null) { return head + '<p class="v2hint">Fewer than two of the selected methods have been timed yet.</p>'; }
     var lg = ranking(R, shown, slot, ki);
@@ -1531,7 +1660,14 @@
         (state.view === "matrix" ? [METRIC[state.focus]] : D.metrics.filter(function (m) { return plotAxes().indexOf(m.key) >= 0; })).forEach(function (m) { if (needsHist(m)) { ensureHists(m); } });
       }
       renderHeadline();
+      // Tables by problem set, problem sets and distributions read every method at a position (between budgets too);
+      // curves, paired differences, ranks and predictions stay on budgets a method was run at.
+      var atPos = state.view === "matrix" || (state.view === "table" && state.rows === "cats") || (state.view === "dist" && !(METRIC[state.dmetric].kind !== "rate" && state.dmode === "rungs"));
+      if (atPos) { settlePos(shown); }
+      BETWEEN = atPos;
+      try {
       view.innerHTML = state.view === "table" ? renderTable(shown) : state.view === "matrix" ? renderMatrix(shown) : state.view === "dist" ? renderDist(shown) : state.view === "ranks" ? renderRanks(shown) : state.view === "paired" ? renderPaired(shown) : state.view === "preds" ? renderPreds(shown) : renderCurves(shown);
+      } finally { BETWEEN = false; }
       // A redraw replaces the button an open menu hangs on (a histogram that arrives, a container that settles).
       // The menu moves to the button's successor; it closes only when the control itself is gone.
       if (pickerFor && !document.body.contains(pickerFor)) { var again = samePick(pickerFor); if (again) { pickerFor = again; again.setAttribute("aria-expanded", "true"); placePicker(again); } else { closePicker(); } }
@@ -1540,10 +1676,12 @@
   }
 
   // ---- events ----------------------------------------------------------------------------------------------------
-  var SETTABLE = { rung: 1, dmode: 1, dnorm: 1, dmetric: 1, xaxis: 1, tbudget: 1, pset: 1, prun: 1, pprob: 1, pnum: 1 };
+  var SETTABLE = { pos: 1, pm: 1, rung: 1, dmode: 1, dnorm: 1, dmetric: 1, xaxis: 1, tbudget: 1, pset: 1, prun: 1, pprob: 1, pnum: 1 };
   function setState(key, val) {
     if (!SETTABLE[key]) { return; }
     if (key === "rung") { var r = parseInt(val, 10); if (D.rungs.indexOf(r) >= 0) { state.rung = r; } return; }
+    if (key === "pos") { var x = parseFloat(val); if (x > 0) { if (state.pm === "time") { state.pt = x; } else { state.rung = x; } } return; }
+    if (key === "pm") { state.pm = val === "time" && anyTime() ? "time" : "budget"; return; }
     if (key === "dmetric" && !METRIC[val]) { return; }
     if (key === "pset") { if (CAT[val]) { state.pset = val; state.pprob = 0; } return; }
     if (key === "prun") { state.prun = val === "2" ? 2 : 1; return; }
@@ -1562,12 +1700,13 @@
     else if (t.name === "v2stat") { state.stat = t.value; } else if (t.name === "v2xaxis") { state.xaxis = t.value; } else if (t.name === "v2rows") { state.rows = t.value; }
     else if (t.classList.contains("v2band")) { state.band = t.checked; } else if (t.classList.contains("v2cross")) { state.cross = t.checked; } else if (t.classList.contains("v2impute")) { state.impute = t.checked; } else if (t.classList.contains("v2tier")) { state.tier = t.checked ? "all" : "main"; }
     else if (t.classList.contains("v2rung")) { state.rung = parseInt(t.value, 10); } else if (t.classList.contains("v2base")) { state.base = t.value; }
+    else if (t.classList.contains("v2pos")) { setState("pos", String(posFromSlider(t))); }
     else if (t.dataset.state) { setState(t.dataset.state, t.value); }
     else if (t.classList.contains("v2swatch")) { userColors[t.dataset.m] = t.value; writeCookie(userColors); root.querySelector(".v2cookie").hidden = false; }
     else { return; }
     render();
   });
-  on("input", function (e) { var t = e.target; if (t.classList.contains("v2valid")) { state.valid = Math.min(100, Math.max(0, parseInt(t.value, 10) || 0)); syncControls(); scheduleRender(); } else if (t.classList.contains("v2q")) { state.q = t.value; syncControls(); } else if (t.classList.contains("v2swatch")) { userColors[t.dataset.m] = t.value; render(); } });
+  on("input", function (e) { var t = e.target; if (t.classList.contains("v2pos")) { var o = t.parentNode.querySelector(".v2posval"), v = posFromSlider(t); if (o) { o.textContent = posLabel(v, state.pm === "time"); } return; } if (t.classList.contains("v2valid")) { state.valid = Math.min(100, Math.max(0, parseInt(t.value, 10) || 0)); syncControls(); scheduleRender(); } else if (t.classList.contains("v2q")) { state.q = t.value; syncControls(); } else if (t.classList.contains("v2swatch")) { userColors[t.dataset.m] = t.value; render(); } });
   on("click", function (e) {
     var b = e.target.closest ? e.target.closest("button") : null; if (!b || !root.contains(b) || b.classList.contains("v2help")) { return; }
     if (b.dataset.view) { state.view = b.dataset.view; render(); return; }
