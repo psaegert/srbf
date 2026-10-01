@@ -174,6 +174,12 @@ test('the Reproductions page: every compared method with its source, published v
       for (const [, p] of cells.slice(1)) { expect(p).toMatch(/^(< 0\.001|0\.\d+|1\.00)$/); }   // every srbf run has its p
       await expect(row.locator('.repro-reading')).toHaveText(/^(No significant difference\.|srbf's (runs succeed (less|more) often than the published ones|fits score (lower|higher) than the published fits)\.)/);
       expect(await row.locator('.repro-protocol dt').allTextContents()).toEqual(['Published', 'srbf']);
+      // where the published number comes from: the publication's figure or table, or the pinned results file and the computation
+      expect(await row.locator('.repro-sources img, .repro-sources pre').count()).toBeGreaterThan(0);
+      for (const img of await row.locator('.repro-sources img').all()) {
+        await img.scrollIntoViewIfNeeded();
+        await expect.poll(() => img.evaluate((el) => el.complete && el.naturalWidth > 0)).toBe(true);
+      }
     }
   }
   // a difference has its explanation next to it

@@ -135,7 +135,7 @@ def reading(res: dict[str, Any]) -> str:
     return "srbf's runs succeed " + ("less" if low else "more") + " often than the published ones."
 
 
-def row_html(row: dict[str, Any], res: dict[str, Any]) -> str:
+def row_html(row: dict[str, Any], res: dict[str, Any], base: Path) -> str:
     pub, srbf = row["published"], row["srbf"]
     lines = [f'<p class="repro-what">{esc(row["what"])}</p>',
              '<div class="repro-scroll"><table class="repro-table">',
@@ -164,7 +164,35 @@ def row_html(row: dict[str, Any], res: dict[str, Any]) -> str:
     lines.append('<dl class="repro-protocol">'
                  f'<dt>Published</dt><dd>{esc(pub["where"])}. {esc(pub["protocol"])}.</dd>'
                  f'<dt>srbf</dt><dd>{esc(srbf["problems"])}. {esc(srbf["protocol"])}.{config}</dd></dl>')
-    return "\n".join(lines)
+    lines.append(sources_html(row, base))
+    return "\n".join(line for line in lines if line)
+
+
+def png_size(path: Path) -> tuple[int, int]:
+    """A PNG's width and height, from its header."""
+    with open(path, "rb") as fh:
+        head = fh.read(24)
+    if head[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError(f"{path} is not a PNG")
+    return int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big")
+
+
+def sources_html(row: dict[str, Any], base: Path) -> str:
+    """Where the published number comes from: a crop of the publication's figure or table, and for a number computed
+    from a published results file, the pinned file and the computation."""
+    parts = []
+    for src in row.get("sources", []):
+        if "image" in src:
+            w, h = png_size(base / src["image"])
+            href = "data/" + src["image"]
+            parts.append(f'<figure class="repro-source"><a href="{esc(href)}" target="_blank" rel="noopener">'
+                         f'<img src="{esc(href)}" width="{w}" height="{h}" loading="lazy" alt="{esc(src["caption"])}" />'
+                         f'</a><figcaption>{esc(src["caption"])}</figcaption></figure>')
+        if "code" in src:
+            parts.append(f'<p class="repro-codecap">The published results file '
+                         f'(<a href="{esc(src["file"])}" target="_blank" rel="noopener">pinned on GitHub</a>) and the '
+                         f'computation:</p><pre class="repro-code"><code>{esc(src["code"])}</code></pre>')
+    return f'<div class="repro-sources">{"".join(parts)}</div>' if parts else ""
 
 
 def slug(name: str) -> str:
@@ -174,12 +202,12 @@ def slug(name: str) -> str:
 def build(data: dict[str, Any], base: Path) -> str:
     parts = ['<section id="compared" class="prose">', "<h2>Methods with a matching published result</h2>"]
     for m in data["compared"]:
-        rows = "\n".join(f'<div class="repro-row">\n{row_html(r, evaluate(r, base))}\n</div>' for r in m["rows"])
+        rows = "\n".join(f'<div class="repro-row">\n{row_html(r, evaluate(r, base), base)}\n</div>' for r in m["rows"])
         parts.append(f'<section class="topic" id="repro-{slug(m["method"])}"><h3>{esc(m["method"])}</h3><div>'
                      f'<p class="repro-src"><a href="{esc(m["source"]["url"])}" target="_blank" rel="noopener">'
                      f'{esc(m["source"]["cite"])}</a></p>\n{rows}\n</div></section>')
     parts.append("</section>")
-    parts += ['<section id="not-compared" class="prose">', "<h2>Methods without a matching published result</h2>"]
+    parts += ['<section id="not-compared" class="prose">', "<h2>Not compared yet</h2>"]
     for m in data["not_compared"]:
         parts.append(f'<section class="topic" id="repro-{slug(m["method"])}"><h3>{esc(m["method"])}</h3><div>'
                      f'<p class="repro-src"><a href="{esc(m["url"])}" target="_blank" rel="noopener">{esc(m["cite"])}</a></p>'

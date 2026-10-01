@@ -33,6 +33,11 @@ compared:
             bags, so 768 candidates in all, the closest of srbf's settings to the paper's 1,000. 512 fresh
             test points
           draws: [[104, 120], [103, 120]]
+        sources:
+          - image: reproductions/sources/e2e_fig5.png
+            caption: >-
+              Fig. 5 of the paper. The compared share is the noise-0 marker (×) of “Ours” in the accuracy panel,
+              read from the figure.
         test: {kind: rate, rate: 0.866}
 
   - method: GP-GOMEA
@@ -55,6 +60,17 @@ compared:
             SRBench 2021's GP-GOMEA settings, 1,000,000 evaluations; 512 training and 512 test points; one fit per law
           config: configs/evaluation/panels/gpgomea_srbench2021_feynman.yaml
           draws: [[83, 116]]
+        sources:
+          - image: reproductions/sources/srbench2021_fig8.png
+            caption: >-
+              Fig. 8 of SRBench 2021: GP-GOMEA's noise-0 marker in the Feynman panel. The exact share comes from the
+              benchmark's published results file, computed as below.
+          - file: https://github.com/cavalab/srbench/blob/e5ded4715ed5721703353d3500a2fdb99004faf1/results/ground-truth_results.feather
+            code: |-
+              import pandas as pd
+              r = pd.read_feather("https://media.githubusercontent.com/media/cavalab/srbench/e5ded4715ed5721703353d3500a2fdb99004faf1/results/ground-truth_results.feather")
+              r = r.query("algorithm == 'GP-GOMEA' and data_group == 'Feynman' and target_noise == 0")
+              (r.r2_test > 0.999).mean()  # 0.709: 658 of 928 fits
         test: {kind: per_problem, file: reproductions/gpgomea_srbench_feynman.csv}
 
   - method: NeSymReS
@@ -75,6 +91,11 @@ compared:
             The released model, pre-trained on 100 million equations; srbf's own runs at beam width 32; 512
             training and 512 test points
           draws: [[36, 52], [37, 52]]
+        sources:
+          - image: reproductions/sources/nesymres_fig3.png
+            caption: >-
+              Fig. 3 of the paper. In the AI Feynman panel, the NeSymReS line has one point per beam width, from 1
+              to 256; the point for beam width 32 reads 48 of 52.
         test: {kind: count, k: 48, n: 52}
         note: >-
           The released model is not the one the paper's figures report: the paper used a model pre-trained on 10
@@ -89,6 +110,10 @@ compared:
           problems: The same 52 laws
           protocol: The released model, as above
           draws: [[43, 52], [46, 52]]
+        sources:
+          - image: reproductions/sources/nesymres_fig8.png
+            caption: >-
+              Fig. 8 of the paper, the same for the R² measure; the point for beam width 32 reads 49 of 52.
         test: {kind: count, k: 49, n: 52}
 
   - method: Operon
@@ -111,6 +136,17 @@ compared:
             SRBench 2021's Operon settings, 1,000,000 evaluations; 512 training and 512 test points; one fit per law
           config: configs/evaluation/panels/operon_srbench2021_feynman.yaml
           draws: [[98, 116]]
+        sources:
+          - image: reproductions/sources/srbench2021_fig8.png
+            caption: >-
+              Fig. 8 of SRBench 2021: Operon's noise-0 marker in the Feynman panel. The exact share comes from the
+              benchmark's published results file, computed as below.
+          - file: https://github.com/cavalab/srbench/blob/e5ded4715ed5721703353d3500a2fdb99004faf1/results/ground-truth_results.feather
+            code: |-
+              import pandas as pd
+              r = pd.read_feather("https://media.githubusercontent.com/media/cavalab/srbench/e5ded4715ed5721703353d3500a2fdb99004faf1/results/ground-truth_results.feather")
+              r = r.query("algorithm == 'Operon' and data_group == 'Feynman' and target_noise == 0")
+              (r.r2_test > 0.999).mean()  # 0.852: 988 of 1,160 fits
         test: {kind: per_problem, file: reproductions/operon_srbench_feynman.csv}
 
   - method: QLattice
@@ -130,6 +166,13 @@ compared:
           problems: Six of the datasets, two seeds each (12 fits)
           protocol: srbf's QLattice code, run inside SRBench's protocol (SRBench's data, split and seeds 769 and 860); 200 epochs
           ranks: {runs: 30, of: [11, 8, 16, 1, 7, 3, 17, 18, 12, 23, 6, 27]}
+        sources:
+          - file: https://github.com/cavalab/srbench/blob/dc3f6daa93bf10955df8775256a6f8644f38fd93/results/first-principles-tuning/results.feather
+            code: |-
+              import pandas as pd
+              r = pd.read_feather("https://media.githubusercontent.com/media/cavalab/srbench/dc3f6daa93bf10955df8775256a6f8644f38fd93/results/first-principles-tuning/results.feather")
+              r = r.query("algorithm == 'QLattice'")
+              r.groupby('dataset').r2_test.size()  # 30 fits on each dataset
         test: {kind: ranks}
 
   - method: RILS-ROLS
@@ -149,21 +192,41 @@ compared:
           protocol: The authors' settings, 1,000,000 fit calls; 512 training and 512 test points; one fit per law
           config: configs/evaluation/panels/rilsrols_paper_feynman.yaml
           draws: [[94, 116]]
+        sources:
+          - image: reproductions/sources/rilsrols_table6.png
+            caption: >-
+              Table 6 of the paper prints 78.45 % for the Feynman laws at noise 0: each law's median over its 10
+              fits, averaged over the laws. The per-fit share compared here comes from the authors' published
+              results file, computed as below.
+          - file: https://github.com/kartelj/rils-rols/blob/54861c1c8dc4a521da6885bdcfdc54ecb7b38c31/paper_resources/srbench/feathers/ground-truth_results_rils-rols.feather
+            code: |-
+              import pandas as pd
+              r = pd.read_feather("https://raw.githubusercontent.com/kartelj/rils-rols/54861c1c8dc4a521da6885bdcfdc54ecb7b38c31/paper_resources/srbench/feathers/ground-truth_results_rils-rols.feather")
+              r = r.query("data_group == 'Feynman' and target_noise == 0")
+              (r.r2_test > 0.999).mean()  # 0.782: 905 of 1,158 fits
         test: {kind: per_problem, file: reproductions/rilsrols_srbench_feynman.csv}
 
 not_compared:
   - method: DSR
-    cite: Petersen et al., Deep symbolic regression, ICLR 2021
-    url: https://arxiv.org/abs/1912.04871
-    reason: The paper's results use 2 million expressions per problem; srbf runs DSR at up to 16,000.
-  - method: PySR
-    cite: Cranmer, Interpretable Machine Learning for Science with PySR and SymbolicRegression.jl, 2023
-    url: https://arxiv.org/abs/2305.01582
-    reason: The paper evaluates PySR on its own benchmark of empirical laws, none of which are among srbf's problems.
-  - method: uDSR*
-    cite: Landajuela et al., A Unified Framework for Deep Symbolic Regression, NeurIPS 2022
-    url: https://arxiv.org/abs/2205.15569
+    cite: La Cava et al., Contemporary Symbolic Regression Methods and their Relative Performance (SRBench 2021), NeurIPS Datasets and Benchmarks 2021
+    url: https://arxiv.org/abs/2107.14351
     reason: >-
-      The paper's results use 2 million expressions per problem; srbf runs uDSR* at 13,000. The asterisk marks that
-      srbf runs uDSR as far as it was released: without the paper's AI Feynman step (a pre-processing that splits a
-      problem into simpler ones) and without pre-training.
+      SRBench 2021 reports DSR on the Feynman laws: 22.6 % of its fits reach a test R² above 0.999, at 1,000,000
+      expressions per fit. srbf's own runs of DSR use at most 16,000 expressions, so a comparison needs a run of
+      srbf's DSR at SRBench's settings.
+  - method: PySR
+    cite: "Imai Aldeia et al., Call for Action: Towards the Next Generation of Symbolic Regression Benchmarks (SRBench 2025), GECCO 2025 Companion"
+    url: https://github.com/cavalab/srbench/tree/srbench_2025
+    reason: >-
+      SRBench 2025 reports PySR on the physics datasets QLattice is compared on above, 30 fits per dataset with
+      50 minutes each. A comparison needs a run of srbf's PySR inside SRBench's protocol, as for QLattice. PySR's
+      own paper evaluates it on empirical laws that are not among srbf's problems.
+  - method: uDSR*
+    cite: "Imai Aldeia et al., Call for Action: Towards the Next Generation of Symbolic Regression Benchmarks (SRBench 2025), GECCO 2025 Companion"
+    url: https://github.com/cavalab/srbench/tree/srbench_2025
+    reason: >-
+      SRBench 2025 reports uDSR on twelve datasets of its black-box track, 30 fits per dataset. A comparison needs a
+      run of srbf's uDSR inside SRBench's protocol. The uDSR paper's own results use 2 million expressions per
+      problem, and srbf runs uDSR* at 13,000. The asterisk marks that srbf runs uDSR as far as it was released:
+      without the paper's AI Feynman step (a pre-processing that splits a problem into simpler ones) and without
+      pre-training.

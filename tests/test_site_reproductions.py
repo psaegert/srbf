@@ -96,3 +96,19 @@ def test_a_change_to_the_data_shows_as_a_stale_page() -> None:
     data["compared"][0]["rows"][0]["srbf"]["draws"][0][0] -= 1
     page = repro.PAGE.read_text(encoding="utf-8")
     assert repro.render(page, repro.build(data, repro.DATA.parent)) != page
+
+
+def test_every_published_number_shows_where_it_comes_from() -> None:
+    import re
+    for m in _rows()["compared"]:
+        for row in m["rows"]:
+            sources = row.get("sources") or []
+            assert sources, f"{m['method']}: {row['what']} has no source"
+            for src in sources:
+                if "image" in src:
+                    w, h = repro.png_size(repro.DATA.parent / src["image"])
+                    assert w > 300 and h > 100 and src["caption"]
+                if "code" in src:
+                    # the file is pinned to a commit, and the code reads that same commit
+                    sha = re.search(r"/([0-9a-f]{40})/", src["file"]).group(1)
+                    assert sha in src["code"] and "read_feather" in src["code"]

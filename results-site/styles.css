@@ -262,6 +262,12 @@ html[data-theme="dark"] #va {
 .repro-protocol { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .3rem .9rem; margin: .4rem 0 0; }
 .repro-protocol dt { padding-top: .15rem; }
 .repro-protocol dd { margin: 0; max-width: none; overflow-wrap: anywhere; }
+.repro-sources { display: grid; gap: .7rem; margin: .8rem 0 0; }
+.repro-source { margin: 0; }
+.repro-source img { display: block; width: 100%; max-width: 34rem; height: auto; border: 1px solid var(--line); border-radius: var(--r-ctl); background: #fff; }
+.topic .repro-codecap { margin: 0 0 .3rem; }
+.repro-code { margin: 0; padding: .6rem .8rem; overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-ctl); font-size: 12px; line-height: 1.5; }
+.repro-code code { font-family: "JetBrains Mono", ui-monospace, monospace; white-space: pre; }
 .metric h4 { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin: 0 0 .4rem; font-size: .96rem; font-weight: 650; color: var(--ink); }
 /* prose written for one benchmark release is shown with that release only */
 html[data-release="2026-09"] [data-for="2026-07"], html[data-release="2026-07"] [data-for="2026-09"] { display: none; }
@@ -307,6 +313,7 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 .explorer-v2 p.v2hint,
 .headline-v2 .v2hlfig figcaption,
 .topic .repro-note,
+.repro-source figcaption,
 .repro-protocol dd {
   font-size: 13px; line-height: 1.55; color: var(--ink-soft); max-width: 88ch; margin: 10px 0 0;
 }
