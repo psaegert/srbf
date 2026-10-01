@@ -490,11 +490,22 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 .explorer-v2 .v2stepbtn:hover:not([disabled]), .explorer-v2 .v2stepbtn:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
 .explorer-v2 .v2stepbtn[disabled] { opacity: .35; cursor: default; }
 .explorer-v2 .v2stepsel { min-height: 28px; font-variant-numeric: tabular-nums; }
-/* the position slider: one track on a logarithmic scale, the value beside it; the step buttons frame both */
+/* the position slider: one continuous track on a logarithmic scale; the marks (powers of two, or 1-2-5 s) sit under it */
 .explorer-v2 .v2posstep { align-items: center; gap: 6px; }
+.explorer-v2 .v2posrail { position: relative; display: inline-flex; align-items: center; }
+.explorer-v2 .v2posrail i { position: absolute; bottom: 1px; width: 1px; height: 5px; background: var(--ink-faint); opacity: .55; pointer-events: none; }
 .explorer-v2 .v2pos { width: clamp(140px, 22vw, 280px); min-height: 28px; margin: 0; accent-color: var(--accent); cursor: pointer; }
 .explorer-v2 .v2posval { min-width: 5.5em; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); }
 .explorer-v2 .v2tween { color: var(--ink-soft); margin-right: 2px; }
+/* shown, faded and hidden methods: the headline's legend entries are buttons; the explorer's boxes carry the state */
+.explorer-v2 .v2legitem { cursor: pointer; }
+.explorer-v2 .v2legitem:focus { outline: none; }
+.explorer-v2 .v2legitem:focus-visible rect { stroke: var(--accent); stroke-width: 1.5; rx: 4px; }
+.explorer-v2 .v2legitem:hover text { text-decoration: underline; }
+.explorer-v2 .leg.v2legdim { fill: var(--ink-soft); }
+.explorer-v2 .leg.v2leggone { fill: var(--ink-faint); font-style: italic; }
+.explorer-v2 .v2faderow .v2fade { width: 120px; accent-color: var(--accent); }
+.explorer-v2 .v2faderow .v2fadeval { min-width: 3.2em; font-variant-numeric: tabular-nums; }
 .explorer-v2 .v2viewbar .v2pick { max-width: 100%; border-color: var(--line); background: var(--surface); font-weight: 600; }
 .explorer-v2 .v2distwide { max-width: 980px; }
 .explorer-v2 .v2one { grid-template-columns: minmax(0, 980px); }
