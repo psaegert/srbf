@@ -490,6 +490,11 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 .explorer-v2 .v2stepbtn:hover:not([disabled]), .explorer-v2 .v2stepbtn:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
 .explorer-v2 .v2stepbtn[disabled] { opacity: .35; cursor: default; }
 .explorer-v2 .v2stepsel { min-height: 28px; font-variant-numeric: tabular-nums; }
+/* the position slider: one track on a logarithmic scale, the value beside it; the step buttons frame both */
+.explorer-v2 .v2posstep { align-items: center; gap: 6px; }
+.explorer-v2 .v2pos { width: clamp(140px, 22vw, 280px); min-height: 28px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.explorer-v2 .v2posval { min-width: 5.5em; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); }
+.explorer-v2 .v2tween { color: var(--ink-soft); margin-right: 2px; }
 .explorer-v2 .v2viewbar .v2pick { max-width: 100%; border-color: var(--line); background: var(--surface); font-weight: 600; }
 .explorer-v2 .v2distwide { max-width: 980px; }
 .explorer-v2 .v2one { grid-template-columns: minmax(0, 980px); }
