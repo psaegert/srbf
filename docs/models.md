@@ -407,8 +407,10 @@ model_adapter:
 | `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
 
 **Budget.** DSO checks `n_samples` after each iteration: an iteration is 1,000 expressions for DSR and 500 + 25 ×
-500 = 13,000 for uDSR\*, so the ladders count whole iterations. A search stops early once an expression fits the
-data to a normalized mean squared error below 1e-12, which happens only on noiseless data.
+500 = 13,000 for uDSR\*, so the ladders count whole iterations and double them: DSR's `n_samples` is 1,000 × 2^k,
+uDSR\*'s 13,000 × 2^k. A budget between two multiples of an iteration would run to the next one. A search stops
+early once an expression fits the data to a normalized mean squared error below 1e-12, which happens only on
+noiseless data.
 
 **Operators.** DSO searches over the operators it has among those the expressions are written in:
 
@@ -556,8 +558,9 @@ powers and roots, `abs`, `tan`, or the inverse and hyperbolic functions. It expr
 The worker also stores GP-GOMEA's own printed model in the `model_string` column.
 `configs/evaluation/scaling/gpgomea_fastsrb.yaml` sweeps the evaluations in doublings, from 2^14,
 the first power of two above the cost of one generation, up to about 100 s per problem on the
-reference machine. Between 2^16 and 2^18 it takes quarter steps (2^16.25, 2^16.5, ...), so that its
-points stay about evenly spaced in time where the stalls set in.
+reference machine. Between 2^16 and 2^18 it takes quarter steps (2^16.25, 2^16.5, ...), and between
+2^16.75 and 2^17, where the time grows tenfold within one quarter step, sixteenth steps (2^16.8125, 2^16.875,
+2^16.9375), so that its points stay about evenly spaced in time where the stalls set in.
 `configs/evaluation/panels/gpgomea_srbench2021_feynman.yaml` runs the configuration that SRBench 2021
 published its GP-GOMEA results with, on the Feynman catalogs.
 

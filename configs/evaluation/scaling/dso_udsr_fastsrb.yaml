@@ -1,6 +1,6 @@
 # DSO's uDSR* on FastSRB at its sample budget, in doublings of one iteration (13,000 expressions: 500 sampled by the RNN,
-# 12,500 bred by GP-meld) up to about 100 s per problem on the reference machine. One iteration already takes about
-# that long, so the ladder has one rung. DSO v3.0.0 in the uDSR paper's Table 3 configuration (see
+# 12,500 bred by GP-meld): 1, 2, 4, 8 and 16 iterations, about 9 s to 140 s per problem on the reference machine.
+# DSO v3.0.0 in the uDSR paper's Table 3 configuration (see
 # srbf/worker/models/dso_worker.py and docs/models.md), run in an environment of its own:
 #   scripts/envs/build_dso_env.sh {{ROOT}}/envs/dso
 run:
@@ -24,11 +24,11 @@ run:
       arm: udsr
       n_samples: !sweep
         name: ladder
-        values: [13000]
+        values: [13000, 26000, 52000, 104000, 208000]
   runner:
     limit: null
     save_every: 8
     resume: true
     output: !sweep
       name: ladder
-      values: ['{{ROOT}}/results/evaluation/scaling/dso-udsr/fastsrb/samples_0013000.pkl']
+      values: ['{{ROOT}}/results/evaluation/scaling/dso-udsr/fastsrb/samples_0013000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-udsr/fastsrb/samples_0026000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-udsr/fastsrb/samples_0052000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-udsr/fastsrb/samples_0104000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-udsr/fastsrb/samples_0208000.pkl']
