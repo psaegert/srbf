@@ -121,7 +121,24 @@
   var userColors = readCookie();
   // A method drawn in the page's ink (the oracle) follows the theme: black on the light page, white on the dark one.
   function ink() { var v = window.getComputedStyle(document.documentElement).getPropertyValue("--ink"); return (v && v.trim()) || "#000000"; }
-  function colorOf(m) { return userColors[m.key] || (m.ink ? ink() : m.color); }
+  // Three states per method (owner 2026-10-01): shown, faded, hidden. The headline starts every visit at its own default
+  // -- the four methods below shown, every other one faded -- and a click on a name in its legend cycles that method,
+  // shown -> hidden -> faded -> shown; nothing of it is stored. The explorer keeps its own states, in its method boxes
+  // (the same cycle), with an adjustable strength for the faded ones, and leaves the headline alone. A faded method is
+  // drawn in its colour blended into the chart's background (so 20 % of the colour, 80 % background), still opaque: an
+  // overlap of its own line and points does not darken, and it is drawn behind every shown method.
+  var FULL_DEFAULT = ["T8-120M", "T8-120M-pysr", "PySR", "gpgomea"], HL_FADE = 0.2, FADE_DEFAULT = 0.2;
+  var hlVis = {}, HL_DRAWING = false;
+  function hlVisOf(k) { return hlVis[k] || (FULL_DEFAULT.indexOf(k) >= 0 ? "full" : "dim"); }
+  function exVisOf(k) { return state.methods.indexOf(k) < 0 ? "hidden" : (state.dim || []).indexOf(k) >= 0 ? "dim" : "full"; }
+  function visOf(k) { return HL_DRAWING ? hlVisOf(k) : exVisOf(k); }
+  function nextVis(v) { return v === "full" ? "hidden" : v === "hidden" ? "dim" : "full"; }
+  function alphaOf(k) { return visOf(k) === "dim" ? (HL_DRAWING ? HL_FADE : state.fade) : 1; }
+  function tint(c, a) { return "color-mix(in srgb, " + String(c).trim() + " " + Math.round(a * 100) + "%, var(--surface))"; }
+  function isFaded(sr) { return !!(sr && sr.key) && visOf(sr.key) === "dim"; }
+  function behind(list) { return list.filter(isFaded).concat(list.filter(function (sr) { return !isFaded(sr); })); }   // faded first, so shown ones draw on top
+  function baseColorOf(m) { return userColors[m.key] || (m.ink ? ink() : m.color); }
+  function colorOf(m) { var c = baseColorOf(m), a = alphaOf(m.key); return a < 1 ? tint(c, a) : c; }
   function dashOf(sr) { return sr && sr.dash ? ' stroke-dasharray="7 4"' : ""; }
   function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;"); }
   function term(key, text) { return '<span class="v2term" data-term="' + key + '" role="button" tabindex="0">' + text + "</span>"; }
@@ -132,6 +149,7 @@
   var VALID_DEFAULT = 90;
   var DEFAULTS = function () {
     return { view: "curves", cats: CATS.slice(), methods: D.methods.filter(function (m) { return withData(m) && !m.off; }).map(function (m) { return m.key; }),
+      dim: D.methods.filter(function (m) { return withData(m) && !m.off && FULL_DEFAULT.indexOf(m.key) < 0; }).map(function (m) { return m.key; }), fade: FADE_DEFAULT,
       plots: D.metrics.filter(function (m) { return m.tier === "main"; }).map(function (m) { return { x: defaultAxis(), y: m.key }; }),
       focus: "numeric_recovery_val", stat: "mean", band: true, cross: false, xaxis: anyTime() ? "time" : "rung", rung: 64, base: null, tier: "main", q: "", rows: "rungs", pset: null, prun: 1, pprob: 0,
       // the Distribution view reads a continuous metric by default (a rate has no distribution over problems), the Ranks
@@ -143,7 +161,7 @@
       impute: true };
   };
   var state = DEFAULTS();
-  var LS = "srbf-v2-" + REL + ".9";   // bumped whenever a default changes (.2 time axis, .3 mean, .4 bands, .5 per-view metrics, .6 complete pools only, .7 hollow markers, .8 failed predictions counted or left out, .9 methods marked off start unchecked), so a saved state cannot pin the old one
+  var LS = "srbf-v2-" + REL + ".10";   // bumped whenever a default changes (.10 shown, faded and hidden methods; .2 time axis, .3 mean, .4 bands, .5 per-view metrics, .6 complete pools only, .7 hollow markers, .8 failed predictions counted or left out, .9 methods marked off start unchecked), so a saved state cannot pin the old one
   var rungChosen = false;   // a budget from a link or from storage is kept; otherwise the first render picks one that has data
   function loadState() {
     try { var s = JSON.parse(localStorage.getItem(LS) || "null"); if (s) { rungChosen = s.rung !== undefined; Object.keys(state).forEach(function (k) { if (s[k] !== undefined) { state[k] = s[k]; } }); } } catch (e) { /* no storage */ }
@@ -151,7 +169,12 @@
     var preset = { all: CATS, phys: CATS.filter(function (c) { return CAT[c].group === "physics"; }), classic: CATS.filter(function (c) { return CAT[c].group === "classical"; }), synth: CATS.filter(function (c) { return CAT[c].group === "synthetic"; }), none: [] };
     if (q.has("v")) { state.view = q.get("v"); any = true; }
     if (q.has("c")) { var c = q.get("c"); state.cats = preset[c] ? preset[c].slice() : c.split(",").filter(function (x) { return CAT[x]; }); any = true; }
-    if (q.has("m")) { state.methods = q.get("m").split(",").filter(function (x) { return D.methods.some(function (mm) { return mm.key === x; }); }); any = true; }
+    if (q.has("m")) {   // a faded method is written with a tilde: m=T8-120M,~e2e
+      var mlist = q.get("m").split(","), known = function (x) { return D.methods.some(function (mm) { return mm.key === x; }); };
+      state.methods = mlist.map(function (x) { return x.replace(/^~/, ""); }).filter(known);
+      state.dim = mlist.filter(function (x) { return x.charAt(0) === "~"; }).map(function (x) { return x.slice(1); }).filter(known); any = true;
+    }
+    if (q.has("fa")) { var fa = parseFloat(q.get("fa")); if (fa > 0 && fa < 1) { state.fade = fa; } any = true; }
     if (q.has("p")) { state.plots = q.get("p").split(",").map(asPlot).filter(Boolean); any = true; }
     if (q.has("f") && METRIC[q.get("f")]) { state.focus = q.get("f"); any = true; }
     if (q.has("s")) { state.stat = q.get("s") === "median" ? "median" : "mean"; any = true; }
@@ -187,6 +210,9 @@
     state.cats = state.cats.filter(function (x) { return CAT[x]; });
     state.plots = state.plots.map(asPlot).filter(Boolean);   // from a link, from storage, or from an older shape
     state.methods = state.methods.filter(function (x) { return D.methods.some(function (mm) { return mm.key === x; }); });
+    if (!Array.isArray(state.dim)) { state.dim = []; }
+    state.dim = state.dim.filter(function (x) { return state.methods.indexOf(x) >= 0; });
+    if (!(state.fade > 0 && state.fade < 1)) { state.fade = FADE_DEFAULT; }
     if (!METRIC[state.focus]) { state.focus = "numeric_recovery_val"; }
     if (!state.base || state.methods.indexOf(state.base) < 0) { state.base = state.methods[0] || null; }
     if (!(state.rung > 0)) { state.rung = 64; }
@@ -212,7 +238,7 @@
     try { localStorage.setItem(LS, JSON.stringify(state)); } catch (e) { /* no storage */ }
     var q = new URLSearchParams(window.location.search);
     ["view", "bench", "baseline", "metric", "budget"].forEach(function (k) { q.delete(k); });   // never carry the retired 2026-07 explorer's keys
-    q.set("release", REL); q.set("v", state.view); q.set("c", catsParam()); q.set("m", sharedMethods().join(",")); q.set("p", state.plots.map(plotKey).join(","));
+    q.set("release", REL); q.set("v", state.view); q.set("c", catsParam()); q.set("m", sharedMethods().map(function (k) { return (state.dim.indexOf(k) >= 0 ? "~" : "") + k; }).join(",")); q.delete("fa"); if (state.fade !== FADE_DEFAULT) { q.set("fa", String(state.fade)); } q.set("p", state.plots.map(plotKey).join(","));
     q.set("f", state.focus); q.set("s", state.stat); q.delete("pool"); q.delete("thin"); q.set("band", state.band ? "1" : "0"); q.set("cross", state.cross ? "1" : "0");
     q.set("x", state.xaxis); q.set("r", String(state.rung)); q.delete("pm"); q.delete("pt"); if (state.pm === "time" && state.pt) { q.set("pm", "time"); q.set("pt", String(state.pt)); } if (state.base) { q.set("b", state.base); } q.set("rows", state.rows); q.set("ok", String(state.valid)); q.set("imp", state.impute ? "1" : "0");
     ["dm", "dv", "dn", "rm", "t", "ps", "pr", "pn", "pp"].forEach(function (k) { q.delete(k); });   // a link carries only what its display reads
@@ -661,10 +687,23 @@
     }
     return out;
   }
+  // A legend entry: its line and its name. On the headline (cycle) it is a button that cycles the method's state, and a
+  // hidden method keeps an entry, dotted, so that it can be brought back.
+  function ghostLabels(ghosts) { return ghosts.map(function (m) { return m.label + (m.local ? " (local)" : ""); }); }
+  function ghostSeries(m) { return { key: m.key, label: m.label + (m.local ? " (local)" : ""), color: baseColorOf(m), dash: !!m.dash }; }
+  function legendItem(sr, lx, ly, cycle, gone) {
+    var vis = gone ? "hidden" : sr.key ? visOf(sr.key) : "full", lab = esc(sr.label);
+    var mark = '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 20) + '" y2="' + ly + '" stroke="' + sr.color + '"' + (gone ? ' stroke-width="2" stroke-dasharray="2 3"' : ' stroke-width="3"' + dashOf(sr)) + "/>";
+    var text = '<text x="' + (lx + 26) + '" y="' + (ly + 4) + '" class="leg' + (vis === "hidden" ? " v2leggone" : vis === "dim" ? " v2legdim" : "") + '">' + lab + "</text>";
+    if (!cycle || !sr.key) { return mark + text; }
+    var word = vis === "hidden" ? "hidden" : vis === "dim" ? "faded" : "shown";
+    return '<g class="v2legitem" data-cycle="' + esc(sr.key) + '" data-vis="' + vis + '" role="button" tabindex="0" aria-label="' + lab + ", " + word + '; a click changes it"><title>' + lab + ": " + word + " (a click cycles shown, hidden, faded)</title>" +
+      '<rect x="' + (lx - 4) + '" y="' + (ly - 10) + '" width="' + Math.ceil(34 + 7 * sr.label.length) + '" height="20" fill="transparent"/>' + mark + text + "</g>";
+  }
   function chartSVG(opts) {
-    var series = opts.series, nr = narrow(), W = opts.width || hostWidth(), L = 76, T = opts.title ? 52 : 18;
-    var R = nr ? 18 : legendRight(series.map(function (sr) { return sr.label; }));
-    var B = nr ? 60 + 20 * Math.max(1, series.length) : 58, H = plotHeight(W) + B;
+    var series = opts.series, nr = narrow(), W = opts.width || hostWidth(), L = 76, T = opts.title ? 52 : 18, ghosts = opts.ghosts || [];
+    var R = nr ? 18 : legendRight(series.map(function (sr) { return sr.label; }).concat(ghostLabels(ghosts)));
+    var B = nr ? 60 + 20 * Math.max(1, series.length + ghosts.length) : 58, H = plotHeight(W) + B;
     // A narrow chart shortens the visible axis label to "(s, ref)"; the calibration is named in full here, so
     // every width -- and every screen reader -- says which clock these seconds came from.
     var aria = (opts.aria || opts.title || "") + (opts.timeAxis && opts.timeSource === "ref" ? ", timed on one workstation" : "");
@@ -698,11 +737,12 @@
     // A series' points come in its method's budget order and the line keeps it: on a time axis a larger budget can be
     // timed faster than a smaller one (PySR at 1 and 2 iterations: 2.58 and 2.03 s), and re-sorting by x joined the
     // points in time order, a dip that is not in the data. The band follows the same path (ciSVG).
-    series.forEach(function (sr) { var col = sr.color, pts = sr.pts; var cl = function (v) { return Math.min(ymax, Math.max(ymin, v)); };
+    behind(series).forEach(function (sr) { var col = sr.color, pts = sr.pts; var cl = function (v) { return Math.min(ymax, Math.max(ymin, v)); };
       s += ciSVG(pts, col, xs, y, function (v) { return v; }, cl);
       s += '<polyline fill="none" stroke="' + col + '" stroke-width="2"' + dashOf(sr) + ' points="' + pts.map(function (p) { return xs(p.x).toFixed(1) + "," + y(cl(p.v)).toFixed(1); }).join(" ") + '"/>';
-      pts.forEach(function (p) { s += '<circle cx="' + xs(p.x).toFixed(1) + '" cy="' + y(cl(p.v)).toFixed(1) + '" r="3.2" fill="' + (p.hollow ? "var(--surface)" : col) + '" stroke="' + col + '" stroke-width="1.5"><title>' + esc(p.title) + '</title></circle>'; });
-      s += '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 20) + '" y2="' + ly + '" stroke="' + col + '" stroke-width="3"' + dashOf(sr) + '/><text x="' + (lx + 26) + '" y="' + (ly + 4) + '" class="leg">' + esc(sr.label) + '</text>'; ly += 20; });
+      pts.forEach(function (p) { s += '<circle cx="' + xs(p.x).toFixed(1) + '" cy="' + y(cl(p.v)).toFixed(1) + '" r="3.2" fill="' + (p.hollow ? "var(--surface)" : col) + '" stroke="' + col + '" stroke-width="1.5"><title>' + esc(p.title) + '</title></circle>'; }); });
+    series.forEach(function (sr) { s += legendItem(sr, lx, ly, opts.cycle); ly += 20; });
+    ghosts.forEach(function (m) { s += legendItem(ghostSeries(m), lx, ly, opts.cycle, true); ly += 20; });
     return s + "</svg>";
   }
   // x positions. The budget axis is the method's own ladder. The time axis is seconds per problem, always from
@@ -720,9 +760,9 @@
   // A chart whose x is a metric, not a budget: each method's ladder walks a path through the plane
   // (here: how long its prediction is against how well it fits), so the points keep their rung order.
   function frontSVG(opts) {
-    var nr = narrow(), W = opts.width || hostWidth(), L = 76, T = opts.title ? 52 : 18;
-    var R = nr ? 18 : legendRight(opts.series.map(function (sr) { return sr.label; }));
-    var B = nr ? 60 + 20 * Math.max(1, opts.series.length) : 58, H = plotHeight(W) + B;
+    var nr = narrow(), W = opts.width || hostWidth(), L = 76, T = opts.title ? 52 : 18, ghosts = opts.ghosts || [];
+    var R = nr ? 18 : legendRight(opts.series.map(function (sr) { return sr.label; }).concat(ghostLabels(ghosts)));
+    var B = nr ? 60 + 20 * Math.max(1, opts.series.length + ghosts.length) : 58, H = plotHeight(W) + B;
     var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="v2chart" role="img" aria-label="' + esc(opts.aria || opts.title) + '">' + (opts.title ? '<text x="' + L + '" y="' + TITLE_Y + '" class="ct">' + esc(opts.title) + "</text>" : "");
     if (opts.empty) { return s + '<text x="' + W / 2 + '" y="' + H / 2 + '" class="tick" text-anchor="middle">' + esc(opts.empty) + "</text></svg>"; }
     var xmin = opts.xmin, xmax = opts.xmax, ymin = opts.ymin, ymax = opts.ymax;
@@ -736,16 +776,17 @@
     s += '<text x="' + ((L + W - R) / 2).toFixed(0) + '" y="' + (H - B + 32) + '" class="tick" text-anchor="middle">' + esc(opts.xlabel) + "</text>";
     s += '<text transform="translate(' + YLABEL_X + ',' + ((T + H - B) / 2).toFixed(0) + ') rotate(-90)" class="tick" text-anchor="middle">' + esc(opts.ylabel) + "</text>";
     var ly = nr ? H - B + 46 : T + 6, lx = nr ? L : W - R + LEG_GAP;
-    opts.series.forEach(function (sr) {
+    behind(opts.series).forEach(function (sr) {
       var col = sr.color;
       s += ciSVG(sr.pts, col, xs, y, clx, cly);
       s += '<polyline fill="none" stroke="' + col + '" stroke-width="1.6" stroke-opacity="0.65"' + dashOf(sr) + ' points="' + sr.pts.map(function (p) { return xs(clx(p.x)).toFixed(1) + "," + y(cly(p.v)).toFixed(1); }).join(" ") + '"/>';
       sr.pts.forEach(function (p) { s += '<circle cx="' + xs(clx(p.x)).toFixed(1) + '" cy="' + y(cly(p.v)).toFixed(1) + '" r="3.2" fill="' + (p.hollow ? "var(--surface)" : col) + '" stroke="' + col + '" stroke-width="1.5"><title>' + esc(p.title) + "</title></circle>"; });
-      s += '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 20) + '" y2="' + ly + '" stroke="' + col + '" stroke-width="3"' + dashOf(sr) + '/><text x="' + (lx + 26) + '" y="' + (ly + 4) + '" class="leg">' + esc(sr.label) + "</text>"; ly += 20;
     });
+    opts.series.forEach(function (sr) { s += legendItem(sr, lx, ly, opts.cycle); ly += 20; });
+    ghosts.forEach(function (m) { s += legendItem(ghostSeries(m), lx, ly, opts.cycle, true); ly += 20; });
     return s + "</svg>";
   }
-  function frontChart(xm, ym, shown, title, aria, xlabel, ylabel) {
+  function frontChart(xm, ym, shown, title, aria, xlabel, ylabel, legend) {
     var keys = shown.map(function (m) { return m.key; }), series = [], pending = false;
     var xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity;
     shown.forEach(function (m) {
@@ -762,7 +803,7 @@
         [sx.v, anyCI() ? sx.lo : sx.v, anyCI() ? sx.hi : sx.v].forEach(function (v) { if (isFinite(v)) { xmin = Math.min(xmin, v); xmax = Math.max(xmax, v); } });
         [sy.v, anyCI() ? sy.lo : sy.v, anyCI() ? sy.hi : sy.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
       });
-      if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), dash: !!m.dash, pts: pts }); }
+      if (pts.length) { series.push({ key: m.key, label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), dash: !!m.dash, pts: pts }); }
     });
     if (title == null) { title = xm.short + " vs " + ym.short; }
     if (pending && !series.length) { return frontSVG({ title: title, aria: aria, series: [], empty: "loading the distributions\u2026" }); }
@@ -770,7 +811,7 @@
     var xpad = (xmax - xmin) * 0.06 || 0.3, ypad = (ymax - ymin) * 0.06 || 0.3;
     if (nearRange(xmin, xmax, 0, 0.35)) { xmin = Math.min(xmin, 0); xmax = Math.max(xmax, 0); }   // the problem's own length, when it is near
     xmin -= xpad; xmax += xpad; ymin -= ypad; ymax += ypad;
-    return frontSVG({ title: title, aria: aria, series: series, xmin: xmin, xmax: xmax, ymin: ymin, ymax: ymax,
+    return frontSVG({ title: title, aria: aria, series: series, cycle: !!(legend && legend.cycle), ghosts: legend && legend.ghosts, xmin: xmin, xmax: xmax, ymin: ymin, ymax: ymax,
       xticks: ticksFor(xm, xmin, xmax), xtick: function (g) { return tickLabel(xm, g); },
       yticks: ticksFor(ym, ymin, ymax), ytick: function (g) { return tickLabel(ym, g); },
       xlabel: xlabel || axisName(xm), ylabel: ylabel == null ? axisName(ym) : ylabel, xzero: 0 });
@@ -789,7 +830,7 @@
   // ---- Curves ----------------------------------------------------------------------------------------------------
   var thinDrawn = false;   // set by a chart that drew a hollow point, so the block around it can say what that means
   function thinNote() { return "A hollow point is based on fewer than " + state.valid + " % of the problems"; }
-  function curveChart(metric, shown, title, aria) {
+  function curveChart(metric, shown, title, aria, legend) {
     var keys = shown.map(function (x) { return x.key; }), series = [], ymin = Infinity, ymax = -Infinity, pending = false, tmin = Infinity, tmax = -Infinity;
     var src = timeSource(keys);
     shown.forEach(function (m) { var pts = [];
@@ -800,7 +841,7 @@
         pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, hollow: thin(st), title: title });   // a budget has no interval: the candidate count is exact, and the measured time is within a pixel of its mean (0.4-1.1 px, measured)
         [st.v, anyCI() ? st.lo : st.v, anyCI() ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
         if (state.xaxis === "time") { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); } });
-      if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), dash: !!m.dash, pts: pts }); } });
+      if (pts.length) { series.push({ key: m.key, label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), dash: !!m.dash, pts: pts }); } });
     if (title == null) { title = metric.label; }   // the statistic is named once per block, not on every chart
     var ylabel = axisName(metric) + (metric.median_via && state.stat === "mean" ? ", median" : "");
     if (pending && !series.length) { return chartSVG({ title: title, aria: aria, series: [], empty: "loading the distribution…" }); }
@@ -809,7 +850,7 @@
     if (metric.kind === "rate") { var floor0 = nearRange(ymin, ymax, 0, 0.6); ymin = floor0 ? 0 : Math.max(0, ymin - pad); ymax = Math.min(1, Math.max(ymin + 0.02, ymax + pad)); }
     else { if (tfOf(metric) === "log2" && nearRange(ymin, ymax, 0, 0.35)) { ymin = Math.min(ymin, 0); ymax = Math.max(ymax, 0); } ymin -= pad; ymax += pad; }
     var tr = state.xaxis === "time" ? timeRange(tmin, tmax) : [0, 0];
-    return chartSVG({ title: title, aria: aria, series: series, ymin: ymin, ymax: ymax, ticks: ticksFor(metric, ymin, ymax), tick: function (g) { return tickLabel(metric, g); }, ylabel: ylabel, timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: tfOf(metric) === "log2" ? 0 : undefined });
+    return chartSVG({ title: title, aria: aria, series: series, cycle: !!(legend && legend.cycle), ghosts: legend && legend.ghosts, ymin: ymin, ymax: ymax, ticks: ticksFor(metric, ymin, ymax), tick: function (g) { return tickLabel(metric, g); }, ylabel: ylabel, timeAxis: state.xaxis === "time", timeSource: src, tmin: tr[0], tmax: tr[1], zero: tfOf(metric) === "log2" ? 0 : undefined });
   }
   // ---- Curves: one card per plot, each carrying its own two axes -------------------------------------------------
   // A picker, not a select: forty metrics in one column is a scroll, in grouped columns it is a menu. One control
@@ -890,12 +931,16 @@
   function withState(over, fn) { var prev = state; state = Object.assign({}, prev, over); try { return fn(); } finally { state = prev; } }
   function renderHeadline() {
     if (!headRoot) { return; }
+    var ghosts = D.methods.filter(function (m) { return withData(m) && hlVisOf(m.key) === "hidden"; });
+    var changed = Object.keys(hlVis).some(function (k) { return hlVis[k] !== (FULL_DEFAULT.indexOf(k) >= 0 ? "full" : "dim"); });
+    HL_DRAWING = true;
+    try {
     headRoot.innerHTML = inBlock(headRoot, HEADLINE.length, function () { return withState(
-      { cats: CATS.slice(), methods: D.methods.filter(withData).map(function (m) { return m.key; }),
+      { cats: CATS.slice(), methods: D.methods.filter(function (m) { return withData(m) && hlVisOf(m.key) !== "hidden"; }).map(function (m) { return m.key; }),
         stat: "mean", band: true, cross: false, xaxis: anyTime() ? "time" : "rung", valid: VALID_DEFAULT, impute: true },
       function () {
         var shown = shownMethods();
-        if (!shown.length) { return '<p class="v2hint">No method has finished a budget in this release yet.</p>'; }
+        if (!shown.length) { return ghosts.length ? '<p class="v2hint">Every method is hidden. <button type="button" class="v2btn" data-hlreset="1">show the default again</button></p>' : '<p class="v2hint">No method has finished a budget in this release yet.</p>'; }
         var drawn = axisMethods(shown), off = offAxis(shown);
         var keys = drawn.map(function (m) { return m.key; }), src = timeSource(keys);
         thinDrawn = false;
@@ -903,12 +948,13 @@
           var ms = (h.key ? [h.key] : [h.x, h.y]).map(function (k) { return METRIC[k]; });
           if (ms.some(function (m) { return !m; })) { return ""; }
           ms.forEach(function (m) { if (needsHist(m)) { ensureHists(m); } });
-          var svg = h.key ? curveChart(ms[0], drawn, hlText(h.title)) : frontChart(ms[0], ms[1], shown, hlText(h.title));
+          var svg = h.key ? curveChart(ms[0], drawn, hlText(h.title), undefined, { cycle: true, ghosts: ghosts.filter(onAxis) }) : frontChart(ms[0], ms[1], shown, hlText(h.title), undefined, undefined, undefined, { cycle: true, ghosts: ghosts });
           return '<figure class="v2hlfig">' + svg + "<figcaption>" + esc(hlText(h.caption)) + "</figcaption></figure>";
         }).join("");
         return '<h2 class="v2hltitle">Accuracy, cost and formula length</h2>' +
           '<p class="v2hlsub">Each point is one method at one ' + term("rungs", "budget") + ': the ' + (state.stat === "mean" ? "mean" : "median") + ' over ' + laws(CATS).toLocaleString() + ' problems from ' + CATS.length + ' problem sets, ' + term("average", "with the problem sets weighted about equally") + ', and a ' + term("interval", "95 % interval") + '. Every method is run twice on every problem; a problem\u2019s value is the average of its finished runs. ' + term("complete", "Why do some methods have fewer points?") + '</p>' +
           '<div class="v2hlcharts">' + charts + "</div>" +
+          '<p class="v2hint v2hlvis">A click on a name in a legend cycles that method: shown, hidden, faded.' + (changed ? ' <button type="button" class="v2btn" data-hlreset="1">show the default again</button>' : "") + "</p>" +
           '<p class="v2hint">' + (src === "ref" ? term("time", "Time is measured on one workstation for every method") +
               (off.length ? ". " + esc(off.map(function (m) { return m.label; }).join(", ")) + (off.length > 1 ? " have" : " has") + " not been timed yet, so " +
                 (off.length > 1 ? "they are" : "it is") + " not in the first chart" : "")
@@ -916,6 +962,18 @@
               ": seconds measured wherever a unit happened to run are not comparable between methods, so this release does not publish them") + "." +
             (thinDrawn ? " " + term("valid", thinNote()) + "." : "") + "</p>";
       }); });
+    } finally { HL_DRAWING = false; }
+  }
+  if (headRoot) {   // the headline's legend: a click or Enter on a name cycles that method for this visit
+    var cycleHeadline = function (k) { hlVis[k] = nextVis(hlVisOf(k)); renderHeadline(); var again = headRoot.querySelector('[data-cycle="' + k + '"]'); if (again && again.focus) { again.focus(); } };
+    headRoot.addEventListener("click", function (e) {
+      var g = e.target.closest ? e.target.closest("[data-cycle]") : null; if (g) { cycleHeadline(g.getAttribute("data-cycle")); return; }
+      if (e.target.closest && e.target.closest("[data-hlreset]")) { hlVis = {}; renderHeadline(); }
+    });
+    headRoot.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter" && e.key !== " ") { return; }
+      var g = e.target.closest ? e.target.closest("[data-cycle]") : null; if (g) { e.preventDefault(); cycleHeadline(g.getAttribute("data-cycle")); }
+    });
   }
 
   // ---- Table -----------------------------------------------------------------------------------------------------
@@ -998,8 +1056,7 @@
   function rungStepper(shown, whole, cur) { return stepper("rung", cur !== undefined ? cur : state.rung, rungsWith(shown, whole), function (r) { return String(r); }, "budget " + help(TERMS.rungs, "What is a budget?"), "budget per problem"); }
   // The position the per-method displays read every method at: a budget, or a time per problem, on a slider over the
   // logarithm of the range the shown methods cover. Its marks: powers of two for budgets, 1, 2, 5 per decade for times.
-  // The slider rests on a mark or on a budget a method was run at when released within 1.5 % of the track from one.
-  var POS_STEPS = 1000;
+  // The slider is continuous: any position on the track is a position (the arrows step from mark to mark).
   function posRange(shown, time) {
     var lo = Infinity, hi = -Infinity;
     shown.forEach(function (m) { state.cats.forEach(function (c) { points(m.key, c, time).forEach(function (pt) { if (pt[0] < lo) { lo = pt[0]; } if (pt[0] > hi) { hi = pt[0]; } }); }); });
@@ -1011,11 +1068,6 @@
     for (e = Math.floor(Math.log10(lo)); e <= Math.ceil(Math.log10(hi)); e++) { [1, 2, 5].forEach(function (k) { v = +(k * Math.pow(10, e)).toPrecision(3); if (v >= lo * (1 - 1e-9) && v <= hi * (1 + 1e-9)) { out.push(v); } }); }
     return out;
   }
-  function posRests(shown, lo, hi, time) {   // the marks and every position a shown method was run at
-    var seen = {}; posMarks(lo, hi, time).forEach(function (v) { seen[v] = 1; });
-    shown.forEach(function (m) { state.cats.forEach(function (c) { points(m.key, c, time).forEach(function (pt) { seen[pt[0]] = 1; }); }); });
-    return Object.keys(seen).map(Number).sort(function (a, b) { return a - b; });
-  }
   function posLabel(x, time) { return time ? fmtSec(x) + " s" : fmtBudget(x); }
   function posControl(shown) {
     var time = state.pm === "time", rg = posRange(shown, time);
@@ -1026,12 +1078,12 @@
     var x = time ? state.pt : state.rung;
     var marks = posMarks(rg[0], rg[1], time), prev = null, next = null, span = Math.log(rg[1] / rg[0]);
     marks.forEach(function (v) { if (v < x * (1 - 1e-9)) { prev = v; } else if (v > x * (1 + 1e-9) && next === null) { next = v; } });
-    var at = function (v) { return Math.round(POS_STEPS * Math.log(v / rg[0]) / span); };
+    var at = function (v) { return Math.log(v / rg[0]) / span; };
     var btn = function (to, glyph, word) { return '<button type="button" class="v2stepbtn" ' + (to === null ? "disabled" : 'data-set="pos:' + to + '"') + ' aria-label="' + word + '">' + glyph + "</button>"; };
     return mode + why + '<span class="v2step v2posstep">' + btn(prev, "◀", time ? "shorter time" : "smaller budget") +
-      '<input type="range" class="v2pos" min="0" max="' + POS_STEPS + '" step="1" value="' + at(x) + '" list="v2posmarks" data-lo="' + rg[0] + '" data-hi="' + rg[1] + '" data-rests="' + posRests(shown, rg[0], rg[1], time).join(",") +
+      '<span class="v2posrail"><input type="range" class="v2pos" min="0" max="1" step="any" value="' + at(x) + '" data-lo="' + rg[0] + '" data-hi="' + rg[1] +
       '" aria-label="' + (time ? "time per problem" : "budget per problem") + '" aria-valuetext="' + esc(posLabel(x, time)) + '">' +
-      '<datalist id="v2posmarks">' + marks.map(function (v) { return '<option value="' + at(v) + '"></option>'; }).join("") + "</datalist>" +
+      marks.map(function (v) { return '<i style="left:calc(8px + (100% - 16px) * ' + at(v).toFixed(4) + ')"></i>'; }).join("") + "</span>" +
       '<output class="v2posval">' + esc(posLabel(x, time)) + "</output>" + btn(next, "▶", time ? "longer time" : "larger budget") + "</span>";
   }
   function settlePos(shown) {   // a position inside the range the shown methods cover: kept if it is, else the middle mark
@@ -1039,11 +1091,7 @@
     var x = time ? state.pt : state.rung;
     if (!(x >= rg[0] * (1 - 1e-9) && x <= rg[1] * (1 + 1e-9))) { var mk = posMarks(rg[0], rg[1], time); x = mk.length ? mk[Math.floor(mk.length / 2)] : +Math.sqrt(rg[0] * rg[1]).toPrecision(3); if (time) { state.pt = x; } else { state.rung = x; } }
   }
-  function posFromSlider(t) {
-    var lo = +t.dataset.lo, hi = +t.dataset.hi, f = (+t.value) / POS_STEPS, best = null;
-    (t.dataset.rests || "").split(",").map(Number).forEach(function (v) { if (!(v > 0)) { return; } var d = Math.abs(Math.log(v / lo) / Math.log(hi / lo) - f); if (d < 0.015 && (best === null || d < best[0])) { best = [d, v]; } });
-    return best ? best[1] : +(lo * Math.pow(hi / lo, f)).toPrecision(4);
-  }
+  function posFromSlider(t) { var lo = +t.dataset.lo, hi = +t.dataset.hi, f = Math.min(1, Math.max(0, +t.value)); return +(lo * Math.pow(hi / lo, f)).toPrecision(6); }
   // which shown methods sit between two of their budgets at this position, and between which
   function tweenText(between) { return "interpolated between budgets " + fmtBudget(between[0]) + " and " + fmtBudget(between[1]); }
   function tweenNote(shown, r) {
@@ -1193,10 +1241,13 @@
     [0, 0.25, 0.5, 0.75, 1].forEach(function (g) { s += '<line x1="' + L + '" y1="' + y(g).toFixed(1) + '" x2="' + (W - R) + '" y2="' + y(g).toFixed(1) + '" class="grid' + (g === 0.5 ? " zero" : "") + '"/><text x="' + (L - 6) + '" y="' + (y(g) + 4).toFixed(1) + '" class="tick" text-anchor="end">' + (100 * g) + "%</text>"; });
     s += xAxisSVG(p, vr, xs, T, H - B, W, L, R);
     var ly = nr ? H - B + 50 : T + 6, lx = nr ? L : W - R + LEG_GAP;
-    series.forEach(function (sr) { var col = colorOf(sr.m), den = all ? sr.rows : sr.ph.n, cum = all && low ? sr.rows - sr.ph.n : 0, pts = [];
+    var lines = [], keys2 = [];
+    series.forEach(function (sr) { var col = colorOf(sr.m), den = all ? sr.rows : sr.ph.n, cum = all && low ? sr.rows - sr.ph.n : 0, pts = [], line = "";
       for (var b = 0; b < sr.ph.nb; b++) { var before = cum; cum += sr.ph.h[b]; if (b < vr.b0) { continue; } if (b > vr.b1) { break; } var x0 = vr.lo + (b - vr.b0) * vr.w; if (!pts.length) { pts.push(xs(x0).toFixed(1) + "," + y(before / den).toFixed(1)); } pts.push(xs(x0 + vr.w).toFixed(1) + "," + y(before / den).toFixed(1), xs(x0 + vr.w).toFixed(1) + "," + y(cum / den).toFixed(1)); }
-      s += '<polyline fill="none" stroke="' + col + '" stroke-width="2"' + dashOf(sr.m) + ' points="' + pts.join(" ") + '"><title>' + esc(sr.m.label + ": " + fiveText(p, sr.f) + "; " + Math.round(sr.ph.n).toLocaleString() + " of " + sr.rows.toLocaleString() + " problems have a value") + "</title></polyline>";
-      s += '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 20) + '" y2="' + ly + '" stroke="' + col + '" stroke-width="3"' + dashOf(sr.m) + '/><text x="' + (lx + 26) + '" y="' + (ly + 4) + '" class="leg">' + esc(sr.m.label + (sr.m.local ? " (local)" : "")) + "</text>"; ly += 20; });
+      line = '<polyline fill="none" stroke="' + col + '" stroke-width="2"' + dashOf(sr.m) + ' points="' + pts.join(" ") + '"><title>' + esc(sr.m.label + ": " + fiveText(p, sr.f) + "; " + Math.round(sr.ph.n).toLocaleString() + " of " + sr.rows.toLocaleString() + " problems have a value") + "</title></polyline>";
+      lines.push({ key: sr.m.key, line: line });
+      keys2.push('<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 20) + '" y2="' + ly + '" stroke="' + col + '" stroke-width="3"' + dashOf(sr.m) + '/><text x="' + (lx + 26) + '" y="' + (ly + 4) + '" class="leg' + (visOf(sr.m.key) === "dim" ? " v2legdim" : "") + '">' + esc(sr.m.label + (sr.m.local ? " (local)" : "")) + "</text>"); ly += 20; });
+    s += behind(lines).map(function (x) { return x.line; }).join("") + keys2.join("");
     return s + "</svg>" + '<p class="v2hint">' + (p.higher === true ? "Further right is better: a curve that stays low longer holds more of its problems at high values." : p.higher === false ? "Further left is better: a curve that rises early holds more of its problems at low values." : p.ideal !== undefined ? "Closer to " + p.ideal + " is better: a curve that rises steeply around " + p.ideal + " is the tighter one." : "") +
       (all ? " Out of all problems, a method that leaves problems without a prediction " + (low ? "starts above 0 %." : "ends below 100 %.") : "") + "</p>";
   }
@@ -1225,7 +1276,7 @@
       D.rungs.forEach(function (r) { var use = poolCats(m.key, r, keys); if (!use.length) { return; } var x = xOf(m.key, r, use, src); if (x === null) { return; } var ph = pooledHist(p.key, m.key, r, use); if (!ph) { return; } var f = five(ph);
         pts.push({ x: x, v: f[2], lo: f[1], hi: f[3], title: m.label + " @ " + r + ": " + fiveText(p, f) + ", n = " + ph.n });
         ymin = Math.min(ymin, f[1]); ymax = Math.max(ymax, f[3]); if (state.xaxis === "time") { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); } });
-      if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), dash: !!m.dash, pts: pts }); } });
+      if (pts.length) { series.push({ key: m.key, label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), dash: !!m.dash, pts: pts }); } });
     var title = narrow() ? p.short + ": median, middle half" : p.label + ": median and middle half, by budget", off = offAxis(shown);
     var note = off.length ? '<p class="v2hint">' + esc(off.map(function (m) { return m.label; }).join(", ")) + (off.length > 1 ? " have" : " has") + " no place on this axis; choose the other x-axis above.</p>" : "";
     if (!series.length) { return chartSVG({ title: title, aria: title, series: [], empty: "nothing to draw on this axis yet", width: wideWidth() }) + note; }
@@ -1266,7 +1317,7 @@
       axisMethods(others).forEach(function (m) { var pts = []; D.rungs.forEach(function (r) { var use = bothDone(m.key, base.key, r); if (!use.length) { return; } var x = xOf(m.key, r, use, src); if (x === null) { return; } var st = pairedStat(p, m.key, base.key, r, use); if (!st || !isFinite(st.v)) { return; }
           pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, title: m.label + " − " + base.label + " @ " + r + ": " + fmtDelta(p, st.v) + " [" + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + "], over " + st.n.toLocaleString() + " problems in " + st.S + " problem sets, p = " + fmtP(st.p) });
           [st.v, anyCI() ? st.lo : st.v, anyCI() ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } }); if (state.xaxis === "time") { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); } });
-        if (pts.length) { series.push({ label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), dash: !!m.dash, pts: pts }); } });
+        if (pts.length) { series.push({ key: m.key, label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), dash: !!m.dash, pts: pts }); } });
       var title = "Δ " + mname(p) + " vs " + base.label;
       if (!series.length) { return chartSVG({ title: title, aria: title, series: [], empty: "no matched cells with the baseline yet" }); }
       if (nearRange(ymin, ymax, 0, 0.35)) { ymin = Math.min(ymin, 0); ymax = Math.max(ymax, 0); } var pad = (ymax - ymin) * 0.08 || 0.05; ymin -= pad; ymax += pad;
@@ -1575,7 +1626,7 @@
     var rel = D.release;
     var stamp = releaseStamp(rel);
     var catList = CATS.map(function (c) { var m = CAT[c]; return '<label title="' + esc(GROUPS[m.group] + (m.mu ? " · typical formula length " + m.mu[1] + " bits (middle half: " + m.mu[0] + " to " + m.mu[2] + ")" : "")) + '"><input type="checkbox" data-c="' + c + '"> ' + esc(c) + ' <span class="v2hint">' + m.laws + '</span></label>'; }).join("");
-    var methList = D.methods.filter(withData).map(function (m) { return '<div class="v2meth"><label><input type="checkbox" data-m="' + m.key + '"><input type="color" class="v2swatch" data-m="' + m.key + '" value="' + colorOf(m) + '" title="Colour for ' + esc(m.label) + '"><span class="v2mname">' + esc(m.label) + '</span></label>' + (m.local ? ' <span class="v2tag v2tag-local">local only</span>' : "") + ' <span class="v2hint">' + esc(m.param) + '</span>' + (m.selection ? " " + help(m.selection, "How does " + m.label + " choose its prediction?") : "") + ' <span class="v2tag" title="' + esc(PROV_NOTE[m.provenance] || "") + '">' + esc(PROV[m.provenance] || m.provenance || "") + '</span><button type="button" class="v2reset" data-m="' + m.key + '" title="Reset colour to default" hidden>↺</button></div>'; }).join("") || '<span class="v2hint">no method has finished a budget yet</span>';
+    var methList = D.methods.filter(withData).map(function (m) { return '<div class="v2meth"><label><input type="checkbox" data-m="' + m.key + '"><input type="color" class="v2swatch" data-m="' + m.key + '" value="' + baseColorOf(m) + '" title="Colour for ' + esc(m.label) + '"><span class="v2mname">' + esc(m.label) + '</span></label>' + (m.local ? ' <span class="v2tag v2tag-local">local only</span>' : "") + ' <span class="v2hint">' + esc(m.param) + '</span>' + (m.selection ? " " + help(m.selection, "How does " + m.label + " choose its prediction?") : "") + ' <span class="v2tag" title="' + esc(PROV_NOTE[m.provenance] || "") + '">' + esc(PROV[m.provenance] || m.provenance || "") + '</span><button type="button" class="v2reset" data-m="' + m.key + '" title="Reset colour to default" hidden>↺</button></div>'; }).join("") || '<span class="v2hint">no method has finished a budget yet</span>';
     var metricList = MGROUPS.map(function (g) { var ms = D.metrics.filter(function (m) { return m.group === g; }); return '<div class="v2mgroup" data-group="' + esc(g) + '"><h4>' + esc(g) + '</h4>' + ms.map(function (m) { return '<div class="v2metric" data-tier="' + m.tier + '" data-key="' + m.key + '"><label><input type="checkbox" data-p="' + m.key + '"> ' + esc(m.label) + '</label> ' + mhelp(m) + '</div>'; }).join("") + "</div>"; }).join("");
     root.innerHTML =
       '<div class="v2relhead"><div><h2 class="v2hltitle">Release ' + esc(rel.id) + (rel.title !== rel.id ? ' · ' + esc(rel.title) : '') + '</h2><p class="v2hlsub">' + stamp + (rel.notes ? ' · ' + esc(rel.notes) : '') + '</p></div><div class="v2row"><button type="button" class="v2btn" data-act="link">copy link to this view</button><span class="v2linkok v2hint" hidden>link copied</span></div></div>' +
@@ -1592,6 +1643,7 @@
       '<div class="v2row" data-uses="rung"><span class="v2lab">budget</span><select class="v2rung" aria-label="budget per problem">' + D.rungs.map(function (r) { return '<option value="' + r + '">' + r + '</option>'; }).join("") + '</select><span class="v2hint">in each method\u2019s own unit</span></div></div>' +
       // 2. what it is shown for
       '<div class="v2panel"><h3>Methods</h3><div class="v2methods">' + methList + '</div>' +
+      '<div class="v2row v2faderow"><span class="v2lab">faded at ' + help("A click on a method\u2019s box cycles it: shown (ticked), hidden (empty), faded (a dash). A faded method stays in every chart, behind the shown ones, in its colour blended into the background: this much of the colour, the rest background.", "What does a box\u2019s dash mean?") + '</span><input type="range" class="v2fade" min="0.05" max="0.9" step="0.05" aria-label="how much of its colour a faded method keeps"><output class="v2fadeval"></output></div>' +
       '<div class="v2row v2addm"><button type="button" class="v2btn v2addmopen" data-act="add-method">open a method with a key</button>' +
       '<span class="v2addmbox" hidden><input type="text" class="v2addmkey" placeholder="key" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="key for a method shared with you">' +
       '<button type="button" class="v2btn" data-act="add-method-go">add</button></span>' +
@@ -1613,7 +1665,9 @@
   }
   function syncControls() {
     root.querySelectorAll(".v2cats input").forEach(function (i) { i.checked = state.cats.indexOf(i.dataset.c) >= 0; });
-    root.querySelectorAll(".v2methods input[type=checkbox]").forEach(function (i) { i.checked = state.methods.indexOf(i.dataset.m) >= 0; });
+    root.querySelectorAll(".v2methods input[type=checkbox]").forEach(function (i) { var v = exVisOf(i.dataset.m); i.checked = v === "full"; i.indeterminate = v === "dim"; i.title = v === "full" ? "shown (a click hides it)" : v === "dim" ? "faded (a click shows it)" : "hidden (a click fades it in)";
+      var row = i.closest(".v2meth"); if (row) { row.classList.toggle("v2faded", v === "dim"); row.classList.toggle("v2hidden", v === "hidden"); row.style.setProperty("--fade", String(state.fade)); } });
+    var fd = root.querySelector(".v2fade"); if (fd && document.activeElement !== fd) { fd.value = String(state.fade); } var fo = root.querySelector(".v2fadeval"); if (fo) { fo.textContent = Math.round(100 * state.fade) + " %"; }
     root.querySelectorAll(".v2metrics input[type=checkbox]").forEach(function (i) { i.checked = plotMetrics().indexOf(i.dataset.p) >= 0; });
     var q = state.q.toLowerCase();
     root.querySelectorAll(".v2metric").forEach(function (l) { var mm = METRIC[l.dataset.key]; var show = state.tier === "all" || l.dataset.tier === "main" || plotMetrics().indexOf(l.dataset.key) >= 0; if (q) { show = mm.label.toLowerCase().indexOf(q) >= 0 || l.dataset.key.indexOf(q) >= 0 || mm.group.toLowerCase().indexOf(q) >= 0; } l.hidden = !show; });
@@ -1628,7 +1682,7 @@
     root.querySelectorAll("input[name=v2rows]").forEach(function (i) { i.checked = i.value === state.rows; });
     if (state.base) { root.querySelector(".v2base").value = state.base; }
     root.querySelectorAll(".v2tab").forEach(function (b) { b.classList.toggle("active", b.dataset.view === state.view); b.setAttribute("aria-selected", b.dataset.view === state.view ? "true" : "false"); });
-    root.querySelectorAll(".v2swatch").forEach(function (i) { var m = D.methods.filter(function (x) { return x.key === i.dataset.m; })[0]; if (m && document.activeElement !== i) { i.value = colorOf(m); } });
+    root.querySelectorAll(".v2swatch").forEach(function (i) { var m = D.methods.filter(function (x) { return x.key === i.dataset.m; })[0]; if (m && document.activeElement !== i) { i.value = baseColorOf(m); } });
     root.querySelectorAll(".v2reset").forEach(function (b) { b.hidden = !userColors[b.dataset.m]; });
     var single = state.view === "matrix" || state.view === "dist" || state.view === "ranks";
     root.querySelector(".v2metcount").textContent = single ? "" : plotMetrics().length + " plotted";
@@ -1677,6 +1731,11 @@
 
   // ---- events ----------------------------------------------------------------------------------------------------
   var SETTABLE = { pos: 1, pm: 1, rung: 1, dmode: 1, dnorm: 1, dmetric: 1, xaxis: 1, tbudget: 1, pset: 1, prun: 1, pprob: 1, pnum: 1 };
+  function cycleMethod(k) {
+    var v = nextVis(exVisOf(k));
+    state.methods = state.methods.filter(function (c) { return c !== k; }); state.dim = state.dim.filter(function (c) { return c !== k; });
+    if (v !== "hidden") { state.methods.push(k); } if (v === "dim") { state.dim.push(k); }
+  }
   function setState(key, val) {
     if (!SETTABLE[key]) { return; }
     if (key === "rung") { var r = parseInt(val, 10); if (D.rungs.indexOf(r) >= 0) { state.rung = r; } return; }
@@ -1695,7 +1754,7 @@
   on("change", function (e) {
     var t = e.target;
     if (t.dataset.c) { if (t.checked) { state.cats.push(t.dataset.c); } else { state.cats = state.cats.filter(function (c) { return c !== t.dataset.c; }); } }
-    else if (t.dataset.m && t.type === "checkbox") { if (t.checked) { state.methods.push(t.dataset.m); } else { state.methods = state.methods.filter(function (c) { return c !== t.dataset.m; }); } }
+    else if (t.dataset.m && t.type === "checkbox") { cycleMethod(t.dataset.m); }
     else if (t.dataset.p) { if (t.checked) { state.plots.push({ x: lastAxis(), y: t.dataset.p }); } else { state.plots = state.plots.filter(function (c) { return c.y !== t.dataset.p; }); } }
     else if (t.name === "v2stat") { state.stat = t.value; } else if (t.name === "v2xaxis") { state.xaxis = t.value; } else if (t.name === "v2rows") { state.rows = t.value; }
     else if (t.classList.contains("v2band")) { state.band = t.checked; } else if (t.classList.contains("v2cross")) { state.cross = t.checked; } else if (t.classList.contains("v2impute")) { state.impute = t.checked; } else if (t.classList.contains("v2tier")) { state.tier = t.checked ? "all" : "main"; }
@@ -1706,7 +1765,7 @@
     else { return; }
     render();
   });
-  on("input", function (e) { var t = e.target; if (t.classList.contains("v2pos")) { var o = t.parentNode.querySelector(".v2posval"), v = posFromSlider(t); if (o) { o.textContent = posLabel(v, state.pm === "time"); } return; } if (t.classList.contains("v2valid")) { state.valid = Math.min(100, Math.max(0, parseInt(t.value, 10) || 0)); syncControls(); scheduleRender(); } else if (t.classList.contains("v2q")) { state.q = t.value; syncControls(); } else if (t.classList.contains("v2swatch")) { userColors[t.dataset.m] = t.value; render(); } });
+  on("input", function (e) { var t = e.target; if (t.classList.contains("v2fade")) { state.fade = Math.min(0.9, Math.max(0.05, parseFloat(t.value) || FADE_DEFAULT)); var fo = root.querySelector(".v2fadeval"); if (fo) { fo.textContent = Math.round(100 * state.fade) + " %"; } scheduleRender(); return; } if (t.classList.contains("v2pos")) { var o = t.parentNode.querySelector(".v2posval"), v = posFromSlider(t); if (o) { o.textContent = posLabel(v, state.pm === "time"); } return; } if (t.classList.contains("v2valid")) { state.valid = Math.min(100, Math.max(0, parseInt(t.value, 10) || 0)); syncControls(); scheduleRender(); } else if (t.classList.contains("v2q")) { state.q = t.value; syncControls(); } else if (t.classList.contains("v2swatch")) { userColors[t.dataset.m] = t.value; render(); } });
   on("click", function (e) {
     var b = e.target.closest ? e.target.closest("button") : null; if (!b || !root.contains(b) || b.classList.contains("v2help")) { return; }
     if (b.dataset.view) { state.view = b.dataset.view; render(); return; }

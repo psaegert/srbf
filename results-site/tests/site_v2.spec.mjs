@@ -588,9 +588,11 @@ test('a method marked off starts unchecked, and its checkbox shows it', async ({
   const box = page.locator(V2 + ' .v2methods input[type=checkbox][data-m="e2e"]');
   await expect(box).not.toBeChecked();
   await expect(chart.locator('text.leg', { hasText: 'E2E 93M' })).toHaveCount(0);
-  await expect(page.locator(V2 + ' .v2methods input[type=checkbox][data-m="T8-20M"]')).toBeChecked();
-  await box.check();
+  expect(await box.evaluate((el) => el.indeterminate)).toBe(false);   // hidden: neither ticked nor dashed
+  await expect(page.locator(V2 + ' .v2methods input[type=checkbox][data-m="T8-120M"]')).toBeChecked();
+  await box.click();   // hidden -> faded: back in the chart
   await expect(page.locator(V2 + ' .v2main svg.v2chart').first().locator('text.leg', { hasText: 'E2E 93M' })).toHaveCount(1);
+  expect(await box.evaluate((el) => el.indeterminate)).toBe(true);
 });
 
 test('a headline chart keeps its title and its y label off the frame', async ({ page }) => {
@@ -781,7 +783,7 @@ test('the slider reads every method between its budgets, marks it, and reads by 
   await expect(page.locator(V2 + ' .v2view')).toContainText('Interpolated: Flash-ANSR T8-20M between budgets 1,024 and 2,048.');
   await expect(page.locator(V2 + ' .v2view .v2matrix .v2tween').first()).toBeVisible();   // and every such number carries the mark
   const slider = page.locator(V2 + ' .v2viewbar input.v2pos');
-  await slider.evaluate((el) => { el.value = String(Math.round(0.37 * (+el.max))); el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); });
+  await slider.evaluate((el) => { el.value = String(0.37 * (+el.max)); el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); });
   await expect.poll(() => new URL(page.url()).searchParams.get('r')).not.toBe('1448');
   await page.locator(V2 + ' .v2viewbar button[data-set="pm:time"]').click();
   await expect(val).toContainText(' s');
@@ -807,6 +809,85 @@ test('displays that compare on finished budgets take the budget nearest the posi
   await expect(page.locator(V2 + ' .v2view select[data-state="rung"]')).toHaveValue('1024');
   await page.goto('/explorer.html?release=2026-09&v=ranks&x=rung&r=1448&m=T8-20M,T8-120M');
   await expect(page.locator(V2 + ' .v2view select[data-state="rung"]')).toHaveValue('1024');
+});
+
+test('the slider is continuous, and its arrows step to the powers of two', async ({ page }) => {
+  await page.goto('/explorer.html?release=2026-09&v=matrix&m=T8-20M&r=1024');
+  const slider = page.locator(V2 + ' .v2viewbar input.v2pos'), val = page.locator(V2 + ' .v2viewbar .v2posval');
+  await slider.evaluate((el) => {   // just past 1,024: the position stays where it was put
+    const lo = +el.dataset.lo, hi = +el.dataset.hi; el.value = String(Math.log(1100 / lo) / Math.log(hi / lo));
+    el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect(val).toHaveText('1,100');
+  expect(+new URL(page.url()).searchParams.get('r')).toBeCloseTo(1100, 0);
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="larger budget"]').click();
+  await expect(val).toHaveText('2,048');
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="smaller budget"]').click();
+  await expect(val).toHaveText('1,024');
+});
+
+// ---- Shown, faded and hidden methods --------------------------------------------------------------------------------
+test('the headline shows four methods in full and fades the rest; a legend click cycles one, for this visit only', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto('/');
+  const chart = page.locator('.headline-v2 svg.v2chart').first();
+  await expect(chart).toBeVisible();
+  const item = (k) => chart.locator('[data-cycle="' + k + '"]');
+  for (const k of ['T8-120M', 'T8-120M-pysr', 'PySR', 'gpgomea']) { await expect(item(k)).toHaveAttribute('data-vis', 'full'); }
+  for (const k of ['T8-20M', 'e2e', 'T8-3M', 'nesymres-100M']) { await expect(item(k)).toHaveAttribute('data-vis', 'dim'); }
+  // a faded method: its colour blended into the background (20 %), fully opaque; a shown one: its colour
+  expect(await item('T8-20M').locator('line').getAttribute('stroke')).toMatch(/^color-mix\(in srgb, #[0-9a-f]{6} 20%, var\(--surface\)\)$/i);
+  expect(await item('T8-120M').locator('line').getAttribute('stroke')).toMatch(/^#[0-9a-f]{6}$/i);
+  // drawn behind: every faded line comes before every shown one
+  const order = await chart.evaluate((svg) => [...svg.querySelectorAll('polyline')].map((l) => l.getAttribute('stroke').startsWith('color-mix')));
+  expect(order.indexOf(false)).toBeGreaterThan(0); expect(order.lastIndexOf(true)).toBeLessThan(order.indexOf(false));
+  await item('T8-120M').click();
+  await expect(item('T8-120M')).toHaveAttribute('data-vis', 'hidden');   // gone from the plot, still in the legend
+  await item('T8-120M').click();
+  await expect(item('T8-120M')).toHaveAttribute('data-vis', 'dim');
+  await item('T8-120M').click();
+  await expect(item('T8-120M')).toHaveAttribute('data-vis', 'full');
+  await item('PySR').focus(); await page.keyboard.press('Enter');
+  await expect(item('PySR')).toHaveAttribute('data-vis', 'hidden');
+  await page.locator('.headline-v2 [data-hlreset]').click();
+  await expect(item('PySR')).toHaveAttribute('data-vis', 'full');
+  await item('PySR').click();
+  await page.reload();   // nothing is stored: a new visit starts from the default
+  await expect(page.locator('.headline-v2 svg.v2chart').first().locator('[data-cycle="PySR"]')).toHaveAttribute('data-vis', 'full');
+});
+
+test('in the explorer a box cycles its method: shown, hidden, faded; the faded opacity is set beside them', async ({ page }) => {
+  await page.goto('/explorer.html?release=2026-09&v=curves&p=rung~numeric_recovery_val');
+  const box = (k) => page.locator(V2 + ' .v2methods input[type=checkbox][data-m="' + k + '"]');
+  const dash = (k) => box(k).evaluate((el) => el.indeterminate);
+  const m = () => new URL(page.url()).searchParams.get('m').split(',');
+  await expect(box('T8-120M')).toBeChecked();
+  expect(await dash('T8-20M')).toBe(true);
+  expect(m()).toContain('~T8-20M');
+  await box('T8-120M').click();
+  await expect(box('T8-120M')).not.toBeChecked(); expect(await dash('T8-120M')).toBe(false); expect(m()).not.toContain('T8-120M');
+  await box('T8-120M').click();
+  expect(await dash('T8-120M')).toBe(true); expect(m()).toContain('~T8-120M');
+  await box('T8-120M').click();
+  await expect(box('T8-120M')).toBeChecked(); expect(m()).toContain('T8-120M');
+  const keyStroke = (label) => page.locator(V2 + ' .v2main svg.v2chart').first().evaluate((svg, lab) => {
+    const t = [...svg.querySelectorAll('text.leg')].find((x) => x.textContent === lab); return t && t.previousElementSibling.getAttribute('stroke'); }, label);
+  expect(await keyStroke('Flash-ANSR T8-20M')).toMatch(/ 20%, var\(--surface\)\)$/);
+  await expect(page.locator(V2 + ' .v2meth:has(input[data-m="T8-20M"])')).toHaveClass(/v2faded/);   // the row itself is lighter
+  await page.locator(V2 + ' .v2fade').evaluate((el) => { el.value = '0.6'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+  await expect.poll(() => keyStroke('Flash-ANSR T8-20M')).toMatch(/ 60%, var\(--surface\)\)$/);
+  expect(new URL(page.url()).searchParams.get('fa')).toBe('0.6');
+  // the explorer's setting leaves the headline alone
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto('/');
+  expect(await page.locator('.headline-v2 svg.v2chart').first().locator('[data-cycle="T8-20M"] line').getAttribute('stroke')).toMatch(/ 20%, var\(--surface\)\)$/);
+});
+
+test('a link carries shown and faded methods', async ({ page }) => {
+  await page.goto('/explorer.html?release=2026-09&v=curves&m=T8-120M,~e2e');
+  await expect(page.locator(V2 + ' .v2methods input[type=checkbox][data-m="T8-120M"]')).toBeChecked();
+  expect(await page.locator(V2 + ' .v2methods input[type=checkbox][data-m="e2e"]').evaluate((el) => el.indeterminate)).toBe(true);
+  await expect(page.locator(V2 + ' .v2methods input[type=checkbox][data-m="PySR"]')).not.toBeChecked();
 });
 
 // ---- Ranks ---------------------------------------------------------------------------------------------------------
