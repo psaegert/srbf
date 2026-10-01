@@ -1,0 +1,50 @@
+# RILS-ROLS in its first author's configuration at the paper's budget, 1,000,000 fit calls (Kartelj and
+# Djukanovic, Journal of Big Data 10, 71, 2023). It checks srbf's RILS-ROLS against the authors' Feynman results
+# (noise 0: 78.2 % of runs with test R^2 > 0.999); the result is on the results site's Reproductions page. Like
+# every panel it is labelled harness_tuned: the maintainers chose the budget. One experiment per catalog; the
+# environment as for configs/evaluation/scaling/rilsrols_fastsrb.yaml.
+experiments:
+  feynman:
+    data_source:
+      catalog: feynman
+      sampling:
+        n_support: 512
+        n_validation: 512
+        noise: 0.0
+        problems_per_expression: 1
+    model_adapter:
+      type: subprocess
+      worker: rilsrols
+      python: '{{ROOT}}/envs/rilsrols/bin/python'
+      config_provenance: harness_tuned
+      simplipy_engine: acj-5-4-llm
+      timeout: 4800
+      options:
+        max_fit_calls: 1000000
+    runner:
+      limit: null
+      save_every: 8
+      resume: true
+      output: '{{ROOT}}/results/evaluation/panels/rilsrols_paper/feynman/evals_1000000.pkl'
+  feynman-bonus:
+    data_source:
+      catalog: feynman-bonus
+      sampling:
+        n_support: 512
+        n_validation: 512
+        noise: 0.0
+        problems_per_expression: 1
+    model_adapter:
+      type: subprocess
+      worker: rilsrols
+      python: '{{ROOT}}/envs/rilsrols/bin/python'
+      config_provenance: harness_tuned
+      simplipy_engine: acj-5-4-llm
+      timeout: 4800
+      options:
+        max_fit_calls: 1000000
+    runner:
+      limit: null
+      save_every: 8
+      resume: true
+      output: '{{ROOT}}/results/evaluation/panels/rilsrols_paper/feynman-bonus/evals_1000000.pkl'
