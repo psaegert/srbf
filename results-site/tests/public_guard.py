@@ -108,15 +108,37 @@ def entropy(data: bytes) -> float:
 
 
 def check_sealed(text: str, name: str) -> list[str]:
-    """Everything that must hold for a sealed payload, whatever it holds."""
-    bad = []
-    m = re.search(r"window\.RESULTS_V2_SEALED\[[^\]]*\]=(\{.*\});\s*$", text, re.S)
-    if not m:
+    """Everything that must hold for a sealed file, whatever it holds: one line with the envelope a page has always read
+    (RESULTS_V2_SEALED), at most one more with the envelopes sealed under further keys (RESULTS_V2_SEALED_MORE, written
+    first by tools/seal.mjs --source ...), nothing else; and every envelope passes the same checks."""
+    first, more, envs = None, None, []
+    for line in text.strip().split("\n"):
+        m = re.search(r"window\.RESULTS_V2_SEALED\[[^\]]*\]=(\{.*\});$", line)
+        n = re.fullmatch(r"window\.RESULTS_V2_SEALED_MORE=window\.RESULTS_V2_SEALED_MORE\|\|\{\};"
+                         r"window\.RESULTS_V2_SEALED_MORE\[[^\]]*\]=(\[.*\]);", line)
+        if m and first is None:
+            first = m.group(1)
+        elif n and more is None:
+            more = n.group(1)
+        else:
+            return [f"{name}: a line that is neither a sealed envelope nor the further ones, or one of them twice"]
+    if first is None:
         return [f"{name}: not a sealed envelope"]
     try:
-        env = json.loads(m.group(1))
+        envs = [json.loads(first)] + (json.loads(more) if more is not None else [])
     except ValueError:
         return [f"{name}: envelope is not JSON"]
+    if not all(isinstance(e, dict) for e in envs):
+        return [f"{name}: the further envelopes are not a list of envelopes"]
+    bad: list[str] = []
+    for i, env in enumerate(envs):
+        bad.extend(check_envelope(env, name if i == 0 else f"{name} (envelope {i + 1})"))
+    return bad
+
+
+def check_envelope(env: dict[str, Any], name: str) -> list[str]:
+    """One envelope: its own fields only, a strong KDF, and ciphertext that does not read as plaintext."""
+    bad = []
     if set(env) != SEALED_FIELDS:
         bad.append(f"{name}: envelope fields {sorted(set(env) ^ SEALED_FIELDS)} (only {sorted(SEALED_FIELDS)} belong here)")
     if env.get("kdf") != "PBKDF2-SHA256" or int(env.get("iter", 0)) < MIN_ITERATIONS:
@@ -184,6 +206,16 @@ def selftest() -> list[str]:
                 "ct": base64.b64encode(plain).decode()}
     text = "window.RESULTS_V2_SEALED[\"t\"]=" + json.dumps(envelope) + ";\n"
     bad = [] if check_sealed(text, "selftest") else ["selftest: check_sealed accepted a plaintext payload"]
+    # a plaintext payload behind a sealed one is as plain: every envelope is checked
+    sealed_first = {"v": 1, "kdf": "PBKDF2-SHA256", "iter": 600000, "salt": "AA==", "iv": "AA==",
+                    "ct": base64.b64encode(bytes(range(256)) * 8).decode()}
+    two = ("window.RESULTS_V2_SEALED_MORE=window.RESULTS_V2_SEALED_MORE||{};window.RESULTS_V2_SEALED_MORE[\"t\"]="
+           + json.dumps([envelope]) + ";\nwindow.RESULTS_V2_SEALED=window.RESULTS_V2_SEALED||{};window.RESULTS_V2_SEALED[\"t\"]="
+           + json.dumps(sealed_first) + ";\n")
+    if check_sealed(two.replace(json.dumps([envelope]), json.dumps([sealed_first])), "selftest"):
+        bad.append("selftest: check_sealed refused two sealed envelopes")
+    if not check_sealed(two, "selftest"):
+        bad.append("selftest: check_sealed accepted a plaintext envelope behind a sealed one")
     probe = SITE / "data" / ".guard_selftest.js"
     try:
         probe.write_text('window.X={"fit_time":[1,2]};\n', encoding="utf-8")
