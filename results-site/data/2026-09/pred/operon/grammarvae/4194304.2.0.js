@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|grammarvae|4194304|2|0"]={"0":["+ 0.3333 * 1 - sin / * 0.5119 x1 / acos 0.1255 * 2.823 x1 * -1 x1",1]};})();

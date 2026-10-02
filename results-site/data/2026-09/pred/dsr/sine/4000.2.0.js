@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["dsr|sine|4000|2|0"]={"0":["tanh * neg pow cos - 1.204 abs x1 4 * 76.01 + cos x1 - x1 2.513",0]};})();
