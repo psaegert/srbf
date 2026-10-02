@@ -34,6 +34,22 @@ test('the explorer\'s page opens on the explorer and renders its curves', async 
   expect(errors).toEqual([]);
 });
 
+test('a ladder that cannot go further ends in a square; every other point is a circle', async ({ page }) => {
+  // E2E is reported at its default settings, which stop at 256 candidates per bag (summary.ladder: "declared")
+  const errors = collectErrors(page);
+  await page.goto('/explorer.html?release=2026-09&v=curves');
+  await expect(page.locator(V2 + ' svg.v2chart').first()).toBeVisible();
+  const squares = page.locator(V2 + ' svg.v2chart rect.v2end');
+  await expect(squares.first()).toBeAttached();
+  const tips = await squares.locator('title').allTextContents();
+  expect(tips.length).toBeGreaterThan(0);
+  for (const t of tips) { expect(t).toMatch(/^E2E[^@]* (at budget|@) 256\b/); expect(t).toContain('default settings'); expect(t).not.toContain('..'); }
+  const e2eCircles = await page.locator(V2 + ' svg.v2chart circle title').evaluateAll((ts) => ts.map((t) => t.textContent).filter((t) => /^E2E[^@]* (at budget|@) 256\b/.test(t)));
+  expect(e2eCircles).toEqual([]);
+  await expect(page.locator(V2 + ' .v2endnote')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test('the metric registry carries its floor and the headline metrics', async ({ page }) => {
   await page.goto('/explorer.html');
   const keys = await page.evaluate(() => window.RESULTS_V2.metrics.map((m) => m.key));
@@ -159,9 +175,10 @@ test('a curve walks its method\'s budgets in order, also on the time axis', asyn
   const series = await head.evaluate((svg) => [...svg.querySelectorAll('polyline')].map((pl) => {
     const col = pl.getAttribute('stroke');
     const verts = pl.getAttribute('points').trim().split(/\s+/).map((q) => q.split(',').map(Number));
-    const dots = [...svg.querySelectorAll('circle')].filter((c) => c.getAttribute('stroke') === col).map((c) => {
+    const dots = [...svg.querySelectorAll('circle, rect.v2end')].filter((c) => c.getAttribute('stroke') === col).map((c) => {
       const m = (c.querySelector('title') || { textContent: '' }).textContent.match(/ at budget (\d+)/);
-      return { x: +c.getAttribute('cx'), y: +c.getAttribute('cy'), b: m ? +m[1] : NaN };
+      const sq = c.tagName === 'rect';   // a ladder's declared end: a 6 px square centred on the point
+      return { x: sq ? +c.getAttribute('x') + 3 : +c.getAttribute('cx'), y: sq ? +c.getAttribute('y') + 3 : +c.getAttribute('cy'), b: m ? +m[1] : NaN };
     });
     return { col, verts, dots };
   }));
