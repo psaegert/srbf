@@ -2196,7 +2196,7 @@
     s += '<line x1="' + labW + '" y1="' + topH + '" x2="' + (labW + n * cell) + '" y2="' + (topH + n * cell) + '" class="v2cdiagline"/></svg>';
     return '<p class="v2hint">Below the diagonal: <span class="v2sw" style="background:' + rgbCss(methodRGB(cA.m)) + '"></span>' + esc(corrLabel(cA)) + "; above it: " + '<span class="v2sw" style="background:' + rgbCss(methodRGB(cB.m)) + '"></span>' + esc(corrLabel(cB)) + ".</p>" +
       '<div class="v2table-wrap v2cmatwrap">' + s + "</div>" +
-      '<p class="v2hint">Each cell is the ' + term("rho", "rank correlation") + " of two metrics over the method’s runs: blue where they rise together, orange where one falls as the other rises, pale where the two are close to unrelated. Hover a cell for its 95 % interval; a click draws the two metrics against each other. Properties of the true formula are the same for every method, so their correlations with each other agree on both sides.</p>";
+      '<p class="v2hint">Each cell is the ' + term("rho", "rank correlation") + " of two metrics over the method’s runs: blue where they rise together, orange where one falls as the other rises, faint where the two are close to unrelated. Hover a cell for its 95 % interval; a click draws the two metrics against each other. Properties of the true formula are the same for every method, so their correlations with each other agree on both sides.</p>";
   }
   // One metric, two methods: each problem's value under one method against its value under the other.
   function corrVs(clouds) {
