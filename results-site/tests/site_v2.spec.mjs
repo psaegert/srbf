@@ -18,7 +18,7 @@ async function pick(page, trigger, key) {
   await page.locator(`.v2picker .v2pickitem[data-k="${key}"]`).click();
   await expect(page.locator('.v2picker')).toHaveCount(0);
 }
-const VIEWS = ['curves', 'table', 'matrix', 'dist', 'ranks', 'paired'];
+const VIEWS = ['curves', 'table', 'matrix', 'dist', 'corr', 'ranks', 'paired'];
 // the metric floor: the 20 metrics every release carries (those of the site's first release, under schema-2 keys)
 const LEGACY_METRICS = ['numeric_recovery_val', 'expr_length_ratio', 'log10_fvu_val', 'log10_fvu_fit', 'numeric_recovery_fit', 'success',
   'skeleton_match_raw', 'f1_score', 'precision_score', 'recall_score', 'edit_distance_norm', 'zss_edit_distance', 'expr_length_ratio_abserr',
@@ -700,7 +700,7 @@ test('a rate is shown per problem set, with a way to a distribution', async ({ p
 // measures them (a progress bar's class once shared the group's name and cut every group to 9 px).
 test('every button group shows its labels in full, each on one line', async ({ page }) => {
   for (const url of ['/explorer.html?release=2026-09&v=dist&r=16', '/explorer.html?release=2026-09&v=dist&dv=ecdf&r=16', '/explorer.html?release=2026-09&v=dist&dv=rungs&r=16',
-    '/explorer.html?release=2026-09&v=preds', '/explorer.html?release=2026-09&v=ranks&x=rung&r=16']) {
+    '/explorer.html?release=2026-09&v=preds', '/explorer.html?release=2026-09&v=ranks&x=rung&r=16', '/explorer.html?release=2026-09&v=corr&cv=vs']) {
     await page.goto(url);
     const btns = page.locator(V2 + ' .v2segbtn');
     await expect(btns.first()).toBeVisible({ timeout: 15000 });
@@ -1698,3 +1698,94 @@ test('without published formulas the predictions view says so', async ({ page })
   await page.goto('/explorer.html?release=2026-09&v=preds');
   await expect(page.locator(V2 + ' .v2view')).toContainText('The formulas are not published in this release yet.');
 });
+
+// ---- Correlations: two metrics problem by problem, from every problem's values (pp/) ------------------------------
+const CORR = '/explorer.html?release=2026-09&v=corr&m=T8-120M,T8-120M-pysr,PySR&c=all';
+// the largest budget at which T8-120M has finished every run of feynman: a single problem set weighs its problems equally
+async function feynmanRung(page) {
+  await page.goto('/explorer.html');
+  return page.evaluate(() => Math.max(...Object.keys(window.RESULTS_V2.pp['T8-120M']).filter((k) => k.startsWith('feynman|')).map((k) => +k.split('|')[1])));
+}
+
+test('every display of the Correlations view draws from a link, keeps it in the link and stays inside the page', async ({ page }) => {
+  const errors = collectErrors(page);
+  for (const [cv, sel] of [['contour', 'svg.v2corr path'], ['heat', 'svg.v2corr image'], ['points', 'svg.v2cpoints image'], ['trend', 'svg.v2corr circle'], ['matrix', 'svg.v2cmatrix .v2ccell'], ['vs', 'svg.v2corr image']]) {
+    await page.goto(`${CORR}&cv=${cv}&cx=mdl_ratio&cy=log10_fvu_val`);
+    await expect(page.locator(V2 + ' .v2tab.active')).toHaveAttribute('data-view', 'corr');
+    await expect(page.locator(V2 + ' ' + sel).first(), cv).toBeAttached({ timeout: 15000 });
+    expect(new URL(page.url()).searchParams.get('cv'), cv).toBe(cv);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow, cv).toBeLessThanOrEqual(0);
+  }
+  expect(errors).toEqual([]);
+});
+
+test('a value at its metric\'s bound sits in a strip, and the strip holds exactly those runs', async ({ page }) => {
+  const r = await feynmanRung(page);
+  await page.goto(`/explorer.html?release=2026-09&v=corr&cv=contour&cx=log10_fvu_val&cy=log10_fvu_val&m=T8-120M&c=feynman&x=rung&r=${r}`);
+  const table = page.locator(V2 + ' table.v2ctable');
+  await expect(table).toBeVisible({ timeout: 15000 });
+  const heads = await table.locator('thead th').allTextContents(), cells = await table.locator('tbody tr').first().locator('td').allTextContents();
+  const col = heads.findIndex((h) => /log10 FVU Val = -15\.65/.test(h));
+  expect(col, heads.join(' | ')).toBeGreaterThan(0);
+  // the same share counted straight from the files the page loaded, on the exporter's grid: an exact fit is log10 of
+  // the float64 epsilon, and it has its byte to itself
+  const expected = await page.evaluate((rung) => {
+    const D = window.RESULTS_V2, sp = D.metrics.find((m) => m.key === 'log10_fvu_val').pp, floor = Math.log10(Math.pow(2, -52));
+    const code = Math.round((floor - sp.lo) / (sp.hi - sp.lo) * 252), draws = D.pp['T8-120M']['feynman|' + rung], P = window.RESULTS_V2_PP['2026-09'];
+    let hit = 0, all = 0;
+    for (const d of draws) { const b = atob(P[`T8-120M|feynman|${rung}|${d}`].v.log10_fvu_val); for (let i = 0; i < b.length; i++) { all += 1 / draws.length; if (b.charCodeAt(i) === code) { hit += 1 / draws.length; } } }
+    return 100 * hit / all;
+  }, r);
+  expect(expected).toBeGreaterThan(5);   // feynman has exact fits at this budget: the comparison is not vacuous
+  expect(Math.abs(parseFloat(cells[col]) - expected)).toBeLessThan(0.051);
+});
+
+test('a run picked in the points display shows its formulas and opens in Predictions', async ({ page }) => {
+  const r = await feynmanRung(page);
+  await page.goto(`/explorer.html?release=2026-09&v=corr&cv=points&cx=mdl_ratio&cy=log10_fvu_val&m=T8-120M&c=feynman&x=rung&r=${r}`);
+  const svg = page.locator(V2 + ' svg.v2cpoints');
+  await expect(svg).toBeVisible({ timeout: 15000 });
+  // the strip of exact fits along the bottom is the widest strip and dense with runs: a tap along it lands on one
+  await svg.scrollIntoViewIfNeeded();
+  const strips = await svg.locator('rect.v2cstrip').evaluateAll((rs) => rs.map((e) => { const b = e.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height }; }));
+  const bottom = strips.sort((a, b) => b.w - a.w || b.y - a.y)[0];
+  let found = false;
+  for (let k = 1; k < 40 && !found; k++) {
+    await page.mouse.click(bottom.x + bottom.w * k / 40, bottom.y + bottom.h / 2);
+    found = await page.locator(V2 + ' .v2csel').isVisible();
+  }
+  expect(found).toBe(true);
+  const sel = page.locator(V2 + ' .v2csel');
+  await expect(sel).toContainText('feynman, problem');
+  await expect(sel).toContainText('exactly -15.65');
+  await expect(sel.locator('.v2predtruthf').first()).not.toHaveText('');
+  const n = (await sel.locator('h3').textContent()).match(/problem (\d+), run (\d)/);
+  await sel.locator('[data-act="corr-open"]').click();
+  await expect(page.locator(V2 + ' .v2tab.active')).toHaveAttribute('data-view', 'preds');
+  await expect.poll(() => { const q = new URL(page.url()).searchParams; return [q.get('ps'), q.get('pn'), q.get('pr'), q.get('r')]; }).toEqual(['feynman', n[1], n[2], String(r)]);
+});
+
+test('a cell of the matrix of rank correlations draws its two metrics', async ({ page }) => {
+  await page.goto(`${CORR}&cv=matrix`);
+  const cell = page.locator(V2 + ' .v2ccell').nth(40);
+  await expect(cell).toBeAttached({ timeout: 15000 });
+  const tip = await cell.locator('title').textContent();
+  expect(tip).toMatch(/ρ = -?\d\.\d\d \[-?\d\.\d\d, -?\d\.\d\d\]/);   // every correlation comes with its interval
+  const [cx, cy] = [await cell.getAttribute('data-cx'), await cell.getAttribute('data-cy')];
+  await cell.click();
+  const q = new URL(page.url()).searchParams;
+  expect([q.get('cv'), q.get('cx'), q.get('cy')]).toEqual(['contour', cx, cy]);
+  await expect(page.locator(V2 + ' svg.v2corr').first()).toBeVisible();
+});
+
+test('one metric under two methods: the diagonal, and the problems both solve exactly in the corner', async ({ page }) => {
+  await page.goto(`${CORR}&cv=vs&cy=log10_fvu_val&ca=PySR&cb=T8-120M`);
+  const svg = page.locator(V2 + ' svg.v2corr');
+  await expect(svg).toBeVisible({ timeout: 15000 });
+  await expect(svg.locator('line.zero')).toHaveCount(1);
+  const corners = await svg.locator('rect.v2ccorner title').allTextContents();
+  expect(corners.some((t) => /% of the run pairs in both strips/.test(t))).toBe(true);
+  await expect(page.locator(V2 + ' .v2view')).toContainText('Paired differences');
+});
+

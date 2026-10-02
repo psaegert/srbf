@@ -11,7 +11,8 @@
  * of one metric at one rung) | Distribution (per-method histograms, cumulative curves, a box per catalog, quartiles
  * along the ladder; per-catalog rates for rate metrics) | Ranks (average places from the pairwise chances to beat,
  * pairwise tests, head-to-head table; from <base>ranks.js) | Paired Δ (each method against a baseline, problem by
- * problem: the mean difference, tested on the difference for rates and on the superiority otherwise).
+ * problem: the mean difference, tested on the difference for rates and on the superiority otherwise) | Correlations
+ * (two metrics problem by problem, from <base>pp/: contours, heat maps, points, trend, every pair, method against method).
  * State lives in the URL (?release=...&v=...) for sharing and in localStorage for convenience; colours in the same
  * first-party cookie srbf_colors, written only on an explicit change. The site's 2026-07 release (explorer.js) was
  * retired on 2026-09-26; its links' keys are dropped from the URL and its ?release= opens this page. */
@@ -159,7 +160,9 @@
       // a point that rests on fewer than this share of the problems is drawn hollow
       valid: VALID_DEFAULT,
       // a metric whose range has a worst value: does a failed prediction count that value, or is it left out?
-      impute: true };
+      impute: true,
+      // the Correlations view: the two metrics, how they are drawn, and the two methods its pair displays compare
+      cx: "mdl_ratio", cy: "log10_fvu_val", cv: "contour", ca: null, cb: null };
   };
   var state = DEFAULTS();
   var LS = "srbf-v2-" + REL + ".11";   // bumped whenever a default changes (.11 GP-GOMEA faded by default; .10 shown, faded and hidden methods; .2 time axis, .3 mean, .4 bands, .5 per-view metrics, .6 complete pools only, .7 hollow markers, .8 failed predictions counted or left out, .9 methods marked off start unchecked), so a saved state cannot pin the old one
@@ -199,7 +202,12 @@
     if (q.has("ps") && CAT[q.get("ps")]) { state.pset = q.get("ps"); any = true; }
     if (q.has("pr")) { state.prun = q.get("pr") === "2" ? 2 : 1; any = true; }
     if (q.has("pn")) { state.pprob = Math.max(0, (parseInt(q.get("pn"), 10) || 1) - 1); any = true; }
-    if (["curves", "table", "matrix", "dist", "ranks", "paired", "preds"].indexOf(state.view) < 0) { state.view = "curves"; }
+    ["cx", "cy", "cv", "ca", "cb"].forEach(function (k) { if (q.has(k)) { state[k] = q.get(k); any = true; } });
+    if (["curves", "table", "matrix", "dist", "corr", "ranks", "paired", "preds"].indexOf(state.view) < 0) { state.view = "curves"; }
+    var isPP = function (k) { return !!(METRIC[k] && METRIC[k].pp); };
+    if (!isPP(state.cx)) { state.cx = isPP("mdl_ratio") ? "mdl_ratio" : (D.metrics.filter(function (m) { return m.pp; })[0] || {}).key || null; }
+    if (!isPP(state.cy)) { state.cy = isPP("log10_fvu_val") ? "log10_fvu_val" : state.cx; }
+    if (["contour", "heat", "points", "trend", "matrix", "vs"].indexOf(state.cv) < 0) { state.cv = "contour"; }
     if (state.prun !== 2) { state.prun = 1; }
     state.pprob = Math.max(0, state.pprob | 0);
     if (["hist", "ecdf", "cats", "rungs"].indexOf(state.dmode) < 0) { state.dmode = "hist"; }
@@ -242,10 +250,11 @@
     q.set("release", REL); q.set("v", state.view); q.set("c", catsParam()); q.set("m", sharedMethods().map(function (k) { return (state.dim.indexOf(k) >= 0 ? "~" : "") + k; }).join(",")); q.delete("fa"); if (state.fade !== FADE_DEFAULT) { q.set("fa", String(state.fade)); } q.set("p", state.plots.map(plotKey).join(","));
     q.set("f", state.focus); q.set("s", state.stat); q.delete("pool"); q.delete("thin"); q.set("band", state.band ? "1" : "0"); q.set("cross", state.cross ? "1" : "0");
     q.set("x", state.xaxis); q.set("r", String(state.rung)); q.delete("pm"); q.delete("pt"); if (state.pm === "time" && state.pt) { q.set("pm", "time"); q.set("pt", String(state.pt)); } if (state.base) { q.set("b", state.base); } q.set("rows", state.rows); q.set("ok", String(state.valid)); q.set("imp", state.impute ? "1" : "0");
-    ["dm", "dv", "dn", "rm", "t", "ps", "pr", "pn", "pp"].forEach(function (k) { q.delete(k); });   // a link carries only what its display reads
+    ["dm", "dv", "dn", "rm", "t", "ps", "pr", "pn", "pp", "cx", "cy", "cv", "ca", "cb"].forEach(function (k) { q.delete(k); });   // a link carries only what its display reads
     if (state.view === "preds") { if (state.pset) { q.set("ps", state.pset); } q.set("pr", String(state.prun)); q.set("pn", String(state.pprob + 1)); }
     if (state.view === "dist") { q.set("dm", state.dmetric); q.set("dv", state.dmode); q.set("dn", state.dnorm); }
     if (state.view === "ranks") { q.set("rm", state.rmetric); if (state.tbudget) { q.set("t", state.tbudget); } }
+    if (state.view === "corr") { q.set("cv", state.cv); if (state.cv !== "matrix") { q.set("cy", state.cy); } if (state.cv !== "matrix" && state.cv !== "vs") { q.set("cx", state.cx); } if ((state.cv === "matrix" || state.cv === "vs") && state.ca) { q.set("ca", state.ca); q.set("cb", state.cb || state.ca); } if (state.xaxis === "time" && state.tbudget) { q.set("t", state.tbudget); } }
     try { window.history.replaceState(null, "", "?" + q.toString() + window.location.hash); } catch (e) { /* file:// */ }
   }
 
@@ -892,8 +901,9 @@
   function pickerGroups(axis) {
     var gs = axis === "x" ? [{ title: "budget spent", items: [AXIS.time, AXIS.rung] }] : [];
     var only = axis === "focus" && state.view === "ranks" ? ((ranksOf() || {}).keys || D.rank_keys || []) : null;   // the metrics the release ranked on
+    var perProblem = axis === "cx" || axis === "cy";   // the Correlations view: the continuous metrics, whose values per problem ship
     MGROUPS.forEach(function (g) {
-      var ms = D.metrics.filter(function (m) { return m.group === g && (!only || only.indexOf(m.key) >= 0); });
+      var ms = D.metrics.filter(function (m) { return m.group === g && (!only || only.indexOf(m.key) >= 0) && (!perProblem || m.pp); });
       if (ms.length) { gs.push({ title: g, items: ms }); }
     });
     return gs;
@@ -1620,8 +1630,623 @@
       '<p class="v2hint">' + term("winshare", "Comparisons won") + ": the share of one-on-one comparisons a method wins. 100 % means it beats every other method on every problem; 50 % means it wins as often as it loses." + (timed ? " A hollow marker means the method\u2019s largest budget stays below this time limit." : "") + "</p>";
   }
 
+  // ---- Correlations: two metrics, problem by problem ----------------------------------------------------------------
+  // Every other display summarises the problems; this one shows them. The release ships every problem's value of every
+  // continuous metric, one byte per run, per method x problem set x budget x finished run (D.pp indexes the files;
+  // scripts/site_export_v2.py, write_values): the value's place on its metric's grid (METRIC.pp: lo and hi in the space
+  // the metric's histograms use, whole numbers exact), 253 below the grid, 254 above it, 255 no value. A run weighs what
+  // it weighs in a distribution: its problem's share of its problem set, the set weighted as in an average, and a
+  // problem's runs share its weight. The set weights are those of log10 FVU, whatever the axes show, so that changing an
+  // axis never re-weighs the problems.
+  // A value that piles up at a bound of its metric (an exact fit's log10 FVU, an overlap of 0 or 1), and a value beyond
+  // the range on screen, is drawn in a strip along the frame instead of inside it: inside, a smoothed density or a colour
+  // scale would turn a pile-up into a blob, or wash out everything else.
+  var PP_STEPS = 252, PP_BELOW = 253, PP_ABOVE = 254, PP_NONE = 255, PP_OK = 1, PP_NUM = 2, PP_SYM = 4;
+  var TIME_BUDGETS = [0.1, 0.3, 1, 3, 10, 30, 100, 300, 1000];   // the exporter's TIME_BUDGETS, as the Ranks view uses them
+  var CMODES = [["contour", "contours", "Where each method's runs lie: the smallest regions that hold half and nine tenths of its runs, every method on one chart"],
+    ["heat", "heat maps", "One panel per method: the share of its runs in each cell of a grid"],
+    ["points", "points", "Every run as a point; tap or hover one to see its problem"],
+    ["trend", "trend", "Along the x axis, in bins: the median of the y axis and the middle half of the runs"],
+    ["matrix", "all pairs", "The rank correlation of every pair of metrics, for two methods at once", "pairs"],
+    ["vs", "method vs method", "One metric with one method on each axis, problem by problem", "A vs B"]];
+  var CTERMS = {
+    weights: "Each point is one run of a method on one problem. A run weighs what it weighs in a distribution: every problem set counts as it does in an average of log10 FVU (each about once, whatever its size, and a set of a few problems less), every problem of a set the same, and a problem's two runs share its weight. Without this, the largest problem set would make up four fifths of every chart.",
+    strips: "Values that pile up at a bound of their metric, such as the log10 FVU of an exact fit or an overlap of exactly 0 or 1, and values beyond the range on screen, are drawn in a strip along the frame instead of inside it. Inside, a smoothed region or a colour scale would turn a pile-up into a blob, or wash out everything else. The table below the chart gives the share of each method's runs in every strip.",
+    rho: "Spearman's rank correlation over the runs, weighted as in the charts: 1 when the two metrics put the runs in the same order, -1 in the opposite order, and near 0 when the order on one does not follow the order on the other. Ties share a rank, and a value in a strip counts as lower or higher than every value inside the frame. The 95 % interval treats each problem as one observation.",
+    hdr: "The darker region is the smallest part of the plane that holds half of a method's runs inside the frame, the outline the smallest that holds nine tenths. They are drawn from a smoothed density, so their edges are approximate."
+  };
+  Object.assign(TERMS, CTERMS);   // a dotted term looks its text up in TERMS
+  var csel = null;   // the run picked in the points display: {m, c, row, d, r}
+  function ppStore() { var R = window.RESULTS_V2_PP; return (R && R[REL]) || {}; }
+  var PPDEC = {};
+  function ppPart(key) {
+    var raw = ppStore()[key]; if (!raw) { return null; }
+    var e = PPDEC[key]; if (!e || e.raw !== raw) { e = PPDEC[key] = { raw: raw, n: raw.n, s: raw.s ? bytesOf(raw.s) : null, v: {} }; }
+    return e;
+  }
+  function ppCol(part, k) { if (!part || !part.raw.v || !part.raw.v[k]) { return null; } return part.v[k] || (part.v[k] = bytesOf(part.raw.v[k])); }
+  function ppMetrics() { return D.metrics.filter(function (m) { return m.kind === "cont" && m.pp; }); }
+  function ppValue(sp, c) { return sp.int ? sp.lo + c : sp.lo + c / PP_STEPS * (sp.hi - sp.lo); }
+  function ppBound(sp, side) { var b = sp.bounds && sp.bounds[side]; return b === null || b === undefined || sp.int ? -1 : Math.round((b - sp.lo) / (sp.hi - sp.lo) * PP_STEPS); }
+  function ppHas(k, r) { var idx = (D.pp || {})[k]; return !!idx && state.cats.length > 0 && state.cats.every(function (c) { return (idx[c + "|" + r] || []).length > 0; }); }
+  function ppRungs(k) { return D.rungs.filter(function (r) { return ppHas(k, r); }); }
+  function timeSlots() { return (D.time_budgets || TIME_BUDGETS).map(function (t) { return "t" + t; }); }
+  function corrTimed() { return state.xaxis === "time" && anyTime(); }
+  // the budget a method is read at: the one set, or its largest finished budget within the time limit
+  function corrRung(m) {
+    if (!corrTimed()) { return ppHas(m.key, state.rung) ? state.rung : null; }
+    var t = posValue(state.tbudget), best = null;
+    ppRungs(m.key).forEach(function (r) { var s = refTime(m.key, r); if (s !== null && s <= t * (1 + 1e-9) && (best === null || r > best)) { best = r; } });
+    return best;
+  }
+  function corrWhy(m) {
+    if (!(D.pp || {})[m.key]) { return esc(m.label) + ": its values per problem are not published in this release."; }
+    if (corrTimed()) { return esc(m.label) + (Object.keys(D.timing[m.key] || {}).length ? ": none of its finished budgets takes " + fmtSec(posValue(state.tbudget)) + " s or less per problem." : " has not been timed yet."); }
+    return esc(m.label) + (notRun(m, state.rung) ? " is not run at budget " + state.rung + " (it runs at " + budgetRange(m) + ")." : " has not finished every run of the selected problem sets at budget " + state.rung + ".");
+  }
+  function corrFiles(k, r, ks) {
+    var idx = D.pp[k], out = [];
+    state.cats.forEach(function (c) { (idx[c + "|" + r] || []).forEach(function (d) { out.push("pp/" + k + "/" + c + "/" + r + "." + d + ".js"); }); });
+    if (ks.some(function (q) { return METRIC[q].every; })) { state.cats.forEach(function (c) { out.push("pp/truth/" + c + ".js"); }); }
+    return out;
+  }
+  function filesReady(files) { var all = true; files.forEach(function (f) { if (!ready(f)) { all = false; ensure(f, scheduleRender); } }); return all; }
+  // One method's runs at budget r over the selected problem sets, with the columns of the metrics ks.
+  function ppCloud(m, r, ks) {
+    var idx = D.pp[m.key], cs = state.cats.slice(), n = 0, at = 0, cols = {};
+    cs.forEach(function (c) { n += (idx[c + "|" + r] || []).length * CAT[c].laws; });
+    var cat = new Uint16Array(n), row = new Int32Array(n), drw = new Uint8Array(n), flag = new Uint8Array(n), share = new Float64Array(n);
+    ks.forEach(function (k) { cols[k] = new Uint8Array(n).fill(PP_NONE); });
+    cs.forEach(function (c, ci) {
+      var ds = idx[c + "|" + r] || [], truth = ppPart("truth|" + c);
+      ds.forEach(function (d) {
+        var part = ppPart(m.key + "|" + c + "|" + r + "|" + d); if (!part) { return; }
+        var N = Math.min(part.n, n - at);
+        ks.forEach(function (k) { var col = METRIC[k].every ? ppCol(truth, k) : ppCol(part, k); if (col) { cols[k].set(col.subarray(0, N), at); } });
+        for (var i = 0; i < N; i++) { cat[at + i] = ci; row[at + i] = i; drw[at + i] = d; flag[at + i] = part.s ? part.s[i] : PP_OK; share[at + i] = 1 / ds.length; }
+        at += N;
+      });
+    });
+    return { m: m, r: r, cs: cs, n: at, cat: cat, row: row, drw: drw, flag: flag, share: share, cols: cols };
+  }
+  // whether a run has a value on metric k as the reader counts it (a failed run left out of an overlap metric on request)
+  function ppOk(cl, k, i) { return cl.cols[k][i] !== PP_NONE && !(leftOut(k) && !(cl.flag[i] & PP_OK)); }
+  // Every run's weight (0 where a metric of ks has no value), summing to 1; n: the problems behind them; neff: the number
+  // of equally weighted problems that would be as precise (Kish), for the intervals.
+  function ppWeights(cl, ks) {
+    var w = new Float64Array(cl.n), cnt = cl.cs.map(function () { return 0; }), ok = new Uint8Array(cl.n), i, j;
+    for (i = 0; i < cl.n; i++) { var good = true; for (j = 0; j < ks.length; j++) { if (!ppOk(cl, ks[j], i)) { good = false; break; } } if (good) { ok[i] = 1; cnt[cl.cat[i]] += cl.share[i]; } }
+    var weigh = setWeights("log10_fvu_val", cl.m.key, cl.r, cl.cs), W = cnt.map(function (x) { return x > 0 ? weigh(x) : 0; });
+    var tot = W.reduce(function (a, b) { return a + b; }, 0), q = 0;
+    W.forEach(function (x, ci) { if (cnt[ci] > 0) { q += x * x / cnt[ci]; } });
+    for (i = 0; i < cl.n; i++) { if (ok[i] && tot > 0) { w[i] = W[cl.cat[i]] * cl.share[i] / cnt[cl.cat[i]] / tot; } }
+    var all = cl.cs.reduce(function (a, c) { return a + CAT[c].laws; }, 0), have = cnt.reduce(function (a, b) { return a + b; }, 0);
+    return { w: w, n: have, all: all, neff: q > 0 ? tot * tot / q : 0 };
+  }
+  // An axis: the range on screen, from where 99 % of the values inside the frame lie (as in the Distribution view), and
+  // the bytes of the metric's bounds.
+  function ppAxis(k, clouds, ws) {
+    var sp = METRIC[k].pp, bl = ppBound(sp, 0), bh = ppBound(sp, 1), h = new Float64Array(PP_STEPS + 1), tot = 0;
+    clouds.forEach(function (cl, j) { var col = cl.cols[k], w = ws[j].w; for (var i = 0; i < cl.n; i++) { var c = col[i]; if (w[i] > 0 && c <= PP_STEPS && c !== bl && c !== bh) { h[c] += w[i]; tot += w[i]; } } });
+    var lo = sp.lo, hi = sp.hi;
+    if (tot > 0) {
+      var q = function (p) { var cum = 0; for (var c = 0; c <= PP_STEPS; c++) { cum += h[c]; if (cum >= p * tot - 1e-12) { return c; } } return PP_STEPS; };
+      var a = ppValue(sp, q(0.005)), b = ppValue(sp, q(0.995));
+      if (sp.int) { lo = a - 0.5; hi = b + 0.5; }
+      else { var step = (sp.hi - sp.lo) / PP_STEPS, pad = Math.max(0.04 * (b - a), 2 * step); lo = Math.max(sp.lo, a - pad); hi = Math.min(sp.hi, b + pad); }
+    }
+    if (!(hi > lo)) { hi = lo + 1; }
+    return { k: k, m: METRIC[k], sp: sp, lo: lo, hi: hi, bl: bl, bh: bh };
+  }
+  // where a run falls on an axis: -1 the low strip, 1 the high strip, 0 inside the frame, null no value
+  function ppPlace(A, c) {
+    if (c === PP_NONE) { return null; }
+    if (c === PP_BELOW || c === A.bl) { return -1; }
+    if (c === PP_ABOVE || c === A.bh) { return 1; }
+    var v = ppValue(A.sp, c);
+    return v < A.lo ? -1 : v > A.hi ? 1 : 0;
+  }
+  function vText(A, x) { return A.sp.int ? String(Math.round(back(A.m, x))) : fmt(A.m, x); }
+  function codeText(A, c) {
+    if (c === PP_NONE) { return "no value"; }
+    if (c === PP_BELOW) { return A.m.key.indexOf("log10_fvu") === 0 ? "below " + vText(A, A.sp.lo) : "below " + vText(A, A.sp.lo) + " or minus infinity"; }
+    if (c === PP_ABOVE) { return "above " + vText(A, A.sp.hi) + ", or no finite value"; }
+    return (c === A.bl || c === A.bh ? "exactly " : "") + vText(A, ppValue(A.sp, c));
+  }
+  // what a strip holds: the bound, when only values at the bound are in it, else everything beyond the range on screen
+  function stripLabel(A, side, onlyBound) {
+    if (onlyBound) { return "= " + vText(A, A.sp.bounds[side < 0 ? 0 : 1]); }
+    return (side < 0 ? "≤ " : "≥ ") + vText(A, side < 0 ? A.lo : A.hi);
+  }
+  function hexRGB(s) {
+    s = String(s || "").trim(); var m6 = /^#([0-9a-f]{6})$/i.exec(s), m3 = /^#([0-9a-f]{3})$/i.exec(s);
+    if (m6) { return [0, 2, 4].map(function (i) { return parseInt(m6[1].slice(i, i + 2), 16); }); }
+    if (m3) { return [0, 1, 2].map(function (i) { return parseInt(m3[1].charAt(i) + m3[1].charAt(i), 16); }); }
+    return [128, 128, 128];
+  }
+  function cssVar(name) { return window.getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function mixRGB(a, b, t) { return [0, 1, 2].map(function (i) { return Math.round(t * a[i] + (1 - t) * b[i]); }); }
+  function rgbCss(c, alpha) { return alpha === undefined ? "rgb(" + c.join(",") + ")" : "rgba(" + c.join(",") + "," + alpha.toFixed(3) + ")"; }
+  function methodRGB(m) { var c = hexRGB(baseColorOf(m)), a = alphaOf(m.key); return a < 1 ? mixRGB(c, hexRGB(cssVar("--surface")), a) : c; }
+  // A raster drawn on a canvas and placed in the chart as an image: points and grids by the thousand stay one element.
+  function rasterHref(w, h, draw) {
+    var dpr = Math.min(2, window.devicePixelRatio || 1), cv = document.createElement("canvas");
+    cv.width = Math.max(1, Math.round(w * dpr)); cv.height = Math.max(1, Math.round(h * dpr));
+    var g = cv.getContext("2d"); if (!g) { return ""; } g.scale(dpr, dpr); draw(g);
+    try { return cv.toDataURL("image/png"); } catch (e) { return ""; }
+  }
+  // ---- the frame: the plot area, a strip on each side that holds values, ticks that keep clear of the strip labels ----
+  function corrFrame(W, H, A, B, has, opt) {
+    var nr = narrow(), Lm = opt.left || (nr ? 52 : 70), Tm = opt.top || 14, Rm = opt.right || 14, Bm = 50 + (opt.below || 0), ST = opt.strip || 16, gap = 4;
+    var f = { W: W, H: H, A: A, B: B, has: has, ST: ST };
+    f.x0 = Lm + (has.xl ? ST + gap : 0); f.x1 = W - Rm - (has.xh ? ST + gap : 0);
+    f.yb = H - Bm; f.y0 = Tm + (has.yh ? ST + gap : 0); f.y1 = f.yb - (has.yl ? ST + gap : 0);
+    f.sxl = [Lm, Lm + ST]; f.sxh = [W - Rm - ST, W - Rm]; f.syh = [Tm, Tm + ST]; f.syl = [f.yb - ST, f.yb];
+    f.xs = function (v) { return f.x0 + (v - A.lo) / (A.hi - A.lo) * (f.x1 - f.x0); };
+    f.ys = function (v) { return f.y1 - (v - B.lo) / (B.hi - B.lo) * (f.y1 - f.y0); };
+    f.xv = function (px) { return A.lo + (px - f.x0) / (f.x1 - f.x0) * (A.hi - A.lo); };
+    f.yv = function (py) { return B.lo + (f.y1 - py) / (f.y1 - f.y0) * (B.hi - B.lo); };
+    return f;
+  }
+  // a run's spot: inside, its values; in a strip, the strip's middle across and its value along (u in [0, 1) spreads it across)
+  // inside the frame, d in [0, 1) places a continuous value within its grid step (it is known to that precision)
+  function dither(sp, c, d) { return d === undefined || sp.int || c > PP_STEPS ? 0 : (d - 0.5) * (sp.hi - sp.lo) / PP_STEPS; }
+  function spotX(f, px, c, u, d) { return px === 0 ? f.xs(ppValue(f.A.sp, c) + dither(f.A.sp, c, d)) : px < 0 ? f.sxl[0] + (u === undefined ? 0.5 : u) * f.ST : f.sxh[0] + (u === undefined ? 0.5 : u) * f.ST; }
+  function spotY(f, py, c, u, d) { return py === 0 ? f.ys(ppValue(f.B.sp, c) + dither(f.B.sp, c, d)) : py < 0 ? f.syl[0] + (u === undefined ? 0.5 : u) * f.ST : f.syh[0] + (u === undefined ? 0.5 : u) * f.ST; }
+  function frameSVG(f, labels) {
+    var A = f.A, B = f.B, s = "", nr = narrow();
+    var strip = function (x, y, w, h) { return '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) + '" class="v2cstrip"/>'; };
+    if (f.has.xl) { s += strip(f.sxl[0], f.y0, f.ST, f.y1 - f.y0); } if (f.has.xh) { s += strip(f.sxh[0], f.y0, f.ST, f.y1 - f.y0); }
+    if (f.has.yl) { s += strip(f.x0, f.syl[0], f.x1 - f.x0, f.ST); } if (f.has.yh) { s += strip(f.x0, f.syh[0], f.x1 - f.x0, f.ST); }
+    // the strips' labels take their places first; a tick label that would crowd one gives way
+    var xres = [], yres = [];
+    if (f.has.xl) { xres.push({ at: f.sxl[0] + f.ST / 2, t: labels.xl, anchor: "end" }); } if (f.has.xh) { xres.push({ at: f.sxh[0] + f.ST / 2, t: labels.xh, anchor: "start" }); }
+    if (f.has.yl) { yres.push({ at: f.syl[0] + f.ST / 2, t: labels.yl }); } if (f.has.yh) { yres.push({ at: f.syh[0] + f.ST / 2, t: labels.yh }); }
+    var xt = thinTicks(ticksFor(A.m, A.lo, A.hi, nr ? 4 : 6).filter(function (g) { return g >= A.lo - 1e-9 && g <= A.hi + 1e-9; }), f.xs, nr ? 40 : 52, roundness)
+      .filter(function (g) { return xres.every(function (r) { return Math.abs(f.xs(g) - r.at) >= 12 + textWidth(r.t) / 2 + textWidth(tickLabel(A.m, g)) / 2; }); });
+    var yt = thinTicks(ticksFor(B.m, B.lo, B.hi, nr ? 4 : 5).filter(function (g) { return g >= B.lo - 1e-9 && g <= B.hi + 1e-9; }), f.ys, 20, roundness)
+      .filter(function (g) { return yres.every(function (r) { return Math.abs(f.ys(g) - r.at) >= 15; }); });
+    xt.forEach(function (g) { var x = f.xs(g).toFixed(1); s += '<line x1="' + x + '" y1="' + f.y0 + '" x2="' + x + '" y2="' + f.y1 + '" class="grid"/><text x="' + x + '" y="' + (f.yb + 16) + '" class="tick" text-anchor="middle">' + esc(A.sp.int ? String(Math.round(back(A.m, g))) : tickLabel(A.m, g)) + "</text>"; });
+    yt.forEach(function (g) { var y = f.ys(g).toFixed(1); s += '<line x1="' + f.x0 + '" y1="' + y + '" x2="' + f.x1 + '" y2="' + y + '" class="grid"/><text x="' + (Math.min(f.x0, f.has.xl ? f.sxl[0] : f.x0) - 6) + '" y="' + (+y + 4) + '" class="tick" text-anchor="end">' + esc(B.sp.int ? String(Math.round(back(B.m, g))) : tickLabel(B.m, g)) + "</text>"; });
+    xres.forEach(function (r) { s += '<text x="' + r.at.toFixed(1) + '" y="' + (f.yb + 16) + '" class="tick v2cstriplab" text-anchor="middle">' + esc(r.t) + "</text>"; });
+    yres.forEach(function (r) { s += '<text x="' + ((f.has.xl ? f.sxl[0] : f.x0) - 6) + '" y="' + (r.at + 4).toFixed(1) + '" class="tick v2cstriplab" text-anchor="end">' + esc(r.t) + "</text>"; });
+    s += '<rect x="' + f.x0 + '" y="' + f.y0 + '" width="' + (f.x1 - f.x0) + '" height="' + (f.y1 - f.y0) + '" class="v2cframe"/>';
+    s += '<text x="' + ((f.x0 + f.x1) / 2).toFixed(0) + '" y="' + (f.yb + 34) + '" class="tick" text-anchor="middle">' + esc(labels.x || axisName(A.m)) + "</text>";
+    s += '<text transform="translate(' + (narrow() ? 12 : 16) + "," + ((f.y0 + f.y1) / 2).toFixed(0) + ') rotate(-90)" class="tick" text-anchor="middle">' + esc(labels.y || axisName(B.m)) + "</text>";
+    return s;
+  }
+  // which strips the runs of these clouds need, and what each holds
+  function stripsOf(A, B, clouds, ws) {
+    var has = { xl: false, xh: false, yl: false, yh: false }, bound = { xl: true, xh: true, yl: true, yh: true };
+    clouds.forEach(function (cl, j) { var ca = cl.cols[A.k], cb = cl.cols[B.k], w = ws[j].w;
+      for (var i = 0; i < cl.n; i++) { if (!(w[i] > 0)) { continue; } var px = ppPlace(A, ca[i]), py = ppPlace(B, cb[i]);
+        if (px < 0) { has.xl = true; if (ca[i] !== A.bl) { bound.xl = false; } } else if (px > 0) { has.xh = true; if (ca[i] !== A.bh) { bound.xh = false; } }
+        if (py < 0) { has.yl = true; if (cb[i] !== B.bl) { bound.yl = false; } } else if (py > 0) { has.yh = true; if (cb[i] !== B.bh) { bound.yh = false; } } } });
+    return { has: has, labels: { xl: stripLabel(A, -1, bound.xl), xh: stripLabel(A, 1, bound.xh), yl: stripLabel(B, -1, bound.yl), yh: stripLabel(B, 1, bound.yh) } };
+  }
+  // where a strip on each axis meets, a square holds the runs that are in both (both exact fits, say)
+  function cornersSVG(f, corner, color, title) {
+    var s = "";
+    Object.keys(corner).forEach(function (k) { var v = corner[k], xk = k.charAt(0) === "l" ? "xl" : "xh", yk = k.charAt(1) === "l" ? "yl" : "yh";
+      if (!(v > 0) || !f.has[xk] || !f.has[yk]) { return; }
+      var x = xk === "xl" ? f.sxl[0] : f.sxh[0], y = yk === "yl" ? f.syl[0] : f.syh[0];
+      s += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + f.ST + '" height="' + f.ST + '" rx="2" fill="' + color(v) + '" class="v2ccorner"><title>' + esc(title(v)) + "</title></rect>"; });
+    return s;
+  }
+  // ---- statistics on the runs ------------------------------------------------------------------------------------
+  function ppOrder(c) { return c === PP_BELOW ? 0 : c === PP_ABOVE ? 254 : c + 1; }   // value order, strips at the ends
+  function midRanks(h, tot) { var out = new Float64Array(h.length), cum = 0; for (var i = 0; i < h.length; i++) { out[i] = (cum + h[i] / 2) / tot; cum += h[i]; } return out; }
+  // Spearman's rho of two metrics over the runs that have both, with the weights w (renormalised over those runs), and
+  // a 95 % interval from Fisher's z with the Bonett-Wright variance on the effective number of problems.
+  function spearman(cl, w, ka, kb, neff) {
+    var ca = cl.cols[ka], cb = cl.cols[kb], ha = new Float64Array(255), hb = new Float64Array(255), tot = 0, i;
+    for (i = 0; i < cl.n; i++) { if (w[i] > 0 && ppOk(cl, ka, i) && ppOk(cl, kb, i)) { ha[ppOrder(ca[i])] += w[i]; hb[ppOrder(cb[i])] += w[i]; tot += w[i]; } }
+    if (!(tot > 0)) { return null; }
+    var ra = midRanks(ha, tot), rb = midRanks(hb, tot), ma = 0, mb = 0, sab = 0, saa = 0, sbb = 0;
+    for (i = 0; i < cl.n; i++) { if (w[i] > 0 && ppOk(cl, ka, i) && ppOk(cl, kb, i)) { var x = ra[ppOrder(ca[i])], y = rb[ppOrder(cb[i])], wi = w[i] / tot; ma += wi * x; mb += wi * y; } }
+    for (i = 0; i < cl.n; i++) { if (w[i] > 0 && ppOk(cl, ka, i) && ppOk(cl, kb, i)) { var dx = ra[ppOrder(ca[i])] - ma, dy = rb[ppOrder(cb[i])] - mb, wj = w[i] / tot; sab += wj * dx * dy; saa += wj * dx * dx; sbb += wj * dy * dy; } }
+    if (!(saa > 0 && sbb > 0)) { return null; }
+    var rho = Math.max(-1, Math.min(1, sab / Math.sqrt(saa * sbb))), n = neff * tot, out = { rho: rho, n: n, lo: null, hi: null };
+    if (n > 4 && Math.abs(rho) < 1) { var z = 0.5 * Math.log((1 + rho) / (1 - rho)), se = Math.sqrt((1 + rho * rho / 2) / (n - 3)); out.lo = Math.tanh(z - Z * se); out.hi = Math.tanh(z + Z * se); }
+    return out;
+  }
+  function rhoText(st) { return st ? "ρ = " + st.rho.toFixed(2) + (st.lo !== null ? " [" + st.lo.toFixed(2) + ", " + st.hi.toFixed(2) + "]" : "") : "ρ: –"; }
+  function wQuantiles(vals, ws, qs) {   // weighted quantiles of values that may be +-Infinity
+    var ix = vals.map(function (_v, i) { return i; }).sort(function (a, b) { return vals[a] - vals[b]; }), tot = 0;
+    ix.forEach(function (i) { tot += ws[i]; });
+    return qs.map(function (q) { var cum = 0; for (var j = 0; j < ix.length; j++) { cum += ws[ix[j]]; if (cum >= q * tot - 1e-12) { return vals[ix[j]]; } } return vals[ix[ix.length - 1]]; });
+  }
+  function hash01(a, b, c) { var h = (a * 73856093) ^ (b * 19349663) ^ (c * 83492791); h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+  // ---- hover: one handler per chart, by id; it maps a position in the chart to a sentence, or null ----------------------
+  var HOVERS = {}, hoverSeq = 0, tipEl = null;
+  function hoverId(fn) { var id = "c" + (++hoverSeq); HOVERS[id] = fn; return id; }
+  function hideTip() { if (tipEl) { tipEl.remove(); tipEl = null; } }
+  function chartPoint(svg, e) { var r = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal; return { x: (e.clientX - r.left) * vb.width / r.width, y: (e.clientY - r.top) * vb.height / r.height }; }
+  function showTip(text, e) {
+    if (!tipEl) { tipEl = document.createElement("div"); tipEl.className = "v2pop v2ctip"; tipEl.setAttribute("role", "status"); document.body.appendChild(tipEl); }
+    tipEl.textContent = text; var margin = 8, w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+    var left = Math.min(Math.max(margin, e.clientX + 14), window.innerWidth - w - margin), top = e.clientY + 16;
+    if (top + h > window.innerHeight - margin) { top = Math.max(margin, e.clientY - h - 12); }
+    tipEl.style.left = left + "px"; tipEl.style.top = top + "px";
+  }
+  // ---- the view --------------------------------------------------------------------------------------------------------
+  function corrHead(shown, used) {
+    var mode = state.cv, timed = corrTimed(), x = METRIC[state.cx], y = METRIC[state.cy];
+    var bar = '<div class="v2viewbar">' + seg("cv", mode, CMODES, "show", "how the runs are drawn") + "</div>";
+    var axes;
+    if (mode === "matrix" || mode === "vs") {
+      var opts = function (cur) { return used.map(function (u) { return '<option value="' + esc(u.m.key) + '"' + (u.m.key === cur ? " selected" : "") + ">" + esc(u.m.label) + "</option>"; }).join(""); };
+      axes = (mode === "vs" ? '<span class="v2segwrap"><span class="v2lab">metric</span>' + pickButton("v2viewpick", 'data-axis="cy" aria-label="metric compared"', y.key) + " " + mhelp(y) + "</span>" : "") +
+        '<span class="v2segwrap"><span class="v2lab">' + (mode === "vs" ? "x axis" : "lower left") + '</span><select class="v2stepsel" data-state="ca" aria-label="' + (mode === "vs" ? "method on the x axis" : "method in the lower left triangle") + '">' + opts(state.ca) + "</select></span>" +
+        '<span class="v2segwrap"><span class="v2lab">' + (mode === "vs" ? "y axis" : "upper right") + '</span><select class="v2stepsel" data-state="cb" aria-label="' + (mode === "vs" ? "method on the y axis" : "method in the upper right triangle") + '">' + opts(state.cb) + "</select></span>";
+    } else {
+      axes = '<span class="v2segwrap"><span class="v2lab">x</span>' + pickButton("v2viewpick", 'data-axis="cx" aria-label="metric on the x axis"', x.key) + " " + mhelp(x) + "</span>" +
+        '<button type="button" class="v2swap" data-act="corr-swap" aria-label="Swap the two axes" title="Swap the two axes">⇆</button>' +
+        '<span class="v2segwrap"><span class="v2lab">y</span>' + pickButton("v2viewpick", 'data-axis="cy" aria-label="metric on the y axis"', y.key) + " " + mhelp(y) + "</span>";
+    }
+    var slots = timeSlots().filter(function (b) { return withState({ tbudget: b }, function () { return shown.some(function (m) { return corrRung(m) !== null; }); }); });
+    var rungs = D.rungs.filter(function (r) { return shown.some(function (m) { return ppHas(m.key, r); }); });
+    var pos = seg("xaxis", timed ? "time" : "rung", [["time", "the same time", "Each method at its largest finished budget that fits within the time limit per problem"], ["rung", "the same budget", "Each method at the same budget number, in its own unit: a rough comparison, since the units differ"]].filter(function (o) { return o[0] !== "time" || anyTime(); }), "every method at", "what the methods are held equal on") +
+      (timed ? stepper("tbudget", state.tbudget, slots, function (b) { return fmtSec(posValue(b)) + " s"; }, "time limit " + help(TERMS.tbudget, "How is the time limit applied?"), "time limit per problem")
+        : stepper("rung", state.rung, rungs, function (r) { return fmtBudget(r); }, "budget " + help(TERMS.rungs, "What is a budget?"), "budget per problem"));
+    return bar + '<div class="v2viewbar">' + axes + "</div>" + '<div class="v2viewbar">' + pos + "</div>";
+  }
+  function corrSettle(shown) {   // a budget or time limit where a shown method has values
+    if (corrTimed()) {
+      var slots = timeSlots(), have = function (b) { return withState({ tbudget: b }, function () { return shown.filter(function (m) { return corrRung(m) !== null; }).length; }); };
+      if (slots.indexOf(state.tbudget) < 0 || !have(state.tbudget)) { var best = null, top = 0; slots.forEach(function (b) { var n = have(b); if (n > top) { top = n; best = b; } }); if (best) { state.tbudget = best; } }
+    } else {
+      var rs = D.rungs.filter(function (r) { return shown.some(function (m) { return ppHas(m.key, r); }); });
+      if (rs.length && rs.indexOf(state.rung) < 0) { state.rung = nearestOf(rs, state.rung); }
+    }
+  }
+  function renderCorr(shown) {
+    HOVERS = {}; hideTip();
+    if (!D.pp || !Object.keys(D.pp).length) { return '<p class="v2hint">The values per problem are not published in this release yet.</p>'; }
+    if (!shown.length) { return '<p class="v2hint">Select at least one method.</p>'; }
+    if (!state.cats.length) { return '<p class="v2hint">Select at least one problem set in the side panel.</p>'; }
+    corrSettle(shown);
+    var used = [], gone = [];
+    shown.forEach(function (m) { var r = corrRung(m); if (r === null) { gone.push(m); } else { used.push({ m: m, r: r }); } });
+    if (state.cv === "matrix" || state.cv === "vs") {
+      var keys = used.map(function (u) { return u.m.key; });
+      if (keys.indexOf(state.ca) < 0) { state.ca = keys[0] || null; }
+      if (keys.indexOf(state.cb) < 0 || (state.cb === state.ca && keys.length > 1)) { state.cb = keys.filter(function (k) { return k !== state.ca; })[0] || state.ca; }
+    }
+    var head = corrHead(shown, used), missing = gone.length ? '<p class="v2hint">' + gone.map(corrWhy).join(" ") + "</p>" : "";
+    if (!used.length) { return head + '<p class="v2hint">No selected method has finished every run of the selected problem sets ' + (corrTimed() ? "within this time limit" : "at this budget") + ". Choose another setting above, or select fewer problem sets.</p>" + missing; }
+    var ks = state.cv === "matrix" ? ppMetrics().map(function (m) { return m.key; }) : state.cv === "vs" ? [state.cy] : [state.cx, state.cy];
+    var pick = state.cv === "matrix" || state.cv === "vs" ? used.filter(function (u) { return u.m.key === state.ca || u.m.key === state.cb; }) : used;
+    var files = []; pick.forEach(function (u) { files = files.concat(corrFiles(u.m.key, u.r, ks)); });
+    if (!filesReady(files)) { return head + '<p class="v2hint">Loading the values of ' + pick.length + (pick.length === 1 ? " method" : " methods") + "…</p>" + missing; }
+    var clouds = pick.map(function (u) { return ppCloud(u.m, u.r, ks); });
+    var body = state.cv === "matrix" ? corrMatrix(clouds, ks) : state.cv === "vs" ? corrVs(clouds) : corrPlane(clouds);
+    return head + body + missing;
+  }
+  function corrLabel(cl) { return cl.m.label + (cl.m.local ? " (local)" : "") + (corrTimed() ? " · budget " + fmtBudget(cl.r) : ""); }
+  // The four displays of two metrics: contours, heat maps, points, trend.
+  function corrPlane(clouds) {
+    var ka = state.cx, kb = state.cy;
+    var ws = clouds.map(function (cl) { return ppWeights(cl, [ka, kb]); });
+    var A = ppAxis(ka, clouds, ws), B = ppAxis(kb, clouds, ws), st = stripsOf(A, B, clouds, ws);
+    var rhos = clouds.map(function (cl, j) { return spearman(cl, ws[j].w, ka, kb, ws[j].neff); });
+    var chart = state.cv === "heat" ? corrHeat(clouds, ws, A, B, st) : state.cv === "points" ? corrPoints(clouds, ws, A, B, st) : state.cv === "trend" ? corrTrend(clouds, ws, A, B, st) : corrContours(clouds, ws, A, B, st);
+    return chart + corrTable(clouds, ws, A, B, st, rhos) + corrSelected(A, B);
+  }
+  function legendSVG(clouds, f, W) {   // the methods' names beside the chart, or under it on a narrow screen
+    var s = "", nr = narrow(), lx = nr ? f.x0 : W - legendRight(clouds.map(corrLabel)) + LEG_GAP, ly = nr ? f.yb + 58 : f.y0 + 6;
+    behind(clouds.map(function (cl) { return { key: cl.m.key, label: corrLabel(cl), color: rgbCss(methodRGB(cl.m)), dash: !!cl.m.dash }; })).slice().sort(function (a, b) { return clouds.map(function (c) { return c.m.key; }).indexOf(a.key) - clouds.map(function (c) { return c.m.key; }).indexOf(b.key); })
+      .forEach(function (sr) { s += legendItem(sr, lx, ly, false, false); ly += 20; });
+    return s;
+  }
+  function planeSize(clouds, legend) {
+    var nr = narrow(), W = wideWidth(), R = legend && !nr ? legendRight(clouds.map(corrLabel)) : (nr ? 14 : 18);
+    var below = legend && nr ? 20 * clouds.length + 12 : 0, H = Math.round(Math.min(560, Math.max(300, (W - R) * 0.62))) + below;
+    return { W: W, H: H, right: R, below: below };
+  }
+  function corrContours(clouds, ws, A, B, st) {
+    var k = clouds.length, sz = planeSize(clouds, true), ST = Math.max(16, 6 * k + 6);
+    var f = corrFrame(sz.W, sz.H, A, B, st.has, { right: sz.right, strip: ST, below: sz.below });
+    var s = '<svg viewBox="0 0 ' + sz.W + " " + sz.H + '" class="v2chart v2corr" role="img" aria-label="' + esc(B.m.label + " against " + A.m.label + ", where each method's runs lie") + '">' + frameSVG(f, st.labels);
+    var G = 72, clip = "cc" + (++hoverSeq), regions = [];
+    s += '<defs><clipPath id="' + clip + '"><rect x="' + f.x0 + '" y="' + f.y0 + '" width="' + (f.x1 - f.x0) + '" height="' + (f.y1 - f.y0) + '"/></clipPath></defs>';
+    clouds.forEach(function (cl, j) {
+      var ca = cl.cols[A.k], cb = cl.cols[B.k], w = ws[j].w, grid = new Float64Array(G * G), xs = [], ys = [], wv = [], i;
+      for (i = 0; i < cl.n; i++) { if (!(w[i] > 0)) { continue; } if (ppPlace(A, ca[i]) !== 0 || ppPlace(B, cb[i]) !== 0) { continue; }
+        var vx = ppValue(A.sp, ca[i]), vy = ppValue(B.sp, cb[i]); xs.push(vx); ys.push(vy); wv.push(w[i]);
+        var gx = (vx - A.lo) / (A.hi - A.lo) * G - 0.5, gy = (vy - B.lo) / (B.hi - B.lo) * G - 0.5, ix = Math.floor(gx), iy = Math.floor(gy), fx = gx - ix, fy = gy - iy;
+        [[0, 0, (1 - fx) * (1 - fy)], [1, 0, fx * (1 - fy)], [0, 1, (1 - fx) * fy], [1, 1, fx * fy]].forEach(function (q) { var a = Math.min(G - 1, Math.max(0, ix + q[0])), b = Math.min(G - 1, Math.max(0, iy + q[1])); grid[b * G + a] += w[i] * q[2]; }); }
+      if (!xs.length) { return; }
+      var hx = bandwidth(xs, wv, A.sp.int) / (A.hi - A.lo) * G, hy = bandwidth(ys, wv, B.sp.int) / (B.hi - B.lo) * G;
+      var sm = blur(grid, G, Math.max(0.6, hx), Math.max(0.6, hy)), lv = hdrLevels(sm, [0.5, 0.9]);
+      var gxp = function (gx) { return f.x0 + (gx + 0.5) / G * (f.x1 - f.x0); }, gyp = function (gy) { return f.y1 - (gy + 0.5) / G * (f.y1 - f.y0); };
+      var path = function (t) { return contourRings(sm, G, t).map(function (ring) { return "M" + ring.map(function (p) { return gxp(p[0]).toFixed(1) + " " + gyp(p[1]).toFixed(1); }).join("L") + "Z"; }).join(""); };
+      regions.push({ key: cl.m.key, col: rgbCss(methodRGB(cl.m)), p50: path(lv[0]), p90: path(lv[1]) });
+    });
+    s += '<g clip-path="url(#' + clip + ')">';
+    behind(regions).forEach(function (rg) { s += '<path d="' + rg.p50 + '" fill="' + rg.col + '" fill-opacity="0.28" fill-rule="evenodd" stroke="' + rg.col + '" stroke-width="2"/><path d="' + rg.p90 + '" fill="none" stroke="' + rg.col + '" stroke-width="1.4" fill-rule="evenodd"/>'; });
+    s += "</g>" + stripIntervals(clouds, ws, A, B, f) + legendSVG(clouds, f, sz.W);
+    return '<div class="v2charts v2one">' + s + "</svg></div>" + '<p class="v2hint">For each method, the ' + term("hdr", "darker region holds half of its runs inside the frame, the outline nine tenths") + ". " + term("strips", "Runs at a bound or beyond the range are in the strips along the frame") + "; there, a thick bar spans the middle half of a method's runs and a thin one the middle nine tenths. " + term("weights", "How the runs are weighted") + ".</p>";
+  }
+  function bandwidth(vals, ws, integer) {   // Scott's rule in two dimensions on a robust spread; a whole number never under half a step
+    var tot = 0, m = 0, v = 0, i; for (i = 0; i < vals.length; i++) { tot += ws[i]; m += ws[i] * vals[i]; } m /= tot;
+    for (i = 0; i < vals.length; i++) { v += ws[i] * (vals[i] - m) * (vals[i] - m); } var sd = Math.sqrt(v / tot);
+    var q = wQuantiles(vals, ws, [0.25, 0.75]), iqr = (q[1] - q[0]) / 1.349, sig = iqr > 0 ? Math.min(sd, iqr) : sd;
+    var s2 = 0; for (i = 0; i < ws.length; i++) { s2 += ws[i] * ws[i]; } var neff = tot * tot / s2;
+    var h = sig * Math.pow(Math.max(2, neff), -1 / 6); return integer ? Math.max(0.5, h) : h;
+  }
+  function blur(grid, G, sx, sy) {   // a separable Gaussian, in cells
+    var kern = function (s) { var r = Math.ceil(3 * s), k = [], t = 0; for (var i = -r; i <= r; i++) { var v = Math.exp(-0.5 * i * i / (s * s)); k.push(v); t += v; } return { r: r, k: k.map(function (v) { return v / t; }) }; };
+    var kx = kern(sx), ky = kern(sy), tmp = new Float64Array(G * G), out = new Float64Array(G * G), x, y, i;
+    for (y = 0; y < G; y++) { for (x = 0; x < G; x++) { var a = 0; for (i = -kx.r; i <= kx.r; i++) { var xx = x + i; if (xx >= 0 && xx < G) { a += grid[y * G + xx] * kx.k[i + kx.r]; } } tmp[y * G + x] = a; } }
+    for (y = 0; y < G; y++) { for (x = 0; x < G; x++) { var b = 0; for (i = -ky.r; i <= ky.r; i++) { var yy = y + i; if (yy >= 0 && yy < G) { b += tmp[yy * G + x] * ky.k[i + ky.r]; } } out[y * G + x] = b; } }
+    return out;
+  }
+  function hdrLevels(d, shares) {   // the density above which the given shares of the mass lie
+    var v = Array.prototype.slice.call(d).sort(function (a, b) { return b - a; }), tot = v.reduce(function (a, b) { return a + b; }, 0);
+    return shares.map(function (p) { var cum = 0; for (var i = 0; i < v.length; i++) { cum += v[i]; if (cum >= p * tot) { return v[i]; } } return v[v.length - 1]; });
+  }
+  // Marching squares over the grid padded with zeros (so every outline closes), with the segments joined into rings.
+  // Corner values sit at cell centres; a saddle is resolved by the mean of its four corners.
+  function contourRings(d, G, t) {
+    var val = function (x, y) { return x < 0 || y < 0 || x >= G || y >= G ? 0 : d[y * G + x]; };
+    var segs = {}, ends = {}, id = 0, x, y;
+    var pt = function (k) { var p = k.split(","), kind = p[0], i = +p[1], j = +p[2], a, b; if (kind === "h") { a = val(i, j); b = val(i + 1, j); return [i + (t - a) / (b - a), j]; } a = val(i, j); b = val(i, j + 1); return [i, j + (t - a) / (b - a)]; };
+    var add = function (k1, k2) { var s = { a: k1, b: k2, used: false }; segs[id] = s; (ends[k1] = ends[k1] || []).push(id); (ends[k2] = ends[k2] || []).push(id); id++; };
+    for (y = -1; y < G; y++) {
+      for (x = -1; x < G; x++) {
+        var v0 = val(x, y), v1 = val(x + 1, y), v2 = val(x + 1, y + 1), v3 = val(x, y + 1);
+        var c = (v0 >= t ? 1 : 0) | (v1 >= t ? 2 : 0) | (v2 >= t ? 4 : 0) | (v3 >= t ? 8 : 0);
+        if (c === 0 || c === 15) { continue; }
+        var B = "h," + x + "," + y, R = "v," + (x + 1) + "," + y, T = "h," + x + "," + (y + 1), Lk = "v," + x + "," + y;
+        var ctr = (v0 + v1 + v2 + v3) / 4 >= t;
+        switch (c) {
+          case 1: case 14: add(Lk, B); break;
+          case 2: case 13: add(B, R); break;
+          case 3: case 12: add(Lk, R); break;
+          case 4: case 11: add(R, T); break;
+          case 6: case 9: add(B, T); break;
+          case 7: case 8: add(Lk, T); break;
+          case 5: if (ctr) { add(Lk, T); add(B, R); } else { add(Lk, B); add(R, T); } break;
+          case 10: if (ctr) { add(Lk, B); add(R, T); } else { add(Lk, T); add(B, R); } break;
+        }
+      }
+    }
+    var rings = [];
+    Object.keys(segs).forEach(function (sid) {
+      var s = segs[sid]; if (s.used) { return; }
+      s.used = true; var ring = [s.a, s.b], cur = s.b, guard = 0;
+      while (cur !== s.a && guard++ < 100000) {
+        var nxt = (ends[cur] || []).map(function (q) { return segs[q]; }).filter(function (q) { return !q.used; })[0];
+        if (!nxt) { break; } nxt.used = true; cur = nxt.a === cur ? nxt.b : nxt.a; ring.push(cur);
+      }
+      if (ring.length > 3) { rings.push(ring.map(pt)); }
+    });
+    return rings;
+  }
+  // in the contour display, a strip shows each method's middle half (thick) and middle nine tenths (thin) along it
+  function stripIntervals(clouds, ws, A, B, f) {
+    var s = "", k = clouds.length, lanes = [["xl", -1, null], ["xh", 1, null], ["yl", null, -1], ["yh", null, 1]];
+    lanes.forEach(function (ln) { if (!f.has[ln[0]]) { return; }
+      clouds.forEach(function (cl, j) {
+        var ca = cl.cols[A.k], cb = cl.cols[B.k], w = ws[j].w, vals = [], wv = [], tot = 0, i;
+        for (i = 0; i < cl.n; i++) { if (!(w[i] > 0)) { continue; } var px = ppPlace(A, ca[i]), py = ppPlace(B, cb[i]);
+          if (ln[1] !== null && px === ln[1] && py === 0) { vals.push(ppValue(B.sp, cb[i])); wv.push(w[i]); }
+          if (ln[2] !== null && py === ln[2] && px === 0) { vals.push(ppValue(A.sp, ca[i])); wv.push(w[i]); } }
+        if (!vals.length) { return; } wv.forEach(function (x) { tot += x; });
+        var q = wQuantiles(vals, wv, [0.05, 0.25, 0.5, 0.75, 0.95]), col = rgbCss(methodRGB(cl.m)), off = 3 + (j + 0.5) * (f.ST - 6) / k, title = "<title>" + esc(cl.m.label + ": " + (100 * tot).toFixed(1) + " % of its runs in this strip and inside the frame on the other axis; median " + (ln[1] !== null ? vText(B, q[2]) : vText(A, q[2]))) + "</title>";
+        if (ln[1] !== null) { var sx = (ln[1] < 0 ? f.sxl[0] : f.sxh[0]) + off;
+          s += '<g>' + title + '<line x1="' + sx.toFixed(1) + '" y1="' + f.ys(q[0]).toFixed(1) + '" x2="' + sx.toFixed(1) + '" y2="' + f.ys(q[4]).toFixed(1) + '" stroke="' + col + '" stroke-width="1.5"/><line x1="' + sx.toFixed(1) + '" y1="' + f.ys(q[1]).toFixed(1) + '" x2="' + sx.toFixed(1) + '" y2="' + f.ys(q[3]).toFixed(1) + '" stroke="' + col + '" stroke-width="4"/><circle cx="' + sx.toFixed(1) + '" cy="' + f.ys(q[2]).toFixed(1) + '" r="2.6" fill="var(--surface)" stroke="' + col + '" stroke-width="1.5"/></g>'; }
+        else { var sy = (ln[2] < 0 ? f.syl[0] : f.syh[0]) + off;
+          s += '<g>' + title + '<line x1="' + f.xs(q[0]).toFixed(1) + '" y1="' + sy.toFixed(1) + '" x2="' + f.xs(q[4]).toFixed(1) + '" y2="' + sy.toFixed(1) + '" stroke="' + col + '" stroke-width="1.5"/><line x1="' + f.xs(q[1]).toFixed(1) + '" y1="' + sy.toFixed(1) + '" x2="' + f.xs(q[3]).toFixed(1) + '" y2="' + sy.toFixed(1) + '" stroke="' + col + '" stroke-width="4"/><circle cx="' + f.xs(q[2]).toFixed(1) + '" cy="' + sy.toFixed(1) + '" r="2.6" fill="var(--surface)" stroke="' + col + '" stroke-width="1.5"/></g>'; }
+      }); });
+    return s;
+  }
+  // grid bins: one per whole number where there are few enough, else about eight pixels each
+  function binsOf(Ax, px) { var span = Ax.hi - Ax.lo; if (Ax.sp.int && span <= 64) { return Math.max(1, Math.round(span)); } return Math.max(12, Math.min(60, Math.round(px / 8))); }
+  function corrHeat(clouds, ws, A, B, st) {
+    var nr = narrow(), avail = wideWidth(), gapW = 16, cols = Math.max(1, Math.min(3, clouds.length, Math.floor((avail + gapW) / (280 + gapW))));
+    var W = Math.floor((avail - gapW * (cols - 1)) / cols), H = Math.round(Math.max(260, Math.min(420, W * 0.85))) + 26;
+    var surf = hexRGB(cssVar("--surface")), panels = [], top = 0, stop = 0;
+    clouds.forEach(function (cl, j) {
+      var f = corrFrame(W, H, A, B, st.has, { top: 40, left: nr ? 48 : 58 }), nx = binsOf(A, f.x1 - f.x0), ny = binsOf(B, f.y1 - f.y0);
+      var cells = new Float64Array(nx * ny), strips = { xl: new Float64Array(ny), xh: new Float64Array(ny), yl: new Float64Array(nx), yh: new Float64Array(nx) }, corner = { ll: 0, lh: 0, hl: 0, hh: 0 }, ca = cl.cols[A.k], cb = cl.cols[B.k], w = ws[j].w;
+      var bx = function (v) { return Math.min(nx - 1, Math.max(0, Math.floor((v - A.lo) / (A.hi - A.lo) * nx))); }, by = function (v) { return Math.min(ny - 1, Math.max(0, Math.floor((v - B.lo) / (B.hi - B.lo) * ny))); };
+      for (var i = 0; i < cl.n; i++) { if (!(w[i] > 0)) { continue; } var px = ppPlace(A, ca[i]), py = ppPlace(B, cb[i]);
+        if (px === 0 && py === 0) { cells[by(ppValue(B.sp, cb[i])) * nx + bx(ppValue(A.sp, ca[i]))] += w[i]; }
+        else if (px !== 0 && py === 0) { strips[px < 0 ? "xl" : "xh"][by(ppValue(B.sp, cb[i]))] += w[i]; }
+        else if (py !== 0 && px === 0) { strips[py < 0 ? "yl" : "yh"][bx(ppValue(A.sp, ca[i]))] += w[i]; }
+        else { corner[(px < 0 ? "l" : "h") + (py < 0 ? "l" : "h")] += w[i]; } }
+      cells.forEach(function (v) { top = Math.max(top, v); }); ["xl", "xh", "yl", "yh"].forEach(function (k) { strips[k].forEach(function (v) { stop = Math.max(stop, v); }); });
+      Object.keys(corner).forEach(function (k) { stop = Math.max(stop, corner[k]); });
+      panels.push({ cl: cl, f: f, nx: nx, ny: ny, cells: cells, strips: strips, corner: corner, col: methodRGB(cl.m) });
+    });
+    var out = panels.map(function (P) {
+      var f = P.f, cw = (f.x1 - f.x0) / P.nx, ch = (f.y1 - f.y0) / P.ny, shade = function (v, mx) { return mixRGB(P.col, surf, Math.sqrt(v / mx)); };
+      var href = rasterHref(f.x1 - f.x0, f.y1 - f.y0, function (g) { for (var yb = 0; yb < P.ny; yb++) { for (var xb = 0; xb < P.nx; xb++) { var v = P.cells[yb * P.nx + xb]; if (v > 0) { g.fillStyle = rgbCss(shade(v, top)); g.fillRect(xb * cw, (P.ny - 1 - yb) * ch, cw + 0.5, ch + 0.5); } } } });
+      var s = '<svg viewBox="0 0 ' + W + " " + H + '" class="v2chart v2corr" role="img" aria-label="' + esc(P.cl.m.label + ": " + B.m.label + " against " + A.m.label + ", share of runs per cell") + '" data-hover="' + hoverId(function (pt) {
+        var txt = null;
+        if (pt.x >= f.x0 && pt.x <= f.x1 && pt.y >= f.y0 && pt.y <= f.y1) { var xb = Math.min(P.nx - 1, Math.floor((pt.x - f.x0) / cw)), yb = Math.min(P.ny - 1, Math.floor((f.y1 - pt.y) / ch)), v = P.cells[yb * P.nx + xb];
+          var x0 = A.lo + xb * (A.hi - A.lo) / P.nx, x1 = x0 + (A.hi - A.lo) / P.nx, y0 = B.lo + yb * (B.hi - B.lo) / P.ny, y1 = y0 + (B.hi - B.lo) / P.ny;
+          txt = P.cl.m.label + ": " + A.m.short + " " + vText(A, x0) + " to " + vText(A, x1) + ", " + B.m.short + " " + vText(B, y0) + " to " + vText(B, y1) + ": " + (100 * v).toFixed(2) + " % of its runs"; }
+        return txt ? { text: txt } : null; }) + '"><text x="' + f.x0 + '" y="' + TITLE_Y + '" class="ct">' + esc(corrLabel(P.cl)) + "</text>" + frameSVG(f, st.labels);
+      if (href) { s += '<image href="' + href + '" x="' + f.x0 + '" y="' + f.y0 + '" width="' + (f.x1 - f.x0) + '" height="' + (f.y1 - f.y0) + '" preserveAspectRatio="none"/>'; }
+      ["xl", "xh", "yl", "yh"].forEach(function (k) { if (!f.has[k]) { return; } var arr = P.strips[k], n = arr.length, vert = k.charAt(0) === "x";
+        for (var b = 0; b < n; b++) { if (!(arr[b] > 0)) { continue; } var c = rgbCss(shade(arr[b], stop)), lab = esc(P.cl.m.label + ": " + (100 * arr[b]).toFixed(2) + " % of its runs in this cell of the strip");
+          if (vert) { var sx = k === "xl" ? f.sxl[0] : f.sxh[0], y1b = f.y1 - b * ch; s += '<rect x="' + sx.toFixed(1) + '" y="' + (y1b - ch).toFixed(1) + '" width="' + f.ST + '" height="' + (ch + 0.4).toFixed(1) + '" fill="' + c + '"><title>' + lab + "</title></rect>"; }
+          else { var sy = k === "yl" ? f.syl[0] : f.syh[0]; s += '<rect x="' + (f.x0 + b * cw).toFixed(1) + '" y="' + sy.toFixed(1) + '" width="' + (cw + 0.4).toFixed(1) + '" height="' + f.ST + '" fill="' + c + '"><title>' + lab + "</title></rect>"; } } });
+      s += cornersSVG(f, P.corner, function (v) { return rgbCss(shade(v, stop)); }, function (v) { return P.cl.m.label + ": " + (100 * v).toFixed(2) + " % of its runs in both strips"; });
+      return s + "</svg>";
+    }).join("");
+    return '<div class="v2cpanels" style="grid-template-columns:repeat(' + cols + ', minmax(0, 1fr))">' + out + "</div>" +
+      '<p class="v2hint">Colour: the share of the method’s runs in each cell, on a square-root scale, the same in every panel; the darkest cell holds ' + (100 * top).toFixed(1) + " % of a method’s runs. " + term("strips", "The strips along the frame") + " have a scale of their own" + (stop > 0 ? " (darkest: " + (100 * stop).toFixed(1) + " %)" : "") + ". " + term("weights", "How the runs are weighted") + ".</p>";
+  }
+  function corrPoints(clouds, ws, A, B, st) {
+    var sz = planeSize(clouds, true), f = corrFrame(sz.W, sz.H, A, B, st.has, { right: sz.right, below: sz.below }), nr = narrow(), rad = nr ? 2.1 : 1.7;
+    var pts = [];   // drawn order: faded methods first, then shown ones in the methods' order
+    var order = behind(clouds.map(function (cl) { return { key: cl.m.key, cl: cl }; }));
+    order.forEach(function (o) {
+      var cl = o.cl, j = clouds.indexOf(cl), w = ws[j].w, ca = cl.cols[A.k], cb = cl.cols[B.k], pos = [], i;
+      for (i = 0; i < cl.n; i++) { if (w[i] > 0) { pos.push(w[i]); } }
+      pos.sort(function (a, b) { return a - b; }); var med = pos.length ? pos[Math.floor(pos.length / 2)] : 1;
+      for (i = 0; i < cl.n; i++) { if (!(w[i] > 0)) { continue; } var px = ppPlace(A, ca[i]), py = ppPlace(B, cb[i]), u = hash01(cl.cat[i] + 1, cl.row[i] + 1, cl.drw[i] + 7 * j);
+        var u2 = hash01(cl.row[i] + 3, cl.cat[i] + 5, cl.drw[i] + 11 * j), bx0 = ca[i] === A.bl || ca[i] === A.bh, by0 = cb[i] === B.bl || cb[i] === B.bh;
+        pts.push({ j: j, i: i, x: spotX(f, px, ca[i], u, bx0 ? undefined : u2), y: spotY(f, py, cb[i], u2, by0 ? undefined : u), a: Math.min(1, 0.35 * w[i] / med) }); }
+    });
+    var cols = clouds.map(function (cl) { return methodRGB(cl.m); }), L = f.has.xl ? f.sxl[0] : f.x0, T = f.has.yh ? f.syh[0] : f.y0, Rr = f.has.xh ? f.sxh[1] : f.x1, Bb = f.has.yl ? f.syl[1] : f.y1;
+    var href = rasterHref(Rr - L, Bb - T, function (g) { pts.forEach(function (p) { g.fillStyle = rgbCss(cols[p.j], p.a); g.beginPath(); g.arc(p.x - L, p.y - T, rad, 0, 2 * Math.PI); g.fill(); }); });
+    var cellPx = 8, buckets = {};
+    pts.forEach(function (p, n) { var key = Math.floor(p.x / cellPx) + "," + Math.floor(p.y / cellPx); (buckets[key] = buckets[key] || []).push(n); });
+    var near = function (pt) { var best = -1, bd = 36, bx = Math.floor(pt.x / cellPx), by = Math.floor(pt.y / cellPx);
+      for (var dx = -1; dx <= 1; dx++) { for (var dy = -1; dy <= 1; dy++) { (buckets[(bx + dx) + "," + (by + dy)] || []).forEach(function (n) { var p = pts[n], d = (p.x - pt.x) * (p.x - pt.x) + (p.y - pt.y) * (p.y - pt.y); if (d <= bd) { bd = d; best = n; } }); } }
+      return best < 0 ? null : pts[best]; };
+    var hid = hoverId(function (pt, click) {
+      var p = near(pt); if (!p) { return null; }
+      var cl = clouds[p.j], i = p.i, c = cl.cs[cl.cat[i]], fl = cl.flag[i];
+      if (click) { csel = { m: cl.m.key, c: c, row: cl.row[i], d: cl.drw[i], r: cl.r, xa: codeText(A, cl.cols[A.k][i]), yb: codeText(B, cl.cols[B.k][i]) }; scheduleRender(); }
+      return { text: cl.m.label + " · " + c + ", problem " + (cl.row[i] + 1) + ", run " + cl.drw[i] + " (budget " + fmtBudget(cl.r) + "): " + A.m.short + " " + codeText(A, cl.cols[A.k][i]) + ", " + B.m.short + " " + codeText(B, cl.cols[B.k][i]) +
+        (fl & PP_OK ? ((fl & PP_NUM) || (fl & PP_SYM) ? "; recovered: " + [fl & PP_NUM ? "numeric" : "", fl & PP_SYM ? "structure" : ""].filter(Boolean).join(" and ") : "") : "; no usable formula") + ". A click shows its formula." };
+    });
+    var s = '<svg viewBox="0 0 ' + sz.W + " " + sz.H + '" class="v2chart v2corr v2cpoints" role="img" aria-label="' + esc(B.m.label + " against " + A.m.label + ", every run as a point") + '" data-hover="' + hid + '">' + frameSVG(f, st.labels);
+    if (href) { s += '<image href="' + href + '" x="' + L + '" y="' + T + '" width="' + (Rr - L) + '" height="' + (Bb - T) + '" preserveAspectRatio="none"/>'; }
+    s += legendSVG(clouds, f, sz.W) + "</svg>";
+    return '<div class="v2charts v2one">' + s + "</div>" + '<p class="v2hint">One point per run, ' + pts.length.toLocaleString() + " in all. A point’s opacity follows its " + term("weights", "weight") + ", so the runs of a small problem set stand out from those of a large one.  In the " + term("strips", "strips") + ", points are spread across the strip at random; their position across it means nothing. Inside the frame, a point is placed at random within the precision its value is published to (one 252nd of the metric’s range), so that values do not line up in stripes. Tap or hover a point for its problem; a click shows its formula below.</p>";
+  }
+  function corrTrend(clouds, ws, A, B, st) {
+    var sz = planeSize(clouds, true), f = corrFrame(sz.W, sz.H, A, B, st.has, { right: sz.right, below: sz.below }), nb = binsOf(A, f.x1 - f.x0);
+    if (!(A.sp.int && A.hi - A.lo <= 40)) { nb = Math.max(8, Math.min(24, Math.round((f.x1 - f.x0) / 36))); }
+    var bw = (A.hi - A.lo) / nb, series = [], dots = [];
+    clouds.forEach(function (cl, j) {
+      var ca = cl.cols[A.k], cb = cl.cols[B.k], w = ws[j].w, bins = {}, i;
+      for (i = 0; i < cl.n; i++) { if (!(w[i] > 0)) { continue; } var px = ppPlace(A, ca[i]), py = ppPlace(B, cb[i]);
+        var key = px < 0 ? "lo" : px > 0 ? "hi" : String(Math.min(nb - 1, Math.floor((ppValue(A.sp, ca[i]) - A.lo) / bw)));
+        var yv = py < 0 ? -Infinity : py > 0 ? Infinity : ppValue(B.sp, cb[i]);
+        (bins[key] = bins[key] || { v: [], w: [] }).v.push(yv); bins[key].w.push(w[i]); }
+      var pts = [];
+      Object.keys(bins).forEach(function (key) { var b = bins[key], share = b.w.reduce(function (a, x) { return a + x; }, 0), q = wQuantiles(b.v, b.w, [0.25, 0.5, 0.75]);
+        var x = key === "lo" ? f.sxl[0] + f.ST / 2 : key === "hi" ? f.sxh[0] + f.ST / 2 : f.xs(A.lo + (+key + 0.5) * bw);
+        var yOf = function (v) { return v === -Infinity ? f.syl[0] + f.ST / 2 : v === Infinity ? f.syh[0] + f.ST / 2 : f.ys(Math.min(B.hi, Math.max(B.lo, v))); };
+        var tv = function (v) { return v === -Infinity ? st.labels.yl : v === Infinity ? st.labels.yh : vText(B, v); };
+        var range = key === "lo" ? st.labels.xl : key === "hi" ? st.labels.xh : vText(A, A.lo + +key * bw) + " to " + vText(A, A.lo + (+key + 1) * bw);
+        pts.push({ x: x, inside: key !== "lo" && key !== "hi", y: yOf(q[1]), y0: yOf(q[0]), y1: yOf(q[2]), r: Math.max(2.2, Math.min(6, 2 + 18 * Math.sqrt(share / 10))), share: share,
+          text: cl.m.label + ", " + A.m.short + " " + range + ": median " + B.m.short + " " + tv(q[1]) + ", middle half " + tv(q[0]) + " to " + tv(q[2]) + "; " + (100 * share).toFixed(1) + " % of its runs" }); });
+      pts.sort(function (a, b) { return a.x - b.x; });
+      series.push({ key: cl.m.key, col: rgbCss(methodRGB(cl.m)), pts: pts }); pts.forEach(function (p) { dots.push(p); });
+    });
+    var hid = hoverId(function (pt) { var best = null, bd = 400; dots.forEach(function (p) { var d = (p.x - pt.x) * (p.x - pt.x) + (p.y - pt.y) * (p.y - pt.y); if (d < bd) { bd = d; best = p; } }); return best ? { text: best.text } : null; });
+    var s = '<svg viewBox="0 0 ' + sz.W + " " + sz.H + '" class="v2chart v2corr" role="img" aria-label="' + esc("median " + B.m.label + " along " + A.m.label) + '" data-hover="' + hid + '">' + frameSVG(f, st.labels);
+    behind(series).forEach(function (sr) {
+      var inside = sr.pts.filter(function (p) { return p.inside; });
+      if (inside.length > 1) { s += '<polygon points="' + inside.map(function (p) { return p.x.toFixed(1) + "," + p.y1.toFixed(1); }).concat(inside.slice().reverse().map(function (p) { return p.x.toFixed(1) + "," + p.y0.toFixed(1); })).join(" ") + '" fill="' + sr.col + '" fill-opacity="0.13" stroke="none"/>'; }
+      sr.pts.forEach(function (p) { s += '<line x1="' + p.x.toFixed(1) + '" y1="' + p.y0.toFixed(1) + '" x2="' + p.x.toFixed(1) + '" y2="' + p.y1.toFixed(1) + '" stroke="' + sr.col + '" stroke-width="1.5" stroke-opacity="0.45"/><circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="' + p.r.toFixed(1) + '" fill="' + sr.col + '"/>'; });
+    });
+    s += legendSVG(clouds, f, sz.W) + "</svg>";
+    return '<div class="v2charts v2one">' + s + "</div>" + '<p class="v2hint">The x axis is cut into bins. In each, a dot marks the median ' + esc(B.m.label) + " of a method’s runs, and the bar and the band span their middle half; a larger dot holds more of the method’s runs. A bin in a " + term("strips", "strip") + " holds the runs at a bound or beyond the range. " + term("weights", "How the runs are weighted") + ".</p>";
+  }
+  // Where each method's runs fall, strip by strip, and the rank correlation of the two metrics.
+  function corrTable(clouds, ws, A, B, st, rhos) {
+    var lanes = [["in", "inside the frame"]].concat([["xl", A.m.short + " " + st.labels.xl], ["xh", A.m.short + " " + st.labels.xh], ["yl", B.m.short + " " + st.labels.yl], ["yh", B.m.short + " " + st.labels.yh]].filter(function (l) { return st.has[l[0]]; }));
+    var rows = clouds.map(function (cl, j) {
+      var ca = cl.cols[A.k], cb = cl.cols[B.k], w = ws[j].w, tot = { in: 0, xl: 0, xh: 0, yl: 0, yh: 0 }, i;
+      for (i = 0; i < cl.n; i++) { if (!(w[i] > 0)) { continue; } var px = ppPlace(A, ca[i]), py = ppPlace(B, cb[i]);
+        if (px === 0 && py === 0) { tot.in += w[i]; } if (px < 0) { tot.xl += w[i]; } if (px > 0) { tot.xh += w[i]; } if (py < 0) { tot.yl += w[i]; } if (py > 0) { tot.yh += w[i]; } }
+      var none = ws[j].all - ws[j].n;
+      return "<tr><td>" + '<span class="v2sw" style="background:' + rgbCss(methodRGB(cl.m)) + '"></span>' + esc(corrLabel(cl)) + "</td>" + lanes.map(function (l) { return "<td>" + (100 * tot[l[0]]).toFixed(1) + " %</td>"; }).join("") +
+        "<td>" + Math.round(ws[j].n).toLocaleString() + (none > 0.5 ? ' <span class="v2ci-txt">of ' + ws[j].all.toLocaleString() + "</span>" : "") + "</td><td>" + rhoText(rhos[j]) + "</td></tr>";
+    }).join("");
+    return '<div class="v2table-wrap"><table class="v2table v2ctable"><thead><tr><th>method</th>' + lanes.map(function (l) { return "<th>" + esc(l[1]) + "</th>"; }).join("") + "<th>problems with both values</th><th>rank correlation " + help(CTERMS.rho, "What is the rank correlation?") + "</th></tr></thead><tbody>" + rows + "</tbody></table></div>" +
+      '<p class="v2hint">The share of each method’s runs inside the frame and in each strip, weighted as in the chart; a run in a corner counts in both of its strips. A problem without a value on either metric is left out' + (leftOut(A.k) || leftOut(B.k) ? ", and so is a run without a usable formula in an overlap metric, as chosen in the side panel" : "") + ".</p>";
+  }
+  // the run picked in the points display: its problem's true formula and the method's, from the Predictions view's files
+  function corrSelected(A, B) {
+    if (!csel || state.cv !== "points") { return ""; }
+    var m = D.methods.filter(function (x) { return x.key === csel.m; })[0]; if (!m) { return ""; }
+    var blk = Math.floor(csel.row / (D.pred_block || 500)), have = ((D.pred || {})[m.key] || {})[csel.c + "|" + csel.r] || [];
+    var files = ["pred/truth/" + csel.c + "." + blk + ".js"].concat(have.indexOf(csel.d) >= 0 ? ["pred/" + m.key + "/" + csel.c + "/" + csel.r + "." + csel.d + "." + blk + ".js"] : []);
+    var wait = filesReady(files) ? "" : "…", Rp = (window.RESULTS_V2_PRED || {})[REL] || {};
+    var gt = (Rp["truth|" + csel.c + "|" + blk] || {})[String(csel.row)], v = (Rp[m.key + "|" + csel.c + "|" + csel.r + "|" + csel.d + "|" + blk] || {})[String(csel.row)];
+    var formula = have.indexOf(csel.d) < 0 ? '<span class="v2predna">not published</span>' : v === undefined ? wait : v === null ? '<span class="v2predna">no usable formula</span>' : typeset(v[0]);
+    return '<section class="v2csel" aria-label="the run picked in the chart"><h3 class="v2h">' + esc(m.label) + " · " + esc(csel.c) + ", problem " + (csel.row + 1) + ", run " + csel.d + ", budget " + fmtBudget(csel.r) + "</h3>" +
+      '<p class="v2hint">' + esc(A.m.label) + ": " + esc(csel.xa) + "; " + esc(B.m.label) + ": " + esc(csel.yb) + "</p>" + predTruth(gt, wait) +
+      '<div class="v2predtruth"><span class="v2lab">its formula</span><span class="v2predtruthf">' + formula + (v ? " " + predMarks(v[1]) : "") + "</span></div>" +
+      '<div class="v2row"><button type="button" class="v2btn" data-act="corr-open">open this problem in Predictions</button><button type="button" class="v2btn" data-act="corr-clear">clear</button></div></section>';
+  }
+  // Every pair of metrics: one method's rank correlations below the diagonal, the other's above it.
+  function corrMatrix(clouds, ks) {
+    var cA = clouds.filter(function (cl) { return cl.m.key === state.ca; })[0], cB = clouds.filter(function (cl) { return cl.m.key === state.cb; })[0] || cA;
+    var wA = ppWeights(cA, []), wB = cB === cA ? wA : ppWeights(cB, []);
+    var has = function (cl, k) { for (var i = 0; i < cl.n; i++) { if (cl.cols[k][i] !== PP_NONE) { return true; } } return false; };
+    var mk = ks.filter(function (k) { return has(cA, k) || has(cB, k); }), n = mk.length, nr = narrow();
+    var labW = Math.ceil(widest(mk.map(function (k) { return METRIC[k].short; }))) + 14, cell = Math.max(nr ? 20 : 22, Math.min(34, Math.floor((wideWidth() - labW - 20) / n)));
+    var topH = Math.ceil(widest(mk.map(function (k) { return METRIC[k].short; })) * 0.72) + 24, W = labW + n * cell + topH, H = topH + n * cell + 10;
+    var memo = {}, rho = function (cl, w, a, b) { var key = cl.m.key + "|" + a + "|" + b; if (!(key in memo)) { memo[key] = spearman(cl, w.w, a, b, w.neff); } return memo[key]; };
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" class="v2chart v2cmatrix" style="min-width:' + W + 'px" role="img" aria-label="' + esc("rank correlations of every pair of metrics: " + cA.m.label + " below the diagonal, " + cB.m.label + " above it") + '">';
+    mk.forEach(function (k, i) { var x = labW + (i + 0.5) * cell, y = topH + (i + 0.5) * cell;
+      s += '<text x="' + (labW - 8) + '" y="' + (y + 4).toFixed(1) + '" class="tick" text-anchor="end">' + esc(METRIC[k].short) + "<title>" + esc(METRIC[k].label) + "</title></text>";
+      s += '<text transform="translate(' + (x + 3).toFixed(1) + "," + (topH - 8) + ') rotate(-45)" class="tick">' + esc(METRIC[k].short) + "<title>" + esc(METRIC[k].label) + "</title></text>"; });
+    mk.forEach(function (ky, i) { mk.forEach(function (kx, j) {
+      var x = labW + j * cell, y = topH + i * cell;
+      if (i === j) { s += '<rect x="' + x + '" y="' + y + '" width="' + cell + '" height="' + cell + '" class="v2cdiag"/>'; return; }
+      var lower = i > j, cl = lower ? cA : cB, w = lower ? wA : wB, st = rho(cl, w, kx, ky);
+      var fill = st ? "color-mix(in srgb, var(" + (st.rho >= 0 ? "--rho-pos" : "--rho-neg") + ") " + Math.round(70 * Math.abs(st.rho)) + "%, var(--surface))" : "var(--surface)";
+      s += '<g class="v2ccell" data-cx="' + esc(kx) + '" data-cy="' + esc(ky) + '" role="button" tabindex="0"><title>' + esc(cl.m.label + ": " + METRIC[ky].label + " and " + METRIC[kx].label + ", " + (st ? rhoText(st) + " (95 % interval), from " + Math.round(st.n).toLocaleString() + " problems" : "no runs with both values") + ". A click draws the two.") + "</title>" +
+        '<rect x="' + x + '" y="' + y + '" width="' + cell + '" height="' + cell + '" fill="' + fill + '" class="v2ccellbox"/>' +
+        (st && cell >= 26 ? '<text x="' + (x + cell / 2) + '" y="' + (y + cell / 2 + 3.5) + '" class="v2ccelltxt" text-anchor="middle">' + (st.rho < 0 ? "−" : "") + Math.abs(st.rho).toFixed(2).replace(/^0/, "") + "</text>" : "") + "</g>"; }); });
+    s += '<line x1="' + labW + '" y1="' + topH + '" x2="' + (labW + n * cell) + '" y2="' + (topH + n * cell) + '" class="v2cdiagline"/></svg>';
+    return '<p class="v2hint">Below the diagonal: <span class="v2sw" style="background:' + rgbCss(methodRGB(cA.m)) + '"></span>' + esc(corrLabel(cA)) + "; above it: " + '<span class="v2sw" style="background:' + rgbCss(methodRGB(cB.m)) + '"></span>' + esc(corrLabel(cB)) + ".</p>" +
+      '<div class="v2table-wrap v2cmatwrap">' + s + "</div>" +
+      '<p class="v2hint">Each cell is the ' + term("rho", "rank correlation") + " of two metrics over the method’s runs: blue where they rise together, orange where one falls as the other rises, pale where the two are close to unrelated. Hover a cell for its 95 % interval; a click draws the two metrics against each other. Properties of the true formula are the same for every method, so their correlations with each other agree on both sides.</p>";
+  }
+  // One metric, two methods: each problem's value under one method against its value under the other.
+  function corrVs(clouds) {
+    var k = state.cy, cA = clouds.filter(function (cl) { return cl.m.key === state.ca; })[0], cB = clouds.filter(function (cl) { return cl.m.key === state.cb; })[0] || cA;
+    if (cA === cB) { return '<p class="v2hint">Select a second method in the side panel to compare two.</p>'; }
+    var wA = ppWeights(cA, [k]), wB = ppWeights(cB, [k]), A = ppAxis(k, [cA, cB], [wA, wB]);
+    var key = function (cl, i) { return cl.cat[i] + ":" + cl.row[i]; }, runsB = {}, i;
+    // pairs of runs on the same problem, every combination; a problem weighs the mean of its weights under the two methods
+    for (i = 0; i < cB.n; i++) { if (wB.w[i] > 0) { (runsB[cB.cs[cB.cat[i]] + ":" + cB.row[i]] = runsB[cB.cs[cB.cat[i]] + ":" + cB.row[i]] || []).push(i); } }
+    var probA = {}; for (i = 0; i < cA.n; i++) { if (wA.w[i] > 0) { var pk = cA.cs[cA.cat[i]] + ":" + cA.row[i]; (probA[pk] = probA[pk] || []).push(i); } }
+    var pairs = [], tot = 0;
+    Object.keys(probA).forEach(function (pk) { var ra = probA[pk], rb = runsB[pk]; if (!rb) { return; }
+      var wa = ra.reduce(function (a, q) { return a + wA.w[q]; }, 0), wb = rb.reduce(function (a, q) { return a + wB.w[q]; }, 0), wp = (wa + wb) / 2;
+      ra.forEach(function (qa) { rb.forEach(function (qb) { var wv = wp / (ra.length * rb.length); pairs.push([cA.cols[k][qa], cB.cols[k][qb], wv]); tot += wv; }); }); });
+    if (!pairs.length) { return '<p class="v2hint">The two methods share no problem with a value on ' + esc(METRIC[k].label) + ".</p>"; }
+    var has = { xl: false, xh: false, yl: false, yh: false }, onlyB = { xl: true, xh: true, yl: true, yh: true };
+    pairs.forEach(function (p) { var px = ppPlace(A, p[0]), py = ppPlace(A, p[1]);
+      if (px < 0) { has.xl = true; if (p[0] !== A.bl) { onlyB.xl = false; } } if (px > 0) { has.xh = true; if (p[0] !== A.bh) { onlyB.xh = false; } }
+      if (py < 0) { has.yl = true; if (p[1] !== A.bl) { onlyB.yl = false; } } if (py > 0) { has.yh = true; if (p[1] !== A.bh) { onlyB.yh = false; } } });
+    var labels = { xl: stripLabel(A, -1, onlyB.xl), xh: stripLabel(A, 1, onlyB.xh), yl: stripLabel(A, -1, onlyB.yl), yh: stripLabel(A, 1, onlyB.yh), x: cA.m.label + ": " + axisName(A.m), y: cB.m.label + ": " + axisName(A.m) };
+    var W = Math.min(wideWidth(), 640), H = Math.round(W * 0.9), f = corrFrame(W, H, A, A, has, {}), nx = binsOf(A, f.x1 - f.x0), ny = binsOf(A, f.y1 - f.y0);
+    var cells = new Float64Array(nx * ny), strips = { xl: new Float64Array(ny), xh: new Float64Array(ny), yl: new Float64Array(nx), yh: new Float64Array(nx) }, corner = { ll: 0, lh: 0, hl: 0, hh: 0 }, below = 0, above = 0, same = 0;
+    var bx = function (v) { return Math.min(nx - 1, Math.max(0, Math.floor((v - A.lo) / (A.hi - A.lo) * nx))); }, by = function (v) { return Math.min(ny - 1, Math.max(0, Math.floor((v - A.lo) / (A.hi - A.lo) * ny))); };
+    pairs.forEach(function (p) { var px = ppPlace(A, p[0]), py = ppPlace(A, p[1]), wv = p[2] / tot, oa = ppOrder(p[0]), ob = ppOrder(p[1]);
+      if (ob < oa) { below += wv; } else if (ob > oa) { above += wv; } else { same += wv; }
+      if (px === 0 && py === 0) { cells[by(ppValue(A.sp, p[1])) * nx + bx(ppValue(A.sp, p[0]))] += wv; }
+      else if (px !== 0 && py === 0) { strips[px < 0 ? "xl" : "xh"][by(ppValue(A.sp, p[1]))] += wv; }
+      else if (py !== 0 && px === 0) { strips[py < 0 ? "yl" : "yh"][bx(ppValue(A.sp, p[0]))] += wv; }
+      else if (px !== null && py !== null) { corner[(px < 0 ? "l" : "h") + (py < 0 ? "l" : "h")] += wv; } });
+    var top = 0, stop = 0; cells.forEach(function (v) { top = Math.max(top, v); }); ["xl", "xh", "yl", "yh"].forEach(function (q) { strips[q].forEach(function (v) { stop = Math.max(stop, v); }); });
+    Object.keys(corner).forEach(function (q) { stop = Math.max(stop, corner[q]); });
+    var ink3 = hexRGB(cssVar("--accent")), surf = hexRGB(cssVar("--surface")), cw = (f.x1 - f.x0) / nx, ch = (f.y1 - f.y0) / ny, shade = function (v, mx) { return rgbCss(mixRGB(ink3, surf, Math.sqrt(v / mx))); };
+    var href = rasterHref(f.x1 - f.x0, f.y1 - f.y0, function (g) { for (var yb = 0; yb < ny; yb++) { for (var xb = 0; xb < nx; xb++) { var v = cells[yb * nx + xb]; if (v > 0) { g.fillStyle = shade(v, top); g.fillRect(xb * cw, (ny - 1 - yb) * ch, cw + 0.5, ch + 0.5); } } } });
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" class="v2chart v2corr" role="img" aria-label="' + esc(METRIC[k].label + ": " + cB.m.label + " against " + cA.m.label + ", problem by problem") + '" data-hover="' + hoverId(function (pt) {
+      if (!(pt.x >= f.x0 && pt.x <= f.x1 && pt.y >= f.y0 && pt.y <= f.y1)) { return null; }
+      var xb = Math.min(nx - 1, Math.floor((pt.x - f.x0) / cw)), yb = Math.min(ny - 1, Math.floor((f.y1 - pt.y) / ch)), v = cells[yb * nx + xb], x0 = A.lo + xb * (A.hi - A.lo) / nx, y0 = A.lo + yb * (A.hi - A.lo) / ny;
+      return { text: cA.m.label + " " + vText(A, x0) + " to " + vText(A, x0 + (A.hi - A.lo) / nx) + ", " + cB.m.label + " " + vText(A, y0) + " to " + vText(A, y0 + (A.hi - A.lo) / ny) + ": " + (100 * v).toFixed(2) + " % of the run pairs" }; }) + '">' + frameSVG(f, labels);
+    if (href) { s += '<image href="' + href + '" x="' + f.x0 + '" y="' + f.y0 + '" width="' + (f.x1 - f.x0) + '" height="' + (f.y1 - f.y0) + '" preserveAspectRatio="none"/>'; }
+    ["xl", "xh", "yl", "yh"].forEach(function (q) { if (!f.has[q]) { return; } var arr = strips[q], vert = q.charAt(0) === "x";
+      for (var b = 0; b < arr.length; b++) { if (!(arr[b] > 0)) { continue; } var c = shade(arr[b], stop), lab = "<title>" + (100 * arr[b]).toFixed(2) + " % of the run pairs</title>";
+        if (vert) { var sx = q === "xl" ? f.sxl[0] : f.sxh[0], yy = f.y1 - (b + 1) * ch; s += '<rect x="' + sx + '" y="' + yy.toFixed(1) + '" width="' + f.ST + '" height="' + (ch + 0.4).toFixed(1) + '" fill="' + c + '">' + lab + "</rect>"; }
+        else { var sy = q === "yl" ? f.syl[0] : f.syh[0]; s += '<rect x="' + (f.x0 + b * cw).toFixed(1) + '" y="' + sy + '" width="' + (cw + 0.4).toFixed(1) + '" height="' + f.ST + '" fill="' + c + '">' + lab + "</rect>"; } } });
+    s += cornersSVG(f, corner, function (v) { return shade(v, stop); }, function (v) { return (100 * v).toFixed(2) + " % of the run pairs in both strips"; });
+    s += '<line x1="' + f.x0 + '" y1="' + f.y1 + '" x2="' + f.x1 + '" y2="' + f.y0 + '" class="grid zero" stroke-dasharray="4 4"/></svg>';
+    var lowName = METRIC[k].higher === false ? " (lower is better)" : METRIC[k].higher === true ? " (higher is better)" : "";
+    return '<div class="v2charts v2one v2cvs">' + s + "</div>" +
+      '<p class="v2hint">Each problem’s ' + esc(METRIC[k].label) + " under " + esc(cA.m.label) + " (across) and under " + esc(cB.m.label) + " (up), every run of one against every run of the other. On the dashed line both have the same value; below it " + esc(cB.m.label) + " has the lower value" + lowName + ". Of the run pairs, weighted as drawn: " + esc(cB.m.label) + " lower on " + (100 * below).toFixed(1) + " %, " + esc(cA.m.label) + " lower on " + (100 * above).toFixed(1) + " %, the same on " + (100 * same).toFixed(1) + " %. These shares describe the chart; the " + '<button type="button" class="v2linkbtn" data-view="paired">Paired differences</button> view tests the difference. ' + term("strips", "Strips along the frame") + ". " + term("weights", "How the runs are weighted") + ".</p>";
+  }
+
   // ---- shell -----------------------------------------------------------------------------------------------------
-  var VIEWS = [["curves", "Curves"], ["table", "Tables"], ["matrix", "Problem sets"], ["dist", "Distribution"], ["ranks", "Ranks"], ["paired", "Paired differences"], ["preds", "Predictions"]];
+  var VIEWS = [["curves", "Curves"], ["table", "Tables"], ["matrix", "Problem sets"], ["dist", "Distribution"], ["corr", "Correlations"], ["ranks", "Ranks"], ["paired", "Paired differences"], ["preds", "Predictions"]];
   // the metric a single-metric display shows: each of them keeps its own
   function focusKey() { return state.view === "dist" ? "dmetric" : state.view === "ranks" ? "rmetric" : "focus"; }
   // Each display carries its own controls. A control that cannot change what is on screen is not shown, and a
@@ -1632,11 +2257,12 @@
     table: { plots: 1, stat: 1, ci: 1, valid: 1 },
     matrix: { stat: 1, valid: 1 },
     dist: {},
+    corr: {},
     ranks: {},
     paired: { plots: 1, base: 1, ci: 1, xaxis: 1 },
     preds: {}
   };
-  function shownMetricKeys(view) { return view === "matrix" ? [state.focus] : view === "dist" ? [state.dmetric] : view === "ranks" || view === "preds" ? [] : plotAxes(); }
+  function shownMetricKeys(view) { return view === "matrix" ? [state.focus] : view === "dist" ? [state.dmetric] : view === "corr" ? (state.cv === "matrix" ? D.metrics.filter(function (m) { return m.pp; }).map(function (m) { return m.key; }) : state.cv === "vs" ? [state.cy] : [state.cx, state.cy]) : view === "ranks" || view === "preds" ? [] : plotAxes(); }
   function usesFor(view) {
     var u = {}, src = USES[view] || {};
     Object.keys(src).forEach(function (k) { u[k] = src[k]; });
@@ -1752,7 +2378,7 @@
       syncControls();
       var shown = shownMethods(), view = root.querySelector(".v2view");
       if (!rungChosen) { rungChosen = true; var br = bestRung(shown); if (br) { state.rung = br; } syncControls(); }
-      if (state.view !== "dist" && state.view !== "paired") {   // histograms the current view needs
+      if (state.view !== "dist" && state.view !== "paired" && state.view !== "corr") {   // histograms the current view needs
         (state.view === "matrix" ? [METRIC[state.focus]] : D.metrics.filter(function (m) { return plotAxes().indexOf(m.key) >= 0; })).forEach(function (m) { if (needsHist(m)) { ensureHists(m); } });
       }
       renderHeadline();
@@ -1762,7 +2388,7 @@
       if (atPos) { settlePos(shown); }
       BETWEEN = atPos;
       try {
-      view.innerHTML = state.view === "table" ? renderTable(shown) : state.view === "matrix" ? renderMatrix(shown) : state.view === "dist" ? renderDist(shown) : state.view === "ranks" ? renderRanks(shown) : state.view === "paired" ? renderPaired(shown) : state.view === "preds" ? renderPreds(shown) : renderCurves(shown);
+      view.innerHTML = state.view === "table" ? renderTable(shown) : state.view === "matrix" ? renderMatrix(shown) : state.view === "dist" ? renderDist(shown) : state.view === "corr" ? renderCorr(shown) : state.view === "ranks" ? renderRanks(shown) : state.view === "paired" ? renderPaired(shown) : state.view === "preds" ? renderPreds(shown) : renderCurves(shown);
       } finally { BETWEEN = false; }
       // A redraw replaces the button an open menu hangs on (a histogram that arrives, a container that settles).
       // The menu moves to the button's successor; it closes only when the control itself is gone.
@@ -1772,7 +2398,7 @@
   }
 
   // ---- events ----------------------------------------------------------------------------------------------------
-  var SETTABLE = { pos: 1, pm: 1, rung: 1, dmode: 1, dnorm: 1, dmetric: 1, xaxis: 1, tbudget: 1, pset: 1, prun: 1, pprob: 1, pnum: 1 };
+  var SETTABLE = { pos: 1, pm: 1, rung: 1, dmode: 1, dnorm: 1, dmetric: 1, xaxis: 1, tbudget: 1, pset: 1, prun: 1, pprob: 1, pnum: 1, cv: 1, ca: 1, cb: 1 };
   function cycleMethod(k) {
     var v = nextVis(exVisOf(k));
     state.methods = state.methods.filter(function (c) { return c !== k; }); state.dim = state.dim.filter(function (c) { return c !== k; });
@@ -1788,6 +2414,8 @@
     if (key === "prun") { state.prun = val === "2" ? 2 : 1; return; }
     if (key === "pprob") { state.pprob = Math.max(0, parseInt(val, 10) || 0); return; }
     if (key === "pnum") { state.pprob = Math.max(0, (parseInt(val, 10) || 1) - 1); return; }
+    if (key === "cv") { if (CMODES.some(function (o) { return o[0] === val; })) { state.cv = val; csel = null; } return; }
+    if (key === "ca" || key === "cb") { if (D.methods.some(function (m) { return m.key === val; })) { state[key] = val; } return; }
     state[key] = val;
   }
   // the explorer's controls, where the explorer is mounted
@@ -1808,12 +2436,18 @@
     render();
   });
   on("input", function (e) { var t = e.target; if (t.classList.contains("v2fade")) { state.fade = Math.min(0.9, Math.max(0.05, parseFloat(t.value) || FADE_DEFAULT)); var fo = root.querySelector(".v2fadeval"); if (fo) { fo.textContent = Math.round(100 * state.fade) + " %"; } scheduleRender(); return; } if (t.classList.contains("v2pos")) { var o = t.parentNode.querySelector(".v2posval"), v = posFromSlider(t); if (o) { o.textContent = posLabel(v, state.pm === "time"); } return; } if (t.classList.contains("v2valid")) { state.valid = Math.min(100, Math.max(0, parseInt(t.value, 10) || 0)); syncControls(); scheduleRender(); } else if (t.classList.contains("v2q")) { state.q = t.value; syncControls(); } else if (t.classList.contains("v2swatch")) { userColors[t.dataset.m] = t.value; render(); } });
+  // a cell of the Correlations view's matrix draws its two metrics
+  function openPair(g) { state.cx = g.getAttribute("data-cx"); state.cy = g.getAttribute("data-cy"); state.cv = "contour"; render(); }
   on("click", function (e) {
+    var cellG = e.target.closest ? e.target.closest(".v2ccell") : null; if (cellG && root.contains(cellG)) { openPair(cellG); return; }
     var b = e.target.closest ? e.target.closest("button") : null; if (!b || !root.contains(b) || b.classList.contains("v2help")) { return; }
     if (b.dataset.view) { state.view = b.dataset.view; render(); return; }
     if (b.dataset.set) { var kv = b.dataset.set.split(":"); setState(kv[0], kv.slice(1).join(":")); render(); return; }
     if (b.classList.contains("v2reset")) { delete userColors[b.dataset.m]; writeCookie(userColors); render(); return; }
     if (b.classList.contains("v2rmplot")) { state.plots.splice(+b.dataset.i, 1); render(); return; }
+    if (b.dataset.act === "corr-swap") { var cxy = state.cx; state.cx = state.cy; state.cy = cxy; render(); return; }
+    if (b.dataset.act === "corr-clear") { csel = null; render(); return; }
+    if (b.dataset.act === "corr-open" && csel) { state.view = "preds"; state.pset = csel.c; state.pprob = csel.row; state.rung = csel.r; state.prun = csel.d === 2 ? 2 : 1; if (state.cats.indexOf(csel.c) < 0) { state.cats.push(csel.c); } render(); return; }
     if (b.classList.contains("v2swap")) { var sp = state.plots[+b.dataset.i]; if (sp && METRIC[sp.x]) { state.plots[+b.dataset.i] = { x: sp.y, y: sp.x }; render(); } return; }
     var act = b.dataset.act; if (!act) { return; }
     if (act === "add-plot") {   // a plot the reader does not have yet, on the axis the last one uses
@@ -1890,6 +2524,7 @@
       var it = e.target.closest ? e.target.closest(".v2pickitem") : null;
       if (!it || it.disabled) { return; }
       if (axis === "focus") { state[focusKey()] = it.dataset.k; }
+      else if (axis === "cx" || axis === "cy") { state[axis] = it.dataset.k; }
       else if (btn.dataset.i !== undefined) { state.plots[+btn.dataset.i][axis] = it.dataset.k; }
       closePicker(); render();
     });
@@ -1921,7 +2556,22 @@
     [root && root.querySelector(".v2main"), headRoot].forEach(function (el) { if (el) { ro.observe(el); } });
   }
   document.addEventListener("scroll", closeArmed, true);
+  // The Correlations view's charts answer the pointer: each registers what a position in it means (HOVERS), a click
+  // in the points display picks the run under it. A touch is a click.
+  function hoverAt(e, click) {
+    var svg = e.target.closest ? e.target.closest("svg[data-hover]") : null, fn = svg && HOVERS[svg.getAttribute("data-hover")];
+    if (!fn) { hideTip(); return; }
+    var got = fn(chartPoint(svg, e), click); if (got) { showTip(got.text, e); } else { hideTip(); }
+  }
+  on("mousemove", function (e) { hoverAt(e, false); });
+  on("mouseleave", hideTip);
+  on("click", function (e) { if (e.target.closest && e.target.closest("svg[data-hover]")) { hoverAt(e, true); } });
+  document.addEventListener("scroll", hideTip, true);
+  // A canvas does not follow the theme by itself: the Correlations view draws its rasters again when the theme changes.
+  if (window.MutationObserver) { new MutationObserver(function () { if (state.view === "corr") { scheduleRender(); } }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] }); }
+  if (window.matchMedia) { var dark = window.matchMedia("(prefers-color-scheme: dark)"); if (dark.addEventListener) { dark.addEventListener("change", function () { if (state.view === "corr") { scheduleRender(); } }); } }
   on("keydown", function (e) {
+    if ((e.key === "Enter" || e.key === " ") && e.target.classList && e.target.classList.contains("v2ccell")) { e.preventDefault(); openPair(e.target); return; }
     if (e.key !== "Enter" || !e.target.classList || !e.target.classList.contains("v2addmkey")) { return; }
     e.preventDefault(); var v = e.target.value.trim(); if (v) { tryKey(v, false); }
   });
