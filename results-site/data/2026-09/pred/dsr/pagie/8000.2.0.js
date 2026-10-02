@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["dsr|pagie|8000|2|0"]={"0":["* 2.405 pow sin tanh + / pow * pow x1 2 x2 3 x1 0.6164 2",0]};})();

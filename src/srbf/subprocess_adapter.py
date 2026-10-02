@@ -10,6 +10,7 @@ same fields the in-process adapters produce.
 """
 from __future__ import annotations
 
+import atexit
 import collections
 import importlib
 import json
@@ -17,6 +18,7 @@ import math
 import os
 import re
 import queue
+import signal
 import socket
 import subprocess
 import sys
@@ -41,6 +43,35 @@ BUILTIN_WORKERS: dict[str, Path] = {
 }
 """The shipped workers by name: every ``<name>_worker.py`` under ``srbf/worker/models`` (``example``,
 ``pysr``, and whatever a PR adds there)."""
+
+
+#: Seconds between two looks at a worker while a request is in flight, and how long a worker that has exited is
+#: given to deliver a reply it may have written just before it went.
+_POLL_S = 2.0
+
+#: Process groups of the workers this interpreter started and has not reaped yet. A worker runs in a group of its
+#: own so that what it forked can be killed with it: a pool child that outlives its parent keeps the worker's socket
+#: open, and nothing short of the group reaches it once it has been re-parented.
+_LIVE_GROUPS: set[int] = set()
+
+
+def _kill_group(pgid: int) -> None:
+    """SIGKILL every process left in ``pgid``; nothing to do when the group is already empty."""
+    if os.name != "posix":
+        return
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
+@atexit.register
+def _kill_live_groups() -> None:
+    """A worker group does not receive the terminal's Ctrl-C, so the interpreter takes its workers along when it
+    exits."""
+    for pgid in list(_LIVE_GROUPS):
+        _kill_group(pgid)
+    _LIVE_GROUPS.clear()
 
 
 class WorkerError(RuntimeError):
@@ -218,8 +249,10 @@ class WorkerProcess:
         self._proc = subprocess.Popen(
             [self.python, str(RUNNER_PATH), "--connect", f"127.0.0.1:{port}", str(self.worker)],
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, bufsize=1, env=env, cwd=self.cwd,
+            text=True, bufsize=1, env=env, cwd=self.cwd, start_new_session=(os.name == "posix"),
         )
+        if os.name == "posix":
+            _LIVE_GROUPS.add(self._proc.pid)
         threading.Thread(target=self._pump_output, daemon=True).start()
         self._accept(self.startup_timeout)
         threading.Thread(target=self._pump_socket, daemon=True).start()
@@ -264,16 +297,25 @@ class WorkerProcess:
                 self._proc.wait(timeout=grace)
             except Exception:  # noqa: BLE001 - a worker that will not close gets killed
                 self.kill()
+        self._kill_tree()      # whatever a closed worker left running goes with it
         self._cleanup()
 
     def kill(self) -> None:
-        if self._proc is not None and self._proc.poll() is None:
-            self._proc.kill()
+        """Kill the worker and everything it started, including children that outlived it."""
+        if self._proc is not None:
+            self._kill_tree()
+            if self._proc.poll() is None:
+                self._proc.kill()
             try:
                 self._proc.wait(timeout=5)
             except Exception:  # noqa: BLE001
                 pass
         self._cleanup()
+
+    def _kill_tree(self) -> None:
+        if self._proc is not None and os.name == "posix":
+            _kill_group(self._proc.pid)
+            _LIVE_GROUPS.discard(self._proc.pid)
 
     def _cleanup(self) -> None:
         for stream in (self._wfile, self._rfile, self._sock, self._listener):
@@ -344,13 +386,25 @@ class WorkerProcess:
         window = self.hang_after_idle_s if watch else None
         samples: collections.deque[tuple[float, float]] = collections.deque()
         pid = self._proc.pid if self._proc is not None else None
+        exited_at: float | None = None
         while True:
             remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
-            polled = window is not None or overdue_s is not None
-            wait = remaining if not polled else (2.0 if remaining is None else min(remaining, 2.0))
+            wait = _POLL_S if remaining is None else min(remaining, _POLL_S)
             try:
                 line = self._lines.get(timeout=wait)
             except queue.Empty:
+                # The worker process is gone but no end-of-stream came: something it forked still holds the socket
+                # open, so the reader would wait forever. One more poll interval for a reply written just before the
+                # exit, then it is a crash, and the group goes with it.
+                code = self._proc.poll() if self._proc is not None else None
+                if code is not None:
+                    if exited_at is None:
+                        exited_at = time.monotonic()
+                    elif time.monotonic() - exited_at >= _POLL_S:
+                        self.kill()
+                        raise WorkerCrashed(self._describe(
+                            f"worker exited (returncode {code}); processes it started kept its socket open")) from None
+                    continue
                 if deadline is not None and time.monotonic() >= deadline:
                     self.kill()
                     raise WorkerTimeout(self._describe(f"no reply within {timeout:.0f} s")) from None

@@ -14,6 +14,7 @@ block. To enter a method of your own, see [Adding your method](adapters.md).
 | `e2e` | [E2E](#e2e) | clone, patch, download weights |
 | `subprocess`, `worker: dso` | [DSR and uDSR\*](#dso) | `scripts/envs/build_dso_env.sh`: a conda environment with Python 3.7 |
 | `subprocess`, `worker: gpgomea` | [GP-GOMEA](#gp-gomea) | `scripts/envs/build_gpgomea_env.sh envs/gpgomea`: a conda environment of its own, compiled from source |
+| `subprocess`, `worker: qlattice` | [QLattice](#qlattice) | `scripts/envs/build_qlattice_env.sh envs/qlattice`: a virtual environment with Python 3.12 |
 | `lample_charton`, `brute_force` | [prior sampling and enumeration](#sampling-and-enumeration-baselines) | `pip install "srbf[flash-ansr]"` (they fit constants with its refiner) |
 | `subprocess` | [any method, in its own environment](adapters.md) | yours |
 
@@ -198,7 +199,9 @@ and division.
 - Operon searches in single precision (float32).
 - It always returns its model as `a * f(x) + b`, with a weight on every variable. On a law without such constants
   that shape rarely matches the ground truth symbol for symbol, so its numeric recovery is the comparable rate.
-- One search runs on one thread: more threads make a run irreproducible.
+- The option `threads` sets how many threads a search runs on (default 1, the author's and pyoperon's own). The
+  benchmark's configs set `threads: all`, so Operon gets the whole machine, as every method does. With more than one
+  thread the evaluation budget is counted in parallel and a run is not reproducible exactly.
 
 The worker stores the whole Pareto front in the `front` column. `configs/evaluation/scaling/operon_fastsrb.yaml`
 sweeps the evaluations in doublings from 2^10 up to about 100 s per problem on the reference machine.
@@ -275,8 +278,9 @@ same data and seed, the changed and the unchanged build take the same steps and 
   of those values.
 - It does not stop early: a fit spends its whole budget, also after it has fit the data exactly. The `fit_calls`
   column records what a fit spent, a few calls more than the budget.
-- Every fit runs in a process forked for it, on one thread. The same data and seed give the same answer on the same
-  machine.
+- Every fit runs in a process forked for it. RILS-ROLS has no parallelism, so a fit runs on one thread; the
+  benchmark's configs set `threads: all` as for every method, and the worker caps no library's thread pool. The same
+  data and seed give the same answer on the same machine.
 
 `configs/evaluation/scaling/rilsrols_fastsrb.yaml` sweeps the fitness evaluations in doublings from 2^6, the first
 power of two above the method's first step (scoring the perturbations of its starting model), up to 2^21, about
@@ -488,8 +492,10 @@ model_adapter:
 | `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
 
 **Budget.** DSO checks `n_samples` after each iteration: an iteration is 1,000 expressions for DSR and 500 + 25 ×
-500 = 13,000 for uDSR\*, so the ladders count whole iterations. A search stops early once an expression fits the
-data to a normalized mean squared error below 1e-12, which happens only on noiseless data.
+500 = 13,000 for uDSR\*, so the ladders count whole iterations and double them: DSR's `n_samples` is 1,000 × 2^k,
+uDSR\*'s 13,000 × 2^k. A budget between two multiples of an iteration would run to the next one. A search stops
+early once an expression fits the data to a normalized mean squared error below 1e-12, which happens only on
+noiseless data.
 
 **Operators.** DSO searches over the operators it has among those the expressions are written in:
 
@@ -519,7 +525,17 @@ method; its docstring gives the details.
 - The prior that keeps the polynomial token out of `sin cos tan abs` and the even powers binds the RNN only:
   GP-meld's check of it looks at one of these operators, as in the authors' own code, so GP-meld breeds such
   expressions.
-- One search runs on one thread, and its result depends only on the problem's data and the seed.
+- The option `threads` sets DSO's reward pool (`n_cores_batch`, the processes that compute the rewards of each
+  batch's new expressions, their constant fits included). The default 1 is DSO's own, no pool. DSR's benchmark
+  config sets `threads: all`, so DSR gets the whole machine, as every method does. uDSR* runs in DSO's default
+  configuration, its one configuration, with the whole machine available to it. DSO pins its TensorFlow session to
+  one thread itself. GP-meld's own evaluation pool (`parallel_eval`) stays off: it sends every new expression
+  through the pool and back, and made uDSR* slower in every run we timed.
+- DSO forks its reward pool anew for every fit, from a process that already runs TensorFlow's and the numerical
+  libraries' threads, and a forked process can then wait forever on a lock one of those threads held. DSR's config
+  therefore uses srbf's hang policy ([Adapters](adapters.md)), as PySR's does: a problem whose worker stops using the
+  CPU for 60 seconds, or runs 30 times longer than the run's median problem, is tried once more in a fresh worker,
+  and a second hang fails it. Every hang is logged.
 
 The worker stores the Pareto front of complexity against reward over every expression evaluated in the `front`
 column, and the expressions and iterations used in `nevals` and `iterations`.
@@ -558,7 +574,8 @@ The configuration is the one GP-GOMEA's first author committed for running it as
 baseline (SRBench 2021), without the hyperparameter grid that SRBench's maintainers searched around it:
 - GP-GOMEA with the linkage-tree FOS, linear scaling and ephemeral random constants;
 - the interleaved multistart scheme off, population 500, initial tree height 4, elitism 1;
-- one thread.
+- one thread, which the option `threads` raises: the benchmark's configs set `threads: all`, so GP-GOMEA gets the
+  whole machine, as every method does.
 
 The interleaved multistart scheme is the authors' way to run GP-GOMEA without choosing a population
 size. It is off because the first author turned it off in his benchmark configuration.
@@ -612,14 +629,94 @@ powers and roots, `abs`, `tan`, or the inverse and hyperbolic functions. It expr
   symbol for symbol. Its numeric recovery is the comparable rate.
 - The budget is checked between generations, so a run overshoots it by up to one generation (about
   10,000 evaluations at the start of a run). The `evaluations` column records what a fit spent.
-- Every fit runs in a process forked for it, on one thread, and starts the random number
-  generators as a fresh process would. The same data and seed give the same answer.
+- Every fit runs in a process forked for it and starts the random number generators as a fresh process would. On
+  one thread the same data and seed give the same answer; with more (`threads`, GP-GOMEA's `parallel`) the
+  evaluation count races and a run is not reproducible exactly.
+- GP-GOMEA evaluates a formula only when a change reaches a part of the tree that the formula uses. Once
+  every member of the population expresses the same formula, nothing it changes is evaluated: generations go
+  on, the evaluation count stands still, and the answer does not change. The run moves on only when the unused
+  parts have become identical too, which makes GP-GOMEA start a new population. A budget that a run reaches
+  before its population settles costs a fraction of a second; one above that point waits out at least one such
+  stall, ten seconds or more on the reference machine. Between 2^16 and 2^18 evaluations more and more runs stall, and the time per
+  problem grows about tenfold per doubling of the budget.
 
 The worker also stores GP-GOMEA's own printed model in the `model_string` column.
 `configs/evaluation/scaling/gpgomea_fastsrb.yaml` sweeps the evaluations in doublings, from 2^14,
 the first power of two above the cost of one generation, up to about 100 s per problem on the
-reference machine. `configs/evaluation/panels/gpgomea_srbench2021_feynman.yaml` runs the
-configuration that SRBench 2021 published its GP-GOMEA results with, on the Feynman catalogs.
+reference machine. Between 2^16 and 2^18 it takes quarter steps (2^16.25, 2^16.5, ...), and between
+2^16.75 and 2^17, where the time grows tenfold within one quarter step, sixteenth steps (2^16.8125, 2^16.875,
+2^16.9375), so that its points stay about evenly spaced in time where the stalls set in.
+`configs/evaluation/panels/gpgomea_srbench2021_feynman.yaml` runs the configuration that SRBench 2021
+published its GP-GOMEA results with, on the Feynman catalogs.
+
+## QLattice
+
+```bash
+scripts/envs/build_qlattice_env.sh envs/qlattice     # Python 3.12, feyn 3.5.0 and pinned dependencies
+```
+
+QLattice samples models from a probability distribution over expression graphs, fits every sampled model's
+parameters by gradient descent and moves the distribution towards the best models, epoch after epoch. It is
+distributed as the Python package `feyn` (Abzu), whose core is closed source; it runs locally, without a licence key
+or network access. **Licence:** feyn is licensed CC BY-NC-ND 4.0, for research and other non-commercial use. The
+script installs it from PyPI; srbf redistributes none of it.
+
+QLattice runs through the [worker protocol](adapters.md) as `worker: qlattice`, in an environment of its own. The
+configuration is the one QLattice's authors submitted to SRBench:
+- their own epoch loop: sample new models, fit the whole pool, prune it, update the distribution;
+- 200 epochs, at most 10 edges per model;
+- models ranked by feyn's `wide_parsimony` criterion, fitted to the squared error, every input numerical;
+- the prediction is the first model the loop returns, its best by that ranking.
+
+```yaml
+model_adapter:
+  type: subprocess
+  worker: qlattice
+  python: "{{ROOT}}/envs/qlattice/bin/python"
+  config_provenance: author_blessed
+  simplipy_engine: acj-5-4-llm
+  timeout: 7200
+  options:
+    n_epochs: 16
+```
+
+| key | default | meaning |
+|---|---|---|
+| `options.n_epochs` | `200` | epochs of the loop: the budget |
+| `options.seed` | `0` | mixed with a hash of the problem's data into the run's seed |
+| `options.max_time` | `3600` | the authors' wall-clock stop in seconds, SRBench's limit for this method; when it passes, the best models so far are returned and `hit_time_guard` is set |
+| `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
+
+**Budget.** An epoch samples about a thousand new models and refits the whole pool, each model on 20,000 rows
+resampled from the data, so its cost hardly depends on the number of data points.
+
+**Operators.** QLattice searches over the functions it has among the benchmark's operators:
+- `+ *` and `exp log tanh`;
+- `^` as the square, `rootn` as the square root and `inv` as `1/u`;
+- the affine node `w*u + b`, through which it places constants inside a model.
+
+It has no `sin`, `cos` or other trigonometric function, no `abs`, and no general power or root; subtraction and
+negation it expresses through signed weights. Its `gaussian` function, `exp(-2u²)`, is a compound of the
+benchmark's operators and is left out.
+
+**Patches.** The method is unchanged. The authors' loop gets one crash fix: it passes `stypes=None` to feyn's data
+validation, which the version the authors submitted with (3.0.1) accepted and 3.5.0 rejects; the worker passes an
+empty mapping there, which states the same thing, every input numerical.
+
+**What to know when reading the results:**
+- Every input enters through an affine map and the output leaves through one, so a prediction reads
+  `A*f(a1*x1 + c1, ...) + B`. Like Operon's, that shape rarely matches a law symbol for symbol, so its numeric
+  recovery is the comparable rate.
+- A model has at most 10 edges.
+- QLattice's `exp`, `log`, square root, square and `1/u` are protected: the model clips their argument. Where a
+  clip is active at a support or validation point, the prediction writes it out with `abs`, so that the expression
+  computes the model's own prediction; the `protections` column names these functions.
+- The option `threads` sets the threads feyn fits its models on (the authors' "auto" is the cores minus one). The
+  benchmark's configs set `threads: all`, so QLattice gets the whole machine, as every method does.
+
+The worker stores the other models the method returned in the `diverse` column, and the largest deviation of the
+expression from the model's own predictions in `string_deviation` and `string_deviation_val`.
+`configs/evaluation/scaling/qlattice_fastsrb.yaml` sweeps the epochs in doublings from 1 to 16.
 
 ## Sampling and enumeration baselines
 

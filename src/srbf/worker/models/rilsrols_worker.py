@@ -23,6 +23,10 @@ docs/models.md.
   spends its whole budget, also after it has fit the data exactly.
 * ``seed`` (int, 0): mixed with a hash of the problem's data into the run's ``random_state``, so a problem's fit is
   reproducible and two draws of a law (fresh data) get different seeds.
+* ``threads`` (int or ``"all"``, 1): accepted so that every method's benchmark config can give it the whole machine
+  (``threads: all``, owner 2026-09-30); RILS-ROLS has no parallelism (its C++ core runs on one thread, without
+  OpenMP), so a fit runs on one thread whatever it says, and ``extra["threads"]`` records 1. The worker caps no
+  library's thread pool.
 * ``config`` (dict, none): settings that replace the author configuration's. For side experiments only; a config
   that sets it is ``harness_tuned``, and published results never set it.
 
@@ -55,10 +59,7 @@ import signal
 import time
 import traceback
 
-for _variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
-    os.environ.setdefault(_variable, "1")   # one thread, and a single-threaded process to fork each fit from
-
-import numpy as np  # noqa: E402 - after the thread settings, which numpy reads when it loads
+import numpy as np
 
 VERSION = "1.6.7"
 
@@ -252,7 +253,20 @@ def check_full_precision():
                            "scripts/envs/build_rilsrols_env.sh, which applies the full-precision patch" % report["model"])
 
 
+def resolve_threads(value):
+    """The ``threads`` option as a count: an int >= 1, or ``"all"`` = the CPUs this process may run on."""
+    if value == "all":
+        try:
+            return len(os.sched_getaffinity(0))
+        except AttributeError:   # no affinity call on this platform
+            return os.cpu_count() or 1
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError("threads must be an int >= 1 or 'all', got %r" % (value,))
+    return value
+
+
 def load(options):
+    resolve_threads(options.get("threads", 1))      # validated; RILS-ROLS has no parallelism to give it to
     state = {"max_fit_calls": int(options.get("max_fit_calls", 1_000_000)), "seed": int(options.get("seed", 0)),
              "config": dict(options.get("config") or {})}
     build_params(state["max_fit_calls"], 0, state["config"])      # a bad option fails at start, not per problem
@@ -278,7 +292,7 @@ def fit(x, y, *, x_val, variables, meta, options, state):
     names = list(variables)
     seed = run_seed(X, Y, state["seed"])
     params = build_params(state["max_fit_calls"], seed, state.get("config"))
-    extra = {"seed": seed, "max_fit_calls": state["max_fit_calls"]}
+    extra = {"seed": seed, "max_fit_calls": state["max_fit_calls"], "threads": 1}
     report = run_method(X, Y, names, params, wait=params["max_time"] + GRACE_SECONDS)
     for key in ("model", "fit_calls", "total_time", "best_time", "answer_form"):
         if key in report:

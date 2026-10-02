@@ -13,6 +13,11 @@ Operon has them) and the budget, a count of evaluations. See docs/models.md.
 
 * ``max_evaluations`` (int, 1,000,000): the budget, the compute axis of the scaling sweeps. Operon counts every
   fitness, residual and Jacobian evaluation, including those of the local search.
+* ``threads`` (int or ``"all"``, 1): the threads the search and its noise estimate run on -- a resource, not a
+  search setting, so it leaves the configuration's provenance alone. 1 is the author's and pyoperon's own default;
+  ``"all"`` is every CPU this process may run on (the benchmark's runs, owner 2026-09-30: every method gets the whole
+  reference machine). With more than one thread the evaluation budget is counted in parallel, so a run is not
+  reproducible exactly; the noise estimate is (its forest is seeded; only the summing order of its trees changes).
 * ``seed`` (int, 0): mixed with a hash of the problem's data into the run's seed, so a problem's fit is
   reproducible and two draws of a law (fresh data) get different seeds.
 * ``config`` (dict, none): settings that replace the author configuration's, ``allowed_symbols`` included. For
@@ -24,6 +29,7 @@ on every variable; the returned string carries every digit of those float32 cons
 are float32, so they are not returned: srbf evaluates the string.
 """
 import hashlib
+import os
 
 import numpy as np
 
@@ -58,7 +64,7 @@ AUTHOR_CONFIG = {
     "model_selection_criterion": "minimum_description_length",
     "add_model_scale_term": True,
     "add_model_intercept_term": True,
-    "n_threads": 1,      # more threads make a run irreproducible (the evaluation budget is checked in parallel)
+    "n_threads": 1,      # the author's default; the `threads` option (a resource) replaces it
     "max_time": None,    # no wall-clock stop: the budget is a count; srbf's worker timeout is the guard
 }
 GENERATION_CAP = AUTHOR_CONFIG["generations"]
@@ -81,12 +87,13 @@ def run_seed(x, y, seed=0):
     return int.from_bytes(h.digest()[:4], "little") & 0x7FFFFFFF
 
 
-def noise_level(x, y, seed):
+def noise_level(x, y, seed, n_jobs=1):
     """The author's noise estimate for MDL: the in-sample RMSE of a random forest on the training data
-    (``compute_sigma`` in his wrapper; seeded here, where his is not, so the run is reproducible)."""
+    (``compute_sigma`` in his wrapper; seeded here, where his is not, so the run is reproducible). ``n_jobs`` only
+    spreads the trees over threads: the seeded forest is the same, summed in another order."""
     from sklearn.ensemble import RandomForestRegressor
 
-    forest = RandomForestRegressor(random_state=seed).fit(x, y)
+    forest = RandomForestRegressor(random_state=seed, n_jobs=int(n_jobs)).fit(x, y)
     return float(np.sqrt(np.mean((y - forest.predict(x)) ** 2)))
 
 
@@ -107,15 +114,28 @@ def rootn_spelling(expression):
         expression = f"{expression[:start]}rootn({argument}, 3){expression[i + 1:]}"
 
 
-def create_model(*, max_evaluations, uncertainty, random_state, config=None):
+def resolve_threads(value):
+    """The ``threads`` option as a count: an int >= 1, or ``"all"`` = the CPUs this process may run on."""
+    if value == "all":
+        try:
+            return len(os.sched_getaffinity(0))
+        except AttributeError:   # no affinity call on this platform
+            return os.cpu_count() or 1
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError(f"threads must be an int >= 1 or 'all', got {value!r}")
+    return value
+
+
+def create_model(*, max_evaluations, uncertainty, random_state, config=None, threads=1):
     SymbolicRegressor = _require_operon()
-    params = {**AUTHOR_CONFIG, "allowed_symbols": ALLOWED_SYMBOLS, **(config or {})}
+    params = {**AUTHOR_CONFIG, "allowed_symbols": ALLOWED_SYMBOLS, "n_threads": int(threads), **(config or {})}
     return SymbolicRegressor(**params, max_evaluations=int(max_evaluations), uncertainty=[float(uncertainty)],
                              random_state=int(random_state))
 
 
 def load(options):
     return {"max_evaluations": int(options.get("max_evaluations", 1_000_000)), "seed": int(options.get("seed", 0)),
+            "threads": resolve_threads(options.get("threads", 1)),
             "config": dict(options.get("config") or {})}
 
 
@@ -132,13 +152,14 @@ def fit(x, y, *, x_val, variables, meta, options, state):
     X = np.asarray(x, dtype=float)
     Y = np.asarray(y, dtype=float).ravel()
     seed = run_seed(X, Y, state["seed"])
-    sigma = noise_level(X, Y, seed)
+    threads = state.get("threads", 1)
+    sigma = noise_level(X, Y, seed, n_jobs=threads)
     model = create_model(max_evaluations=state["max_evaluations"], uncertainty=sigma, random_state=seed,
-                         config=state.get("config"))
+                         config=state.get("config"), threads=threads)
     model.fit(X, Y)
     names = list(variables)
     expression = rootn_spelling(model.get_model_string(model.model_, 40, names))
-    extra = {"sigma": sigma, "seed": seed, "max_evaluations": state["max_evaluations"]}
+    extra = {"sigma": sigma, "seed": seed, "max_evaluations": state["max_evaluations"], "threads": threads}
     stats = dict(getattr(model, "stats_", {}) or {})
     for key in ("generations", "evaluation_count", "residual_evaluations", "jacobian_evaluations", "model_length",
                 "model_complexity"):

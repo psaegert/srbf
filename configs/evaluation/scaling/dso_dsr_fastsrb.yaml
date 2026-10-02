@@ -17,15 +17,22 @@ run:
     config_provenance: upstream_default
     simplipy_engine: acj-5-4-llm
     timeout: 7200
+    # DSO forks its reward pool anew for every fit; rarely a forked process waits forever on a lock a thread of its
+    # parent held. The hang policy (docs/adapters.md) retries such a problem once in a fresh worker.
+    hang_after_idle_s: 60
+    hang_overdue_factor: 30
+    hang_overdue_floor_s: 60
+    hang_log: '{{ROOT}}/results/evaluation/scaling/dso-dsr/hangs.jsonl'
     options:
+      threads: all              # every method gets the whole reference machine
       arm: dsr
       n_samples: !sweep
         name: ladder
-        values: [1000, 2000, 4000, 8000, 16000]
+        values: [1000, 2000, 4000, 8000, 16000, 32000]
   runner:
     limit: null
     save_every: 8
     resume: true
     output: !sweep
       name: ladder
-      values: ['{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0001000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0002000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0004000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0008000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0016000.pkl']
+      values: ['{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0001000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0002000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0004000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0008000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0016000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0032000.pkl']

@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["udsr|physo-astro|26000|1|0"]={"0":["/ / tanh 1 x1 + + + + -0.4436 * -0.2 x1 * 0.2876 pow x1 2 1 x1",1],"1":["+ + + + + + -4.287 * 3.534 x1 * 4.534 pow x1 2 * 1.511 pow x1 3 exp 1 exp abs -1 abs x1",1]};})();

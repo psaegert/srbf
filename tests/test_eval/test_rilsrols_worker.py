@@ -209,3 +209,14 @@ def test_the_stand_in_matches_the_real_regressor():
     accepted = set(inspect.signature(rils_rols.RILSROLSRegressor.__init__).parameters)
     assert set(w.AUTHOR_CONFIG) | set(w.SET_PER_FIT) <= accepted
     assert inspect.signature(_Regressor.__init__) == inspect.signature(rils_rols.RILSROLSRegressor.__init__)
+
+
+def test_threads_are_accepted_and_a_fit_runs_on_the_one_thread_the_method_has(fake_rilsrols):
+    X, y = _data()
+    for threads in (1, 8, "all"):
+        state = w.load({"max_fit_calls": 4096, "threads": threads})
+        out = w.fit(X.tolist(), y.tolist(), x_val=[], variables=["v1", "v2"], meta={}, options={}, state=state)
+        assert out["extra"]["threads"] == 1
+    for bad in (0, -1, "many", 2.5, True):
+        with pytest.raises(ValueError, match="threads"):
+            w.load({"threads": bad})

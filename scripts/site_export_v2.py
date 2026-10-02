@@ -52,12 +52,41 @@ METHODS = [
     ("PySR", "PySR", "iterations", "#d62728", "baseline", "upstream_default", "pysr",
      "PySR evolves a population of formulas, as a genetic algorithm does. It keeps the best formula of every length found "
      "so far and returns the one its own rule picks from these, a rule that weighs error against length."),
+    # Operon (owner 2026-09-30): pyoperon 0.6.1 in its first author's benchmark configuration; the budget counts evaluations.
+    # Its colour is the one farthest from every other method's, for full and for colour-deficient vision (indigo).
+    ("operon", "Operon", "evaluations", "#4010f0", "baseline", "author_blessed", "operon",
+     "Operon evolves a population of formulas, as a genetic algorithm does, and fits the numbers in every candidate as it goes. "
+     "It returns the formula its own rule picks from the best ones found, a rule that weighs error against length."),
+    # The other baselines (owner 2026-09-30), each with the whole reference machine where it can use it. Their colours are
+    # chosen one by one as the farthest from every colour before them, for full and colour-deficient vision.
+    ("gpgomea", "GP-GOMEA", "evaluations", "#11aaff", "baseline", "author_blessed", "gpgomea",
+     "GP-GOMEA evolves a population of formulas and learns which of their parts belong together, so that it recombines "
+     "them as whole units. It returns its best formula, with an intercept and a slope fitted by least squares."),
+    ("dsr", "DSR", "batches", "#885577", "baseline", "upstream_default", "dsr",
+     "Deep Symbolic Regression: a neural network learns on the problem itself, by trial and error, to write formulas that "
+     "fit better. It returns the formula that fits the given points best among all it wrote."),
+    ("udsr", "uDSR*", "dso iterations", "#cc22aa", "baseline", "author_blessed", "udsr",
+     "Unified Deep Symbolic Regression as publicly released: DSR combined with an evolutionary search and polynomial "
+     "fitting. It returns the formula that fits the given points best among all it tried. The asterisk: the paper's "
+     "version also uses a pre-trained network and a step from AI Feynman, which were never released."),
+    ("rilsrols", "RILS-ROLS", "fit calls", "#9944ff", "baseline", "author_blessed", "rilsrols",
+     "RILS-ROLS searches locally around its current formula and fits the numbers in each candidate by ordinary least "
+     "squares. It returns the final formula of its search, which weighs error against size."),
+    ("qlattice", "QLattice", "epochs", "#ff5577", "baseline", "author_blessed", "qlattice",
+     "QLattice draws formulas as graphs from a distribution it learns, and moves that distribution towards the ones that "
+     "fit. It returns the best formula by its own ranking, which weighs error against the number of parameters."),
     ("T8-3M", "Flash-ANSR T8-3M", "draws", "#8fcf8a", "flash-ansr", "author_blessed", None, None),
     ("T8-20M", "Flash-ANSR T8-20M", "draws", "#3e9b4a", "flash-ansr", "author_blessed", None, None),
     ("T8-120M", "Flash-ANSR T8-120M", "draws", "#1b5e20", "flash-ansr", "author_blessed", None, None),
     # the hybrid: a rung is a pair (D draws, I iterations) chosen so that both halves take the same time on the reference
-    # machine; the ladder is labelled by its draws
-    ("T8-20M-pysr", "Flash-ANSR T8-20M + PySR", "draws", "#7b1fa2", "hybrid", "author_blessed", "hybrid",
+    # machine; the ladder is labelled by its draws. The release shows the 120M hybrid (owner 2026-09-29); the 20M one,
+    # which it replaces, keeps its entry (a lighter purple) for local exports.
+    ("T8-120M-pysr", "Flash-ANSR T8-120M + PySR", "draws", "#7b1fa2", "hybrid", "author_blessed", "hybrid",
+     "Flash-ANSR T8-120M generates candidate formulas, and up to 100 of those with the best Flash-ANSR score become PySR's starting population. "
+     "PySR's best formulas then join Flash-ANSR's candidates, and Flash-ANSR's rule picks one. At a budget of B, Flash-ANSR generates B "
+     "candidates and PySR runs as many iterations as take the same time on our timing workstation, so each budget costs about twice "
+     "what Flash-ANSR alone spends at it."),
+    ("T8-20M-pysr", "Flash-ANSR T8-20M + PySR", "draws", "#b07cc6", "hybrid", "author_blessed", "hybrid",
      "Flash-ANSR T8-20M generates candidate formulas, and up to 100 of those with the best Flash-ANSR score become PySR's starting population. "
      "PySR's best formulas then join Flash-ANSR's candidates, and Flash-ANSR's rule picks one. At a budget of B, Flash-ANSR generates B "
      "candidates and PySR runs as many iterations as take the same time on our timing workstation, so each budget costs about twice "
@@ -73,7 +102,9 @@ METHODS = [
      "attempts, each from new random starting values.")]
 # How a method is drawn when its colour alone is not the point: the oracle is the ceiling, a dashed line in the ink colour
 # of the page (black, or white in the dark theme), like the ground truth's own reference line.
-METHOD_STYLE: dict[str, dict[str, bool]] = {"oracle": {"dash": True, "ink": True}}
+# "off": the explorer leaves the method unchecked by default (owner 2026-09-30: the prior); a link that names it, or its
+# checkbox, shows it. The headline charts are not affected.
+METHOD_STYLE: dict[str, dict[str, bool]] = {"oracle": {"dash": True, "ink": True}, "prior": {"off": True}}
 # Scheduled (owner 2026-09-26): methods whose srbf worker is merged but which the release does not carry yet, shown on
 # the Progress page as one line of names, a sentence each on hover. A method leaves the line once the release carries
 # it (its key among the published methods), so each key here is the one the method will have in METHODS. Only the
@@ -88,17 +119,27 @@ SCHEDULED = [
      "polynomial fitting. The asterisk: the paper's version also uses a pre-trained network and a step from AI Feynman, "
      "which were never released."),
     ("rilsrols", "RILS-ROLS", "A local search over formulas that fits their numbers by ordinary least squares."),
+    ("qlattice", "QLattice", "Draws formulas as graphs from a distribution it learns, and moves that distribution towards "
+     "the ones that fit."),
     ("oracle", "Oracle", "A reference, not a method: it is given the true formula with its constants blanked out (exponents "
      "are kept) and only fits the constants, the way Flash-ANSR does. It shows how well Flash-ANSR's fitting does when it is "
      "given the true form.")]
 # Where two methods share a component at different versions, the release says so (Protocol, "Versions").
 # The hybrid's sentence is part of a payload only when the hybrid is: a method withheld from the public page is not named
 # there either.
+_HYBRID_PYSR = ("PySR 2.4.0, with SymbolicRegression.jl 2.4.2. The settings it uses have the same defaults "
+                "in both PySR versions. Between these versions, the release notes of both packages list performance improvements, "
+                "packaging fixes and optional additions, and no change to the search at the settings used here. ")
 RELEASE_VERSIONS = ("PySR: version 2.3.0, with SymbolicRegression.jl 2.4.0. ",
-                    ("T8-20M-pysr", "The PySR part of Flash-ANSR T8-20M + PySR: PySR 2.4.0, "
-                     "with SymbolicRegression.jl 2.4.2. The settings it uses have the same defaults "
-                     "in both PySR versions. Between these versions, the release notes of both packages list performance improvements, "
-                     "packaging fixes and optional additions, and no change to the search at the settings used here. "),
+                    ("T8-120M-pysr", "The PySR part of Flash-ANSR T8-120M + PySR: " + _HYBRID_PYSR),
+                    ("T8-20M-pysr", "The PySR part of Flash-ANSR T8-20M + PySR: " + _HYBRID_PYSR),
+                    ("operon", "Operon: pyoperon 0.6.1, in the configuration its first author uses to run it as a benchmark "
+                               "baseline. "),
+                    ("gpgomea", "GP-GOMEA: the original implementation at the commit SRBench 2021 ran (6a92cb6), in its first "
+                                "author's 2021 configuration. "),
+                    ("dsr", "DSR and uDSR*: DSO 3.0.0 (deep-symbolic-optimization), with three fixes srbf documents. "),
+                    ("rilsrols", "RILS-ROLS: version 1.6.7, the release its authors submitted to SRBench. "),
+                    ("qlattice", "QLattice: feyn 3.5.0 (community edition, for non-commercial use). "),
                     "Simplification: SimpliPy (a formula-simplification library), with its rule set acj-5-4-llm.")
 
 
@@ -115,9 +156,20 @@ FLASH_ANSR_SELECTION = ("A neural network generates candidate formulas from the 
 # How each budget unit reads next to the method's name.
 PARAM_LABEL = {"candidates per bag": "budget: candidate formulas", "beam width": "budget: beam width",
                "iterations": "budget: search iterations", "draws": "budget: candidate formulas",
-               "restarts": "budget: fitting attempts"}
-RUNGS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536]
+               "restarts": "budget: fitting attempts",
+               # DSO counts its budget in expressions and stops only after whole iterations: the ladders double those
+               "batches": "budget: formulas tried, in batches of 1,000",
+               "dso iterations": "budget: formulas tried, in iterations of 13,000"}
 E2E_DEFAULT_MAX_RUNG = 256   # E2E is reported at its default settings only
+# Where a method's ladder ends. Every method's budgets double up to about LADDER_TOP_S seconds per problem on the
+# reference machine, where the time axis ends; the ladder has reached its end at the doubling nearest that on a log
+# scale, i.e. once a measured time is at least LADDER_TOP_S / sqrt(2) (the next doubling would land further from it).
+# A method that cannot run a larger budget ends earlier, for the reason given here. Until its ladder has ended, a
+# method stays in progress even when every run planned so far is in.
+LADDER_TOP_S = 1000.0
+LADDER_END = {"e2e": "E2E runs at its default settings, which allow at most 256 candidates per bag."}
+# Budgets taken out of a method's plan on purpose; they no longer count as open runs.
+PLAN_DROPPED = {"T8-3M": {65536}, "T8-20M": {65536}, "T8-120M": {65536}}   # stopped; larger budgets come with a later model
 CATALOG_GROUPS = {
     "physics": ["fastsrb", "feynman", "feynman-bonus", "srsd-dummy", "erbench-phybench", "erbench-densities", "physo-astro", "physo-class"],
     "classical": ["nguyen", "keijzer", "korns", "koza", "livermore", "livermore2", "vladislavleva", "jin", "neat", "pagie", "poly", "nonic", "sine", "meier", "r-rationals", "constant", "grammarvae"],
@@ -374,8 +426,9 @@ Expressions = dict[tuple[str, str, int, int], dict[int, list[Any] | None]]
 
 def load_expressions(root: str, keys: list[str]) -> tuple[Expressions, dict[str, dict[int, str]]]:
     """(pred, truth): pred[(method, catalog, rung, draw)][row] = [expression, flags] for the methods in `keys`, and
-    truth[catalog][row] = the ground truth's expression. Both are empty when the rows carry no expressions (a table
-    written before `srbf table` stored them)."""
+    truth[catalog][row] = the ground truth's expression as the benchmark states it, unrounded (the page rounds it; the
+    canonical form is computed from it). Both are empty when the rows carry no expressions (a table written before
+    `srbf table` stored them)."""
     pred: Expressions = defaultdict(dict)
     truth: dict[str, dict[int, str]] = defaultdict(dict)
     want = set(keys)
@@ -393,7 +446,7 @@ def load_expressions(root: str, keys: list[str]) -> tuple[Expressions, dict[str,
                 cat, row = r[at["catalog"]], int(r[at["row"]])
                 gt = r[at["ground_truth_expression"]]
                 if gt and row not in truth[cat]:
-                    truth[cat][row] = round_prefix(gt)
+                    truth[cat][row] = gt
                 if r[at["model"]] not in want:
                     continue
                 expr = r[at["predicted_expression"]] if r[at["success"]] in ("1", "1.0") else ""
@@ -404,10 +457,43 @@ def load_expressions(root: str, keys: list[str]) -> tuple[Expressions, dict[str,
     return pred, truth
 
 
+def canonical_truths(truth: dict[str, dict[int, str]], engine_name: str, cache_path: str | None,
+                     engine: Any = None) -> dict[str, str | None]:
+    """Every ground truth in its canonical form: the SimpliPy engine the judge uses (`srbf table`'s default engine)
+    simplifies the expression WITH its numbers -- the judge's first step (srbf.result_processing._judged_form, then it
+    masks the numbers). Returns {prefix as stated: canonical prefix, or None where the engine refuses it}. Cached in
+    `cache_path` per simplipy version and engine: a form depends on nothing else."""
+    import simplipy
+    tag = f"{getattr(simplipy, '__version__', '?')}|{engine_name}"
+    cache: dict[str, Any] = {}
+    if cache_path and os.path.exists(cache_path):
+        try:
+            loaded = json.load(open(cache_path))
+            cache = loaded.get("forms", {}) if loaded.get("tag") == tag else {}
+        except (OSError, ValueError):
+            cache = {}
+    todo = sorted({e for rows in truth.values() for e in rows.values() if e and e not in cache})
+    if todo:
+        engine = engine if engine is not None else simplipy.SimpliPyEngine.load(engine_name, install=True)
+        for e in todo:
+            try:
+                form = engine.simplify(e.split())
+                cache[e] = " ".join(map(str, form)) if form is not None else None
+            except Exception:  # noqa: BLE001 - an expression the engine refuses has no canonical form; shown as stated
+                cache[e] = None
+        if cache_path:
+            tmp = cache_path + ".tmp"
+            with open(tmp, "w") as fh:
+                json.dump({"tag": tag, "forms": cache}, fh)
+            os.replace(tmp, cache_path)
+    return cache
+
+
 def write_predictions(out_dir: str, rel: str, pred: Expressions, truth: dict[str, dict[int, str]],
-                      sizes: dict[str, int]) -> dict[str, dict[str, list[int]]]:
+                      sizes: dict[str, int], canonical: dict[str, str | None] | None = None) -> dict[str, dict[str, list[int]]]:
     """Write the Predictions view's files next to the release; returns the index the page reads:
-    {method: {"catalog|rung": [the runs whose files exist]}}. A run still in progress is left out."""
+    {method: {"catalog|rung": [the runs whose files exist]}}. A run still in progress is left out. A ground truth is
+    written as [as stated, canonical form] (both rounded for the page; the canonical form None where there is none)."""
     def put(path: str, key: str, obj: Any) -> None:
         text = "window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R[%s]=R[%s]||{};R[%s][%s]=%s;})();\n" % (
             json.dumps(rel), json.dumps(rel), json.dumps(rel), json.dumps(key), json.dumps(obj, separators=(",", ":")))
@@ -430,8 +516,12 @@ def write_predictions(out_dir: str, rel: str, pred: Expressions, truth: dict[str
         index[m].setdefault(f"{c}|{r}", []).append(d)
         for b, chunk in blocks(got).items():
             put(os.path.join(out_dir, "pred", m, c, f"{r}.{d}.{b}.js"), f"{m}|{c}|{r}|{d}|{b}", chunk)
-    for c, formulas in sorted(truth.items()):
+    for c, stated in sorted(truth.items()):
         if c in sizes:
+            formulas: dict[int, list[str | None]] = {}
+            for i, e in stated.items():
+                form = (canonical or {}).get(e)
+                formulas[i] = [round_prefix(e), round_prefix(form) if form else None]
             for b, chunk in blocks(formulas).items():
                 put(os.path.join(out_dir, "pred", "truth", f"{c}.{b}.js"), f"truth|{c}|{b}", chunk)
     # A method this release no longer holds leaves no files behind: a withheld method would otherwise stay published.
@@ -764,6 +854,18 @@ def rung_within(timing: dict[str, Any], key: str, budget: float, have: set[int])
     return max(fits) if fits else None
 
 
+def usable(key: str, r: int) -> bool:
+    """Whether the release publishes method ``key`` at budget ``r``: any budget it was run at -- a method's ladder is in
+    its own unit (DSO samples in batches of 1,000 expressions, so its ladder doubles from 1,000) -- and E2E only up to its
+    default."""
+    return r >= 1 and not (key == "e2e" and r > E2E_DEFAULT_MAX_RUNG)
+
+
+def published_rungs(rungs: Any) -> list[int]:
+    """The budgets the explorer steps through: every published budget with data, in order."""
+    return sorted({int(r) for r in rungs})
+
+
 # ---- status / catalogs / timing ---------------------------------------------------------------------------------
 def planned_cells(root: str, ukey: str | None, publishes: Any) -> set[tuple[int, str, int]] | None:
     """Every (draw, catalog, rung) a method's run plan holds: the unit lists in the root (`units_<ukey>_d<draw>.txt`, or
@@ -803,20 +905,42 @@ def progress_of(rows_by_cell: dict[tuple[str, int], Any], sizes: dict[str, int],
     return {str(r): [sum(1 for x in done if x[2] == r), sum(1 for x in plan if x[2] == r) if plan is not None else None] for r in rungs}
 
 
+def ladder_end(key: str, timing: dict[str, Any]) -> tuple[str | None, str | None]:
+    """(how the method's ladder ended, why): ('declared', reason) for a method that cannot run a larger budget,
+    ('reached', None) once a measured time is at least LADDER_TOP_S / sqrt(2), else (None, None): larger budgets to come."""
+    if key in LADDER_END:
+        return "declared", LADDER_END[key]
+    seconds = [v for v in (timing.get(key) or {}).values() if isinstance(v, (int, float))]
+    return ("reached", None) if seconds and max(seconds) >= LADDER_TOP_S / math.sqrt(2) else (None, None)
+
+
 def progress_summary(methods: list[dict[str, Any]], status: dict[str, list[int | None]], timing: dict[str, Any]) -> dict[str, Any]:
     """Which methods are finished, in progress and scheduled: the one rule the Results page's progress line and the
-    Progress page both show. Finished: every planned run has its results and every budget of the plan a measured time.
-    In progress: every other published method. Scheduled: SCHEDULED's methods the release does not carry yet."""
+    Progress page both show. Finished: every planned run has its results, every budget of the plan a measured time, and
+    the ladder has reached its end (ladder_end). In progress: every other published method; `more_budgets` names those
+    whose planned runs and times are all in but whose ladder goes on. Scheduled: SCHEDULED's methods the release does
+    not carry yet. In progress runs from the least advanced method to the most: by its largest measured time per problem
+    (none first), so the Progress page shows the methods furthest from the end first."""
     finished: list[str] = []
     in_progress: list[str] = []
+    more: list[str] = []
+    ends: dict[str, dict[str, Any]] = {}
     for m in methods:
         st, budgets, timed = status.get(m["key"]), m.get("budgets") or [], timing.get(m["key"]) or {}
         if st is None:
             continue
-        done = st[1] is not None and (st[0] or 0) >= st[1] and bool(budgets) and all(str(b) in timed for b in budgets)
-        (finished if done else in_progress).append(m["key"])
+        planned_in = st[1] is not None and (st[0] or 0) >= st[1] and bool(budgets) and all(str(b) in timed for b in budgets)
+        end, why = ladder_end(m["key"], timing)
+        if end:
+            ends[m["key"]] = {"end": end, **({"reason": why} if why else {})}
+        (finished if planned_in and end else in_progress).append(m["key"])
+        if planned_in and not end:
+            more.append(m["key"])
     carried = {m["key"] for m in methods}
-    return {"finished": finished, "in_progress": in_progress,
+    reach = {k: max([v for v in (timing.get(k) or {}).values() if isinstance(v, (int, float))], default=0.0) for k in in_progress}
+    in_progress = sorted(in_progress, key=lambda k: reach[k])   # stable: equal reach keeps the method order
+    return {"finished": finished, "in_progress": in_progress, "more_budgets": more, "ladder": ends,
+            "ladder_top_s": LADDER_TOP_S,
             "scheduled": [{"label": label, "note": note} for key, label, note in SCHEDULED if key not in carried]}
 
 
@@ -854,6 +978,7 @@ def main() -> None:
     ap.add_argument("out")
     ap.add_argument("--title", default=None)
     ap.add_argument("--notes", default="")
+    ap.add_argument("--engine", default="acj-5-4-llm", help="the SimpliPy engine the judge used (srbf table's default): the ground truths' canonical forms")
     ap.add_argument("--sizes", default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results-site", "data", "catalog_mu.json"),
                     help="every catalog's ground-truth description lengths (scripts/catalog_mu.py; default: results-site/data/catalog_mu.json)")
     ap.add_argument("--site-dir", default=None, help="results-site directory (default: two levels above out.js); base paths are relative to it")
@@ -884,9 +1009,6 @@ def main() -> None:
             present[c] = max([present[c]] + [len(rs) for rs in by_draw(rows).values()])
     cats = catalog_meta(a.sizes, present)
     sizes = {c["key"]: c["laws"] for c in cats}
-
-    def usable(key: str, r: int) -> bool:
-        return r in RUNGS and not (key == "e2e" and r > E2E_DEFAULT_MAX_RUNG)
 
     def contrasts(pairs: list[tuple[str, str]], paired: dict[str, Any]) -> None:
         for ka, kb in pairs:
@@ -954,7 +1076,7 @@ def main() -> None:
                         h = hist_of(problems, hk, lo, hi, answered)
                         if h is not None:
                             hists.setdefault(name, {}).setdefault(key, {}).setdefault(c, {})[str(r)] = h
-            plans[key] = planned_cells(a.root, ukey, lambda r, k=key: usable(k, r))
+            plans[key] = planned_cells(a.root, ukey, lambda r, k=key: usable(k, r) and r not in PLAN_DROPPED.get(k, ()))
             published = {cr: rows for cr, rows in data.get(key, {}).items() if usable(key, cr[1])}
             status[key] = status_of(published, sizes, plans[key])
             progress[key] = progress_of(published, sizes, plans[key])
@@ -975,7 +1097,7 @@ def main() -> None:
                                "updated": dt.datetime.now().astimezone().isoformat(timespec="minutes"),   # with its offset: shown in the reader's time zone
                                "scoring": "Every method is allowed to return one formula per problem, its prediction, and picks it by its own rule. The ? after a method's name describes that rule; the label beside it says who chose the method's settings.",
                                "judge": "Every prediction is checked the same way against the true formula. Numeric Recovery: it reproduces the 512 held-out points almost exactly (FVU at most 2^-23: a typical error of at most 0.035 % of the true values' spread). Symbolic Recovery: once both formulas are simplified into a standard form, they are identical when their numbers are ignored (so x^2 matches x^3; stricter versions also check exponents and all numbers)."},
-                   "catalogs": cats, "rungs": RUNGS, "nb": NB, "metrics": listed, "paired_keys": PAIRED_KEYS, "rank_keys": [k for k in RANK_KEYS if k in {m["key"] for m in listed}],
+                   "catalogs": cats, "rungs": published_rungs(r for per in cells.values() for by_rung in per.values() for r in by_rung), "nb": NB, "metrics": listed, "paired_keys": PAIRED_KEYS, "rank_keys": [k for k in RANK_KEYS if k in {m["key"] for m in listed}],
                    # budget: what one rung of the ladder buys. "candidates" is a count a generative method draws;
                    # PySR's rungs are search iterations, which have no place on the candidate axis of the site.
                    "methods": [{"key": k, "label": l, "param": PARAM_LABEL.get(p, p), "budget": p if p in ("iterations", "seconds", "restarts") else "candidates",
@@ -1010,7 +1132,8 @@ def main() -> None:
     payload, hists, paired = build(public, rel_base(out_dir, site_dir))
     pred, truth = load_expressions(a.root, public)
     pred = {k: v for k, v in pred.items() if usable(k[0], k[2])}   # the budgets the release publishes, and no others
-    payload["pred"] = write_predictions(out_dir, a.release, pred, truth, sizes)
+    canonical = canonical_truths(truth, a.engine, os.path.join(a.root, "canonical_truth_cache.json"))
+    payload["pred"] = write_predictions(out_dir, a.release, pred, truth, sizes, canonical)
     payload["pred_block"] = PRED_BLOCK
     ranks = leagues([(ka, kb) for i, ka in enumerate(public) for kb in public[i + 1:]], public, payload["rank_keys"])
     write_set(payload, hists, paired, ranks, a.out, out_dir, "RESULTS_V2", f"public release {a.release}")

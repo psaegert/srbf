@@ -65,7 +65,12 @@ def note(suite_keys: list[str]) -> str:
 
 def rungs_in(directory: Path, pattern: str) -> list[int]:
     """Every rung some catalog of `directory` has a file for."""
-    rx = re.compile("^" + re.escape(pattern).replace(re.escape("{rung:06d}"), r"(\d{6})").replace(re.escape("{rung:05d}"), r"(\d{5})") + "$")
+    # any zero-padded width ({rung:05d}, {rung:06d}, Operon's and the other evaluation ladders' {rung:07d}) or none ({rung})
+    parts = re.split(r"\{rung(?::0?(\d+)d)?\}", pattern)
+    if len(parts) != 3:
+        raise ValueError(f"a rung-file pattern names the rung exactly once: {pattern!r}")
+    head, width, tail = parts
+    rx = re.compile("^" + re.escape(head) + (rf"(\d{{{width}}})" if width else r"(\d+)") + re.escape(tail) + "$")
     found = {int(m.group(1)) for p in directory.glob("*/*") if (m := rx.match(p.name))}
     return sorted(found)
 

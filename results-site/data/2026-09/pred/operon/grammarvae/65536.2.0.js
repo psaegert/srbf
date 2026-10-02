@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|grammarvae|65536|2|0"]={"0":["+ 1.653 * 0.853 - - tanh * -0.4164 x1 * -0.7138 x1 - exp tanh * -0.4573 x1 * * 0.6262 x1 0.7006",0]};})();

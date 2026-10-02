@@ -34,6 +34,22 @@ test('the explorer\'s page opens on the explorer and renders its curves', async 
   expect(errors).toEqual([]);
 });
 
+test('a ladder that cannot go further ends in a square; every other point is a circle', async ({ page }) => {
+  // E2E is reported at its default settings, which stop at 256 candidates per bag (summary.ladder: "declared")
+  const errors = collectErrors(page);
+  await page.goto('/explorer.html?release=2026-09&v=curves');
+  await expect(page.locator(V2 + ' svg.v2chart').first()).toBeVisible();
+  const squares = page.locator(V2 + ' svg.v2chart rect.v2end');
+  await expect(squares.first()).toBeAttached();
+  const tips = await squares.locator('title').allTextContents();
+  expect(tips.length).toBeGreaterThan(0);
+  for (const t of tips) { expect(t).toMatch(/^E2E[^@]* (at budget|@) 256\b/); expect(t).toContain('default settings'); expect(t).not.toContain('..'); }
+  const e2eCircles = await page.locator(V2 + ' svg.v2chart circle title').evaluateAll((ts) => ts.map((t) => t.textContent).filter((t) => /^E2E[^@]* (at budget|@) 256\b/.test(t)));
+  expect(e2eCircles).toEqual([]);
+  await expect(page.locator(V2 + ' .v2endnote')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test('the metric registry carries its floor and the headline metrics', async ({ page }) => {
   await page.goto('/explorer.html');
   const keys = await page.evaluate(() => window.RESULTS_V2.metrics.map((m) => m.key));
@@ -147,6 +163,33 @@ test('a time axis needs one calibrated method, and an uncalibrated one costs onl
   await expect(head).toBeVisible();
   if (timed) { await calibrated(head); } else { await expect(page.locator('#results-headline-v2')).not.toContainText(/time (per problem )?\(s/); }
   expect(await page.content()).not.toContain('as run');
+});
+
+test('a curve walks its method\'s budgets in order, also on the time axis', async ({ page }) => {
+  // On the time axis a larger budget can be timed faster than a smaller one (PySR at 1 and 2 iterations: 2.58 and 2.03 s
+  // per problem on the reference machine). The line walks the method's ladder in budget order, never re-sorted by time:
+  // sorted by time, PySR's first point was joined after its 8-iteration point and the curve dipped.
+  await page.goto('/');
+  const head = page.locator('#results-headline-v2 svg.v2chart').first();
+  await expect(head).toBeVisible();
+  const series = await head.evaluate((svg) => [...svg.querySelectorAll('polyline')].map((pl) => {
+    const col = pl.getAttribute('stroke');
+    const verts = pl.getAttribute('points').trim().split(/\s+/).map((q) => q.split(',').map(Number));
+    const dots = [...svg.querySelectorAll('circle, rect.v2end')].filter((c) => c.getAttribute('stroke') === col).map((c) => {
+      const m = (c.querySelector('title') || { textContent: '' }).textContent.match(/ at budget (\d+)/);
+      const sq = c.tagName === 'rect';   // a ladder's declared end: a 6 px square centred on the point
+      return { x: sq ? +c.getAttribute('x') + 3 : +c.getAttribute('cx'), y: sq ? +c.getAttribute('y') + 3 : +c.getAttribute('cy'), b: m ? +m[1] : NaN };
+    });
+    return { col, verts, dots };
+  }));
+  expect(series.length).toBeGreaterThan(1);
+  for (const sr of series) {
+    const budgets = sr.dots.map((d) => d.b);
+    expect(budgets.every((b) => Number.isFinite(b)), `every point names its budget (${sr.col})`).toBe(true);
+    expect(budgets.every((b, i) => i === 0 || b > budgets[i - 1]), `points in budget order (${sr.col}): ${budgets.join(', ')}`).toBe(true);
+    expect(sr.verts.length).toBe(sr.dots.length);
+    sr.verts.forEach(([x, y], i) => { expect(Math.abs(x - sr.dots[i].x) + Math.abs(y - sr.dots[i].y)).toBeLessThan(0.2); });
+  }
 });
 
 test('the release publishes no as-run wall clock', async ({ page }) => {
@@ -278,7 +321,7 @@ test('each display carries only the controls it can use', async ({ page }) => {
   // one budget, one metric, each chosen in one place: on the display's own bar, never repeated in the side panel
   for (const k of ['plots', 'xaxis', 'thin', 'focus', 'rung', 'rows']) { expect(matrix, k).not.toContain(k); }
   await expect(page.locator(V2 + ' .v2viewbar .v2viewpick')).toBeVisible();
-  await expect(page.locator(V2 + ' .v2viewbar select[data-state="rung"]')).toBeVisible();
+  await expect(page.locator(V2 + ' .v2viewbar input.v2pos')).toBeVisible();
   await page.locator(V2 + ' .v2tab[data-view="paired"]').click();
   await expect.poll(shown).toContain('base');
 });
@@ -525,18 +568,18 @@ test('a display of one chart is drawn at the width it is shown, not stretched fr
 });
 
 test('a method marked as the ceiling is drawn dashed in the page ink, legend included', async ({ page }) => {
-  // mark the prior as the oracle is marked (dash, ink), in the payload as it is served
+  // mark E2E as the oracle is marked (dash, ink), in the payload as it is served (the oracle itself is not public)
   await page.route('**/data/2026-09/results.js*', async (route) => {
     const response = await route.fetch();
-    const body = (await response.text()).replace('"key":"prior",', '"key":"prior","dash":true,"ink":true,');
+    const body = (await response.text()).replace('"key":"e2e",', '"key":"e2e","dash":true,"ink":true,');
     await route.fulfill({ response, body });
   });
-  await page.goto('/explorer.html?release=2026-09&v=curves&p=rung~numeric_recovery_val');   // the budget axis: the prior has no reference time
+  await page.goto('/explorer.html?release=2026-09&v=curves&p=rung~numeric_recovery_val&m=T8-3M,T8-20M,T8-120M,e2e,PySR');
   const chart = page.locator(V2 + ' .v2main svg.v2chart').first();
   await expect(chart).toBeVisible();
   const drawn = await chart.evaluate((svg) => {
     const ink = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
-    const label = [...svg.querySelectorAll('text.leg')].find((t) => t.textContent === 'Flash-ANSR prior');
+    const label = [...svg.querySelectorAll('text.leg')].find((t) => t.textContent === 'E2E 93M');
     const key = label && label.previousElementSibling;
     const lines = [...svg.querySelectorAll('polyline')].filter((l) => l.getAttribute('stroke') === ink);
     return { ink, keyDash: key && key.getAttribute('stroke-dasharray'), keyStroke: key && key.getAttribute('stroke'),
@@ -547,6 +590,26 @@ test('a method marked as the ceiling is drawn dashed in the page ink, legend inc
   expect(drawn.keyDash, 'the legend key is dashed').toBeTruthy();
   expect(drawn.dashedLines, 'the line is dashed in the ink').toBeGreaterThan(0);
   expect(drawn.otherDashed, 'no other method is dashed').toBe(0);
+});
+
+test('a method marked off starts unchecked, and its checkbox shows it', async ({ page }) => {
+  // METHOD_STYLE "off" in the exporter (the prior had it; since 2026-09-30 the prior is private): mark E2E off here
+  await page.route('**/data/2026-09/results.js*', async (route) => {
+    const response = await route.fetch();
+    const body = (await response.text()).replace('"key":"e2e",', '"key":"e2e","off":true,');
+    await route.fulfill({ response, body });
+  });
+  await page.goto('/explorer.html?release=2026-09&v=curves&p=rung~numeric_recovery_val');
+  const chart = page.locator(V2 + ' .v2main svg.v2chart').first();
+  await expect(chart).toBeVisible();
+  const box = page.locator(V2 + ' .v2methods input[type=checkbox][data-m="e2e"]');
+  await expect(box).not.toBeChecked();
+  await expect(chart.locator('text.leg', { hasText: 'E2E 93M' })).toHaveCount(0);
+  expect(await box.evaluate((el) => el.indeterminate)).toBe(false);   // hidden: neither ticked nor dashed
+  await expect(page.locator(V2 + ' .v2methods input[type=checkbox][data-m="T8-120M"]')).toBeChecked();
+  await box.click();   // hidden -> faded: back in the chart
+  await expect(page.locator(V2 + ' .v2main svg.v2chart').first().locator('text.leg', { hasText: 'E2E 93M' })).toHaveCount(1);
+  expect(await box.evaluate((el) => el.indeterminate)).toBe(true);
 });
 
 test('a headline chart keeps its title and its y label off the frame', async ({ page }) => {
@@ -607,20 +670,22 @@ test('every reading of a distribution draws, and the choice travels in the link'
   expect(errors).toEqual([]);
 });
 
-test('the budget of a snapshot is stepped on the display itself', async ({ page }) => {
+test('the budget of a snapshot is set on the display itself, on a slider and by its marks', async ({ page }) => {
   await page.goto('/explorer.html?release=2026-09&v=dist&dm=log10_fvu_val&r=16');
-  const sel = page.locator(V2 + ' .v2viewbar select[data-state="rung"]');
-  await expect(sel).toHaveValue('16');
-  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('at budget 16');
-  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label^="higher"]').click();
-  await expect(sel).toHaveValue('32');
-  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('at budget 32');
+  const val = page.locator(V2 + ' .v2viewbar .v2posval'), chart = page.locator(V2 + ' .v2view svg.v2chart').first();
+  await expect(val).toHaveText('16');
+  await expect(chart).toContainText('at budget 16');
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="larger budget"]').click();
+  await expect(val).toHaveText('32');
+  await expect(chart).toContainText('at budget 32');
   await expect(page.locator(V2 + ' select.v2rung')).toBeHidden();   // the budget has one place: the display's bar
-  await sel.selectOption('8');
-  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('at budget 8');
-  // the Catalogs matrix and the by-catalog table carry the same stepper
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="smaller budget"]').click();
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="smaller budget"]').click();
+  await expect(chart).toContainText('at budget 8');
+  // the Problem sets view and the by-problem-set table carry the same control, at the same budget
   await page.locator(V2 + ' .v2tab[data-view="matrix"]').click();
-  await expect(page.locator(V2 + ' .v2viewbar select[data-state="rung"]')).toHaveValue('8');
+  await expect(page.locator(V2 + ' .v2viewbar .v2posval')).toHaveText('8');
+  expect(new URL(page.url()).searchParams.get('r')).toBe('8');
 });
 
 test('a rate is shown per problem set, with a way to a distribution', async ({ page }) => {
@@ -691,6 +756,193 @@ test('the explorer averages over problem sets exactly as the reference does', ()
   });
   expect(off).toEqual([]);
   expect(core.holm([0.01, 0.04, 0.03]).map((x) => +x.toFixed(6))).toEqual([0.03, 0.06, 0.06]);
+});
+
+// ---- Positions between budgets -------------------------------------------------------------------------------------
+// Tables, problem sets and distributions read every method at one budget or one time, anywhere on a slider. Between two
+// budgets a method was run at, every sum of a problem set is blended in the logarithm of the position; nothing is
+// extrapolated. The page's code is cut out and run on a fixture with known sums.
+test('a method between two of its budgets is read by blending them in the logarithm of the position', () => {
+  const src = readFileSync(new URL('../explorer_v2.js', import.meta.url), 'utf8');
+  const a = src.indexOf('  // ---- positions between the budgets'), b = src.indexOf('  function hasRung(');
+  expect(a).toBeGreaterThan(0); expect(b).toBeGreaterThan(a);
+  const D = { cells: { A: { s: {
+    '1': { state: 'complete', d: 2, n: 100, ok: 90, m: { rate: [100, 10, 10] }, a: { f1: [90, 90, 45, 30] }, e: { f1: 90 } },
+    '4': { state: 'complete', d: 2, n: 100, ok: 98, m: { rate: [100, 30, 30] }, a: { f1: [98, 98, 70, 60] }, e: { f1: 98 } },
+    '16': { state: 'running', n: 3, m: {} } } } } };
+  const times = { 1: 0.5, 4: 2 };
+  const addHist = (acc, hc) => { hc.forEach((pt) => { acc[pt[0]] += pt[1]; }); };
+  const core = new Function('D', 'state', 'refTime', 'addHist', src.slice(a, b) + '\nBETWEEN = true;\nreturn { cell: cell, histCell: histCell, posText: posText };')(
+    D, { pm: 'budget', rung: 2, pt: null }, (m, r) => times[String(r)] || null, addHist);
+  const r9 = (xs) => xs.map((x) => +x.toFixed(9));
+  const mid = core.cell('A', 's', 2);                               // log 2 lies halfway between log 1 and log 4
+  expect(mid.between).toEqual([1, 4]);
+  expect(r9(mid.m.rate)).toEqual([100, 20, 20]);
+  expect(r9(mid.a.f1)).toEqual([94, 94, 57.5, 45]);
+  expect(+mid.ok.toFixed(9)).toBe(94); expect(+mid.e.f1.toFixed(9)).toBe(94);
+  expect(core.cell('A', 's', 4)).toBe(D.cells.A.s['4']);            // a budget it was run at reads exactly as measured
+  expect(core.cell('A', 's', 8)).toBeNull();                        // nothing is extrapolated; an unfinished budget is no point
+  expect(core.cell('A', 's', 0.5)).toBeNull();
+  expect(+core.cell('A', 's', Math.pow(4, 0.25)).m.rate[1].toFixed(9)).toBe(15);   // a quarter of the way
+  const byTime = core.cell('A', 's', 't1');                         // 1 s lies halfway between 0.5 s and 2 s on a log scale
+  expect(byTime.between).toEqual([1, 4]); expect(+byTime.m.rate[1].toFixed(9)).toBe(20);
+  expect(core.cell('A', 's', 't2')).toBe(D.cells.A.s['4']);
+  expect(core.cell('A', 's', 't4')).toBeNull();
+  expect(core.histCell({ nb: 3, cells: { A: { s: { 1: [[0, 10]], 4: [[2, 10]] } } } }, 'A', 's', 2)).toEqual([5, 0, 5]);
+  expect(core.posText(1448.15)).toBe('budget 1,448'); expect(core.posText('t2.5')).toBe('2.5 s per problem');
+});
+
+test('the slider reads every method between its budgets, marks it, and reads by time too', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/explorer.html?release=2026-09&v=matrix&m=T8-20M&r=1448');
+  const val = page.locator(V2 + ' .v2viewbar .v2posval');
+  await expect(val).toHaveText('1,448');
+  await expect(page.locator(V2 + ' .v2view')).toContainText('Interpolated: Flash-ANSR T8-20M between budgets 1,024 and 2,048.');
+  await expect(page.locator(V2 + ' .v2view .v2matrix .v2tween').first()).toBeVisible();   // and every such number carries the mark
+  const slider = page.locator(V2 + ' .v2viewbar input.v2pos');
+  await slider.evaluate((el) => { el.value = String(0.37 * (+el.max)); el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); });
+  await expect.poll(() => new URL(page.url()).searchParams.get('r')).not.toBe('1448');
+  await page.locator(V2 + ' .v2viewbar button[data-set="pm:time"]').click();
+  await expect(val).toContainText(' s');
+  await expect(page.locator(V2 + ' .v2view')).toContainText('s per problem');
+  expect(new URL(page.url()).searchParams.get('pm')).toBe('time');
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="longer time"]').click();
+  expect(+new URL(page.url()).searchParams.get('pt')).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});
+
+test('a method outside the budgets it was run at has no value there, and says where it runs', async ({ page }) => {
+  await page.goto('/explorer.html?release=2026-09&v=matrix&m=e2e,T8-20M&r=1448');
+  await expect(page.locator(V2 + ' .v2view')).toContainText('E2E 93M has no value at budget 1,448 (it runs at budgets 1 to 256).');
+  for (const v of ['matrix', 'dist&dm=log10_fvu_val', 'dist&dm=numeric_recovery_val', 'table&rows=cats']) {   // by time, every note speaks in seconds
+    await page.goto('/explorer.html?release=2026-09&v=' + v + '&pm=time&pt=0.05');
+    await expect(page.locator(V2 + ' .v2posval')).toContainText(' s');
+    await expect(page.locator(V2 + ' .v2view')).not.toContainText(/budget t\d/);
+  }
+});
+
+test('displays that compare on finished budgets take the budget nearest the position', async ({ page }) => {
+  await page.goto('/explorer.html?release=2026-09&v=paired&r=1448&m=T8-20M,T8-120M');
+  await expect(page.locator(V2 + ' .v2view select[data-state="rung"]')).toHaveValue('1024');
+  await page.goto('/explorer.html?release=2026-09&v=ranks&x=rung&r=1448&m=T8-20M,T8-120M');
+  await expect(page.locator(V2 + ' .v2view select[data-state="rung"]')).toHaveValue('1024');
+});
+
+test('the slider is continuous, and its arrows step to the powers of two', async ({ page }) => {
+  await page.goto('/explorer.html?release=2026-09&v=matrix&m=T8-20M&r=1024');
+  const slider = page.locator(V2 + ' .v2viewbar input.v2pos'), val = page.locator(V2 + ' .v2viewbar .v2posval');
+  await slider.evaluate((el) => {   // just past 1,024: the position stays where it was put
+    const lo = +el.dataset.lo, hi = +el.dataset.hi; el.value = String(Math.log(1100 / lo) / Math.log(hi / lo));
+    el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect(val).toHaveText('1,100');
+  expect(+new URL(page.url()).searchParams.get('r')).toBeCloseTo(1100, 0);
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="larger budget"]').click();
+  await expect(val).toHaveText('2,048');
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="smaller budget"]').click();
+  await expect(val).toHaveText('1,024');
+});
+
+// ---- Shown, faded and hidden methods --------------------------------------------------------------------------------
+test('the headline shows three methods in full and fades the rest; a legend click cycles one, for this visit only', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto('/');
+  const chart = page.locator('.headline-v2 svg.v2chart').first();
+  await expect(chart).toBeVisible();
+  const item = (k) => chart.locator('[data-cycle="' + k + '"]');
+  for (const k of ['T8-120M', 'T8-120M-pysr', 'PySR']) { await expect(item(k)).toHaveAttribute('data-vis', 'full'); }
+  for (const k of ['gpgomea', 'T8-20M', 'e2e', 'T8-3M', 'nesymres-100M']) { await expect(item(k)).toHaveAttribute('data-vis', 'dim'); }
+  // a faded method: its colour blended into the background (20 %), fully opaque; a shown one: its colour
+  expect(await item('T8-20M').locator('line').getAttribute('stroke')).toMatch(/^color-mix\(in srgb, #[0-9a-f]{6} 20%, var\(--surface\)\)$/i);
+  expect(await item('T8-120M').locator('line').getAttribute('stroke')).toMatch(/^#[0-9a-f]{6}$/i);
+  // drawn behind: every faded line comes before every shown one
+  const order = await chart.evaluate((svg) => [...svg.querySelectorAll('polyline')].map((l) => l.getAttribute('stroke').startsWith('color-mix')));
+  expect(order.indexOf(false)).toBeGreaterThan(0); expect(order.lastIndexOf(true)).toBeLessThan(order.indexOf(false));
+  await item('T8-120M').click();
+  await expect(item('T8-120M')).toHaveAttribute('data-vis', 'hidden');   // gone from the plot, still in the legend
+  await item('T8-120M').click();
+  await expect(item('T8-120M')).toHaveAttribute('data-vis', 'dim');
+  await item('T8-120M').click();
+  await expect(item('T8-120M')).toHaveAttribute('data-vis', 'full');
+  await item('PySR').focus(); await page.keyboard.press('Enter');
+  await expect(item('PySR')).toHaveAttribute('data-vis', 'hidden');
+  await page.locator('.headline-v2 [data-hlreset]').click();
+  await expect(item('PySR')).toHaveAttribute('data-vis', 'full');
+  await item('PySR').click();
+  await page.reload();   // nothing is stored: a new visit starts from the default
+  await expect(page.locator('.headline-v2 svg.v2chart').first().locator('[data-cycle="PySR"]')).toHaveAttribute('data-vis', 'full');
+});
+
+test('a headline legend keeps its order while a method cycles: shown, hidden, faded and back', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto('/');
+  const charts = page.locator('.headline-v2 svg.v2chart');
+  await expect(charts.first()).toBeVisible();
+  const orders = () => charts.evaluateAll((svgs) => svgs.map((svg) => [...svg.querySelectorAll('[data-cycle]')].map((g) => g.getAttribute('data-cycle'))));
+  const before = await orders();
+  expect(before.length).toBeGreaterThan(1);
+  for (const legend of before) { expect(legend.length).toBeGreaterThan(3); }
+  // a method in the middle of every legend, so that moving it would show
+  const k = before[0][Math.floor(before[0].length / 2)];
+  const next = { full: 'hidden', hidden: 'dim', dim: 'full' };
+  let vis = await charts.first().locator('[data-cycle="' + k + '"]').getAttribute('data-vis');
+  for (let i = 0; i < 3; i++) {   // through all three states, back to where it started
+    vis = next[vis];
+    await charts.first().locator('[data-cycle="' + k + '"]').click();
+    await expect(charts.first().locator('[data-cycle="' + k + '"]')).toHaveAttribute('data-vis', vis);
+    expect(await orders()).toEqual(before);
+  }
+});
+
+test('on a phone a legend tap keeps the page where it is: the tapped name stays under the finger', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  const charts = page.locator('.headline-v2 svg.v2chart');
+  expect(await charts.count()).toBeGreaterThan(1);
+  const last = charts.nth((await charts.count()) - 1);           // a chart far below the first one
+  const item = last.locator('[data-cycle]').nth(2), k = await item.getAttribute('data-cycle');
+  await item.scrollIntoViewIfNeeded();
+  const y0 = (await item.boundingBox()).y, s0 = await page.evaluate(() => window.scrollY);
+  expect(s0).toBeGreaterThan(400);
+  await item.click();
+  const again = last.locator('[data-cycle="' + k + '"]');
+  await expect(again).toHaveAttribute('data-vis', /.+/);
+  expect(Math.abs((await again.boundingBox()).y - y0)).toBeLessThan(2);
+  expect(await page.evaluate(() => document.activeElement && document.activeElement.closest('svg') === [...document.querySelectorAll('.headline-v2 svg.v2chart')].pop())).toBe(true);
+});
+
+test('in the explorer a box cycles its method: shown, hidden, faded; the faded opacity is set beside them', async ({ page }) => {
+  await page.goto('/explorer.html?release=2026-09&v=curves&p=rung~numeric_recovery_val');
+  const box = (k) => page.locator(V2 + ' .v2methods input[type=checkbox][data-m="' + k + '"]');
+  const dash = (k) => box(k).evaluate((el) => el.indeterminate);
+  const m = () => new URL(page.url()).searchParams.get('m').split(',');
+  await expect(box('T8-120M')).toBeChecked();
+  expect(await dash('T8-20M')).toBe(true);
+  expect(m()).toContain('~T8-20M');
+  await box('T8-120M').click();
+  await expect(box('T8-120M')).not.toBeChecked(); expect(await dash('T8-120M')).toBe(false); expect(m()).not.toContain('T8-120M');
+  await box('T8-120M').click();
+  expect(await dash('T8-120M')).toBe(true); expect(m()).toContain('~T8-120M');
+  await box('T8-120M').click();
+  await expect(box('T8-120M')).toBeChecked(); expect(m()).toContain('T8-120M');
+  const keyStroke = (label) => page.locator(V2 + ' .v2main svg.v2chart').first().evaluate((svg, lab) => {
+    const t = [...svg.querySelectorAll('text.leg')].find((x) => x.textContent === lab); return t && t.previousElementSibling.getAttribute('stroke'); }, label);
+  expect(await keyStroke('Flash-ANSR T8-20M')).toMatch(/ 20%, var\(--surface\)\)$/);
+  await expect(page.locator(V2 + ' .v2meth:has(input[data-m="T8-20M"])')).toHaveClass(/v2faded/);   // the row itself is lighter
+  await page.locator(V2 + ' .v2fade').evaluate((el) => { el.value = '0.6'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+  await expect.poll(() => keyStroke('Flash-ANSR T8-20M')).toMatch(/ 60%, var\(--surface\)\)$/);
+  expect(new URL(page.url()).searchParams.get('fa')).toBe('0.6');
+  // the explorer's setting leaves the headline alone
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto('/');
+  expect(await page.locator('.headline-v2 svg.v2chart').first().locator('[data-cycle="T8-20M"] line').getAttribute('stroke')).toMatch(/ 20%, var\(--surface\)\)$/);
+});
+
+test('a link carries shown and faded methods', async ({ page }) => {
+  await page.goto('/explorer.html?release=2026-09&v=curves&m=T8-120M,~e2e');
+  await expect(page.locator(V2 + ' .v2methods input[type=checkbox][data-m="T8-120M"]')).toBeChecked();
+  expect(await page.locator(V2 + ' .v2methods input[type=checkbox][data-m="e2e"]').evaluate((el) => el.indeterminate)).toBe(true);
+  await expect(page.locator(V2 + ' .v2methods input[type=checkbox][data-m="PySR"]')).not.toBeChecked();
 });
 
 // ---- Ranks ---------------------------------------------------------------------------------------------------------
@@ -1348,7 +1600,7 @@ const PIPELINE_WORDS = [/\bcatalogs?\b/i, /\brungs?\b/i, /\bdraws? (\d|per\b|of\
   /\bmu\b/i];
 test('every text of the 2026-09 explorer uses the reader\'s words', async ({ page }) => {
   test.setTimeout(120_000);
-  const urls = ['v=curves&x=time', 'v=curves&x=rung', 'v=table&rows=rungs', 'v=table&rows=cats', 'v=matrix',
+  const urls = ['v=curves&x=time', 'v=curves&x=rung', 'v=table&rows=rungs', 'v=table&rows=cats', 'v=matrix', 'v=matrix&r=1448', 'v=table&rows=cats&r=1448', 'v=dist&pm=time&pt=2', 'v=matrix&pm=time&pt=0.5',
     'v=dist&dm=log10_fvu_val&dv=hist', 'v=dist&dm=log10_fvu_val&dv=ecdf', 'v=dist&dm=log10_fvu_val&dv=cats',
     'v=dist&dm=log10_fvu_val&dv=rungs', 'v=dist&dm=numeric_recovery_val&dv=cats', 'v=ranks&x=rung&r=16', 'v=ranks&x=time', 'v=paired', 'v=preds'];
   const found = [];
@@ -1393,7 +1645,7 @@ test('the predictions view shows one problem: its true formula, and one row per 
   });
   await page.route('**/pred/truth/feynman.0.js', (route) => route.fulfill({ contentType: 'text/javascript', body: wrap('truth|feynman|0', truth) }));
   await page.route('**/pred/T8-20M/feynman/16.1.0.js', (route) => route.fulfill({ contentType: 'text/javascript', body: wrap('T8-20M|feynman|16|1|0', preds) }));
-  await page.goto('/explorer.html?release=2026-09&v=preds&ps=feynman&r=16&pr=1&pn=1&m=T8-20M,prior');
+  await page.goto('/explorer.html?release=2026-09&v=preds&ps=feynman&r=16&pr=1&pn=1&m=T8-20M,T8-120M');
   const rows = page.locator(V2 + ' .v2predtable tbody tr');
   await expect(rows).toHaveCount(2, { timeout: 15000 });                                   // one row per shown method
   await expect(page.locator(V2 + ' .v2predtruth .katex')).toHaveCount(1);                  // the true formula, typeset
@@ -1409,6 +1661,32 @@ test('the predictions view shows one problem: its true formula, and one row per 
   await expect(page.locator(V2 + ' .v2predof')).toHaveText('of 100');
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
+  expect(errors).toEqual([]);
+});
+
+test('the true formula comes with its simplified form: different, the same, or none', async ({ page }) => {
+  const errors = collectErrors(page);
+  const wrap = (key, obj) => `window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"][${JSON.stringify(key)}]=${JSON.stringify(obj)};})();`;
+  const truth = {}, preds = {};
+  for (let i = 0; i < 100; i++) { truth[String(i)] = ['* x1 x1', 'pow x1 2']; preds[String(i)] = ['+ x1 1.5', 0]; }
+  truth['1'] = ['* x1 x2', '* x1 x2'];   // the canonical form is the stated one
+  truth['2'] = ['bad', null];            // the engine cannot read it
+  await page.route('**/data/2026-09/results.js', async (route) => {
+    const res = await route.fetch();
+    await route.fulfill({ response: res, body: (await res.text()) + ';(function(){var D=window.RESULTS_V2;D.pred={"T8-20M":{"feynman|16":[1]}};D.pred_block=500;})();' });
+  });
+  await page.route('**/pred/truth/feynman.0.js', (route) => route.fulfill({ contentType: 'text/javascript', body: wrap('truth|feynman|0', truth) }));
+  await page.route('**/pred/T8-20M/feynman/16.1.0.js', (route) => route.fulfill({ contentType: 'text/javascript', body: wrap('T8-20M|feynman|16|1|0', preds) }));
+  await page.goto('/explorer.html?release=2026-09&v=preds&ps=feynman&r=16&pr=1&pn=1&m=T8-20M');
+  const canon = page.locator(V2 + ' .v2predcanon');
+  await expect(canon.locator('.katex')).toHaveCount(1, { timeout: 15000 });               // x1*x1 -> x1^2, typeset
+  await expect(canon.locator('.v2help')).toHaveCount(1);                                  // what the form is, one ? away
+  expect(await canon.textContent()).not.toMatch(/\bcanon\b|canonical form/i);           // the reader's words, help included
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="next problem"]').click();
+  await expect(canon).toContainText('the same as stated');
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="next problem"]').click();
+  await expect(canon).toContainText('none: the engine cannot read this formula');
+  await expect(page.locator(V2 + ' .v2predtruth').first()).toContainText('bad');               // the stated formula is still shown
   expect(errors).toEqual([]);
 });
 

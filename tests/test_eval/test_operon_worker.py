@@ -103,3 +103,26 @@ def test_the_configuration_names_only_arguments_the_real_regressor_takes():
 
     accepted = set(inspect.signature(pyoperon_sklearn.SymbolicRegressor.__init__).parameters)
     assert set(w.AUTHOR_CONFIG) | {"allowed_symbols", "max_evaluations", "uncertainty", "random_state"} <= accepted
+
+
+def test_threads_are_a_resource_default_one_and_all_means_every_cpu(fake_operon):
+    import os
+    X, y = _data()
+    out = w.fit(X, y, x_val=[], variables=["v1", "v2"], meta={}, options={}, state=w.load({}))
+    assert fake_operon.instances[-1].params["n_threads"] == 1 and out["extra"]["threads"] == 1
+    state = w.load({"threads": "all", "config": {"optimizer_iterations": 5}})
+    out = w.fit(X, y, x_val=[], variables=["v1", "v2"], meta={}, options={}, state=state)
+    params = fake_operon.instances[-1].params
+    assert params["n_threads"] == len(os.sched_getaffinity(0)) == out["extra"]["threads"]
+    assert params["optimizer_iterations"] == 5 and params["population_size"] == 1000
+    assert w.load({"threads": 8})["threads"] == 8
+    for bad in (0, -1, "many", 2.5, True):
+        with pytest.raises(ValueError, match="threads"):
+            w.load({"threads": bad})
+
+
+def test_the_noise_estimate_does_not_depend_on_its_threads():
+    pytest.importorskip("sklearn")
+    X, y = _data()
+    # the same seeded forest; only the order its trees' predictions are summed in changes with the threads
+    assert w.noise_level(X, y, 7, n_jobs=1) == pytest.approx(w.noise_level(X, y, 7, n_jobs=4), rel=1e-12)

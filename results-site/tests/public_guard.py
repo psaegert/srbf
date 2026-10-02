@@ -33,11 +33,12 @@ from pathlib import Path
 from typing import Any
 
 SITE = Path(__file__).resolve().parents[1]
-PUBLIC_METHODS = {"e2e", "nesymres-100M", "PySR", "T8-3M", "T8-20M", "T8-120M", "T8-20M-pysr", "prior"}
+# T8-120M-pysr replaced T8-20M-pysr on the page (2026-09-29); the 20M hybrid stays admissible, it is public-safe.
+PUBLIC_METHODS = {"e2e", "nesymres-100M", "PySR", "operon", "gpgomea", "dsr", "udsr", "rilsrols", "qlattice", "T8-3M", "T8-20M", "T8-120M", "T8-120M-pysr", "T8-20M-pysr"}
 # Methods with results that are withheld from the public page: the key checks below catch their keys, these their names
-# in the texts. None at present (T8-20M-pysr was withheld 2026-09-28 until its re-run under the two-part code; that
-# re-run is what the page now shows).
-WITHHELD_NAMES: dict[str, str] = {}
+# in the texts. The Flash-ANSR prior is private since 2026-09-30 (owner: "hidden from the site ... private with a key");
+# it lives in the sealed overlay. (T8-20M-pysr was withheld 2026-09-28 until its re-run under the two-part code.)
+WITHHELD_NAMES: dict[str, str] = {r"Flash-ANSR prior": "the prior is private: sealed overlay only (owner 2026-09-30)"}
 # the metric floor: the site's first release's 21 metrics under the schema-2 keys (symbolic_recovery there = skeleton_match_raw here,
 # prediction_success_rate = success), plus the release's own headline metrics
 REQUIRED_METRICS = {

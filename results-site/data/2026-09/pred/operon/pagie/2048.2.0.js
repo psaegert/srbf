@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|pagie|2048|2|0"]={"0":["+ 1.105 * 1.643 abs tanh abs tan / * * -0.01861 x2 * 2.135 x1 rootn 0.9246 2",0]};})();

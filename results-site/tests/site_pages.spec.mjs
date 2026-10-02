@@ -14,10 +14,11 @@ function collectErrors(page) {
 // the header names the pages; Docs, GitHub and PyPI have one place, the footer of every page. The Ranks and Paired
 // pages explain two of the explorer's displays and are reached from those displays (owner 2026-09-26), not the header.
 // The home page is the brand's link; Explorer is the explorer's page.
-const NAV = [['explorer.html', 'Explorer'], ['progress.html', 'Progress'], ['guide.html', 'How to read'], ['metrics.html', 'Metrics']];
+const NAV = [['explorer.html', 'Explorer'], ['progress.html', 'Progress'], ['guide.html', 'How to read'], ['metrics.html', 'Metrics'],
+  ['reproductions.html', 'Reproductions']];
 const FOOTER = ['https://srbf.readthedocs.io/', 'https://github.com/psaegert/srbf', 'https://pypi.org/project/srbf/', 'privacy.html'];
 const PAGES = [['/', null], ['/explorer.html', 'Explorer'], ['/progress.html', 'Progress'], ['/guide.html', 'How to read'], ['/metrics.html', 'Metrics'],
-  ['/ranks.html', null], ['/paired.html', null], ['/privacy.html', null]];
+  ['/reproductions.html', 'Reproductions'], ['/ranks.html', null], ['/paired.html', null], ['/privacy.html', null]];
 
 for (const [url, current] of PAGES) {
   test(`${url}: the one navigation, this page marked in it, one title, nothing wider than the screen`, async ({ page }) => {
@@ -153,5 +154,52 @@ test('the guide opens with the protocol, in the release\'s own words, and its li
   for (const href of await page.locator('#protocol a[href^="#"]').evaluateAll((as) => as.map((a) => a.getAttribute('href')))) {
     await expect(page.locator(href + ' > h3'), href).toHaveCount(1);
   }
+  expect(errors).toEqual([]);
+});
+
+// The Reproductions page (owner 2026-10-01): srbf's runs of each method next to the results its own publications
+// report, one exact two-sided test per row; scripts/site_reproductions.py writes the rows from data/reproductions.yaml.
+test('the Reproductions page: one card per method, its paper first, then each comparison with p, the published side and srbf after it', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/reproductions.html');
+  const compared = page.locator('#compared article.repro-card');
+  expect(await compared.locator('.repro-head h3').allTextContents()).toEqual(['E2E', 'GP-GOMEA', 'NeSymReS', 'Operon', 'QLattice', 'RILS-ROLS']);
+  expect(await page.locator('#not-compared article.repro-card .repro-head h3').allTextContents()).toEqual(['DSR', 'PySR', 'uDSR*']);
+  for (const card of await page.locator('article.repro-card').all()) {
+    await expect(card.locator('.repro-paper a[href^="https://"]')).toHaveCount(1);                 // the method's own paper, linked
+    await expect(card.locator('.repro-byline')).toHaveText(/ · /);                                  // its authors and venue
+    expect(await card.locator('.repro-results-src a[href^="https://"]').count()).toBeLessThanOrEqual(1);   // where the numbers come from, when elsewhere
+  }
+  // the results source is set smaller than the paper it accompanies
+  const size = (sel) => page.locator(sel).first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+  expect(await size('#repro-operon .repro-results-src')).toBeLessThan(await size('#repro-operon .repro-paper'));
+  for (const card of await compared.all()) {
+    for (const row of await card.locator('.repro-comparison').all()) {
+      await expect(row.locator('.repro-verdict')).toHaveText(/^p = (< 0\.001|0\.\d+|1\.00)( and (< 0\.001|0\.\d+|1\.00))? (No significant difference\.|srbf's (runs succeed (less|more) often than the published ones|fits score (lower|higher) than the published fits)\.)$/);
+      const cells = await row.locator('tbody tr').evaluateAll((trs) => trs.map((tr) => [tr.querySelector('th').textContent, tr.querySelector('td:last-child').textContent]));
+      expect(cells[0][0]).toBe('Published');
+      expect(cells.length).toBeGreaterThan(1);
+      for (const [, p] of cells.slice(1)) { expect(p).toMatch(/^(< 0\.001|0\.\d+|1\.00)$/); }   // every srbf run has its p
+      expect(await row.locator('.repro-side h5').allTextContents()).toEqual(['Published', 'srbf']);   // the published side first
+      // where the published number comes from sits with the published side: the publication's figure or table, or the pinned file and the computation
+      expect(await row.locator('.repro-published .repro-sources img, .repro-published .repro-sources pre').count()).toBeGreaterThan(0);
+      await expect(row.locator('.repro-srbf .repro-sources')).toHaveCount(0);
+      for (const img of await row.locator('.repro-sources img').all()) {
+        await img.scrollIntoViewIfNeeded();
+        await expect.poll(() => img.evaluate((el) => el.complete && el.naturalWidth > 0)).toBe(true);
+      }
+    }
+  }
+  // a difference has its explanation next to it, and its headline stands out
+  for (const row of await page.locator('.repro-comparison').all()) {
+    if ((await row.locator('.repro-verdict').getAttribute('data-differs')) === '1') {
+      await expect(row.locator('.repro-note')).toHaveCount(1);
+      await expect(row.locator('.repro-verdict-text')).toHaveText(/^srbf's /);
+    }
+  }
+  // cards are set apart: space between them
+  const [a, b] = await compared.evaluateAll((els) => els.slice(0, 2).map((el) => el.getBoundingClientRect()));
+  expect(b.top - a.bottom).toBeGreaterThanOrEqual(24);
+  await expect(page.locator('#how h2')).toHaveText('How to read the comparisons');
   expect(errors).toEqual([]);
 });

@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|pagie|1024|1|0"]={"0":["+ -3.153 * 3.663 / tanh abs cosh * -1.223 x1 pow tan 0.549 exp -0.5299",0]};})();

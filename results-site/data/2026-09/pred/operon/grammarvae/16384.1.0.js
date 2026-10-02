@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|grammarvae|16384|1|0"]={"0":["+ 1.225 * 1.013 - * / 1.341 1.197 * 0.8714 x1 cos cos pow rootn tanh abs -0.2605 3 cos tan * -0.5507 x1",0]};})();

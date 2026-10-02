@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["rilsrols|meier|1024|1|0"]={"0":["+ 0.1334 * 1.504e-13 exp * * -36.83 pow x1 3 x2",0],"1":["/ * 1 pow x1 5 pow x2 3",1]};})();

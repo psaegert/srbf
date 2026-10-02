@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["dsr|sine|2000|2|0"]={"0":["sin + + + * inv exp + * x1 + -1.98 x1 x1 * x1 x1 -0.05048 -0.05048 x1",0]};})();

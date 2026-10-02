@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|pagie|262144|1|0"]={"0":["+ -2.143 * 1.306 + atan cosh sinh * 1.234 x1 atan cosh sinh * 1.234 x2",0]};})();

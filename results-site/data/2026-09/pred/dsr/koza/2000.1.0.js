@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["dsr|koza|2000|1|0"]={"0":["inv / abs pow pow + pow * 0.8665 pow x1 3 2 1.029 4 3 x1",0],"1":["pow * abs sin x1 - 0.3214 tan neg - 0.9097 pow x1 2 3",0]};})();

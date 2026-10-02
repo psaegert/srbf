@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|pagie|4096|2|0"]={"0":["+ -0.177 * 1.305 abs atan * * -1.356 x2 * 1.835 x1",0]};})();

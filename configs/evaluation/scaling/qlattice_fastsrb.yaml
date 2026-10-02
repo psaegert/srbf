@@ -1,0 +1,31 @@
+# QLattice on FastSRB along its epoch budget, 1 epoch up to about 100 s per problem on the reference machine (PROVISIONAL: the
+# rung times are estimated from a local machine, not yet measured on the reference machine): feyn 3.5.0 in its authors'
+# SRBench configuration (see srbf/worker/models/qlattice_worker.py and docs/models.md), run in an environment of its own:
+#   scripts/envs/build_qlattice_env.sh {{ROOT}}/envs/qlattice
+run:
+  data_source:
+    catalog: fastsrb
+    sampling:
+      n_support: 512
+      n_validation: 512
+      noise: 0.0
+      problems_per_expression: 1
+  model_adapter:
+    type: subprocess
+    worker: qlattice
+    python: '{{ROOT}}/envs/qlattice/bin/python'
+    config_provenance: author_blessed
+    simplipy_engine: acj-5-4-llm
+    timeout: 7200
+    options:
+      threads: all              # every method gets the whole reference machine (owner 2026-09-30)
+      n_epochs: !sweep
+        name: ladder
+        values: [1, 2, 4, 8, 16]
+  runner:
+    limit: null
+    save_every: 8
+    resume: true
+    output: !sweep
+      name: ladder
+      values: ['{{ROOT}}/results/evaluation/scaling/qlattice/fastsrb/epochs_00001.pkl', '{{ROOT}}/results/evaluation/scaling/qlattice/fastsrb/epochs_00002.pkl', '{{ROOT}}/results/evaluation/scaling/qlattice/fastsrb/epochs_00004.pkl', '{{ROOT}}/results/evaluation/scaling/qlattice/fastsrb/epochs_00008.pkl', '{{ROOT}}/results/evaluation/scaling/qlattice/fastsrb/epochs_00016.pkl']
