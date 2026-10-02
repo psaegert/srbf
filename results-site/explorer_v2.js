@@ -122,12 +122,13 @@
   // A method drawn in the page's ink (the oracle) follows the theme: black on the light page, white on the dark one.
   function ink() { var v = window.getComputedStyle(document.documentElement).getPropertyValue("--ink"); return (v && v.trim()) || "#000000"; }
   // Three states per method (owner 2026-10-01): shown, faded, hidden. The headline starts every visit at its own default
-  // -- the four methods below shown, every other one faded -- and a click on a name in its legend cycles that method,
-  // shown -> hidden -> faded -> shown; nothing of it is stored. The explorer keeps its own states, in its method boxes
-  // (the same cycle), with an adjustable strength for the faded ones, and leaves the headline alone. A faded method is
-  // drawn in its colour blended into the chart's background (so 20 % of the colour, 80 % background), still opaque: an
-  // overlap of its own line and points does not darken, and it is drawn behind every shown method.
-  var FULL_DEFAULT = ["T8-120M", "T8-120M-pysr", "PySR", "gpgomea"], HL_FADE = 0.2, FADE_DEFAULT = 0.2;
+  // -- the three methods below shown, every other one faded (GP-GOMEA too since 2026-10-02) -- and a click on a name in
+  // its legend cycles that method, shown -> hidden -> faded -> shown; nothing of it is stored. The explorer keeps its
+  // own states, in its method boxes (the same cycle), with an adjustable strength for the faded ones, and leaves the
+  // headline alone. A faded method is drawn in its colour blended into the chart's background (so 20 % of the colour,
+  // 80 % background), still opaque: an overlap of its own line and points does not darken, and it is drawn behind every
+  // shown method.
+  var FULL_DEFAULT = ["T8-120M", "T8-120M-pysr", "PySR"], HL_FADE = 0.2, FADE_DEFAULT = 0.2;
   var hlVis = {}, HL_DRAWING = false;
   function hlVisOf(k) { return hlVis[k] || (FULL_DEFAULT.indexOf(k) >= 0 ? "full" : "dim"); }
   function exVisOf(k) { return state.methods.indexOf(k) < 0 ? "hidden" : (state.dim || []).indexOf(k) >= 0 ? "dim" : "full"; }
@@ -161,7 +162,7 @@
       impute: true };
   };
   var state = DEFAULTS();
-  var LS = "srbf-v2-" + REL + ".10";   // bumped whenever a default changes (.10 shown, faded and hidden methods; .2 time axis, .3 mean, .4 bands, .5 per-view metrics, .6 complete pools only, .7 hollow markers, .8 failed predictions counted or left out, .9 methods marked off start unchecked), so a saved state cannot pin the old one
+  var LS = "srbf-v2-" + REL + ".11";   // bumped whenever a default changes (.11 GP-GOMEA faded by default; .10 shown, faded and hidden methods; .2 time axis, .3 mean, .4 bands, .5 per-view metrics, .6 complete pools only, .7 hollow markers, .8 failed predictions counted or left out, .9 methods marked off start unchecked), so a saved state cannot pin the old one
   var rungChosen = false;   // a budget from a link or from storage is kept; otherwise the first render picks one that has data
   function loadState() {
     try { var s = JSON.parse(localStorage.getItem(LS) || "null"); if (s) { rungChosen = s.rung !== undefined; Object.keys(state).forEach(function (k) { if (s[k] !== undefined) { state[k] = s[k]; } }); } } catch (e) { /* no storage */ }
