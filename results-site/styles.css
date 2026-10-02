@@ -622,3 +622,5 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 .explorer-v2 .v2linkbtn { font: inherit; color: var(--accent); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .v2ctip { pointer-events: none; max-width: 26rem; }
 .explorer-v2 .v2ccorner { stroke: var(--line); stroke-width: 1; }
+.explorer-v2 .v2cpanel { margin: 0; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; gap: 6px; }   /* the charts line up whatever their names wrap to */
+.explorer-v2 .v2cpanelname { font-size: 15px; font-weight: 600; color: var(--ink); text-wrap: balance; padding: 0 4px; }

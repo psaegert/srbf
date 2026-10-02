@@ -2046,10 +2046,10 @@
   function binsOf(Ax, px) { var span = Ax.hi - Ax.lo; if (Ax.sp.int && span <= 64) { return Math.max(1, Math.round(span)); } return Math.max(12, Math.min(60, Math.round(px / 8))); }
   function corrHeat(clouds, ws, A, B, st) {
     var nr = narrow(), avail = wideWidth(), gapW = 16, cols = Math.max(1, Math.min(3, clouds.length, Math.floor((avail + gapW) / (280 + gapW))));
-    var W = Math.floor((avail - gapW * (cols - 1)) / cols), H = Math.round(Math.max(260, Math.min(420, W * 0.85))) + 26;
+    var W = Math.floor((avail - gapW * (cols - 1)) / cols), H = Math.round(Math.max(250, Math.min(400, W * 0.85)));
     var surf = hexRGB(cssVar("--surface")), panels = [], top = 0, stop = 0;
     clouds.forEach(function (cl, j) {
-      var f = corrFrame(W, H, A, B, st.has, { top: 40, left: nr ? 48 : 58 }), nx = binsOf(A, f.x1 - f.x0), ny = binsOf(B, f.y1 - f.y0);
+      var f = corrFrame(W, H, A, B, st.has, { top: 12, left: nr ? 48 : 58 }), nx = binsOf(A, f.x1 - f.x0), ny = binsOf(B, f.y1 - f.y0);
       var cells = new Float64Array(nx * ny), strips = { xl: new Float64Array(ny), xh: new Float64Array(ny), yl: new Float64Array(nx), yh: new Float64Array(nx) }, corner = { ll: 0, lh: 0, hl: 0, hh: 0 }, ca = cl.cols[A.k], cb = cl.cols[B.k], w = ws[j].w;
       var bx = function (v) { return Math.min(nx - 1, Math.max(0, Math.floor((v - A.lo) / (A.hi - A.lo) * nx))); }, by = function (v) { return Math.min(ny - 1, Math.max(0, Math.floor((v - B.lo) / (B.hi - B.lo) * ny))); };
       for (var i = 0; i < cl.n; i++) { if (!(w[i] > 0)) { continue; } var px = ppPlace(A, ca[i]), py = ppPlace(B, cb[i]);
@@ -2069,14 +2069,15 @@
         if (pt.x >= f.x0 && pt.x <= f.x1 && pt.y >= f.y0 && pt.y <= f.y1) { var xb = Math.min(P.nx - 1, Math.floor((pt.x - f.x0) / cw)), yb = Math.min(P.ny - 1, Math.floor((f.y1 - pt.y) / ch)), v = P.cells[yb * P.nx + xb];
           var x0 = A.lo + xb * (A.hi - A.lo) / P.nx, x1 = x0 + (A.hi - A.lo) / P.nx, y0 = B.lo + yb * (B.hi - B.lo) / P.ny, y1 = y0 + (B.hi - B.lo) / P.ny;
           txt = P.cl.m.label + ": " + A.m.short + " " + vText(A, x0) + " to " + vText(A, x1) + ", " + B.m.short + " " + vText(B, y0) + " to " + vText(B, y1) + ": " + (100 * v).toFixed(2) + " % of its runs"; }
-        return txt ? { text: txt } : null; }) + '"><text x="' + f.x0 + '" y="' + TITLE_Y + '" class="ct">' + esc(corrLabel(P.cl)) + "</text>" + frameSVG(f, st.labels);
+        return txt ? { text: txt } : null; }) + '">' + frameSVG(f, st.labels);
       if (href) { s += '<image href="' + href + '" x="' + f.x0 + '" y="' + f.y0 + '" width="' + (f.x1 - f.x0) + '" height="' + (f.y1 - f.y0) + '" preserveAspectRatio="none"/>'; }
       ["xl", "xh", "yl", "yh"].forEach(function (k) { if (!f.has[k]) { return; } var arr = P.strips[k], n = arr.length, vert = k.charAt(0) === "x";
         for (var b = 0; b < n; b++) { if (!(arr[b] > 0)) { continue; } var c = rgbCss(shade(arr[b], stop)), lab = esc(P.cl.m.label + ": " + (100 * arr[b]).toFixed(2) + " % of its runs in this cell of the strip");
           if (vert) { var sx = k === "xl" ? f.sxl[0] : f.sxh[0], y1b = f.y1 - b * ch; s += '<rect x="' + sx.toFixed(1) + '" y="' + (y1b - ch).toFixed(1) + '" width="' + f.ST + '" height="' + (ch + 0.4).toFixed(1) + '" fill="' + c + '"><title>' + lab + "</title></rect>"; }
           else { var sy = k === "yl" ? f.syl[0] : f.syh[0]; s += '<rect x="' + (f.x0 + b * cw).toFixed(1) + '" y="' + sy.toFixed(1) + '" width="' + (cw + 0.4).toFixed(1) + '" height="' + f.ST + '" fill="' + c + '"><title>' + lab + "</title></rect>"; } } });
       s += cornersSVG(f, P.corner, function (v) { return rgbCss(shade(v, stop)); }, function (v) { return P.cl.m.label + ": " + (100 * v).toFixed(2) + " % of its runs in both strips"; });
-      return s + "</svg>";
+      // the panel's name is HTML above the chart, so that a long one wraps instead of running off the frame
+      return '<figure class="v2cpanel"><figcaption class="v2cpanelname">' + esc(corrLabel(P.cl)) + "</figcaption>" + s + "</svg></figure>";
     }).join("");
     return '<div class="v2cpanels" style="grid-template-columns:repeat(' + cols + ', minmax(0, 1fr))">' + out + "</div>" +
       '<p class="v2hint">Colour: the share of the method’s runs in each cell, on a square-root scale, the same in every panel; the darkest cell holds ' + (100 * top).toFixed(1) + " % of a method’s runs. " + term("strips", "The strips along the frame") + " have a scale of their own" + (stop > 0 ? " (darkest: " + (100 * stop).toFixed(1) + " %)" : "") + ". " + term("weights", "How the runs are weighted") + ".</p>";
