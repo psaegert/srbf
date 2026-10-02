@@ -297,6 +297,7 @@ def _subprocess_common_kwargs(config: Mapping[str, Any]) -> dict[str, Any]:
         hang_overdue_floor_s=coerce_float(config.get("hang_overdue_floor_s", 60.0), "model_adapter.hang_overdue_floor_s"),
         hang_overdue_min_history=int(config.get("hang_overdue_min_history", 10)),
         hang_log=substitute_root_path(str(config["hang_log"])) if config.get("hang_log") else None,
+        selection=config.get("selection"),
     )
 
 

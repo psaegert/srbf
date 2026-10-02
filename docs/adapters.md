@@ -61,7 +61,7 @@ library only and runs on Python 3.8 and newer.
 
 ### What `fit` returns
 
-A dict with at least `expression`, or with `error`:
+A dict with at least `expression`, `candidates` or `error`:
 
 | key | meaning |
 |---|---|
@@ -71,6 +71,7 @@ A dict with at least `expression`, or with `error`:
 | `fit_time` | seconds. Without it, the time around the call to `fit` is taken; the protocol and srbf's own work are never part of it |
 | `extra` | a dict of anything JSON can hold, merged into the result row: a Pareto front, diagnostics. A key that a row already has is kept under `worker_extra` instead |
 | `error` | a message. The problem counts as failed and the worker goes on with the next one |
+| `candidates` | instead of `expression`, for a method that ends with several expressions and no rule of its own for picking one, such as a hall of fame: a list of infix strings. srbf picks one only when the config sets `selection`; otherwise the problem counts as failed |
 
 An exception in `fit` is recorded as that problem's error, with its traceback, and the worker stays
 up. Whatever the worker prints goes to its log file and never into the protocol. What `info`
@@ -149,6 +150,17 @@ complete config and the job array that runs it.
 | `startup_timeout` | `600` | seconds the worker may take to start and run `load` |
 | `timeout` | none | seconds one `fit` may take. When it passes, the worker is stopped, the problem is recorded as an error and a new worker is started |
 | `max_restarts` | `1` | how many crashes or timeouts a run survives. After that every remaining problem is recorded as an error |
+| `selection` | none | how to pick one of a worker's `candidates`. `{mode: mdl}` takes the shortest two-part code, the rule Flash-ANSR ranks its own candidates by (below) |
+
+**Picking among candidates.** With `selection: {mode: mdl}`, srbf evaluates every candidate as the
+worker returned it on the support points and scores it by the two-part code: the support points coded
+under the candidate's residual variance, (n/2) log2 FVU for n finite points, plus the candidate's own
+description length in bits, as the judge's engine prices it. The candidate with the shortest code is
+the prediction. A candidate that fits better than float64 precision counts as fitting to that
+precision, so between two such candidates the shorter one wins. A candidate the engine cannot read,
+evaluate or price is never picked. The row keeps every candidate with its FVU, bits and score under
+`selection`, and the time the choice took is part of `fit_time` (`worker_fit_time` is the worker's
+own).
 
 **Searches that stall.** Two optional policies stop a fit that hangs; both are off unless you set
 them. A search that hangs usually still burns a CPU thread, so it only shows in the time it takes.
