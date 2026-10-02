@@ -311,6 +311,10 @@ The configuration is TiSR's own defaults at that commit:
 - an expression seen recently is rejected with probability 0.9;
 - the hall of fame on the weighted squared error and a weighted node count.
 
+On a system whose `libstdc++` is older than Julia 1.12 needs (`GLIBCXX_3.4.26`, missing on RHEL 8 and its
+relatives), put Julia's own first for the worker: `env: {LD_LIBRARY_PATH: <prefix>/julia-1.12.7/lib/julia}` in the
+config. Without it juliacall loads the system's and stops with "version `GLIBCXX_3.4.26' not found".
+
 srbf sets the operators, the budget (a number of generations), the seed and the threads. TiSR runs on one thread
 unless it is told otherwise; given more, it breeds and fits the islands of a generation in parallel, as its
 documentation describes, and the benchmark gives it the whole machine (`threads: all`). BLAS stays at one thread so

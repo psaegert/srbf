@@ -74,7 +74,9 @@ export JULIA_CONDAPKG_BACKEND=Null
 
 echo ">>> smoke fit through juliacall"
 cd "$PREFIX"
-"$PREFIX/bin/python" - "$HERE/../../src/srbf/worker/models/tisr_worker.py" <<'EOF'
+# Julia's own libstdc++ first: where the system's is older than Julia 1.12 needs (GLIBCXX_3.4.26; RHEL 8, for one),
+# juliacall would load the system's and fail. A config whose worker runs here sets the same in its `env`.
+LD_LIBRARY_PATH="$PREFIX/julia-$JULIA_VERSION/lib/julia${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" "$PREFIX/bin/python" - "$HERE/../../src/srbf/worker/models/tisr_worker.py" <<'EOF'
 import importlib.util
 import sys
 
