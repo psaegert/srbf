@@ -472,6 +472,39 @@ test('a method is added with its key, and a key that does not fit adds nothing',
   expect(errors).toEqual([]);
 });
 
+// two overlays sealed under two keys into one file (tools/seal.mjs --source ... --source ...)
+const FIXTURE_TWO_KEY = 'a-second-fixture-key-for-the-tests';
+const FIXTURE_TWO = readFileSync(new URL('./fixtures/sealed_two_fixture.js', import.meta.url), 'utf8');
+
+test('each key opens its own sealed overlay and no other, and the page remembers both', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.addInitScript({ content: FIXTURE_TWO });
+  await page.goto('/explorer.html?release=2026-09&v=curves');
+  const methods = page.locator(V2 + ' .v2methods .v2meth');
+  await expect(methods.first()).toBeVisible();
+  const before = await methods.count();
+  const one = page.locator(V2 + ' .v2methods input[type=checkbox][data-m="fixture-method"]');
+  const two = page.locator(V2 + ' .v2methods input[type=checkbox][data-m="fixture-method-two"]');
+  await page.locator(V2 + ' .v2addmopen').click();
+  // the second key opens the second overlay only
+  await page.locator(V2 + ' .v2addmkey').fill(FIXTURE_TWO_KEY);
+  await page.locator(V2 + ' [data-act="add-method-go"]').click();
+  await expect(two).toBeChecked({ timeout: 20000 });
+  expect(await one.count(), 'a key opens only its own overlay').toBe(0);
+  expect(await methods.count()).toBe(before + 1);
+  // the first key, which a page with one sealed payload has always read, opens the first only
+  await page.locator(V2 + ' .v2addmopen').click();
+  await page.locator(V2 + ' .v2addmkey').fill(FIXTURE_KEY);
+  await page.locator(V2 + ' [data-act="add-method-go"]').click();
+  await expect(one).toBeChecked({ timeout: 20000 });
+  expect(await methods.count()).toBe(before + 2);
+  // both keys are remembered for the session, and both overlays come back on a reload
+  await page.reload();
+  await expect(one).toBeAttached({ timeout: 20000 });
+  await expect(two).toBeAttached({ timeout: 20000 });
+  expect(errors).toEqual([]);
+});
+
 test('an untimed method leaves the time axis standing and is named under it', async ({ page }) => {
   const errors = collectErrors(page);
   await page.addInitScript({ content: FIXTURE });

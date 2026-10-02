@@ -266,39 +266,68 @@
   function pairedOf() { var Pd = window.RESULTS_V2_PAIRED && window.RESULTS_V2_PAIRED[REL]; return Pd || null; }
 
   // ---- adding a method from a key ---------------------------------------------------------------------------------
-  // A release may ship one sealed payload next to the public ones. It holds the same kind of payload scripts as the
+  // A release may ship sealed payloads next to the public ones. Each holds the same kind of payload scripts as the
   // rest of the release -- an overlay, its histograms and its paired contrasts -- gzipped and encrypted with
-  // AES-256-GCM under a key derived by PBKDF2-HMAC-SHA256. The key is not in this repository and nothing here
-  // derives it; the payload is fetched only when someone asks for it, and a key that does not open it leaves the
-  // page exactly as it was. What the page shows without it is complete on its own terms.
-  var sealedAsked = false;
+  // AES-256-GCM under a key derived by PBKDF2-HMAC-SHA256, each under a key of its own (tools/seal.mjs). No key is in
+  // this repository and nothing here derives one; the payloads are fetched only when someone asks, a key is tried on
+  // every one, and a key that opens none leaves the page exactly as it was. What the page shows without them is
+  // complete on its own terms.
+  var sealedLoaded = false, sealedWaiting = null;
   function bytesOf(b64) { var s = atob(b64), u = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) { u[i] = s.charCodeAt(i); } return u; }
-  function withSealed(cb) {
-    if (sealedAsked || window.RESULTS_V2_SEALED) { cb(); return; }
-    sealedAsked = true;
+  function withSealed(cb) {   // cb once the sealed payloads are here (or known to be absent); callers queue meanwhile
+    if (sealedLoaded || window.RESULTS_V2_SEALED) { cb(); return; }
+    if (sealedWaiting) { sealedWaiting.push(cb); return; }
+    sealedWaiting = [cb];
+    var done = function () { sealedLoaded = true; var w = sealedWaiting; sealedWaiting = null; w.forEach(function (f) { f(); }); };
     var sc = document.createElement("script"); sc.src = D.base + "sealed.js"; sc.async = true;
-    sc.onload = cb; sc.onerror = cb; document.head.appendChild(sc);
+    sc.onload = done; sc.onerror = done; document.head.appendChild(sc);
+  }
+  function envelopes() {   // the first where a single one has always been, the others after it
+    var S = window.RESULTS_V2_SEALED, M = window.RESULTS_V2_SEALED_MORE;
+    return [S && S[REL]].concat((M && M[REL]) || []).filter(Boolean);
+  }
+  function openOne(env, key, subtle) {   // -> the payload's source, or null when the key does not open it
+    return subtle.importKey("raw", new TextEncoder().encode(key), "PBKDF2", false, ["deriveKey"])
+      .then(function (base) {
+        return subtle.deriveKey({ name: "PBKDF2", salt: bytesOf(env.salt), iterations: env.iter, hash: "SHA-256" },
+          base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+      })
+      .then(function (k) { return subtle.decrypt({ name: "AES-GCM", iv: bytesOf(env.iv) }, k, bytesOf(env.ct)); })
+      .then(function (gz) { return new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream("gzip"))).text(); })
+      .catch(function () { return null; });   // a key that does not fit is not told apart from a release without one
   }
   function openWithKey(key) {   // -> the keys of the methods it added, or [] when nothing opened
     return new Promise(function (res) { withSealed(res); }).then(function () {
-      var S = window.RESULTS_V2_SEALED, env = S && S[REL];
-      var subtle = window.crypto && window.crypto.subtle;
-      if (!env || !subtle || typeof DecompressionStream === "undefined") { return []; }
-      return subtle.importKey("raw", new TextEncoder().encode(key), "PBKDF2", false, ["deriveKey"])
-        .then(function (base) {
-          return subtle.deriveKey({ name: "PBKDF2", salt: bytesOf(env.salt), iterations: env.iter, hash: "SHA-256" },
-            base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
-        })
-        .then(function (k) { return subtle.decrypt({ name: "AES-GCM", iv: bytesOf(env.iv) }, k, bytesOf(env.ct)); })
-        .then(function (gz) { return new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream("gzip"))).text(); })
-        .then(function (src) {
-          (new Function(src))();   // the payload scripts, run exactly as a <script> tag would run them
-          var added = mergeOverlay(window.RESULTS_V2_PRIVATE, false);
-          added.forEach(function (k2) { byKey[k2] = true; if (state.methods.indexOf(k2) < 0) { state.methods.push(k2); } });
-          return added;
-        })
-        .catch(function () { return []; });   // a key that does not fit is not told apart from a release without one
+      var subtle = window.crypto && window.crypto.subtle, envs = envelopes();
+      if (!envs.length || !subtle || typeof DecompressionStream === "undefined") { return []; }
+      return Promise.all(envs.map(function (env) { return openOne(env, key, subtle); })).then(function (sources) {
+        var added = [];
+        sources.forEach(function (src) {   // one payload at a time: each sets RESULTS_V2_PRIVATE and is merged at once
+          if (src == null) { return; }
+          try {
+            (new Function(src))();   // the payload scripts, run exactly as a <script> tag would run them
+            added = added.concat(mergeOverlay(window.RESULTS_V2_PRIVATE, false));
+          } catch (e) { /* a payload that does not run adds nothing */ }
+        });
+        added.forEach(function (k2) { byKey[k2] = true; if (state.methods.indexOf(k2) < 0) { state.methods.push(k2); } });
+        return added;
+      });
     });
+  }
+  // The keys that opened something, remembered for this browser session (the first version kept one, as srbf.k).
+  function savedKeys() {
+    var out = [];
+    try {
+      out = JSON.parse(window.sessionStorage.getItem("srbf.keys") || "[]") || [];
+      var one = window.sessionStorage.getItem("srbf.k");
+      if (one && out.indexOf(one) < 0) { out.push(one); }
+    } catch (e) { /* storage off */ }
+    return out;
+  }
+  function saveKey(key) {
+    var keys = savedKeys();
+    if (keys.indexOf(key) < 0) { keys.push(key); }
+    try { window.sessionStorage.setItem("srbf.keys", JSON.stringify(keys)); window.sessionStorage.removeItem("srbf.k"); } catch (e) { /* storage off */ }
   }
   function labelsOf(keys) {
     return keys.map(function (k) { var m = D.methods.filter(function (x) { return x.key === k; })[0]; return m ? m.label : k; }).join(", ");
@@ -308,7 +337,7 @@
     if (msg && !quiet) { msg.textContent = "checking…"; }
     openWithKey(key).then(function (added) {
       if (added.length) {
-        try { window.sessionStorage.setItem("srbf.k", key); } catch (e) { /* storage off */ }
+        saveKey(key);
         shell(); render();
         var after = root.querySelector(".v2addmmsg");
         if (after && !quiet) { after.textContent = "Added " + labelsOf(added) + "."; }
@@ -1930,6 +1959,6 @@
   // the explorer on load: it is the top of its own page, and the address carries the state after every change, so a
   // reload scrolled the release's title under the sticky navigation bar.)
   if (root) {
-    try { var saved = window.sessionStorage.getItem("srbf.k"); if (saved) { tryKey(saved, true); } } catch (e) { /* storage off */ }
+    savedKeys().forEach(function (k) { tryKey(k, true); });
   }
 })();

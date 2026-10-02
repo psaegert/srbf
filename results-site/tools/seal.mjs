@@ -1,6 +1,13 @@
 // Seal a directory of payload scripts into one encrypted file the page can open with a key.
 //
 //   SRBF_SEAL_KEY='<key>' node tools/seal.mjs <release> [<source dir>] [<out file>]
+//   node tools/seal.mjs <release> --source <dir>=<ENV VAR> [--source <dir>=<ENV VAR> ...] [--out <out file>]
+//
+// The second form seals several directories, each under the key in its own environment variable, into one file: a
+// key opens its own directory's methods and no other. The first source goes where a page reads a single sealed
+// payload (RESULTS_V2_SEALED[release]), the others into RESULTS_V2_SEALED_MORE[release]; the page tries a key on
+// every one of them. The further envelopes are written FIRST and the first one last, so that a page or a public guard
+// that knows only RESULTS_V2_SEALED reads the file exactly as before.
 //
 // The source files are ordinary payload scripts -- the same `window.NAME = ...` / IIFE files the public release is
 // made of. They are concatenated verbatim, never parsed: this tool does not read what is in them, and the page runs
@@ -38,26 +45,39 @@ async function seal(plain, passphrase) {
   return { v: 1, kdf: "PBKDF2-SHA256", iter: ITERATIONS, salt: b64(salt), iv: b64(iv), ct: b64(ct) };
 }
 
-const [release, srcArg, outArg] = process.argv.slice(2);
-if (!release) {
-  console.error("usage: SRBF_SEAL_KEY='<key>' node tools/seal.mjs <release> [src] [out]");
-  process.exit(2);
+const USAGE = "usage: SRBF_SEAL_KEY='<key>' node tools/seal.mjs <release> [src] [out]\n" +
+  "       node tools/seal.mjs <release> --source <dir>=<ENV VAR> [--source <dir>=<ENV VAR> ...] [--out <file>]";
+const args = process.argv.slice(2);
+const release = args[0];
+if (!release || release.startsWith("--")) { console.error(USAGE); process.exit(2); }
+// [directory, the environment variable that holds its key]
+let sources, outArg;
+if (args.includes("--source")) {
+  sources = [];
+  for (let i = 1; i < args.length; i++) {
+    const v = args[i + 1];
+    if (args[i] === "--source" && v && v.includes("=")) { sources.push([v.slice(0, v.lastIndexOf("=")), v.slice(v.lastIndexOf("=") + 1)]); i++; }
+    else if (args[i] === "--out" && v) { outArg = v; i++; }
+    else { console.error(USAGE); process.exit(2); }
+  }
+} else {
+  sources = [[args[1] || join(SITE, "private", release), "SRBF_SEAL_KEY"]];
+  outArg = args[2];
 }
-const passphrase = process.env.SRBF_SEAL_KEY;
-if (!passphrase || passphrase.length < 16) {
-  console.error("SRBF_SEAL_KEY is missing or shorter than 16 characters.\n" +
-    "The sealed file is public, so the key is the only thing protecting it: use a generated one, e.g.\n" +
-    "  node -e \"console.log(require('crypto').randomBytes(16).toString('base64url'))\"");
-  process.exit(2);
+const passphrases = sources.map(function ([, name]) {
+  const pass = process.env[name];
+  if (!pass || pass.length < 16) {
+    console.error(name + " is missing or shorter than 16 characters.\n" +
+      "The sealed file is public, so the key is the only thing protecting it: use a generated one, e.g.\n" +
+      "  node -e \"console.log(require('crypto').randomBytes(16).toString('base64url'))\"");
+    process.exit(2);
+  }
+  return pass;
+});
+if (new Set(passphrases).size !== passphrases.length) {
+  console.error("two sources share a key: one key would open both, so seal them as one source"); process.exit(2);
 }
-const src = resolve(srcArg || join(SITE, "private", release));
 const out = resolve(outArg || join(SITE, "data", release, "sealed.js"));
-
-const files = scripts(src);
-if (!files.length) { console.error("no payload scripts under " + src); process.exit(1); }
-const plain = Buffer.from(files.map((f) => readFileSync(f, "utf8")).join("\n;\n"), "utf8");
-const gz = gzipSync(plain, { level: 9 });
-const envelope = await seal(gz, passphrase);
 
 // The file is only worth writing if the page can open it: read the envelope back the way the page does.
 async function opens(env, pass, expected) {
@@ -68,9 +88,29 @@ async function opens(env, pass, expected) {
   const back = Buffer.from(await crypto.subtle.decrypt({ name: "AES-GCM", iv: u8(env.iv) }, key, u8(env.ct)));
   return gunzipSync(back).equals(expected);
 }
-if (!(await opens(envelope, passphrase, plain))) { console.error("the sealed payload does not open to what was sealed; nothing written"); process.exit(1); }
-writeFileSync(out, "window.RESULTS_V2_SEALED=window.RESULTS_V2_SEALED||{};window.RESULTS_V2_SEALED[" +
-  JSON.stringify(release) + "]=" + JSON.stringify(envelope) + ";\n");
-console.log(files.length + " file(s) from " + relative(SITE, src) + ": " +
-  (plain.length / 1048576).toFixed(2) + " MB -> " + (gz.length / 1048576).toFixed(2) + " MB gzip -> " +
-  (statSync(out).size / 1048576).toFixed(2) + " MB at " + relative(SITE, out) + "; opened again with the key: identical");
+const envelopes = [], notes = [];
+for (let i = 0; i < sources.length; i++) {
+  const src = resolve(sources[i][0]);
+  const files = scripts(src);
+  if (!files.length) { console.error("no payload scripts under " + src); process.exit(1); }
+  const plain = Buffer.from(files.map((f) => readFileSync(f, "utf8")).join("\n;\n"), "utf8");
+  const gz = gzipSync(plain, { level: 9 });
+  const envelope = await seal(gz, passphrases[i]);
+  if (!(await opens(envelope, passphrases[i], plain))) { console.error("the sealed payload of " + src + " does not open to what was sealed; nothing written"); process.exit(1); }
+  for (let j = 0; j < i; j++) {   // and no other source's key opens it
+    if (await opens(envelope, passphrases[j], plain).catch(() => false)) { console.error("another key opens " + src + "; nothing written"); process.exit(1); }
+  }
+  envelopes.push(envelope);
+  notes.push(files.length + " file(s) from " + relative(SITE, src) + " (" + sources[i][1] + "): " +
+    (plain.length / 1048576).toFixed(2) + " MB -> " + (gz.length / 1048576).toFixed(2) + " MB gzip");
+}
+const rel = JSON.stringify(release);
+let text = "";
+if (envelopes.length > 1) {
+  text += "window.RESULTS_V2_SEALED_MORE=window.RESULTS_V2_SEALED_MORE||{};window.RESULTS_V2_SEALED_MORE[" + rel + "]=" +
+    JSON.stringify(envelopes.slice(1)) + ";\n";
+}
+text += "window.RESULTS_V2_SEALED=window.RESULTS_V2_SEALED||{};window.RESULTS_V2_SEALED[" + rel + "]=" + JSON.stringify(envelopes[0]) + ";\n";
+writeFileSync(out, text);
+console.log(notes.join("; ") + " -> " + (statSync(out).size / 1048576).toFixed(2) + " MB at " + relative(SITE, out) +
+  "; each opened again with its own key: identical");
