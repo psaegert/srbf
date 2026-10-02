@@ -62,10 +62,10 @@ METHODS = [
     ("gpgomea", "GP-GOMEA", "evaluations", "#11aaff", "baseline", "author_blessed", "gpgomea",
      "GP-GOMEA evolves a population of formulas and learns which of their parts belong together, so that it recombines "
      "them as whole units. It returns its best formula, with an intercept and a slope fitted by least squares."),
-    ("dsr", "DSR", "samples", "#885577", "baseline", "upstream_default", "dsr",
+    ("dsr", "DSR", "batches", "#885577", "baseline", "upstream_default", "dsr",
      "Deep Symbolic Regression: a neural network learns on the problem itself, by trial and error, to write formulas that "
      "fit better. It returns the formula that fits the given points best among all it wrote."),
-    ("udsr", "uDSR*", "samples", "#cc22aa", "baseline", "author_blessed", "udsr",
+    ("udsr", "uDSR*", "dso iterations", "#cc22aa", "baseline", "author_blessed", "udsr",
      "Unified Deep Symbolic Regression as publicly released: DSR combined with an evolutionary search and polynomial "
      "fitting. It returns the formula that fits the given points best among all it tried. The asterisk: the paper's "
      "version also uses a pre-trained network and a step from AI Feynman, which were never released."),
@@ -156,7 +156,10 @@ FLASH_ANSR_SELECTION = ("A neural network generates candidate formulas from the 
 # How each budget unit reads next to the method's name.
 PARAM_LABEL = {"candidates per bag": "budget: candidate formulas", "beam width": "budget: beam width",
                "iterations": "budget: search iterations", "draws": "budget: candidate formulas",
-               "restarts": "budget: fitting attempts"}
+               "restarts": "budget: fitting attempts",
+               # DSO counts its budget in expressions and stops only after whole iterations: the ladders double those
+               "batches": "budget: formulas tried, in batches of 1,000",
+               "dso iterations": "budget: formulas tried, in iterations of 13,000"}
 E2E_DEFAULT_MAX_RUNG = 256   # E2E is reported at its default settings only
 # Where a method's ladder ends. Every method's budgets double up to about LADDER_TOP_S seconds per problem on the
 # reference machine, where the time axis ends; the ladder has reached its end at the doubling nearest that on a log
