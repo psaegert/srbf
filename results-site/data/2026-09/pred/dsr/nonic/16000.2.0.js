@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["dsr|nonic|16000|2|0"]={"0":["- + - * exp pow + / x1 exp exp neg * + -1.205 x1 0.5102 0.9034 4 x1 x1 x1 x1",0]};})();
