@@ -122,8 +122,9 @@ def test_a_whole_column_is_coded_as_one_value_at_a_time():
     for k in export.CONT_KEYS:
         s = export.pp_spec(k)
         lo, hi = s["lo"], s["hi"]
-        vals = list(rng.uniform(lo - 2, hi + 2, 300)) + [lo, hi, 0.0, 1.0, -1.0, math.inf, -math.inf, float("nan"), export.FVU_FLOOR,
-                                                           export.FVU_FLOOR + 0.01, 0.999, 1e-9, 2.0 ** -40]
+        edges = [lo, hi, 0.0, 1.0, -1.0, math.inf, -math.inf, float("nan"), export.FVU_FLOOR, export.FVU_FLOOR + 0.01, 0.999, 1e-9,
+                 2.0 ** -40]
+        vals = list(rng.uniform(lo - 2, hi + 2, 300)) + edges
         if export.HIST_SPECS[k][2] == "log2":   # a ratio is coded on its log2 scale: positive values, and 0
             vals = [2.0 ** v if math.isfinite(v) else v for v in vals] + [0.0, -3.0]
         if s["int"]:
