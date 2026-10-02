@@ -532,3 +532,86 @@ class TestWhatAWorkerSees:
             assert record["prediction_success"] is ok, record.get("error")
             if not ok:
                 assert "does not read Heaviside" in record["error"]
+
+
+class TestSelection:
+    """A worker that ends with several candidates and no rule for picking one (a hall of fame) returns them all;
+    `selection: {mode: mdl}` picks the one with the shortest two-part code, Flash-ANSR's ranking."""
+
+    WORKER = """
+    def fit(x, y, *, x_val, variables, meta, options, state):
+        return {"candidates": list(options["candidates"]), "fit_time": 2.0, "extra": {"note": "hall of fame"}}
+    """
+    EXACT = "2.0*x1 - 0.5*x2 + 1.0"
+
+    def _adapter(self, tmp_path, engine, candidates, selection=None):
+        adapter = SubprocessAdapter(worker=_write_worker(tmp_path, self.WORKER), simplipy_engine=engine,
+                                    options={"candidates": candidates}, selection=selection)
+        adapter.prepare()
+        return adapter
+
+    def test_the_shortest_two_part_code_wins_and_every_candidate_is_recorded(self, tmp_path, engine):
+        # the second fits as well as the third to within the FVU floor (float64's epsilon) and costs more bits
+        candidates = ["2.0*x1", self.EXACT + " + 1e-9*x1", self.EXACT, "log(x1)", "frobnicate(x1)"]
+        adapter = self._adapter(tmp_path, engine, candidates, {"mode": "mdl"})
+        try:
+            record = adapter.evaluate_sample(_sample()).to_mapping()
+        finally:
+            adapter.close()
+        assert record["prediction_success"] and record["predicted_expression"] == self.EXACT
+        summary = record["selection"]
+        assert summary["mode"] == "mdl" and summary["chosen"] == 2 and summary["n_points"] == 48
+        rows = summary["candidates"]
+        assert [r["expression"] for r in rows] == candidates
+        assert rows[2]["fvu"] < 1e-20 and 0.0 < rows[1]["fvu"] < 1e-16                # both under the floor
+        assert rows[2]["mdl_bits"] < rows[1]["mdl_bits"] and rows[2]["score"] < rows[1]["score"]
+        assert rows[0]["fvu"] > 1e-3                                                 # simpler, but a worse fit
+        assert np.isnan(rows[3]["score"])                                            # NaN on half the points
+        assert "error" in rows[4] and np.isnan(rows[4]["score"])                     # the engine cannot read it
+        assert record["worker_fit_time"] == 2.0 and record["fit_time"] == 2.0 + record["selection_time"]
+        assert record["note"] == "hall of fame"
+        np.testing.assert_allclose(record["y_pred"], _target(_sample().x_support), rtol=1e-12)
+
+    def test_without_a_selection_the_problem_fails_and_says_why(self, tmp_path, engine):
+        adapter = self._adapter(tmp_path, engine, [self.EXACT, "2.0*x1"])
+        try:
+            record = adapter.evaluate_sample(_sample()).to_mapping()
+        finally:
+            adapter.close()
+        assert not record["prediction_success"] and "2 candidates and no single answer" in record["error"]
+        assert "selection" not in record
+
+    def test_no_candidate_with_a_finite_code_is_a_failed_problem(self, tmp_path, engine):
+        adapter = self._adapter(tmp_path, engine, ["log(x1)", "frobnicate(x1)"], {"mode": "mdl"})
+        try:
+            record = adapter.evaluate_sample(_sample()).to_mapping()
+        finally:
+            adapter.close()
+        assert not record["prediction_success"] and "finite two-part code" in record["error"]
+        assert record["selection"]["chosen"] is None and len(record["selection"]["candidates"]) == 2
+
+    @pytest.mark.parametrize("selection, message", [
+        ({"mode": "fvu"}, "must be one of"), ({"mode": "mdl", "strength": 1e-2}, "unknown keys"), ("mdl", "a mapping"),
+    ])
+    def test_a_bad_selection_fails_when_the_adapter_is_built(self, selection, message):
+        from srbf.subprocess_adapter import check_selection
+        with pytest.raises(ValueError, match=message):
+            check_selection(selection)
+
+    def test_a_config_sets_it(self):
+        from srbf.config import _subprocess_common_kwargs
+        assert _subprocess_common_kwargs({"selection": {"mode": "mdl"}})["selection"] == {"mode": "mdl"}
+        assert _subprocess_common_kwargs({})["selection"] is None
+
+    def test_the_score_is_flash_ansrs(self):
+        scoring = pytest.importorskip("flash_ansr.scoring")
+        from srbf.subprocess_adapter import two_part_score
+        for n in (1, 16, 48, 512, 7500):
+            for fvu in (0.0, 1e-30, 1e-12, 3e-4, 0.5, 2.0):
+                for bits in (3.0, 40.5, 250.0):
+                    ours = two_part_score(fvu, bits, n)
+                    theirs = scoring.score_from_fvu(fvu, 0, 0, None, 0.0, 0.0, 0.0, mdl=bits * 1000.0,
+                                                    mdl_penalty=scoring.two_part_strength(n))
+                    assert ours == pytest.approx(theirs, rel=1e-12, abs=1e-12), (n, fvu, bits)
+        assert np.isnan(two_part_score(float("inf"), 10.0, 48)) and np.isnan(two_part_score(-1.0, 10.0, 48))
+        assert two_part_score(0.1, float("nan"), 48) == float("inf")

@@ -14,8 +14,12 @@
 # every dependency at the version the lock file records: resolved from TiSR's own compatibility bounds with Julia
 # 1.12.7, plus PythonCall 0.9.36, which juliacall 0.9.36 needs. Julia 1.12 is the release series TiSR's own tests ran
 # on at that commit (its CI takes the current Julia 1.x); 1.12.7 is that series' last patch release. The worker finds
-# this layout from its interpreter and points juliacall at it (offline, one thread), so no shared depot or Julia
-# installation is touched.
+# this layout from its interpreter and points juliacall at it (offline), so no shared depot or Julia installation is
+# touched.
+#
+# Import juliacall in this environment only through the worker. A bare `import juliacall` lacks the worker's settings,
+# and juliapkg then re-resolves <prefix>/julia_env against whatever Julia it finds, rewriting the project without TiSR.
+# To repair that, copy tisr/Project.toml and tisr/Manifest.toml back into <prefix>/julia_env.
 #
 # Needs uv (https://docs.astral.sh/uv/; UV=... to choose), curl, tar, sha256sum and git (Pkg clones TiSR).
 set -euo pipefail
@@ -88,7 +92,7 @@ print("info:", worker.info(state))
 hall_of_fame = result["extra"]["hall_of_fame"]
 print("hall of fame:", [m["expression"] for m in hall_of_fame])
 print("deviations:", [m.get("string_deviation") for m in hall_of_fame])
-assert result["error"] == worker.NO_ANSWER and hall_of_fame
+assert "error" not in result and result["candidates"] and hall_of_fame
 assert all(m["string_deviation"] is not None and m["string_deviation"] < 1e-9 for m in hall_of_fame)
 EOF
 

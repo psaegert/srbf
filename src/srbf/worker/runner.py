@@ -15,7 +15,7 @@ Protocol, one JSON object per line (``NaN``/``Infinity`` allowed: both ends are 
         "variables": ["x1", ...], "meta": {...}}
     <- {"type": "result", "id": 7, "expression": "...", "fit_time": 1.23,
         "y_pred": [...] | null, "y_pred_val": [...] | null, "constants": [...] | null,
-        "extra": {...}, "error": null | "..."}
+        "candidates": ["...", ...] | null, "extra": {...}, "error": null | "..."}
     -> {"type": "close"}
     <- {"type": "closed"}
 
@@ -32,6 +32,10 @@ Worker contract -- a Python file (or module) defining:
     predictions; srbf evaluates the expression itself when they are absent), ``constants``,
     ``fit_time`` (seconds; measured around the call when absent), ``extra`` (a JSON-serializable
     dict merged into the result record), ``error`` (a message; the sample counts as failed).
+    A method that ends with several expressions and no rule for picking one (a hall of fame) may
+    return ``"candidates"``, a list of infix strings like ``expression``, instead of
+    ``"expression"``; srbf then picks one only if the config sets ``selection``, and records the
+    problem as failed otherwise.
 ``load(options) -> state``
     Optional. Called once after ``init`` with the config's ``options``; the returned object is
     passed to every ``fit`` as ``state``.
@@ -85,7 +89,7 @@ def _load_worker(target, as_module):
 
 def _result(msg_id):
     return {"type": "result", "id": msg_id, "expression": None, "fit_time": None, "y_pred": None,
-            "y_pred_val": None, "constants": None, "extra": {}, "error": None}
+            "y_pred_val": None, "constants": None, "candidates": None, "extra": {}, "error": None}
 
 
 def serve(worker, target, rfile, wfile):
@@ -130,12 +134,15 @@ def serve(worker, target, rfile, wfile):
                 out = fit(msg["x"], msg["y"], x_val=msg.get("x_val") or [], variables=msg.get("variables") or [],
                           meta=msg.get("meta") or {}, options=options, state=state)
                 elapsed = time.perf_counter() - started
-                if not isinstance(out, dict) or ("expression" not in out and "error" not in out):
-                    raise TypeError("fit() must return a dict with an 'expression' key (or an 'error' key to fail the problem), got %r" % type(out).__name__)
+                if not isinstance(out, dict) or not {"expression", "candidates", "error"} & set(out):
+                    raise TypeError("fit() must return a dict with an 'expression' key (or 'candidates', or an 'error' "
+                                    "key to fail the problem), got %r" % type(out).__name__)
                 for key in ("expression", "y_pred", "y_pred_val", "constants"):
                     reply[key] = _jsonable(out.get(key))
                 if reply["expression"] is not None:
                     reply["expression"] = str(reply["expression"])
+                if out.get("candidates") is not None:
+                    reply["candidates"] = [str(c) for c in out["candidates"]]
                 reply["fit_time"] = float(out.get("fit_time", elapsed))
                 reply["extra"] = _jsonable(out.get("extra") or {})
                 if out.get("error") is not None:

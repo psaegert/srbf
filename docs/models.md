@@ -309,10 +309,12 @@ The configuration is TiSR's own defaults at that commit:
 - constants fitted on half of the islands, by up to 10 Levenberg–Marquardt iterations (Nelder–Mead for one fit in
   ten);
 - an expression seen recently is rejected with probability 0.9;
-- the hall of fame on the weighted squared error and a weighted node count;
-- one thread.
+- the hall of fame on the weighted squared error and a weighted node count.
 
-srbf sets the operators, the budget (a number of generations) and the seed.
+srbf sets the operators, the budget (a number of generations), the seed and the threads. TiSR runs on one thread
+unless it is told otherwise; given more, it breeds and fits the islands of a generation in parallel, as its
+documentation describes, and the benchmark gives it the whole machine (`threads: all`). BLAS stays at one thread so
+that the islands do not each start a BLAS pool on the same cores.
 
 **Every run spends its whole budget.** TiSR ends a search at the first of four conditions: the number of
 generations, a wall-clock limit (300 s by default), a user callback, or `q` typed on its input. The worker keeps only
@@ -328,13 +330,16 @@ model_adapter:
   config_provenance: upstream_default
   simplipy_engine: acj-5-4-llm
   timeout: 7200
+  selection: {mode: mdl}       # TiSR picks no answer; without this every problem counts as failed
   options:
     generations: 64
+    threads: all
 ```
 
 | key | default | meaning |
 |---|---|---|
 | `options.generations` | `512` | TiSR's number of generations: the budget |
+| `options.threads` | `1` | the threads Julia starts with, or `all`; with more than one, TiSR breeds and fits its islands in parallel |
 | `options.seed` | `0` | mixed with a hash of the problem's data into the run's seed |
 | `options.time_guard` | `3600` | TiSR's wall-clock limit in seconds, a guard; the `hit_time_guard` column marks a run it stopped |
 | `options.warmup` | `true` | run a throwaway fit when the worker starts, so that compiling TiSR is not part of the first problem's time |
@@ -349,13 +354,14 @@ The worker therefore gives TiSR `asin acos acosh atanh` as functions that return
 evaluates them, so that TiSR drops such an expression as well. `rootn` needs an integer index, which a fitted
 constant rarely is; TiSR writes roots as powers.
 
-**No single answer yet.** A TiSR search returns its hall of fame, and TiSR defines no rule that picks one expression
-from it: its README and example sort the hall of fame for the user to inspect, and its export functions order their
-tables by the fit error. How to pick one member is not settled for TiSR in srbf, so the worker returns no expression:
-every problem is recorded as failed with that reason, and carries the whole hall of fame in the `hall_of_fame`
-column, each member written in the benchmark's syntax with every constant at full precision, with TiSR's measures of
-it and with its `string_deviation`, how far the string's values are from TiSR's own. TiSR's results carry no recovery
-rates until a rule is set.
+**No single answer of its own.** A TiSR search returns its hall of fame, and TiSR defines no rule that picks one
+expression from it: its README and example sort the hall of fame for the user to inspect, and its export functions
+order their tables by the fit error. The worker therefore returns the whole hall of fame as the problem's candidates,
+and srbf picks one only when the config sets `selection` ([Picking among candidates](adapters.md#the-config-keys)):
+`{mode: mdl}`, the two-part code srbf ranks Flash-ANSR's candidates with, is srbf's rule and not TiSR's. Without it
+every problem is recorded as failed. Either way the row carries the whole hall of fame in the `hall_of_fame` column,
+each member written in the benchmark's syntax with every constant at full precision, with TiSR's measures of it and
+with its `string_deviation`, how far the string's values are from TiSR's own.
 
 **What to know when reading the results:**
 - The weights 1/|y| make the search fit relative errors. TiSR replaces the infinite weight of a zero target by

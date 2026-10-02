@@ -42,6 +42,7 @@ class _Julia:
 
     def __init__(self):
         self.tree = w.TREE
+        self.threads = 1
         self.calls = []
         self.sources = []
         self.SrbfTiSR = _SrbfTiSR(self)
@@ -57,13 +58,19 @@ class _Julia:
             return evaluate
         if code == "string(VERSION)":
             return w.JULIA_VERSION
+        if code == "Threads.nthreads()":
+            return self.threads
         raise AssertionError("unexpected seval: %s" % code)
 
 
 @pytest.fixture
 def julia(monkeypatch):
     fake = _Julia()
-    monkeypatch.setattr(w, "_require_julia", lambda: fake)
+
+    def start(threads=1):
+        fake.threads = threads                                      # Julia starts with what the worker asks for
+        return fake
+    monkeypatch.setattr(w, "_require_julia", start)
     return fake
 
 
@@ -95,10 +102,11 @@ def test_tisr_runs_at_its_defaults_with_the_benchmark_operators_the_budget_and_o
     assert out["extra"]["progress"] == {"generation": [1, 8], "seconds": [0.01, 1.2]}
 
 
-def test_no_member_is_picked_and_the_whole_hall_of_fame_is_written_in_the_benchmark_syntax(julia):
+def test_no_member_is_picked_the_hall_of_fame_is_returned_as_candidates_in_the_benchmark_syntax(julia):
     X, y = _data()
     out = w.fit(X, y, x_val=[], variables=["a", "b"], meta={}, options={}, state=w.load({"warmup": False}))
-    assert "expression" not in out and out["error"] == w.NO_ANSWER     # the selection is open: no answer
+    assert "expression" not in out and "error" not in out              # TiSR picks none; srbf's config may
+    assert out["candidates"] == ["(1.0 + (2.5*(a*b)))", "(a*b)"]       # in TiSR's export order
     hof = out["extra"]["hall_of_fame"]
     assert [m["expression"] for m in hof] == ["(1.0 + (2.5*(a*b)))", "(a*b)"]
     assert set(hof[0]) == set(MEASURES) | {"expression", "string_deviation"}
@@ -180,6 +188,10 @@ def test_a_member_that_cannot_be_written_is_kept_with_its_reason(julia):
     out = w.fit(X, y, x_val=[], variables=["a", "b"], meta={}, options={}, state=w.load({"warmup": False}))
     hof = out["extra"]["hall_of_fame"]
     assert hof[0]["expression"] is None and "non-finite" in hof[0]["error"] and hof[1]["expression"] == "(a*b)"
+    assert out["candidates"] == ["(a*b)"]                               # a member that cannot be written is no candidate
+    julia.report = lambda X: _report([(["pNaN"], np.full(X.shape[0], np.nan))])
+    assert "could be written" in w.fit(X, y, x_val=[], variables=["a", "b"], meta={}, options={},
+                                       state=w.load({"warmup": False}))["error"]
     julia.report = lambda X: _report([])
     assert "empty" in w.fit(X, y, x_val=[], variables=["a", "b"], meta={}, options={}, state=w.load({"warmup": False}))["error"]
 
@@ -223,6 +235,8 @@ def test_a_side_experiment_replaces_settings_and_sets_per_problem_values_at_run_
     ({"config_by_problem": {"B1": {"grammar": {"max_compl": 9}}}}, "which config does not set"),
     ({"config": {"grammar": {"max_compl": 30}}, "config_by_problem": {"B1": {"grammar": {"max_compl": "9"}}}}, "a number or a boolean"),
     ({"generations": 0}, "at least 1"),
+    ({"threads": 0}, "threads must be"),
+    ({"threads": "8"}, "threads must be"),
 ])
 def test_a_bad_option_fails_when_the_worker_starts(julia, options, message):
     with pytest.raises(ValueError, match=message):
@@ -240,6 +254,26 @@ def test_the_worker_points_juliacall_at_its_own_environment(tmp_path, monkeypatc
     assert w.julia_environment(str(tmp_path)) == str(tmp_path / "julia_env")
     assert os.environ["JULIA_DEPOT_PATH"] == str(tmp_path / "julia_depot")
     assert os.environ["PYTHON_JULIAPKG_OFFLINE"] == "yes" and os.environ["PYTHON_JULIACALL_THREADS"] == "1"
+    assert "PYTHON_JULIACALL_HANDLE_SIGNALS" not in os.environ
+    w.julia_environment(str(tmp_path), threads=12)
+    assert os.environ["PYTHON_JULIACALL_THREADS"] == os.environ["JULIA_NUM_THREADS"] == "12"
+    assert os.environ["PYTHON_JULIACALL_HANDLE_SIGNALS"] == "yes"
+
+
+def test_with_more_than_one_thread_tisrs_own_parallelism_is_on(julia):
+    state = w.load({"threads": 4, "warmup": False})
+    assert "multithreading = true" in julia.sources[-1] and julia.threads == 4
+    X, y = _data()
+    assert w.fit(X, y, x_val=[], variables=["a", "b"], meta={}, options={}, state=state)["extra"]["threads"] == 4
+    assert w.info(state)["threads"] == 4
+    w.load({"threads": "all", "warmup": False})
+    assert julia.threads == len(os.sched_getaffinity(0))
+
+
+def test_a_julia_that_did_not_start_with_the_threads_asked_for_is_refused(julia, monkeypatch):
+    monkeypatch.setattr(w, "_require_julia", lambda threads=1: julia)   # julia.threads stays 1
+    with pytest.raises(RuntimeError, match="1 threads, not 4"):
+        w.load({"threads": 4, "warmup": False})
 
 
 def _tisr_python():
@@ -266,7 +300,8 @@ print("REPORT " + json.dumps({"keys": sorted(str(k) for k in report.keys()), "me
       "progress": [[type(v).__name__ for v in part] for part in report["progress"]],
       "n_values": len(list(member["values"]))}))
 out = w.fit(X, y, x_val=[], variables=["a", "b"], meta={}, options={}, state=state)
-print("FIT " + json.dumps({"error": out["error"], "deviations": [m["string_deviation"] for m in out["extra"]["hall_of_fame"]],
+print("FIT " + json.dumps({"error": out.get("error"), "candidates": len(out.get("candidates") or []),
+      "deviations": [m["string_deviation"] for m in out["extra"]["hall_of_fame"]],
       "generations_run": out["extra"]["generations_run"]}))
 """
 
@@ -288,5 +323,5 @@ def test_the_stand_in_reports_what_the_real_environment_reports(tmp_path):
     assert real["types"] == ["float", "str", "int"] and real["n_values"] == 64
     assert len(real["progress"]) == 2 and set(real["progress"][0]) == {"int"} and set(real["progress"][1]) == {"float"}
     assert all(t[0] in "buvp" for t in real["tokens"])
-    assert lines["FIT"]["error"] == w.NO_ANSWER and lines["FIT"]["generations_run"] == 3
+    assert lines["FIT"]["error"] is None and lines["FIT"]["candidates"] >= 1 and lines["FIT"]["generations_run"] == 3
     assert all(d is not None and d < 1e-9 for d in lines["FIT"]["deviations"])

@@ -6,7 +6,9 @@ the protocol: a runtime that seizes them, as Julia does under PySR, cannot break
 the protocol and the worker contract are documented in that file. This module is the srbf side:
 it hands each problem to the worker, reads the expression back, parses it with the run's
 SimpliPy engine, evaluates it where the worker did not, and fills the result record with the
-same fields the in-process adapters produce.
+same fields the in-process adapters produce. A worker that ends with several candidates and no
+rule of its own for picking one (a hall of fame) gets one picked here when the config sets
+``selection`` (see :func:`check_selection`).
 """
 from __future__ import annotations
 
@@ -35,6 +37,7 @@ from symbolic_data.token_ops import desugar_sqrt, normalize_expression, normaliz
 
 from srbf.core import EvaluationModelAdapter, EvaluationResult, EvaluationSample
 from srbf.model_adapters import _compute_fvu_from_predictions
+from srbf.table import mdl_bits
 from srbf.variable_renaming import rename_named_variables, rename_named_variables_in_infix, skeleton_variable_names
 from srbf.worker import MODELS_DIR, RUNNER_PATH
 
@@ -160,6 +163,43 @@ def evaluate_prefix(engine: Any, prefix: list[str], variables: list[str], *array
             values = safe_f(function, rows)
         outputs.append(np.asarray(values, dtype=float).reshape(-1, 1))
     return tuple(outputs)
+
+
+#: The rules ``selection`` can name for a worker that returns candidates instead of one expression.
+SELECTION_MODES = ("mdl",)
+
+_FLOAT64_EPS = float(np.finfo(np.float64).eps)
+
+
+def check_selection(selection: Mapping[str, Any] | None) -> dict[str, str] | None:
+    """The ``selection`` block of a worker-backed config: None (the worker's own answer, the default) or
+    ``{mode: mdl}``, which picks among the worker's candidates the one with the shortest two-part code
+    (:func:`two_part_score`). Anything else raises."""
+    if selection is None:
+        return None
+    if not isinstance(selection, Mapping):
+        raise ValueError("model_adapter.selection is a mapping such as {mode: mdl}")
+    unknown = sorted(set(map(str, selection)) - {"mode"})
+    if unknown:
+        raise ValueError(f"model_adapter.selection: unknown keys {unknown}; allowed: ['mode']")
+    mode = selection.get("mode")
+    if mode not in SELECTION_MODES:
+        raise ValueError(f"model_adapter.selection.mode must be one of {list(SELECTION_MODES)}, got {mode!r}")
+    return {"mode": str(mode)}
+
+
+def two_part_score(fvu: float, bits: float, n_points: int) -> float:
+    """The two-part code of a fit on ``n_points`` finite support points: ``(n/2) log2 FVU + bits``, written on
+    Flash-ANSR's ranking scale, ``log10 FVU + bits * 2 / (n log2 10)``, which orders the same way. The scale and the
+    edge cases are Flash-ANSR's (``flash_ansr.scoring``: ``two_part_strength``, ``score_from_fvu``, ``order_rows``), so
+    the rule picks among a worker's candidates what Flash-ANSR's ranking picks among its own: a perfect fit is floored
+    at the float64 epsilon, an expression the engine cannot price scores +inf, and a non-finite or negative FVU (a fit
+    that diverged) scores NaN, which sorts after everything."""
+    if not np.isfinite(fvu) or fvu < 0.0:
+        return float("nan")
+    if n_points < 1 or not np.isfinite(bits):
+        return float("inf")
+    return float(np.log10(max(float(fvu), _FLOAT64_EPS)) + float(bits) * 2.0 / (int(n_points) * math.log2(10.0)))
 
 
 # What a worker is told about a problem besides its data: which problem it is and how it was sampled. The ground truth
@@ -470,6 +510,9 @@ class SubprocessAdapter(EvaluationModelAdapter):
     drop_unused_variables : bool
         Accepted so that existing configs keep loading, and ignored: a method sees every column of a
         problem, and choosing the relevant ones is part of what is evaluated.
+    selection : mapping, optional
+        How to pick one answer when the worker returns ``candidates`` and no ``expression`` (see
+        :func:`check_selection`). Without it such a problem is recorded as failed, the candidates kept.
     """
 
     def __init__(
@@ -492,8 +535,10 @@ class SubprocessAdapter(EvaluationModelAdapter):
         hang_overdue_floor_s: float = 60.0,
         hang_overdue_min_history: int = 10,
         hang_log: str | None = None,
+        selection: Mapping[str, Any] | None = None,
     ) -> None:
         self.worker = resolve_worker(worker)
+        self.selection = check_selection(selection)
         # The hang policy (off unless hang_after_idle_s is set): a worker that goes idle for that long while a
         # problem is in flight, or misses the hard timeout, is killed and the problem retried ONCE in a fresh
         # worker; a second hang fails the row. Every hang is logged to hang_log (JSON lines) and counted in the
@@ -685,32 +730,36 @@ class SubprocessAdapter(EvaluationModelAdapter):
             return EvaluationResult(record)
 
         expression = reply.get("expression")
+        names = skeleton_variable_names(variables)
+        candidates = reply.get("candidates")
+        if not expression and candidates:
+            if self.selection is None:
+                record["error"] = (f"the worker returned {len(candidates)} candidates and no single answer; "
+                                   f"set model_adapter.selection to pick one")
+                record["prediction_success"] = False
+                return EvaluationResult(record)
+            started = time.perf_counter()
+            chosen, summary = self._select([str(c) for c in candidates], variables, names, X_support, y_support)
+            record["selection"] = summary
+            record["selection_time"] = time.perf_counter() - started
+            # Picking the answer is part of the method: its time counts, the worker's own stays on record.
+            record["worker_fit_time"] = record.get("fit_time")
+            if record["fit_time"] is not None:
+                record["fit_time"] = float(record["fit_time"]) + record["selection_time"]
+            if chosen is None:
+                record["error"] = f"none of the worker's {len(candidates)} candidates has a finite two-part code"
+                record["prediction_success"] = False
+                return EvaluationResult(record)
+            expression = str(candidates[chosen])
+            reply = {**reply, "y_pred": None, "y_pred_val": None, "constants": None}   # the worker's, if any, are no member's
         if not expression:
             record["error"] = "worker returned no expression"
             record["prediction_success"] = False
             return EvaluationResult(record)
-        # A worker predicts in the column names it was handed (PySR spells them v1, v2 on a catalog
-        # that calls its columns that); the ground truth spells the same columns x1, x2, ... , so
-        # both the stored expression and its prefix are mapped back before anything is judged.
-        names = skeleton_variable_names(variables)
-        expression = rename_named_variables_in_infix(str(expression), variables)
-        for pattern, spelling in _PRINTER_SPELLINGS:      # after the renaming: a variable named E stays a variable
-            expression = pattern.sub(spelling, expression)
+        expression = self._spelling(str(expression), variables)
         record["predicted_expression"] = expression
         try:
-            # read_infix, not the raw infix_to_prefix: the reader's own tokens ('**', 'neg' on a
-            # literal) are not the engine grammar, and simplify/complexity refuse them. The reader
-            # takes any identifier as a variable, so the map runs FIRST: everything downstream --
-            # the canonical form, the price, the judge -- then sees one spelling.
-            prefix = rename_named_variables(list(self.simplipy_engine.read_infix(expression)), variables) or []
-            # SymPy and most methods print the square root as sqrt(...); the engine's vocabulary spells it
-            # rootn(u, 2), and its lenient reader would pass the bare token on to a walk that rejects it.
-            prefix = [str(token) for token in prefix]
-            unknown = _unknown_symbols(prefix, self.simplipy_engine.operator_arity)
-            if unknown:
-                raise ValueError(f"the judge does not read {', '.join(unknown)}; it reads + - * / ** and the functions "
-                                 f"{' '.join(sorted(k for k, n in self.simplipy_engine.operator_arity.items() if k.isalpha()))} and sqrt")
-            prefix = desugar_sqrt(prefix, dict(self.simplipy_engine.operator_arity))
+            prefix = self._prefix(expression, variables)
             record["predicted_expression_prefix"] = normalize_expression(prefix)
             record["predicted_skeleton_prefix"] = normalize_skeleton(prefix)
         except Exception as exc:  # noqa: BLE001 - parse errors vary by engine
@@ -746,8 +795,69 @@ class SubprocessAdapter(EvaluationModelAdapter):
         record["prediction_success"] = True
         return EvaluationResult(record)
 
+    # -- reading and picking expressions -------------------------------------------------------
+    @staticmethod
+    def _spelling(expression: str, variables: list[str]) -> str:
+        """A worker predicts in the column names it was handed (PySR spells them v1, v2 on a catalog that calls its
+        columns that); the ground truth spells the same columns x1, x2, ..., so the expression is mapped back before
+        anything is judged, and the printers' constant names are written as the engine reads them."""
+        expression = rename_named_variables_in_infix(expression, variables)
+        for pattern, spelling in _PRINTER_SPELLINGS:      # after the renaming: a variable named E stays a variable
+            expression = pattern.sub(spelling, expression)
+        return expression
+
+    def _prefix(self, expression: str, variables: list[str]) -> list[str]:
+        """The engine's prefix of a (respelled) infix expression; raises when the judge cannot read it."""
+        # read_infix, not the raw infix_to_prefix: the reader's own tokens ('**', 'neg' on a
+        # literal) are not the engine grammar, and simplify/complexity refuse them. The reader
+        # takes any identifier as a variable, so the map runs FIRST: everything downstream --
+        # the canonical form, the price, the judge -- then sees one spelling.
+        prefix = rename_named_variables(list(self.simplipy_engine.read_infix(expression)), variables) or []
+        # SymPy and most methods print the square root as sqrt(...); the engine's vocabulary spells it
+        # rootn(u, 2), and its lenient reader would pass the bare token on to a walk that rejects it.
+        prefix = [str(token) for token in prefix]
+        unknown = _unknown_symbols(prefix, self.simplipy_engine.operator_arity)
+        if unknown:
+            raise ValueError(f"the judge does not read {', '.join(unknown)}; it reads + - * / ** and the functions "
+                             f"{' '.join(sorted(k for k, n in self.simplipy_engine.operator_arity.items() if k.isalpha()))} and sqrt")
+        return list(desugar_sqrt(prefix, dict(self.simplipy_engine.operator_arity)))
+
+    def _select(self, candidates: list[str], variables: list[str], names: list[str], X_support: np.ndarray,
+                y_support: np.ndarray) -> tuple[int | None, dict[str, Any]]:
+        """Pick one of the worker's candidates by the configured rule; returns its index (None when no candidate has a
+        finite score) and the record of the choice: every candidate with its FVU on the support points, its price in
+        bits and its score. ``mdl`` is :func:`two_part_score`, with Flash-ANSR's order: the score, then a diverged fit
+        last, then the shorter prefix, then the prefix's tokens."""
+        finite = np.isfinite(np.asarray(y_support, dtype=float).reshape(-1))
+        n_points = int(finite.sum())
+        price = mdl_bits(self.simplipy_engine)
+        rows: list[dict[str, Any]] = []
+        keys: list[tuple[Any, ...]] = []
+        for candidate in candidates:
+            row: dict[str, Any] = {"expression": candidate}
+            try:
+                prefix = self._prefix(self._spelling(candidate, variables), variables)
+                (y_pred,) = evaluate_prefix(self.simplipy_engine, prefix, names, X_support)
+                fvu = _compute_fvu_from_predictions(np.asarray(y_support, dtype=float).reshape(-1)[finite],
+                                                    y_pred.reshape(-1)[finite])
+                bits = price(prefix)
+                score = two_part_score(fvu, bits, n_points)
+                row.update(fvu=fvu, mdl_bits=bits, score=score)
+                keys.append((score if not np.isnan(score) else float("inf"), bool(np.isnan(score)), len(prefix),
+                             tuple(prefix)))
+            except Exception as exc:  # noqa: BLE001 - a candidate the engine cannot read or evaluate is never picked
+                row.update(error=f"{type(exc).__name__}: {str(exc).splitlines()[0] if str(exc) else ''}", score=float("nan"))
+                keys.append((float("inf"), True, math.inf, ()))
+            rows.append(row)
+        best = min(range(len(rows)), key=lambda i: keys[i]) if rows else None
+        if best is not None and not np.isfinite(rows[best]["score"]):
+            best = None
+        summary = {"mode": self.selection["mode"] if self.selection else None, "n_points": n_points,
+                   "chosen": best, "candidates": rows}
+        return best, summary
+
 
 __all__ = [
-    "BUILTIN_WORKERS", "SubprocessAdapter", "WorkerCrashed", "WorkerError", "WorkerProcess",
-    "WorkerTimeout", "evaluate_prefix", "resolve_worker",
+    "BUILTIN_WORKERS", "SELECTION_MODES", "SubprocessAdapter", "WorkerCrashed", "WorkerError", "WorkerProcess",
+    "WorkerTimeout", "check_selection", "evaluate_prefix", "resolve_worker", "two_part_score",
 ]

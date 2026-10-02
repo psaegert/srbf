@@ -36,15 +36,17 @@ defaults: at most 10 Levenberg-Marquardt iterations (50 for Nelder-Mead), conver
 by less than 1e-4 relative (``rel_f_tol_5_iter``), no time limit per fit (``fitting.t_lim`` infinite) and no early
 stopping on held-out data (``early_stop_iter`` 0; a config cannot set it).
 
-One answer per problem: OPEN. TiSR's search returns its hall of fame, its population, its progress and why it stopped
-(src/main_loop.jl: ``return (hall_of_fame, population, prog_dict, stop_msg)``) and defines no single model. Its README
-and example sort the hall of fame for the user to inspect (README: ``TiSR.convert_to_dataframe(hall_of_fame, ops,
-sort_by=:max_are)``; example/example_main.jl: ``sort_by=:mare``), its export functions order their tables by the fit
-objective (src/save_results.jl: ``sort_by=:ms_processed_e``), and its author's benchmark counts a run as a success when
-any hall-of-fame member matches an acceptable form (FastSRB-paper-repo src/tisr.jl and FastSRB example/TiSR.jl: the
-callback's loop over the hall of fame). Until a rule is chosen the worker returns no expression: every problem is
-recorded with the error ``NO_ANSWER`` and carries the whole hall of fame in ``hall_of_fame``, in TiSR's export order
-(lowest ``ms_processed_e`` first), each member with its expression, TiSR's measures and its ``string_deviation``.
+One answer per problem: TiSR has no rule of its own. Its search returns its hall of fame, its population, its progress
+and why it stopped (src/main_loop.jl: ``return (hall_of_fame, population, prog_dict, stop_msg)``) and defines no single
+model. Its README and example sort the hall of fame for the user to inspect (README: ``TiSR.convert_to_dataframe(
+hall_of_fame, ops, sort_by=:max_are)``; example/example_main.jl: ``sort_by=:mare``), its export functions order their
+tables by the fit objective (src/save_results.jl: ``sort_by=:ms_processed_e``), and its author's benchmark counts a run
+as a success when any hall-of-fame member matches an acceptable form (FastSRB-paper-repo src/tisr.jl and FastSRB
+example/TiSR.jl: the callback's loop over the hall of fame). So the worker returns the whole hall of fame as the
+problem's ``candidates`` and picks none: srbf picks one only when the config sets ``selection`` (``{mode: mdl}``, the
+two-part code srbf ranks Flash-ANSR's candidates with), and records the problem as failed otherwise. The record also
+carries the hall of fame in ``hall_of_fame``, in TiSR's export order (lowest ``ms_processed_e`` first), each member with
+its expression, TiSR's measures and its ``string_deviation``.
 
 TiSR's runs are not reproducible from the seed: two fits of the same data with the same seed can return different
 halls of fame. TiSR picks parents by rank and crowding (src/selection.jl, ``parent_selection``), and an expression
@@ -61,6 +63,11 @@ that memory held. TiSR is used as it is; the worker does not patch it.
 * ``time_guard`` (float, 3,600): TiSR's ``t_lim`` in seconds, the guard.
 * ``warmup`` (bool, true): a small throwaway fit in :func:`load`, so that compiling TiSR is no part of the first
   problem's time.
+* ``threads`` (int or ``"all"``, 1): the threads Julia starts with -- a resource, not a setting of the method. With
+  more than one, the worker switches on TiSR's own parallelism (``multithreading``, off by default: the islands of a
+  generation are bred and fitted in parallel, ``Threads.@threads`` in src/main_loop.jl), as TiSR documents it: Julia
+  started with that many threads. ``"all"`` is every CPU the worker may run on. BLAS stays at one thread, so that the
+  islands' threads do not each start a BLAS pool on the same cores.
 * ``config`` (dict, none): TiSR settings that replace its defaults, for side experiments only, such as reproducing
   a published protocol; a config that sets it is ``harness_tuned``, and published results never set it. Keys:
   ``binops`` and ``unaops`` (lists of operator names, see ``OPERATORS``), and the sections ``data_split``,
@@ -93,10 +100,6 @@ COMMIT = "9e628e68ee0b0e05b3736b3f25321e502ea03d6f"   # TiSR main, 2026-01-08
 TREE = "d7f805458ee067ff63405c655490de0870ac17fe"     # the git tree of COMMIT, as the environment's Manifest pins it
 TISR_UUID = "e1088136-a916-4db6-8e31-3a049800401f"
 JULIA_VERSION = "1.12.7"
-
-# What every problem records until a rule for picking one hall-of-fame member is chosen (see the module docstring).
-NO_ANSWER = ("TiSR returns a hall of fame and defines no single answer; no selection rule is set, so the whole hall of "
-             "fame is in the hall_of_fame column")
 
 BINARY_OPERATORS = ("+", "-", "*", "/", "^", "rootn")
 UNARY_OPERATORS = ("neg", "abs", "inv", "sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh",
@@ -190,7 +193,8 @@ end
 SECTIONS = {"data_split": "data_split_params", "general": "general_params", "measures": "measure_params",
             "selection": "selection_params", "fitting": "fitting_params", "mutation": "mutation_params",
             "grammar": "grammar_params"}
-# What srbf sets in every run and a config cannot replace: the budget, the guard, one thread, no printing.
+# What srbf sets in every run and a config cannot replace: the budget, the guard, the parallelism (from the threads
+# option), no printing.
 SET_BY_WORKER = {"n_gens": "n_gens", "t_lim": "t_lim", "multithreading": "false", "print_progress": "false",
                  "show_hall_of_fame": "false"}
 # Settings that could end a search, or a fit, before its budget: left at TiSR's defaults, which never do.
@@ -270,17 +274,19 @@ def problem_values(config, config_by_problem, keys, problem):
     return [(override.get(section) or {}).get(key, config[section][key]) for section, key in keys]
 
 
-def options_source(config, keys=()):
+def options_source(config, keys=(), threads=1):
     """Julia source of ``(data_matr, n_gens, t_lim, p1, p2, ...) -> Options(...)`` for a config, evaluated in
-    SrbfTiSR; ``p1, p2, ...`` stand for the per-problem ``keys``."""
+    SrbfTiSR; ``p1, p2, ...`` stand for the per-problem ``keys``. With more than one thread TiSR's ``multithreading``
+    is on."""
     binops, unaops = check_config(config)
     arguments = {key: "p%d" % (i + 1) for i, key in enumerate(keys)}
+    fixed = dict(SET_BY_WORKER, multithreading="true" if int(threads) > 1 else "false")
     sections = []
     for section, fn in SECTIONS.items():
         settings = dict(config.get(section) or {})
         words = ["%s = %s" % (key, arguments.get((section, key)) or _julia_value(value)) for key, value in settings.items()]
         if section == "general":
-            words = ["%s = %s" % item for item in SET_BY_WORKER.items()] + words
+            words = ["%s = %s" % item for item in fixed.items()] + words
         sections.append("%s = %s(; %s)" % (section, fn, ", ".join(words)))
     return ("(data_matr, n_gens, t_lim%s) -> Options(data_matr; binops = (%s,), unaops = (%s,), %s)"
             % ("".join(", " + arguments[key] for key in keys), ", ".join(binops), ", ".join(unaops), ", ".join(sections)))
@@ -375,9 +381,21 @@ def string_deviation(expression, names, X, reference):
 
 # -- Julia ----------------------------------------------------------------------------------------------------------
 
-def julia_environment(prefix=None):
+def resolve_threads(value):
+    """The ``threads`` option as a count: an int >= 1, or ``"all"`` = the CPUs this process may run on."""
+    if value == "all":
+        try:
+            return len(os.sched_getaffinity(0))
+        except AttributeError:   # no affinity call on this platform
+            return os.cpu_count() or 1
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError("threads must be an int >= 1 or 'all', got %r" % (value,))
+    return value
+
+
+def julia_environment(prefix=None, threads=1):
     """Point juliacall at the Julia, project and depot inside this interpreter's environment, when it has them
-    (the layout scripts/envs/build_tisr_env.sh builds): offline, one thread, no conda. Returns the project."""
+    (the layout scripts/envs/build_tisr_env.sh builds): offline, ``threads`` threads, no conda. Returns the project."""
     prefix = prefix or sys.prefix
     project = os.path.join(prefix, "julia_env")
     julia = os.path.join(prefix, "julia-" + JULIA_VERSION, "bin", "julia")
@@ -388,15 +406,19 @@ def julia_environment(prefix=None):
         "PYTHON_JULIAPKG_PROJECT": project,
         "PYTHON_JULIAPKG_EXE": julia,
         "PYTHON_JULIAPKG_OFFLINE": "yes",
-        "PYTHON_JULIACALL_THREADS": "1",
-        "JULIA_NUM_THREADS": "1",
+        "PYTHON_JULIACALL_THREADS": str(int(threads)),
+        "JULIA_NUM_THREADS": str(int(threads)),
         "JULIA_CONDAPKG_BACKEND": "Null",
     })
+    if int(threads) > 1:
+        # juliacall's advice for a multithreaded Julia: let Julia handle the signals, or its threads can crash the
+        # interpreter (PySR sets the same)
+        os.environ["PYTHON_JULIACALL_HANDLE_SIGNALS"] = "yes"
     return project
 
 
-def _require_julia():
-    julia_environment()
+def _require_julia(threads=1):
+    julia_environment(threads=threads)
     try:
         from juliacall import Main as jl
     except ImportError as exc:  # pragma: no cover - environment dependent
@@ -410,17 +432,21 @@ def _require_julia():
 def load(options):
     state = {"generations": int(options.get("generations", DEFAULT_GENERATIONS)), "seed": int(options.get("seed", 0)),
              "time_guard": float(options.get("time_guard", 3600.0)), "config": dict(options.get("config") or {}),
-             "config_by_problem": {str(k): dict(v) for k, v in (options.get("config_by_problem") or {}).items()}}
+             "config_by_problem": {str(k): dict(v) for k, v in (options.get("config_by_problem") or {}).items()},
+             "threads": resolve_threads(options.get("threads", 1))}
     if state["generations"] < 1:
         raise ValueError("generations must be at least 1, got %r" % state["generations"])
     state["binops"], state["unaops"] = check_config(state["config"])      # a bad option fails at start, not per problem
     state["keys"] = per_problem_keys(state["config"], state["config_by_problem"])
-    source = options_source(state["config"], state["keys"])
-    jl = _require_julia()
+    source = options_source(state["config"], state["keys"], state["threads"])
+    jl = _require_julia(state["threads"])
     tree = str(jl.SrbfTiSR.tisr_tree())
     if tree != TREE:
         raise RuntimeError("the environment's TiSR is tree %s, not %s (commit %s); rebuild it with "
                            "scripts/envs/build_tisr_env.sh" % (tree, TREE, COMMIT))
+    if int(jl.seval("Threads.nthreads()")) != state["threads"]:
+        raise RuntimeError("Julia started with %d threads, not %d: juliacall was imported before the worker set "
+                           "its threads" % (int(jl.seval("Threads.nthreads()")), state["threads"]))
     state.update(jl=jl, run=jl.SrbfTiSR.run, julia=str(jl.seval("string(VERSION)")),
                  make=jl.seval("source -> SrbfTiSR.eval(Meta.parse(source))")(source))
     if bool(options.get("warmup", True)):
@@ -437,7 +463,7 @@ def warmup_fit(state):
 
 
 def info(state):
-    out = {"worker": "tisr", "tisr_commit": COMMIT, "julia": state.get("julia")}
+    out = {"worker": "tisr", "tisr_commit": COMMIT, "julia": state.get("julia"), "threads": state.get("threads")}
     try:
         from importlib.metadata import version as _version
         out["juliacall"] = _version("juliacall")
@@ -452,7 +478,7 @@ def fit(x, y, *, x_val, variables, meta, options, state):
     names = list(variables)
     seed = run_seed(X, Y, state["seed"])
     values = problem_values(state["config"], state["config_by_problem"], state["keys"], str((meta or {}).get("benchmark_eq_id")))
-    extra = {"seed": seed, "generations": state["generations"]}
+    extra = {"seed": seed, "generations": state["generations"], "threads": state.get("threads", 1)}
     if state["keys"]:
         extra["problem_settings"] = {"%s.%s" % key: value for key, value in zip(state["keys"], values)}
 
@@ -479,5 +505,9 @@ def fit(x, y, *, x_val, variables, meta, options, state):
             entry["error"] = str(exc)
         hall_of_fame.append(entry)
     extra["hall_of_fame"] = hall_of_fame
+    candidates = [entry["expression"] for entry in hall_of_fame if entry.get("expression")]
+    if not candidates:
+        return {"error": "no hall-of-fame member could be written in the benchmark's syntax",
+                "fit_time": float(report["seconds"]), "extra": extra}
     # the search itself: TiSR's Options and its loop, not the conversion to Python or the checks above
-    return {"error": NO_ANSWER, "fit_time": float(report["seconds"]), "extra": extra}
+    return {"candidates": candidates, "fit_time": float(report["seconds"]), "extra": extra}
