@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["dsr|meier|8000|2|0"]={"0":["/ x2 tanh - inv pow * cos inv + 1.347 / x2 x1 x1 4 1.188",0],"1":["neg + / pow * x1 / + sin / x1 x2 * + x1 -57.85 0.1344 x2 3 782.6 x1",0]};})();
