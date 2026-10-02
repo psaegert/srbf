@@ -844,14 +844,14 @@ test('the slider is continuous, and its arrows step to the powers of two', async
 });
 
 // ---- Shown, faded and hidden methods --------------------------------------------------------------------------------
-test('the headline shows four methods in full and fades the rest; a legend click cycles one, for this visit only', async ({ page }) => {
+test('the headline shows three methods in full and fades the rest; a legend click cycles one, for this visit only', async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 900 });
   await page.goto('/');
   const chart = page.locator('.headline-v2 svg.v2chart').first();
   await expect(chart).toBeVisible();
   const item = (k) => chart.locator('[data-cycle="' + k + '"]');
-  for (const k of ['T8-120M', 'T8-120M-pysr', 'PySR', 'gpgomea']) { await expect(item(k)).toHaveAttribute('data-vis', 'full'); }
-  for (const k of ['T8-20M', 'e2e', 'T8-3M', 'nesymres-100M']) { await expect(item(k)).toHaveAttribute('data-vis', 'dim'); }
+  for (const k of ['T8-120M', 'T8-120M-pysr', 'PySR']) { await expect(item(k)).toHaveAttribute('data-vis', 'full'); }
+  for (const k of ['gpgomea', 'T8-20M', 'e2e', 'T8-3M', 'nesymres-100M']) { await expect(item(k)).toHaveAttribute('data-vis', 'dim'); }
   // a faded method: its colour blended into the background (20 %), fully opaque; a shown one: its colour
   expect(await item('T8-20M').locator('line').getAttribute('stroke')).toMatch(/^color-mix\(in srgb, #[0-9a-f]{6} 20%, var\(--surface\)\)$/i);
   expect(await item('T8-120M').locator('line').getAttribute('stroke')).toMatch(/^#[0-9a-f]{6}$/i);
