@@ -20,11 +20,20 @@ const FOOTER = ['https://srbf.readthedocs.io/', 'https://github.com/psaegert/srb
 const PAGES = [['/', null], ['/explorer.html', 'Explorer'], ['/progress.html', 'Progress'], ['/guide.html', 'How to read'], ['/metrics.html', 'Metrics'],
   ['/reproductions.html', 'Reproductions'], ['/ranks.html', null], ['/paired.html', null], ['/privacy.html', null]];
 
+// What these checks read is there once the page has loaded: KaTeX typesets from its script's onload, which runs before the
+// page's load event. The fonts are given time to settle before anything is measured. "networkidle" also waited on every
+// font and CDN request the runner made, and timed out on the deploy runner whenever one of them hung (2026-10-03: four
+// deploys in a row failed on the home page alone).
+async function settled(page) {
+  await page.waitForLoadState('load');
+  await page.evaluate(() => Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 10000))]));
+}
+
 for (const [url, current] of PAGES) {
   test(`${url}: the one navigation, this page marked in it, one title, nothing wider than the screen`, async ({ page }) => {
     const errors = collectErrors(page);
     await page.goto(url);
-    await page.waitForLoadState('networkidle');
+    await settled(page);
     expect(await page.locator('.site-nav a').evaluateAll((as) => as.map((a) => [a.getAttribute('href'), a.textContent]))).toEqual(NAV);
     expect(await page.locator('.site-nav a[aria-current="page"]').allTextContents()).toEqual(current ? [current] : []);
     await expect(page.locator('main h1')).toHaveCount(1);
@@ -42,7 +51,7 @@ test('every page the navigation names is there', async ({ page, request }) => {
   await page.goto('/metrics.html');
   await expect(page.locator('.site-header a.brand')).toHaveAttribute('href', './');   // the brand leads home
   await page.goto('/metrics.html');
-  await page.waitForLoadState('networkidle');
+  await settled(page);
   expect(await page.locator('main .katex').count()).toBeGreaterThan(20);        // the definitions are typeset
 });
 

@@ -2133,7 +2133,7 @@
     var hid = hoverId(function (pt, click) {
       var p = near(pt); if (!p) { return null; }
       var cl = clouds[p.j], i = p.i, c = cl.cs[cl.cat[i]], fl = cl.flag[i];
-      if (click) { csel = { m: cl.m.key, c: c, row: cl.row[i], d: cl.drw[i], r: cl.r, xa: codeText(A, cl.cols[A.k][i]), yb: codeText(B, cl.cols[B.k][i]) }; scheduleRender(); }
+      if (click) { csel = { m: cl.m.key, c: c, row: cl.row[i], d: cl.drw[i], r: cl.r, xa: codeText(A, cl.cols[A.k][i]), yb: codeText(B, cl.cols[B.k][i]) }; render(); }   // at once: a deferred redraw is pushed back by every further click
       return { text: cl.m.label + " · " + c + ", problem " + (cl.row[i] + 1) + ", run " + cl.drw[i] + " (budget " + fmtBudget(cl.r) + "): " + A.m.short + " " + codeText(A, cl.cols[A.k][i]) + ", " + B.m.short + " " + codeText(B, cl.cols[B.k][i]) +
         (fl & PP_OK ? ((fl & PP_NUM) || (fl & PP_SYM) ? "; recovered: " + [fl & PP_NUM ? "numeric" : "", fl & PP_SYM ? "structure" : ""].filter(Boolean).join(" and ") : "") : "; no usable formula") + ". A click shows its formula." };
     });
