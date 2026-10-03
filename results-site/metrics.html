@@ -378,14 +378,18 @@
         </article>
 
         <article class="metric">
-          <h4>Selection Score and Pareto Rank <span class="dir down">lower is better</span></h4>
+          <h4>Selection Score <span class="dir down">lower is better</span></h4>
           $$ S(\hat{f}) \;=\; \tfrac{N}{2} \log_2 \operatorname{FVU}(y, \hat{y}) \;+\; L(\hat{f}) $$
           <p>
-            The score by which Flash-ANSR chooses its prediction, a two-part code in bits: the bits
-            needed to describe the remaining errors on the \(N\) given points, relative to always
-            predicting their average (negative for a good fit), plus the formula's length in bits. The Pareto rank says where the chosen formula stands among Flash-ANSR's candidates
-            when they are compared by error and length together: 0 means no other candidate is both
-            more accurate and shorter. Only the Flash-ANSR entries report these two.
+            Flash-ANSR chooses its prediction by a two-part code in bits: the bits needed to describe
+            the remaining errors on the \(N\) given points, relative to always predicting their average
+            (negative for a good fit), plus the formula's length in bits. The score shown is this code
+            divided by \(\tfrac{N}{2} \log_2 10\), which keeps the order and puts it on the scale of
+            log10 FVU: \(\log_{10} \operatorname{FVU} + 2 L(\hat{f}) / (N \log_2 10)\), about 0.0012 per bit
+            at 512 points. Only the Flash-ANSR entries report it. Flash-ANSR can instead rank its
+            candidates by Pareto fronts of error against length, and then reports which front its
+            prediction is on (0: no other candidate is both more accurate and shorter); the explorer lists
+            that Pareto rank only for a release in which some entry ranks that way.
           </p>
         </article>
         </div>
