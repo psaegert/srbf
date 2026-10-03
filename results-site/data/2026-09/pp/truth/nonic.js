@@ -1,0 +1,1 @@
+window.RESULTS_V2_PP=window.RESULTS_V2_PP||{};(function(){var R=window.RESULTS_V2_PP;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["truth|nonic"]={"n":1,"v":{"ground_truth_mdl":"Nw==","skeleton_length":"IQ==","n_constants":"CA==","total_nestedness":"AA==","n_variables":"AQ=="}};})();

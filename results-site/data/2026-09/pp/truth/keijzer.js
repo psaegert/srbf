@@ -1,0 +1,1 @@
+window.RESULTS_V2_PP=window.RESULTS_V2_PP||{};(function(){var R=window.RESULTS_V2_PP;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["truth|keijzer"]={"n":15,"v":{"ground_truth_mdl":"KysrLhgMBgcUCBodDxMd","skeleton_length":"CAgIFw8HAgMKAwwPBwsP","n_constants":"AgICAwMCAAEDAAIEAQQE","total_nestedness":"AAAAAQAAAAAAAAAAAAAA","n_variables":"AQEBAQMBAQEBAgICAgIC"}};})();

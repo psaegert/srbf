@@ -1,0 +1,1 @@
+window.RESULTS_V2_PP=window.RESULTS_V2_PP||{};(function(){var R=window.RESULTS_V2_PP;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["truth|physo-class"]={"n":8,"v":{"ground_truth_mdl":"FhEZHhkSEhc=","skeleton_length":"CAYLCwkHBQc=","n_constants":"AwIEAwICAQI=","total_nestedness":"AAAAAAAAAAA=","n_variables":"AQEBAQEBAgI="}};})();
