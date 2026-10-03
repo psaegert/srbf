@@ -69,9 +69,10 @@ def test_a_metric_that_copies_another_in_every_cell_is_not_listed() -> None:
                    "numeric_recovery_fit": [5, 10], "numeric_recovery_relative_fit": [5, 10]}}
     keys = lambda cells: {m["key"] for m in sx.listed_metrics(cells)}   # noqa: E731
     everything = {m["key"] for m in sx.registry_json()}
-    assert keys({"a": {"nguyen": {"1": same, "2": same}}}) == everything - set(sx.COPY_OF)
+    internals = {m["key"] for m in sx.registry_json() if m["group"] == "Method Internals"}   # these cells hold none
+    assert keys({"a": {"nguyen": {"1": same, "2": same}}}) == everything - set(sx.COPY_OF) - internals
     # one cell that tells validation apart brings that metric back, and only that one
-    assert keys({"a": {"nguyen": {"1": same}, "measured": {"1": apart}}}) == everything - {"numeric_recovery_relative_fit"}
+    assert keys({"a": {"nguyen": {"1": same}, "measured": {"1": apart}}}) == everything - {"numeric_recovery_relative_fit"} - internals
     # nothing published yet: nothing is known to be a copy, so nothing is dropped
     assert keys({}) == everything
 

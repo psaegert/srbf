@@ -270,8 +270,10 @@ METRICS = [
     # ---- what the method reports about its own choice ----
     ("predicted_log_prob", "Log-Probability of the Prediction", "Log-Prob", "Method Internals", "cont", True, "more", "num1", (-64.0, 0.0, None),
      "How probable the chosen formula was under the Flash-ANSR model itself, given the data: the logarithm of the probability of its sequence of symbols. Longer formulas have lower values. Only the Flash-ANSR models report it."),
-    ("predicted_score", "Selection Score", "Score", "Method Internals", "cont", False, "more", "num1", (-2048.0, 512.0, None),
-     "The score by which Flash-ANSR chose its formula: the error-plus-length score described under its name, in bits; lower is better. Only the Flash-ANSR entries report it."),
+    # flash-ansr stores its two-part code divided by (n/2) log2 10 (scoring.two_part_strength): the order of the code, on the
+    # scale of log10 FVU -- checked on 91,524 T8-120M rows, (score - log10 FVU) / bits = 2 / (512 log2 10) to every digit
+    ("predicted_score", "Selection Score", "Score", "Method Internals", "cont", False, "more", "num2", (-17.0, 3.0, None),
+     "The score by which Flash-ANSR chose its formula, on the scale of log10 FVU: its two-part code, (n/2) log2 FVU plus the formula's length in bits, divided by (n/2) log2 10. That is the formula's log10 FVU on the n given points plus 2 / (n log2 10) per bit of its length, about 0.0012 per bit at 512 points, so an exact fit 80 bits long scores about -15.56. Lower is better. Only the Flash-ANSR entries report it."),
     ("predicted_pareto_rank", "Pareto Rank of the Prediction", "Pareto Rank", "Method Internals", "cont", False, "more", "num1", (0.0, 64.0, None),
      "Where the chosen formula stands among Flash-ANSR's candidates when they are compared by error and length together. 0 means no other candidate is both more accurate and shorter. 1 means that holds once the candidates at 0 are set aside, and so on. Only the Flash-ANSR entries report it.")]
 # A metric that repeats another in EVERY published cell says nothing of its own, so the menu does not list it (its
@@ -301,12 +303,24 @@ UNBOUNDED_WORST = {"log10_fvu_val": math.inf, "log10_fvu_fit": math.inf, "r2_val
 # FVU is read no lower than log10(2^-23), and an R^2 no higher than 1 - 2^-23. {key: (floor, higher is better)}
 RECOVERY_FLOOR = {"log10_fvu_val": (math.log10(2.0 ** -23), False), "log10_fvu_fit": (math.log10(2.0 ** -23), False),
                   "r2_val": (1.0 - 2.0 ** -23, True), "r2_fit": (1.0 - 2.0 ** -23, True)}
+# A value a method writes where it did not compute the metric: a placeholder, read as no value. Flash-ANSR ranks by a
+# single score unless told to rank by Pareto fronts, and then writes -1 for the front (flash_ansr.scoring.
+# PARETO_RANK_NOT_COMPUTED; srbf passes it through: "-1 unless ranked by pareto").
+NOT_COMPUTED = {"predicted_pareto_rank": -1.0}
 ANSWERED = "@answered"   # suffix of a paired contrast taken over the problems BOTH methods have a prediction for
 COPY_OF = {"numeric_recovery_relative_val": "numeric_recovery_val", "numeric_recovery_relative_fit": "numeric_recovery_fit"}
 
 
 def listed_metrics(cells: dict[str, Any]) -> list[dict[str, Any]]:
-    """The metric registry without the entries that copy another metric in every cell of `cells`."""
+    """The metric registry without the entries that copy another metric in every cell of `cells`, and, once the
+    release has results, without a method's own report on its choice (Method Internals) that no cell holds: no
+    method of the release reports it (a Pareto rank without a Pareto ranking)."""
+    held = [cell.get("m") or {} for per_catalog in cells.values() for per_rung in per_catalog.values() for cell in per_rung.values()]
+    present = {k for m in held for k in m}
+
+    def unreported(entry: dict[str, Any]) -> bool:
+        return bool(held) and entry["group"] == "Method Internals" and entry["key"] not in present
+
     def copies(key: str, of: str) -> bool:
         seen = False
         for per_catalog in cells.values():
@@ -318,7 +332,7 @@ def listed_metrics(cells: dict[str, Any]) -> list[dict[str, Any]]:
                         if m.get(key) != m.get(of):
                             return False
         return seen
-    return [m for m in registry_json() if not (m["key"] in COPY_OF and copies(m["key"], COPY_OF[m["key"]]))]
+    return [m for m in registry_json() if not unreported(m) and not (m["key"] in COPY_OF and copies(m["key"], COPY_OF[m["key"]]))]
 
 
 RATE_KEYS = [m[0] for m in METRICS if m[4] == "rate"]
@@ -397,7 +411,8 @@ def load_rows(root: str) -> dict[str, dict[tuple[str, int], Rows]]:
                     v = fnum(r.get(k))
                     vals[k] = (0.0 if v is None else v) if k in r else None   # a column these rows do not have is no rate of 0
                 for k in CONT_KEYS:
-                    vals[k] = fnum(r.get(k))
+                    v = fnum(r.get(k))
+                    vals[k] = None if v is not None and NOT_COMPUTED.get(k) == v else v
                 data[r["model"]][(r["catalog"], int(r["rung"]))][(int(r.get("draw") or 1), int(r["row"]))] = vals
     return data
 
@@ -552,9 +567,9 @@ INTEGER_KEYS = {"n_constants_delta", "total_nestedness_delta", "edit_distance", 
                 "skeleton_length", "predicted_n_constants", "n_constants", "predicted_total_nestedness", "total_nestedness",
                 "n_variables", "predicted_pareto_rank"}
 # A grid wider than the histogram's where the values of this release reach far beyond it (99th percentiles: E2E's
-# formulas 1,746 bits, MDL ratios to 40 and more); the selection score's values span -15.7 to 3 at the 99th percentile.
+# formulas 1,746 bits, MDL ratios to 40 and more).
 PP_RANGE = {"predicted_mdl": (0.0, 2016.0), "ground_truth_mdl": (0.0, 504.0), "mdl_ratio": (-8.0, 8.0),
-            "predicted_log_prob": (-160.0, 0.0), "predicted_score": (-17.0, 3.0)}
+            "predicted_log_prob": (-160.0, 0.0)}
 # The bounds a metric's values can reach and pile up at: (lower, upper), None where there is none.
 _UNIT = (0.0, 1.0)
 PP_BOUNDS: dict[str, tuple[float | None, float | None]] = {
