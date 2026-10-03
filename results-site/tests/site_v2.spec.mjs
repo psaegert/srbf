@@ -1786,7 +1786,7 @@ test('a run picked in the points display shows its formulas and opens in Predict
   let found = false;
   for (let k = 1; k < 40 && !found; k++) {
     await page.mouse.click(bottom.x + bottom.w * k / 40, bottom.y + bottom.h / 2);
-    found = await page.locator(V2 + ' .v2csel').isVisible();
+    found = await page.locator(V2 + ' .v2csel').waitFor({ state: 'visible', timeout: 400 }).then(() => true, () => false);
   }
   expect(found).toBe(true);
   const sel = page.locator(V2 + ' .v2csel');
