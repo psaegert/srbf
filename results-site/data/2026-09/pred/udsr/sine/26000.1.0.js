@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["udsr|sine|26000|1|0"]={"0":["* tan 1 - + + + -0.6473 * 0.7167 x1 * -0.2057 pow x1 2 * 0.02079 pow x1 3 tanh * - + sin * * pow * log * 1 - exp x1 1 / pow tanh exp * 1 - x1 1 4 x1 2 x1 x1 x1 exp 1 1",0]};})();
