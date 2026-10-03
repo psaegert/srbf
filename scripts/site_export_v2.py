@@ -10,6 +10,9 @@ Reads the per-problem judged rows of a campaign root (rows_full_<name>.csv or <n
                                  worst-value metric were filled in for failed predictions; status; timing.
   <out dir>/hist/<metric>.js     per-metric histograms of the same cells (pooled medians and the distribution view),
                                  loaded by the page on demand.
+  <out dir>/pp/<method>/...      every problem's value of every continuous metric, one byte each, per method x catalog x
+                                 rung x finished run (the Correlation view; write_values), and pp/truth/ the ground
+                                 truth's properties per catalog.
   <out dir>/paired.js            paired contrasts (a problem with itself within a draw, over the draws complete on both
                                  sides) per method pair x catalog x rung: 2x2 tables for the rate
                                  metrics (exact McNemar on the client), [n, sum d, sum d^2, better, worse] for the
@@ -362,6 +365,8 @@ def registry_json() -> list[dict[str, Any]]:
             m["median_via"] = MEDIAN_ONLY[k]
         if k in EVERY_PROBLEM:
             m["every"] = True
+        if kind == "cont" and hist:
+            m["pp"] = pp_spec(k)   # its grid in the per-problem files (the Correlation view)
         out.append(m)
     return out
 
@@ -529,6 +534,180 @@ def write_predictions(out_dir: str, rel: str, pred: Expressions, truth: dict[str
     for name in sorted(os.listdir(pred_root)) if os.path.isdir(pred_root) else []:
         if name != "truth" and name not in index and os.path.isdir(os.path.join(pred_root, name)):
             shutil.rmtree(os.path.join(pred_root, name))
+    return dict(index)
+
+
+# ---- every problem's values: the Correlation view ----------------------------------------------------------------
+# One file per method x problem set x budget x run, written once that run of the cell is complete (as the formulas
+# are, so a finished file never changes): every problem's value of every continuous metric, one byte each, so the page
+# can set any two metrics against each other problem by problem. A byte is the value's place on a fixed grid over the
+# metric's range, in the space its histogram uses (log2 for a ratio): 0..252 the grid, 253 below the range (-inf
+# included), 254 above it (+inf included), 255 no value. A whole-number metric is exact over lo..lo+252. A value
+# exactly at a bound of its metric -- an exact fit's log10 FVU, an overlap of 0 or 1 -- has the bound's byte to itself:
+# another value that would round onto it moves one step inwards, so the page can tell an exact fit from a near one.
+# The ground truth's own properties (EVERY_PROBLEM) are one file per problem set.
+PP_STEPS, PP_BELOW, PP_ABOVE, PP_NONE = 252, 253, 254, 255
+FVU_FLOOR = math.log10(float(np.finfo(float).eps))   # where srbf's log10 FVU stops: every exact fit sits here
+INTEGER_KEYS = {"n_constants_delta", "total_nestedness_delta", "edit_distance", "zss_edit_distance", "predicted_skeleton_prefix_length",
+                "skeleton_length", "predicted_n_constants", "n_constants", "predicted_total_nestedness", "total_nestedness",
+                "n_variables", "predicted_pareto_rank"}
+# A grid wider than the histogram's where the values of this release reach far beyond it (99th percentiles: E2E's
+# formulas 1,746 bits, MDL ratios to 40 and more); the selection score's values span -15.7 to 3 at the 99th percentile.
+PP_RANGE = {"predicted_mdl": (0.0, 2016.0), "ground_truth_mdl": (0.0, 504.0), "mdl_ratio": (-8.0, 8.0),
+            "predicted_log_prob": (-160.0, 0.0), "predicted_score": (-17.0, 3.0)}
+# The bounds a metric's values can reach and pile up at: (lower, upper), None where there is none.
+_UNIT = (0.0, 1.0)
+PP_BOUNDS: dict[str, tuple[float | None, float | None]] = {
+    "log10_fvu_val": (FVU_FLOOR, None), "log10_fvu_fit": (FVU_FLOOR, None), "r2_val": (None, 1.0), "r2_fit": (None, 1.0),
+    "f1_score": _UNIT, "precision_score": _UNIT, "recall_score": _UNIT, "f1_score_unique_variables": _UNIT,
+    "precision_unique_variables": _UNIT, "recall_unique_variables": _UNIT, "edit_distance_norm": _UNIT,
+    "expr_length_ratio_abserr": (0.0, None)}
+PP_PROBLEM_KEYS = [k for k in CONT_KEYS if k in EVERY_PROBLEM]
+PP_RUN_KEYS = [k for k in CONT_KEYS if k not in EVERY_PROBLEM]
+PP_SUCCESS, PP_NUMERIC, PP_SYMBOLIC = 1, 2, 4   # the bits of a run's flag byte
+
+
+def pp_spec(key: str) -> dict[str, Any]:
+    """A metric's grid: lo and hi in its transformed space, whether it is a whole number, and its bounds."""
+    lo, hi, _tf = HIST_SPECS[key]
+    integer = key in INTEGER_KEYS
+    lo, hi = (lo, lo + PP_STEPS) if integer else PP_RANGE.get(key, (lo, hi))
+    b = PP_BOUNDS.get(key, (None, None))
+    return {"lo": lo, "hi": hi, "int": integer, "bounds": [b[0], b[1]]}
+
+
+def pp_code(v: float | None, key: str, spec: dict[str, Any]) -> int:
+    """One value's byte (see above); `v` as the rows hold it, before the metric's transform."""
+    if v is None or (isinstance(v, float) and math.isnan(v)):
+        return PP_NONE
+    lo_b, hi_b = spec["bounds"]
+    if not math.isinf(v):
+        v = transform(v, HIST_SPECS[key][2])
+        if v is None or math.isnan(v):
+            return PP_NONE
+    if math.isinf(v):
+        return PP_BELOW if v < 0 else PP_ABOVE
+    lo, hi = spec["lo"], spec["hi"]
+    if v < lo:
+        return PP_BELOW
+    if v > hi:
+        return PP_ABOVE
+    if spec["int"]:
+        return int(round(v - lo))
+    at = lambda x: int(round((x - lo) / (hi - lo) * PP_STEPS))   # noqa: E731 - the grid's byte for x
+    c = at(v)
+    if lo_b is not None and c == at(lo_b) and v != lo_b:
+        c += 1
+    if hi_b is not None and c == at(hi_b) and v != hi_b:
+        c -= 1
+    return c
+
+
+def pp_codes(vals: np.ndarray, failed: np.ndarray, key: str, spec: dict[str, Any]) -> np.ndarray:
+    """pp_code over a whole column at once (NaN = no value), with pp_run_value's worst value for a failed run of an
+    unbounded metric: the same bytes, value for value (tests/test_site_export_values.py checks it)."""
+    x = np.asarray(vals, dtype=float).copy()
+    if key in UNBOUNDED_WORST:
+        x[np.isnan(x) & failed] = UNBOUNDED_WORST[key]
+    out = np.full(x.shape, PP_NONE, dtype=np.uint8)
+    raw_inf = np.isinf(x)
+    t = x.copy()
+    tf = HIST_SPECS[key][2]
+    if tf in ("log2", "log10"):
+        fin = np.isfinite(x)
+        pos, zero = fin & (x > 0), fin & (x == 0)
+        t[fin] = np.nan
+        t[pos] = np.log2(x[pos]) if tf == "log2" else np.log10(x[pos])
+        t[zero] = -np.inf
+    lo, hi = spec["lo"], spec["hi"]
+    with np.errstate(invalid="ignore"):
+        below, above = (t < lo), (t > hi)
+    out[below] = PP_BELOW
+    out[above] = PP_ABOVE
+    out[raw_inf & (x < 0)] = PP_BELOW
+    out[raw_inf & (x > 0)] = PP_ABOVE
+    grid = np.isfinite(t) & ~below & ~above
+    if spec["int"]:
+        out[grid] = np.round(t[grid] - lo).astype(np.uint8)
+        return out
+    c = np.round((t[grid] - lo) / (hi - lo) * PP_STEPS).astype(np.int64)
+    lo_b, hi_b = spec["bounds"]
+    at = lambda b: int(round((b - lo) / (hi - lo) * PP_STEPS))   # noqa: E731 - the grid's byte for a bound
+    if lo_b is not None:
+        c[(c == at(lo_b)) & (t[grid] != lo_b)] += 1
+    if hi_b is not None:
+        c[(c == at(hi_b)) & (t[grid] != hi_b)] -= 1
+    out[grid] = c.astype(np.uint8)
+    return out
+
+
+def pp_run_value(run: dict[str, Any], key: str) -> float | None:
+    """A run's value as the distributions read it: a failed run of an unbounded metric takes its worst value."""
+    v = run.get(key)
+    if (v is None or (isinstance(v, float) and math.isnan(v))) and key in UNBOUNDED_WORST and not run.get("success"):
+        return UNBOUNDED_WORST[key]
+    return v
+
+
+def pp_bytes(codes: Any) -> str:
+    import base64
+    return base64.b64encode(bytes(codes) if isinstance(codes, list) else np.asarray(codes, dtype=np.uint8).tobytes()).decode("ascii")
+
+
+def pp_flags(run: dict[str, Any] | None) -> int:
+    if run is None:
+        return 0
+    return ((PP_SUCCESS if run.get("success") else 0) | (PP_NUMERIC if run.get("numeric_recovery_val") else 0)
+            | (PP_SYMBOLIC if run.get("symbolic_recovery") else 0))
+
+
+def write_values(out_dir: str, rel: str, data: dict[str, dict[tuple[str, int], Rows]], keys: list[str],
+                 sizes: dict[str, int]) -> dict[str, dict[str, list[int]]]:
+    """Write the Correlation view's files next to the release; returns the index the page reads, shaped like the
+    Predictions view's: {method: {"catalog|rung": [the runs whose files exist]}}. A run still in progress is left out."""
+    def put(path: str, key: str, obj: Any) -> None:
+        text = "window.RESULTS_V2_PP=window.RESULTS_V2_PP||{};(function(){var R=window.RESULTS_V2_PP;R[%s]=R[%s]||{};R[%s][%s]=%s;})();\n" % (
+            json.dumps(rel), json.dumps(rel), json.dumps(rel), json.dumps(key), json.dumps(obj, separators=(",", ":")))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if os.path.exists(path) and open(path).read() == text:
+            return
+        with open(path, "w") as fh:
+            fh.write(text)
+
+    specs = {k: pp_spec(k) for k in CONT_KEYS}
+    index: dict[str, dict[str, list[int]]] = defaultdict(dict)
+    truth: dict[str, dict[int, dict[str, Any]]] = defaultdict(dict)   # catalog -> row -> the first run seen
+    for m in keys:
+        for (c, r), rows in sorted(data.get(m, {}).items()):
+            if c not in sizes or not usable(m, r):
+                continue
+            n = sizes[c]
+            for d, rs in sorted(by_draw(rows).items()):
+                for i, run in rs.items():
+                    truth[c].setdefault(i, run)
+                if len(rs) < n:
+                    continue
+                index[m].setdefault(f"{c}|{r}", []).append(d)
+                runs = [rs.get(i) for i in range(n)]
+                obj: dict[str, Any] = {"n": n, "s": pp_bytes([pp_flags(run) for run in runs]), "v": {}}
+                failed = np.asarray([run is not None and not run.get("success") for run in runs])
+                nan = float("nan")
+                for k in PP_RUN_KEYS:
+                    vals = np.asarray([nan if run is None or run.get(k) is None else run[k] for run in runs], dtype=float)
+                    codes = pp_codes(vals, failed, k, specs[k])
+                    if (codes != PP_NONE).any():
+                        obj["v"][k] = pp_bytes(codes)
+                put(os.path.join(out_dir, "pp", m, c, f"{r}.{d}.js"), f"{m}|{c}|{r}|{d}", obj)
+    for c, rows_seen in sorted(truth.items()):
+        n = sizes[c]
+        obj = {"n": n, "v": {k: pp_bytes([pp_code(rows_seen[i].get(k), k, specs[k]) if i in rows_seen else PP_NONE for i in range(n)])
+                             for k in PP_PROBLEM_KEYS}}
+        put(os.path.join(out_dir, "pp", "truth", f"{c}.js"), f"truth|{c}", obj)
+    # A method this release no longer holds leaves no files behind (as for the formulas).
+    pp_root = os.path.join(out_dir, "pp")
+    for name in sorted(os.listdir(pp_root)) if os.path.isdir(pp_root) else []:
+        if name != "truth" and name not in index and os.path.isdir(os.path.join(pp_root, name)):
+            shutil.rmtree(os.path.join(pp_root, name))
     return dict(index)
 
 
@@ -1135,6 +1314,8 @@ def main() -> None:
     canonical = canonical_truths(truth, a.engine, os.path.join(a.root, "canonical_truth_cache.json"))
     payload["pred"] = write_predictions(out_dir, a.release, pred, truth, sizes, canonical)
     payload["pred_block"] = PRED_BLOCK
+    payload["pp"] = write_values(out_dir, a.release, data, public, sizes)
+    payload["time_budgets"] = TIME_BUDGETS   # the time limits the Correlations view offers, as the Ranks view does
     ranks = leagues([(ka, kb) for i, ka in enumerate(public) for kb in public[i + 1:]], public, payload["rank_keys"])
     write_set(payload, hists, paired, ranks, a.out, out_dir, "RESULTS_V2", f"public release {a.release}")
     with open(os.path.join(out_dir, "summary.js"), "w") as fh:   # the Progress page and the guide read this, not results.js
