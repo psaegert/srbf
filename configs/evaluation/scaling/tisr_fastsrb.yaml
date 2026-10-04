@@ -1,5 +1,5 @@
-# TiSR on FastSRB along its number of generations, in doublings from 1 (one generation of 20 islands) to 512, about
-# 100 s per problem on the reference machine (provisional): TiSR main 9e628e6 at its own defaults (see
+# TiSR on FastSRB along its number of generations, in doublings from 1 (one generation of 20 islands) to 2048, about
+# 100 s per problem on the reference machine (512 measured 21 s with threads: all): TiSR main 9e628e6 at its own defaults (see
 # srbf/worker/models/tisr_worker.py and docs/models.md), run in an environment of its own:
 #   scripts/envs/build_tisr_env.sh {{ROOT}}/envs/tisr
 # Every run spends its whole budget. TiSR defines no single answer: it returns its hall of fame, and srbf picks the
@@ -24,11 +24,11 @@ run:
       threads: all              # every method gets the whole reference machine (owner 2026-09-30)
       generations: !sweep
         name: ladder
-        values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+        values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
   runner:
     limit: null
     save_every: 8
     resume: true
     output: !sweep
       name: ladder
-      values: ['{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000001.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000002.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000004.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000008.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000016.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000032.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000064.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000128.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000256.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000512.pkl']
+      values: ['{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000001.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000002.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000004.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000008.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000016.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000032.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000064.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000128.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000256.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0000512.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0001024.pkl', '{{ROOT}}/results/evaluation/scaling/tisr/fastsrb/generations_0002048.pkl']
