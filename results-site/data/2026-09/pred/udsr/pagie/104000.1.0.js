@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["udsr|pagie|104000|1|0"]={"0":["abs + pow pow tanh * 4.102 tanh * 0.4036 x2 4 2 pow tanh * x1 1.222 4",0]};})();
