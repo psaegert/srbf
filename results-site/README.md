@@ -105,9 +105,11 @@ Predictions views read them, thousands per method) and its `ranks/` and `paired/
 - A file's name is the first 32 hex digits of the HMAC of `name\0` and its path below the overlay
   (e.g. `pp/<method>/feynman/16.1.js`): it gives away neither the method nor the path. The page computes the name
   from the path it wants.
-- Its IV is the first 12 bytes of the HMAC of `iv\0`, the path, `\0` and the content, and the ciphertext is the
-  gzipped content encrypted with the path (`<release>/<path>`) as additional data, so a file only opens as itself.
-  Nothing is random: an unchanged file reseals to the same bytes and stays out of the next commit; a changed one gets a
+- The content is gzipped (with a fixed header). The IV is the first 12 bytes of the HMAC of `iv\0`, the path, `\0`
+  and those gzipped bytes, so an IV repeats only for identical plaintext; the ciphertext is the gzipped bytes encrypted
+  with the path (`<release>/<path>`) as additional data, so a file only opens as itself.
+  Nothing is random: an unchanged file reseals to the same bytes and stays out of the next commit (a file that still
+  opens to the same content is kept as it is, under its own IV, whatever gzip would write now); a changed one gets a
   new IV. A file no longer in any overlay is deleted from `sealed/`. Two overlays may hold the same path; their files
   have different names, as their keys differ.
 - Each file is one line, `(window.RESULTS_V2_SEALED_FILES=window.RESULTS_V2_SEALED_FILES||{})["<name>"]={"iv":"…","ct":"…"};`.

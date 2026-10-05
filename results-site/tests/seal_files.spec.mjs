@@ -9,7 +9,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSyn
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { webcrypto, pbkdf2Sync, createHash } from 'node:crypto';
+import { webcrypto, pbkdf2Sync, createHash, createHmac } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 
 const subtle = webcrypto.subtle;
@@ -86,6 +86,7 @@ async function handedKeys(payload) {   // the file keys an opened overlay hands 
   const sf = run(payload).RESULTS_V2_PRIVATE.sealed_files;
   return importKeys(bytesOf(sf.enc), bytesOf(sf.name));
 }
+function ivOf(kName, path, gz) { return createHmac('sha256', kName).update('iv\0' + path + '\0').update(gz).digest().subarray(0, 12); }
 async function nameOf(keys, path) { return Buffer.from(await subtle.sign('HMAC', keys.name, utf8('name\0' + path))).toString('hex').slice(0, 32); }
 async function openLine(line, keys, path) {   // -> the content of one sealed file read as `path`, or null
   try {
@@ -143,21 +144,22 @@ test('a reseal leaves every unchanged file byte for byte, and a changed file cha
   expect((await openFile(out, keys, paths[1])).toString()).toContain('"n":4');
 });
 
-test('a sealed file that holds the same content is kept, whatever gzip wrote: an IV never gets a second ciphertext', async () => {
+test('a sealed file that holds the same content is kept under its own IV, whatever gzip wrote', async () => {
   const dir = scratch(), src = join(dir, 'src'), out = join(dir, 'sealed.js');
   const paths = overlay(src, 'hidden-method-a');
   seal([src, out], { SRBF_SEAL_KEY: KEY });
   const P = run((await openOverlays(readFileSync(out, 'utf8'), KEY))[0]).RESULTS_V2_PRIVATE;
   const keys = await handedKeys((await openOverlays(readFileSync(out, 'utf8'), KEY))[0]);
-  // what another machine's gzip might have written: the same content, other gzip bytes, under the same IV and path
+  // what another machine's gzip might have written: the same content, other gzip bytes, and so another IV
   const at = join(dir, 'sealed', (await nameOf(keys, paths[0])) + '.js');
-  const W = run(readFileSync(at, 'utf8')), name = Object.keys(W.RESULTS_V2_SEALED_FILES)[0], iv = W.RESULTS_V2_SEALED_FILES[name].iv;
+  const W = run(readFileSync(at, 'utf8')), name = Object.keys(W.RESULTS_V2_SEALED_FILES)[0];
   const gz = gzipSync(readFileSync(join(src, paths[0])), { level: 9 });
   gz[9] = 3;   // the OS byte a Unix gzip writes
+  const iv = ivOf(bytesOf(P.sealed_files.name), paths[0], gz).toString('base64');
+  expect(iv).not.toEqual(W.RESULTS_V2_SEALED_FILES[name].iv);
   const k = await subtle.importKey('raw', bytesOf(P.sealed_files.enc), 'AES-GCM', false, ['encrypt']);
   const ct = Buffer.from(await subtle.encrypt({ name: 'AES-GCM', iv: bytesOf(iv), additionalData: utf8(REL + '/' + paths[0]) }, k, gz));
   const other = `(window.RESULTS_V2_SEALED_FILES=window.RESULTS_V2_SEALED_FILES||{})["${name}"]=${JSON.stringify({ iv, ct: ct.toString('base64') })};\n`;
-  expect(other).not.toEqual(readFileSync(at, 'utf8'));
   writeFileSync(at, other);
   expect(seal([src, out], { SRBF_SEAL_KEY: KEY })).toContain('0 written');
   expect(readFileSync(at, 'utf8')).toEqual(other);
@@ -215,6 +217,14 @@ test('the overlay hands over the two file keys, and a wrong key opens nothing', 
   const material = pbkdf2Sync(KEY, 'srbf-sealed-files/' + REL, 600000, 64, 'sha256');
   expect(Buffer.from(sf.enc, 'base64').equals(material.subarray(0, 32))).toBe(true);
   expect(Buffer.from(sf.name, 'base64').equals(material.subarray(32, 64))).toBe(true);
+  // each IV is the HMAC of the path and the very bytes it encrypts: an IV repeats only for identical plaintext
+  const encKey = await subtle.importKey('raw', material.subarray(0, 32), 'AES-GCM', false, ['decrypt']);
+  const named = await importKeys(material.subarray(0, 32), material.subarray(32, 64));
+  for (const p of paths) {
+    const W = run(readFileSync(join(dir, 'sealed', (await nameOf(named, p)) + '.js'), 'utf8')), env = Object.values(W.RESULTS_V2_SEALED_FILES)[0];
+    const gz = Buffer.from(await subtle.decrypt({ name: 'AES-GCM', iv: bytesOf(env.iv), additionalData: utf8(REL + '/' + p) }, encKey, bytesOf(env.ct)));
+    expect(env.iv, p).toEqual(ivOf(material.subarray(32, 64), p, gz).toString('base64'));
+  }
   // a wrong key opens no overlay, and what it would derive names no file and opens none
   const wrong = 'not-the-key-at-all-really';
   expect(await openOverlays(readFileSync(out, 'utf8'), wrong)).toEqual([]);
