@@ -1203,10 +1203,10 @@ test('ranks read every method at the same time per problem on the reference mach
   for (const t of cells) {
     if (t.length === 1) { expect(t[0]).toBeCloseTo(10, 0); } else { expect(t.length).toBe(2); expect(Math.min(t[0], t[1])).toBeLessThanOrEqual(10); expect(Math.max(t[0], t[1])).toBeGreaterThanOrEqual(10); }
   }
-  await expect(page.locator(V2 + ' .v2view svg.v2chart').last()).toContainText('Comparisons won, by time');
+  await expect(page.locator(V2 + ' .v2view h3.v2h').last()).toHaveText('By time');   // the chart along the times
   await page.locator(V2 + ' .v2viewbar button[data-set="pm:budget"]').click();
   await expect(chart).toHaveAttribute('aria-label', /budget [\d,]+/);
-  await expect(page.locator(V2 + ' .v2view svg.v2chart').last()).toContainText('Comparisons won, by budget');
+  await expect(page.locator(V2 + ' .v2view h3.v2h').last()).toHaveText('By budget');
 });
 
 test('a pooled number appears only where a method has finished every selected catalog', async ({ page }) => {
@@ -1285,9 +1285,11 @@ test('outcomes an overlay computed against an older bracket of a release method 
 
 // ---- design contract (2026-09-20): hints, labels, axes, the pinned column, the header ---------------------------
 test('no hint opens empty, in any display', async ({ page }) => {
+  test.setTimeout(120_000);   // every distinct hint of eight displays is opened one by one
   for (const view of VIEWS) {
     await page.goto(`/explorer.html?release=2026-09&v=${view}&c=all`);
     await expect(page.locator(V2 + ' .v2tab.active')).toHaveAttribute('data-view', view);
+    await expect(page.locator(V2 + ' .v2view')).not.toContainText('Loading', { timeout: 20000 });   // a display still fetching redraws under the clicks
     await page.waitForTimeout(600);
     await page.evaluate(() => document.querySelectorAll('.explorer-v2 details').forEach((d) => { d.open = true; }));   // collapsed sections hold hints too
     // every dotted term and every "?" on screen (the headline, the side panel and the display), each distinct one once

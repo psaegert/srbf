@@ -2364,10 +2364,10 @@
       for (i = 0; i < cl.n; i++) { if (!(w[i] > 0)) { continue; } var px = ppPlace(A, ca[i]), py = ppPlace(B, cb[i]);
         if (px === 0 && py === 0) { tot.in += w[i]; } if (px < 0) { tot.xl += w[i]; } if (px > 0) { tot.xh += w[i]; } if (py < 0) { tot.yl += w[i]; } if (py > 0) { tot.yh += w[i]; } }
       var none = ws[j].all - ws[j].n;
-      return "<tr><td>" + '<span class="v2sw" style="background:' + rgbCss(methodRGB(cl.m)) + '"></span>' + esc(corrLabel(cl)) + "</td>" + lanes.map(function (l) { return "<td>" + (100 * tot[l[0]]).toFixed(1) + " %</td>"; }).join("") +
+      return "<tr><td>" + '<span class="v2sw" style="background:' + rgbCss(methodRGB(cl.m)) + '"></span>' + esc(cl.m.label + (cl.m.local ? " (local)" : "")) + "</td><td>" + (cl.between ? "≈ " + fmtBudget(cl.between[0]) + "–" + fmtBudget(cl.between[1]) : fmtBudget(cl.r)) + "</td>" + lanes.map(function (l) { return "<td>" + (100 * tot[l[0]]).toFixed(1) + " %</td>"; }).join("") +
         "<td>" + Math.round(ws[j].n).toLocaleString() + (none > 0.5 ? ' <span class="v2ci-txt">of ' + ws[j].all.toLocaleString() + "</span>" : "") + "</td><td>" + rhoText(rhos[j]) + "</td></tr>";
     }).join("");
-    return '<div class="v2table-wrap"><table class="v2table v2ctable"><thead><tr><th>method</th>' + lanes.map(function (l) { return "<th>" + esc(l[1]) + "</th>"; }).join("") + "<th>problems with both values</th><th>rank correlation " + help(CTERMS.rho, "What is the rank correlation?") + "</th></tr></thead><tbody>" + rows + "</tbody></table></div>" +
+    return '<div class="v2table-wrap"><table class="v2table v2ctable"><thead><tr><th>method</th><th>budget</th>' + lanes.map(function (l) { return "<th>" + esc(l[1]) + "</th>"; }).join("") + "<th>problems with both values</th><th>rank correlation " + help(CTERMS.rho, "What is the rank correlation?") + "</th></tr></thead><tbody>" + rows + "</tbody></table></div>" +
       '<p class="v2hint">The share of each method’s runs inside the frame and in each strip, weighted as in the chart; a run in a corner counts in both of its strips. A problem without a value on either metric is left out' + (leftOut(A.k) || leftOut(B.k) ? ", and so is a run without a usable formula in an overlap metric, as chosen in the side panel" : "") + ".</p>";
   }
   // the run picked in the points display: its problem's true formula and the method's, from the Predictions view's files
