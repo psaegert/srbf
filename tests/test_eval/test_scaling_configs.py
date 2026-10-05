@@ -52,7 +52,8 @@ EXPECTED_PROVENANCE = {
     "subprocess:dso:udsr": "author_blessed",
     "subprocess:dso:dsr": "upstream_default",
     # a shipped worker at its library's own defaults (TiSR's main branch); the FastSRB paper's protocol, with its
-    # per-problem complexity cap from the ground truth, is a panels/ arm
+    # per-problem complexity cap from the ground truth, is a panels/ arm. A TiSR config that lets srbf pick its
+    # answer (`selection`) is harness_tuned, as every config with `selection` is (below).
     "subprocess:tisr": "upstream_default",
     # QLattice: the configuration its authors submitted to SRBench (the 2022 competition, unchanged in srbench_2025)
     "subprocess:qlattice": "author_blessed",
@@ -101,11 +102,13 @@ def test_eval_config_uses_catalog_schema_and_resolves(config_path):
         arm = (ma.get("options") or {}).get("arm")
         policy = next(EXPECTED_PROVENANCE[key] for key in (f"{worker}:{arm}", worker, ma["type"])
                       if key in EXPECTED_PROVENANCE)
-        expected = "harness_tuned" if in_panels else policy
+        # srbf picking a method's answer among its candidates (`selection`) is a maintainer choice (docs/fairness.md).
+        expected = "harness_tuned" if in_panels or ma.get("selection") else policy
         assert ma.get("config_provenance") == expected, \
             f"{config_path}: config_provenance {ma.get('config_provenance')!r} does not match the " \
             f"policy label {expected!r} for adapter {ma['type']!r}" \
-            + (" (panels/ arms are harness_tuned by definition)" if in_panels else "")
+            + (" (panels/ arms are harness_tuned by definition)" if in_panels else "") \
+            + (" (srbf's own `selection` makes a config harness_tuned)" if ma.get("selection") else "")
         sampling = ds.get("sampling", {})
         assert {"n_support", "n_validation", "problems_per_expression"} <= set(sampling), \
             f"{config_path}: sampling missing keys ({sorted(sampling)})"

@@ -88,9 +88,9 @@
   function lastAxis() { return state.plots.length ? state.plots[state.plots.length - 1].x : defaultAxis(); }   // a new plot joins the last one
   var PROV = { upstream_default: "upstream defaults", author_blessed: "author-blessed", harness_tuned: "maintainer-chosen" };
   var PROV_NOTE = {
-    upstream_default: "Settings: the defaults the method's own release ships with. srbf sets only the budget and, for PySR, the operators: the 23 the problems are written in. Nothing was tuned.",
-    author_blessed: "Settings: chosen by the method's authors. The Flash-ANSR authors also run this benchmark, and this label says so.",
-    harness_tuned: "Settings: chosen by the benchmark's maintainers."
+    upstream_default: "Settings: the defaults the method's own release ships with. srbf sets only the budget and, where the method takes a list of operators, the 23 the problems are written in. Nothing was tuned.",
+    author_blessed: "Settings: the ones the method's authors use when they benchmark it themselves, which can differ from its library's defaults. The Flash-ANSR authors also run this benchmark, and this label says so.",
+    harness_tuned: "Settings: chosen by the benchmark's maintainers, in whole or in part, such as the rule that picks the method's one answer."
   };
   var TERMS = {
     posbudget: "Every method is read at the budget set here, in its own unit. Where a method was run at that budget, its numbers are the measured ones. Between two budgets it was run at, they are interpolated by where the budget lies between the two on a logarithmic scale, and marked \u2248. Outside the budgets a method was run at, it has no value.",
@@ -114,7 +114,7 @@
     tbudget: "Each method is compared at its largest finished budget that takes at most this many seconds per problem on our timing workstation. A method is left out when it has not been timed yet, or when its smallest budget already takes longer. A hollow dot marks a method whose largest budget still stays under the limit: with more budget it might do better.",
     worstrank: "For every pair of methods and every problem: the chance that one does better than the other on the chosen metric, setting every run of one against every run of the other, with ties counting half. A method without a usable formula counts as worst, and on log10 FVU two predictions that both meet Numeric Recovery tie. These chances are averaged over problem sets like any value. A method's average place is 1 plus the chances that each other method does better than it: the place it takes on average. Only who is better counts, so a narrow win counts as much as a wide one.",
     winshare: "The chance that a method does better than another method on a problem, averaged over the other methods; a tie counts as half. 100 % means it beats every other method on every problem, and 50 % means it wins as often as it loses. Unlike the average place, it stays on the same 0 to 100 % scale when the number of methods changes; its value still depends on which methods are compared.",
-    provenance: "Who chose each method's settings. Upstream defaults: the settings the method's own release ships with; nothing was tuned. Author-blessed: settings chosen by the method's authors; for Flash-ANSR, these are also the authors of this benchmark. Maintainer-chosen: settings chosen by the benchmark's maintainers."
+    provenance: "Who chose each method's settings. Upstream defaults: the settings the method's own release ships with; nothing was tuned. Author-blessed: the settings the method's authors use when they benchmark it themselves; for Flash-ANSR, these are also the authors of this benchmark. Maintainer-chosen: settings chosen, in whole or in part, by the benchmark's maintainers."
   };
   var COOKIE = "srbf_colors";
   function readCookie() { var m = document.cookie.match(new RegExp("(?:^|; )" + COOKIE + "=([^;]*)")); if (!m) { return {}; } try { return JSON.parse(decodeURIComponent(m[1])) || {}; } catch (e) { return {}; } }

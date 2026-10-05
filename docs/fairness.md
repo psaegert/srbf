@@ -80,12 +80,14 @@ run:
 | label | meaning |
 |---|---|
 | `upstream_default` | the method's own released defaults, apart from the operator vocabulary and the swept budget; nothing was tuned in either direction |
-| `author_blessed` | the method's authors supplied or approved the configuration |
-| `harness_tuned` | the benchmark maintainers chose the configuration |
+| `author_blessed` | the configuration the method's authors use to benchmark it: supplied, approved or published by them |
+| `harness_tuned` | the benchmark maintainers chose the configuration, or part of it |
 
 The label is validated when the config is loaded and stored in every result file, next to the
 record of what ran ([Results](results.md#what-a-result-file-records)). A config without the key is
-read as `harness_tuned`: an unlabeled configuration was chosen by whoever assembled it.
+read as `harness_tuned`: an unlabeled configuration was chosen by whoever assembled it. A config that sets
+`selection` is `harness_tuned` too: srbf, not the method, then picks the method's answer
+([Picking among candidates](adapters.md#the-config-keys)).
 
 The configs in the repository are labeled as follows, and a test keeps them that way:
 
@@ -101,10 +103,11 @@ The configs in the repository are labeled as follows, and a test keeps them that
   benchmark baseline (his SRBench submission), without the hyperparameter grid that the benchmark's
   maintainers searched around it. It differs from the library's defaults in the sample size, which it
   lets the method choose; on up to 10,000 points the method takes them all, as the default does.
-- **TiSR:** `upstream_default`: its own defaults at the pinned commit of its main branch. The protocol of its
-  author's benchmark paper, with its operators and forbidden nestings and a complexity cap per problem taken from the
-  ground truth, runs as a `harness_tuned` config under `configs/evaluation/panels/`, a check against the paper's
-  numbers.
+- **TiSR:** `harness_tuned`: its own defaults at the pinned commit of its main branch, but that version returns
+  a hall of fame and no single answer, so srbf picks one with `selection: {mode: mdl}`, a rule the maintainers
+  chose. A TiSR release that returns its own answer would run as `upstream_default`. The protocol of its author's
+  benchmark paper, with its operators and forbidden nestings and a complexity cap per problem taken from the ground
+  truth, runs as a `harness_tuned` config under `configs/evaluation/panels/`, a check against the paper's numbers.
 - **Flash-ANSR, every size:** `author_blessed`. For these entries the method's authors and the
   benchmark's maintainers are the same people, which is exactly what the label discloses. Any
   method's authors get the same slot on the same terms.

@@ -331,7 +331,7 @@ model_adapter:
   type: subprocess
   worker: tisr
   python: "{{ROOT}}/envs/tisr/bin/python"
-  config_provenance: upstream_default
+  config_provenance: harness_tuned   # srbf picks the answer (selection), so the maintainers chose part of it
   simplipy_engine: acj-5-4-llm
   timeout: 7200
   selection: {mode: mdl}       # TiSR picks no answer; without this every problem counts as failed
