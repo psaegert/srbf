@@ -1,1 +1,1 @@
-window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|nonic|4194304|1|0"]={"0":["+ 0.0007079 * 0.9999 * - cosh + + sinh * 1.798 x1 asin * -0.9273 x1 0.9673 * -0.4396 x1 + sinh * 1.355 x1 * -0.6923 x1",0]};})();
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|nonic|4194304|1|0"]={"0":["+ -8.474e-05 * 1 * * 1.028 x1 + * * 0.1224 x1 exp * 3.907 x1 - cosh tan tan * 0.7215 x1 * -0.8526 x1",0]};})();
