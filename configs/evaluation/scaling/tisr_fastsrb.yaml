@@ -16,7 +16,7 @@ run:
     type: subprocess
     worker: tisr
     python: '{{ROOT}}/envs/tisr/bin/python'
-    config_provenance: upstream_default
+    config_provenance: harness_tuned     # TiSR's defaults, but srbf picks its answer (selection): docs/fairness.md
     simplipy_engine: acj-5-4-llm
     timeout: 7200
     selection: {mode: mdl}
