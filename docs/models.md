@@ -204,10 +204,12 @@ and division.
   thread the evaluation budget is counted in parallel and a run is not reproducible exactly.
 
 The worker stores the whole Pareto front in the `front` column. `configs/evaluation/scaling/operon_fastsrb.yaml`
-sweeps the evaluations in doublings from 2^10 to 2^23. The author configuration also stops a search after 1,000
-generations: at 2^22 a search runs about 800 generations, and at 2^23 every search ends at the cap, about 5 s per
-problem on the reference machine. A larger budget adds no time, so the ladder ends there, short of the 100 s the other
-methods reach.
+sweeps the evaluations in doublings from 2^10 to 2^27, about 100 s per problem on the reference machine. The author's
+configuration also limits a search to 1,000 generations, as a backstop rather than a budget: his SRBench 2021
+configuration sets it only high enough for the evaluation budget to end a search first, and at his 10^6 evaluations a
+search runs about 200 generations. Past about 5 x 10^6 evaluations those 1,000 generations would end every search first, so the worker raises
+the limit with the budget to one it cannot reach (`generation_limit`), and the evaluation count stays the only budget.
+The result records the limit used and whether a search reached it.
 
 ## RILS-ROLS
 

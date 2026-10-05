@@ -170,9 +170,7 @@ E2E_DEFAULT_MAX_RUNG = 256   # E2E is reported at its default settings only
 # A method that cannot run a larger budget ends earlier, for the reason given here. Until its ladder has ended, a
 # method stays in progress even when every run planned so far is in.
 LADDER_TOP_S = 1000.0
-LADDER_END = {"e2e": "E2E runs at its default settings, which allow at most 256 candidates per bag.",
-              "operon": "Operon's author configuration stops a search after 1,000 generations. From about 5 million "
-                        "evaluations on, every search ends there, so a larger budget adds no time (about 5 s per problem)."}
+LADDER_END = {"e2e": "E2E runs at its default settings, which allow at most 256 candidates per bag."}
 # Budgets taken out of a method's plan on purpose; they no longer count as open runs.
 PLAN_DROPPED = {"T8-3M": {65536}, "T8-20M": {65536}, "T8-120M": {65536}}   # stopped; larger budgets come with a later model
 CATALOG_GROUPS = {
