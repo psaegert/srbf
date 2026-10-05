@@ -34,7 +34,10 @@ from typing import Any
 
 SITE = Path(__file__).resolve().parents[1]
 # T8-120M-pysr replaced T8-20M-pysr on the page (2026-09-29); the 20M hybrid stays admissible, it is public-safe.
-PUBLIC_METHODS = {"e2e", "nesymres-100M", "PySR", "operon", "gpgomea", "dsr", "udsr", "rilsrols", "qlattice", "T8-3M", "T8-20M", "T8-120M", "T8-120M-pysr", "T8-20M-pysr"}
+# The oracle is public (owner 2026-09-25: "as all other methods, in black with a dashed line ... it is important that we
+# show it"; its results reached the board 2026-10-05).
+PUBLIC_METHODS = {"e2e", "nesymres-100M", "PySR", "operon", "gpgomea", "dsr", "udsr", "rilsrols", "qlattice", "T8-3M", "T8-20M",
+                  "T8-120M", "T8-120M-pysr", "T8-20M-pysr", "oracle"}
 # Methods with results that are withheld from the public page: the key checks below catch their keys, these their names
 # in the texts. The Flash-ANSR prior is private since 2026-09-30 (owner: "hidden from the site ... private with a key");
 # it lives in the sealed overlay. (T8-20M-pysr was withheld 2026-09-28 until its re-run under the two-part code.)
