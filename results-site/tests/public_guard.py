@@ -2,8 +2,8 @@
 
 Fatal checks, run before the Playwright suite in CI and locally:
   1. no page (index.html and the pages around it) references a private/ path or a local page (*.local.html);
-  2. every method key in data/*/results.js, data/*/summary.js, data/*/hist/*.js, data/*/paired.js, data/*/ranks.js,
-     data/*/pred/ and data/*/pv/ is
+  2. every method key in data/*/results.js (its slots and indexes included), data/*/summary.js, data/*/hist/*.js,
+     data/*/ranks/*.js, data/*/paired/*.js, data/*/pred/ and data/*/pv/ is
      in the public allowlist below
      (the list names PUBLIC methods only; a private method's key must never appear here);
   3. every release payload carries the complete metric registry (at least the metric floor: the site's first
@@ -71,8 +71,8 @@ def keys_in_wrapped(text: str, pattern: str) -> set[str] | None:
 
 
 def _object_after(text: str, *markers: str) -> dict | None:
-    """The first JSON object that directly follows one of `markers` (a ranks.js hands its objects over as
-    Object.assign(target, {...}) or, for the pairs it may first map onto another key list, as `var P={...}`)."""
+    """The first JSON object that directly follows one of `markers` (a per-key cell file hands its cells over as
+    `var P={...}`)."""
     for marker in markers:
         i = text.find(marker)
         while i >= 0:
@@ -86,14 +86,13 @@ def _object_after(text: str, *markers: str) -> dict | None:
     return None
 
 
-def rank_methods(text: str) -> set[str] | None:
-    """Every method key a ranks.js names: the methods with a time-budget rung, both sides of every pair, and both
-    sides of every record of which rungs a time-limit outcome compared."""
-    at, pairs = _object_after(text, ".at,"), _object_after(text, ".pairs,", "var P=")
-    if at is None or pairs is None:
+def cell_methods(text: str) -> set[str] | None:
+    """Every method key a ranks/<key>.js or paired/<key>.js names: both sides of every pair, for every metric the file
+    hands over (as `var P={metric: {pair: ...}}`)."""
+    cells = _object_after(text, "var P=")
+    if cells is None or not all(isinstance(per, dict) for per in cells.values()):
         return None
-    rungs = _object_after(text, ".rungs,") or {}
-    return set(at) | {k for pair in list(pairs) + list(rungs) for k in pair.split("|")}
+    return {k for per in cells.values() for pair in per for k in pair.split("|")}
 
 
 SEALED_FIELDS = {"v", "kdf", "iter", "salt", "iv", "ct"}
@@ -245,11 +244,15 @@ def payload_texts(node: Any, path: str = "") -> list[tuple[str, str]]:
 
 def method_keys(payload: Any) -> set[str]:
     """Every method key a release payload or its summary names: its methods, their cells, status, progress and times,
-    and the finished and in-progress lists of the progress summary (a scheduled method is named by its label only)."""
+    the finished and in-progress lists of the progress summary (a scheduled method is named by its label only), and
+    the methods its slots place."""
     summary = payload.get("summary") or {}
+    slots = payload.get("slots") or {}   # where every method sits at every slot; an overlay's record of its partners
+    basis = slots.get("basis") or {}
     return ({mm["key"] for mm in payload.get("methods", [])} | set(payload.get("cells", payload.get("data", {})))
             | set(payload.get("status", {})) | set(payload.get("progress", {})) | set(payload.get("timing", {}))
-            | set(summary.get("finished", [])) | set(summary.get("in_progress", [])))
+            | set(summary.get("finished", [])) | set(summary.get("in_progress", []))
+            | set(slots.get("at") or {}) | set(slots.get("stamp") or {}) | set(basis) | {q for per in basis.values() for q in per})
 
 
 def check_payload_texts(payload: Any, name: str, banned: dict[str, str]) -> list[str]:
@@ -293,18 +296,17 @@ def selftest() -> list[str]:
             bad.append("selftest: check_no_as_run_time accepted an as-run time metric")
     finally:
         probe.unlink(missing_ok=True)
-    ranks = ('window.RESULTS_V2_RANKS=window.RESULTS_V2_RANKS||{};(function(){var R=window.RESULTS_V2_RANKS;R["t"]=R["t"]||{};'
-             'Object.assign(R["t"].at,{"e2e":{"t1":4}});Object.assign(R["t"].pairs,{"hidden-method|e2e":{"nguyen":{"4":[12,3,4]}}});})();\n')
-    if "hidden-method" not in (rank_methods(ranks) or set()):
-        bad.append("selftest: rank_methods missed a method named only in a pair")
-    compared = ranks.replace("})();", 'Object.assign(R["t"].rungs,{"other-hidden|e2e":{"t1":[4,4]}});})();')
-    mapped = ('window.RESULTS_V2_RANKS=window.RESULTS_V2_RANKS||{};(function(){var R=window.RESULTS_V2_RANKS,rel="t",K=["a"],MAIN=true;'
-              'var X=R[rel]=R[rel]||{keys:K,at:{},pairs:{}};var P={"mapped-hidden|e2e":{"nguyen":{"4":[12,3,4]}}};'
-              'Object.assign(X.at,{"e2e":{"t1":4}});Object.assign(X.pairs,P);Object.assign(X.rungs,{});})();\n')
-    if "mapped-hidden" not in (rank_methods(mapped) or set()):
-        bad.append("selftest: rank_methods missed a method named in pairs handed over as var P")
-    if not {"hidden-method", "other-hidden"} <= (rank_methods(compared) or set()):
-        bad.append("selftest: rank_methods missed a method named only in the compared-rungs record")
+    cells = ('window.RESULTS_V2_RANKCELLS=window.RESULTS_V2_RANKCELLS||{};(function(){var R=window.RESULTS_V2_RANKCELLS,rel="t";'
+             'var X=R[rel]=R[rel]||{};var P={"log10_fvu_val":{"e2e|hidden-method":{"nguyen":{"64":[12,3,4],"t10":[12,1,2]}}}};'
+             'Object.keys(P).forEach(function(k){var Y=X[k]=X[k]||{};Object.keys(P[k]).forEach(function(p){Y[p]=P[k][p];});});})();\n')
+    if "hidden-method" not in (cell_methods(cells) or set()):
+        bad.append("selftest: cell_methods missed a method named only in a pair of a ranks/ file")
+    two = cells.replace('{"log10_fvu_val":', '{"f1_score":{},"f1_score@answered":{"other-hidden|e2e":{}},"log10_fvu_val":')
+    if not {"hidden-method", "other-hidden"} <= (cell_methods(two) or set()):
+        bad.append("selftest: cell_methods missed a method named in the answered-only reading of a paired/ file")
+    placed = {"slots": {"at": {"hidden-at": {}}, "stamp": {"hidden-stamp": {}}, "basis": {"e2e": {"hidden-partner": {}}}}}
+    if not {"hidden-at", "hidden-stamp", "hidden-partner"} <= method_keys(placed):
+        bad.append("selftest: method_keys missed a method named only in the slots")
     if not {"hidden-a", "hidden-b"} <= method_keys({"summary": {"finished": ["hidden-a"], "in_progress": ["hidden-b"], "scheduled": []}}):
         bad.append("selftest: method_keys missed a method named only in the progress summary")
     probe_payload = {"release": {"scoring": "fine"}, "timing_note": "measured on the forbidden-host", "cells": {"m": "the forbidden-host is numeric bulk"}}
@@ -391,15 +393,13 @@ def main() -> int:
             extra = sorted(ks - PUBLIC_METHODS)
             if extra:
                 failures.append(f"{hj}: non-public method keys {extra}")
-        pj = js.parent / "paired.js"
-        if pj.exists():
-            ks = keys_in_wrapped(pj.read_text(encoding="utf-8"), r"Object\.assign\(R\[[^\]]*\],(\{.*\})\);\}\)\(\);\s*$")
-            if ks is None:
-                failures.append(f"{pj}: not a paired file")
-            else:
-                extra = sorted({k for pair in ks for k in pair.split("|")} - PUBLIC_METHODS)
-                if extra:
-                    failures.append(f"{pj}: non-public method keys {extra}")
+        for sub in ("ranks", "paired"):   # the per-key cells along the slots: both sides of every pair
+            for cj in sorted((js.parent / sub).glob("*.js")):
+                named = cell_methods(cj.read_text(encoding="utf-8"))
+                if named is None:
+                    failures.append(f"{cj}: not a per-key cell file")
+                elif named - PUBLIC_METHODS:
+                    failures.append(f"{cj}: non-public method keys {sorted(named - PUBLIC_METHODS)}")
         pd = js.parent / "pred"   # the Predictions view's files: one directory per method, and the ground truth
         if pd.is_dir():
             extra = sorted(d.name for d in pd.iterdir() if d.is_dir() and d.name != "truth" and d.name not in PUBLIC_METHODS)
@@ -416,13 +416,6 @@ def main() -> int:
         extra = sorted(set(payload.get("pv") or {}) - PUBLIC_METHODS)
         if extra:
             failures.append(f"{js}: non-public method keys in the per-problem pair index {extra}")
-        rj = js.parent / "ranks.js"
-        if rj.exists():
-            named = rank_methods(rj.read_text(encoding="utf-8"))
-            if named is None:
-                failures.append(f"{rj}: not a ranks file")
-            elif sorted(named - PUBLIC_METHODS):
-                failures.append(f"{rj}: non-public method keys {sorted(named - PUBLIC_METHODS)}")
     for pub in sorted((SITE / "data").rglob("*.js")):
         if pub.name != "sealed.js":     # the sealed payload is encrypted and is not a published number
             failures.extend(check_no_as_run_time(pub))
