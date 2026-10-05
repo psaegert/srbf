@@ -706,10 +706,10 @@ test('every reading of a distribution draws, and the choice travels in the link'
 test('the budget of a snapshot is set on the display itself, on a slider and by its marks', async ({ page }) => {
   await page.goto('/explorer.html?release=2026-09&v=dist&dm=log10_fvu_val&r=16');
   const val = page.locator(V2 + ' .v2viewbar .v2posval'), chart = page.locator(V2 + ' .v2view svg.v2chart').first();
-  await expect(val).toHaveText('16');
+  await expect(val).toHaveValue('16');
   await expect(chart).toContainText('at budget 16');
   await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="larger budget"]').click();
-  await expect(val).toHaveText('32');
+  await expect(val).toHaveValue('32');
   await expect(chart).toContainText('at budget 32');
   await expect(page.locator(V2 + ' select.v2rung')).toBeHidden();   // the budget has one place: the display's bar
   await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="smaller budget"]').click();
@@ -717,7 +717,7 @@ test('the budget of a snapshot is set on the display itself, on a slider and by 
   await expect(chart).toContainText('at budget 8');
   // the Problem sets view and the by-problem-set table carry the same control, at the same budget
   await page.locator(V2 + ' .v2tab[data-view="matrix"]').click();
-  await expect(page.locator(V2 + ' .v2viewbar .v2posval')).toHaveText('8');
+  await expect(page.locator(V2 + ' .v2viewbar .v2posval')).toHaveValue('8');
   expect(new URL(page.url()).searchParams.get('r')).toBe('8');
 });
 
@@ -829,14 +829,14 @@ test('the slider reads every method between its budgets, marks it, and reads by 
   const errors = collectErrors(page);
   await page.goto('/explorer.html?release=2026-09&v=matrix&m=T8-20M&r=1448');
   const val = page.locator(V2 + ' .v2viewbar .v2posval');
-  await expect(val).toHaveText('1,448');
+  await expect(val).toHaveValue('1,448');
   await expect(page.locator(V2 + ' .v2view')).toContainText('Interpolated: Flash-ANSR T8-20M between budgets 1,024 and 2,048.');
   await expect(page.locator(V2 + ' .v2view .v2matrix .v2tween').first()).toBeVisible();   // and every such number carries the mark
   const slider = page.locator(V2 + ' .v2viewbar input.v2pos');
   await slider.evaluate((el) => { el.value = String(0.37 * (+el.max)); el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); });
   await expect.poll(() => new URL(page.url()).searchParams.get('r')).not.toBe('1448');
   await page.locator(V2 + ' .v2viewbar button[data-set="pm:time"]').click();
-  await expect(val).toContainText(' s');
+  await expect(page.locator(V2 + ' .v2viewbar .v2posunit')).toHaveText('s');
   await expect(page.locator(V2 + ' .v2view')).toContainText('s per problem');
   expect(new URL(page.url()).searchParams.get('pm')).toBe('time');
   await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="longer time"]').click();
@@ -849,7 +849,7 @@ test('a method outside the budgets it was run at has no value there, and says wh
   await expect(page.locator(V2 + ' .v2view')).toContainText('E2E 93M has no value at budget 1,448 (it runs at budgets 1 to 256).');
   for (const v of ['matrix', 'dist&dm=log10_fvu_val', 'dist&dm=numeric_recovery_val', 'table&rows=cats']) {   // by time, every note speaks in seconds
     await page.goto('/explorer.html?release=2026-09&v=' + v + '&pm=time&pt=0.05');
-    await expect(page.locator(V2 + ' .v2posval')).toContainText(' s');
+    await expect(page.locator(V2 + ' .v2posunit')).toHaveText('s');
     await expect(page.locator(V2 + ' .v2view')).not.toContainText(/budget t\d/);
   }
 });
@@ -861,19 +861,90 @@ test('displays that compare on finished budgets take the budget nearest the posi
   await expect(page.locator(V2 + ' .v2view select[data-state="rung"]')).toHaveValue('1024');
 });
 
-test('the slider is continuous, and its arrows step to the powers of two', async ({ page }) => {
+test('the slider is continuous, and its arrows step to the budgets the shown methods were run at', async ({ page }) => {
   await page.goto('/explorer.html?release=2026-09&v=matrix&m=T8-20M&r=1024');
   const slider = page.locator(V2 + ' .v2viewbar input.v2pos'), val = page.locator(V2 + ' .v2viewbar .v2posval');
   await slider.evaluate((el) => {   // just past 1,024: the position stays where it was put
     const lo = +el.dataset.lo, hi = +el.dataset.hi; el.value = String(Math.log(1100 / lo) / Math.log(hi / lo));
     el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }));
   });
-  await expect(val).toHaveText('1,100');
+  await expect(val).toHaveValue('1,100');
   expect(+new URL(page.url()).searchParams.get('r')).toBeCloseTo(1100, 0);
   await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="larger budget"]').click();
-  await expect(val).toHaveText('2,048');
+  await expect(val).toHaveValue('2,048');
   await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="smaller budget"]').click();
-  await expect(val).toHaveText('1,024');
+  await expect(val).toHaveValue('1,024');
+});
+
+// ---- One position for every display (owner 2026-10-05) ----------------------------------------------------------------
+// Every display but Curves reads every method at one position: a time per problem by default, the one budget every
+// method shares, or a budget. Any position on the slider or typed into its box is taken exactly; the arrows (buttons
+// and arrow keys) step to the next of the release's time limits, or to the next budget a shown method was run at.
+test('every display but Curves carries the position, and time is the default', async ({ page }) => {
+  for (const v of ['table&rows=cats', 'matrix', 'dist', 'corr', 'ranks', 'paired', 'preds']) {
+    await page.goto('/explorer.html?release=2026-09&v=' + v);
+    await expect(page.locator(V2 + ' .v2view input.v2pos'), v).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(V2 + ' .v2view button[data-set="pm:time"]'), v).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator(V2 + ' .v2view .v2posunit'), v).toHaveText('s');
+    expect(new URL(page.url()).searchParams.get('pm'), v).toBe('time');
+  }
+  await page.goto('/explorer.html?release=2026-09&v=curves');
+  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toBeVisible({ timeout: 15000 });
+  await expect(page.locator(V2 + ' input.v2pos')).toHaveCount(0);
+});
+
+test('a time or a budget typed into the box is taken as typed, and the arrows step to the time limits', async ({ page }) => {
+  await page.goto('/explorer.html?release=2026-09&v=matrix&m=T8-20M&pm=time&pt=4.2');
+  const val = page.locator(V2 + ' .v2viewbar .v2posval'), url = () => new URL(page.url()).searchParams;
+  await expect(val).toHaveValue('4.2', { timeout: 15000 });
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="longer time"]').click();
+  await expect(val).toHaveValue('10'); expect(url().get('pt')).toBe('10');
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="shorter time"]').click();
+  await expect(val).toHaveValue('3');
+  await val.fill('7.25'); await val.press('Enter');
+  await expect.poll(() => url().get('pt')).toBe('7.25');
+  await expect(val).toHaveValue('7.25');
+  const slider = page.locator(V2 + ' .v2viewbar input.v2pos');   // the arrow keys step as the buttons do, and keep the focus
+  await slider.focus(); await page.keyboard.press('ArrowRight');
+  await expect.poll(() => url().get('pt')).toBe('10');
+  await expect(slider).toBeFocused();
+  await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowLeft');
+  await expect.poll(() => url().get('pt')).toBe('1');
+  await page.locator(V2 + ' .v2viewbar button[data-set="pm:budget"]').click();   // by budget, a typed budget stays as typed
+  await val.fill('1,100'); await val.press('Enter');
+  await expect.poll(() => url().get('r')).toBe('1100');
+  await expect(page.locator(V2 + ' .v2view')).toContainText('Interpolated: Flash-ANSR T8-20M between budgets 1,024 and 2,048.');
+});
+
+test('a link written before every display read at one position opens where it pointed', async ({ page }) => {
+  const val = page.locator(V2 + ' .v2viewbar .v2posval'), unit = page.locator(V2 + ' .v2viewbar .v2posunit');
+  await page.goto('/explorer.html?release=2026-09&v=ranks&x=time&t=t10');   // Ranks and Correlations kept their mode in x, a time limit in t
+  await expect(val).toHaveValue('10', { timeout: 15000 }); await expect(unit).toHaveText('s');
+  await page.goto('/explorer.html?release=2026-09&v=corr&x=rung&r=16');
+  await expect(val).toHaveValue('16', { timeout: 15000 }); await expect(unit).toHaveCount(0);
+  await page.goto('/explorer.html?release=2026-09&v=dist&x=time&r=16');      // a display read at a budget when its link had no pm
+  await expect(val).toHaveValue('16', { timeout: 15000 }); await expect(unit).toHaveCount(0);
+});
+
+test('Correlations between two budgets draw the runs of both, and the legend names the two', async ({ page }) => {
+  const count = async (r) => {
+    await page.goto(`/explorer.html?release=2026-09&v=corr&cv=points&cx=mdl_ratio&cy=log10_fvu_val&m=T8-20M&c=feynman&pm=budget&r=${r}`);
+    const hint = page.locator(V2 + ' .v2view p.v2hint', { hasText: 'One point per run' });
+    await expect(hint).toBeVisible({ timeout: 15000 });
+    return +(await hint.textContent()).match(/One point per run, ([\d,]+) in all/)[1].replace(/,/g, '');
+  };
+  const lo = await count(1024), hi = await count(2048), mid = await count(1448);
+  expect(lo).toBeGreaterThan(0); expect(mid).toBe(lo + hi);
+  await expect(page.locator(V2 + ' .v2view svg.v2corr')).toContainText('≈ budgets 1,024–2,048');
+});
+
+test('Predictions show each method at its last budget within the position, and name it', async ({ page }) => {
+  const at = page.locator(V2 + ' .v2predtable tbody tr td.v2predat').first();
+  await page.goto('/explorer.html?release=2026-09&v=preds&ps=feynman&pr=1&pn=1&m=T8-20M&pm=budget&r=1500');
+  await expect(at).toHaveText('1,024', { timeout: 15000 });
+  await page.goto('/explorer.html?release=2026-09&v=preds&ps=feynman&pr=1&pn=1&m=T8-20M&pm=time&pt=5');   // budget 1,024 takes 5.02 s
+  await expect(at).toHaveText('512 2.59 s', { timeout: 15000 });
+  await expect(page.locator(V2 + ' .v2view')).toContainText('from its last budget that takes at most 5 s per problem');
 });
 
 // ---- Shown, faded and hidden methods --------------------------------------------------------------------------------
@@ -1684,7 +1755,7 @@ test('the predictions view shows one problem: its true formula, and one row per 
   await expect(page.locator(V2 + ' .v2predtruth .katex')).toHaveCount(1);                  // the true formula, typeset
   await expect(rows.nth(0).locator('td.v2predf .katex')).toHaveCount(1);                   // the method's formula, typeset
   await expect(rows.nth(0).locator('.v2predmark')).toHaveText(['numeric', 'structure']);
-  await expect(rows.nth(1)).toContainText(/not finished yet|not run at budget 16/);         // a method without this run says so
+  await expect(rows.nth(1)).toContainText(/not finished|not published in this release/);  // a method without this run says so
   await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="next problem"]').click();
   await expect(rows.nth(0).locator('td.v2predf')).toHaveText('no usable formula');
   expect(page.url()).toContain('pn=2');
