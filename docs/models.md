@@ -204,7 +204,10 @@ and division.
   thread the evaluation budget is counted in parallel and a run is not reproducible exactly.
 
 The worker stores the whole Pareto front in the `front` column. `configs/evaluation/scaling/operon_fastsrb.yaml`
-sweeps the evaluations in doublings from 2^10 up to about 100 s per problem on the reference machine.
+sweeps the evaluations in doublings from 2^10 to 2^23. The author configuration also stops a search after 1,000
+generations: at 2^22 a search runs about 800 generations, and at 2^23 every search ends at the cap, about 5 s per
+problem on the reference machine. A larger budget adds no time, so the ladder ends there, short of the 100 s the other
+methods reach.
 
 ## RILS-ROLS
 
@@ -283,7 +286,7 @@ same data and seed, the changed and the unchanged build take the same steps and 
   data and seed give the same answer on the same machine.
 
 `configs/evaluation/scaling/rilsrols_fastsrb.yaml` sweeps the fitness evaluations in doublings from 2^6, the first
-power of two above the method's first step (scoring the perturbations of its starting model), up to 2^21, about
+power of two above the method's first step (scoring the perturbations of its starting model), up to 2^22, about
 100 s per problem on the reference machine.
 
 ## TiSR
@@ -375,7 +378,7 @@ with its `string_deviation`, how far the string's values are from TiSR's own.
   selection yet, as all of an island's first expressions, carries values that TiSR never set. srbf runs TiSR as it
   is.
 
-`configs/evaluation/scaling/tisr_fastsrb.yaml` sweeps the generations in doublings from 1 to 512, about 100 s per
+`configs/evaluation/scaling/tisr_fastsrb.yaml` sweeps the generations in doublings from 1 to 2048, about 100 s per
 problem on the reference machine. `configs/evaluation/panels/tisr_fastsrb2025_fastsrb.yaml` runs the protocol of the
 FastSRB paper, whose complexity cap per problem is taken from the ground truth, as a check against that paper's
 numbers.
@@ -726,7 +729,8 @@ empty mapping there, which states the same thing, every input numerical.
 
 The worker stores the other models the method returned in the `diverse` column, and the largest deviation of the
 expression from the model's own predictions in `string_deviation` and `string_deviation_val`.
-`configs/evaluation/scaling/qlattice_fastsrb.yaml` sweeps the epochs in doublings from 1 to 16.
+`configs/evaluation/scaling/qlattice_fastsrb.yaml` sweeps the epochs in doublings from 1 to 256, about 100 s per
+problem on the reference machine.
 
 ## Sampling and enumeration baselines
 
