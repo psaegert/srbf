@@ -98,8 +98,9 @@ Several overlays, each under its own key (a key opens its own methods and no oth
     node tools/seal.mjs <release> --source private/<release>=SRBF_SEAL_KEY --source private/<release>-b=SRBF_SEAL_KEY_B
 
 **Per-problem files are sealed one by one.** An overlay's `pp/`, `pred/` and `pv/` files (the Correlations and
-Predictions views read them, thousands per method) and its `ranks/` and `paired/` files (one per metric) do not go into
-`sealed.js`: it would grow several times over and be re-encrypted whole on every change. `tools/seal.mjs` seals each of them into its own file,
+Predictions views read them, thousands per method) and its `ranks/`, `paired/` and `hist/` files (one per metric) do
+not go into `sealed.js`, which holds the overlay's own payload and nothing else: with them it would grow several times
+over and be re-encrypted whole on every change. `tools/seal.mjs` seals each of them into its own file,
 `data/<release>/sealed/<name>.js`, which the page fetches only when a key holder opens a view that needs it:
 
 - From the overlay's key, PBKDF2-HMAC-SHA256 (salt `srbf-sealed-files/<release>`, 600k iterations, 512 bits) gives two
@@ -107,9 +108,11 @@ Predictions views read them, thousands per method) and its `ranks/` and `paired/
 - A file's name is the first 32 hex digits of the HMAC of `name\0` and its path below the overlay
   (e.g. `pp/<method>/feynman/16.1.js`): it gives away neither the method nor the path. The page computes the name
   from the path it wants.
-- Its IV is the first 12 bytes of the HMAC of `iv\0`, the path, `\0` and the content, and the ciphertext is the
-  gzipped content encrypted with the path (`<release>/<path>`) as additional data, so a file only opens as itself.
-  Nothing is random: an unchanged file reseals to the same bytes and stays out of the next commit; a changed one gets a
+- The content is gzipped (with a fixed header). The IV is the first 12 bytes of the HMAC of `iv\0`, the path, `\0`
+  and those gzipped bytes, so an IV repeats only for identical plaintext; the ciphertext is the gzipped bytes encrypted
+  with the path (`<release>/<path>`) as additional data, so a file only opens as itself.
+  Nothing is random: an unchanged file reseals to the same bytes and stays out of the next commit (a file that still
+  opens to the same content is kept as it is, under its own IV, whatever gzip would write now); a changed one gets a
   new IV. A file no longer in any overlay is deleted from `sealed/`. Two overlays may hold the same path; their files
   have different names, as their keys differ.
 - Each file is one line, `(window.RESULTS_V2_SEALED_FILES=window.RESULTS_V2_SEALED_FILES||{})["<name>"]={"iv":"…","ct":"…"};`.

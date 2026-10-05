@@ -16,23 +16,25 @@
 // and the GCM tag means a wrong key fails as an authentication error rather than as garbage.
 //
 // PER-PROBLEM FILES. The scripts under a source's pp/, pred/ and pv/ (the files of the Correlations and Predictions
-// views, one per method x problem set x budget x run) and under ranks/ and paired/ (one per metric) do not go into that
-// payload: there are thousands of them, and the page needs a few at a time. Each is sealed on its own into
+// views, one per method x problem set x budget x run) and under ranks/, paired/ and hist/ (one per metric) do not go
+// into that payload: there are thousands of them, and the page needs a few at a time, so the payload is the overlay
+// itself and a reseal changes little in git. Each is sealed on its own into
 // <out dir>/sealed/<name>.js (data/<release>/sealed/ for the default out file) and fetched only when a key holder opens
 // a view that reads it. Two sources may hold the same path: their names differ, as their keys do. Per source key P:
 //   material = PBKDF2-HMAC-SHA256(P, salt "srbf-sealed-files/<release>", 600000 iterations, 512 bits)
 //   kEnc = material[0:32] (an AES-256-GCM key), kName = material[32:64] (an HMAC-SHA256 key)
 //   path = the file's POSIX path below the source, e.g. "pp/<method>/feynman/16.1.js"
 //   name = hex(HMAC(kName, "name\0" + path))[0:32]                  reveals neither the method nor the path
-//   iv   = HMAC(kName, "iv\0" + path + "\0" || content)[0:12]        changes whenever the content does
-//   ct   = AES-256-GCM(kEnc, iv, gzip -9 (content), additional data "<release>/<path>")   bound to its path
+//   gz   = gzip -9 (content), with a fixed header (no time, OS "unknown")
+//   iv   = HMAC(kName, "iv\0" + path + "\0" || gz)[0:12]             an IV repeats only for identical plaintext
+//   ct   = AES-256-GCM(kEnc, iv, gz, additional data "<release>/<path>")                  bound to its path
 // and the file is one line:
 //   (window.RESULTS_V2_SEALED_FILES=window.RESULTS_V2_SEALED_FILES||{})["<name>"]={"iv":"<base64>","ct":"<base64>"};
 // Nothing here is random, so an unchanged file reseals to the same bytes (no git churn) and only a changed one is
-// rewritten. The gzip header is fixed (no time, OS "unknown"), so it does not depend on the machine; and a file
-// already there that opens to the same content under the same IV is kept as it is, whatever this machine's gzip would
-// write, so a second ciphertext under a published IV is never made. The source's payload gets one more script at its
-// end, which hands the two subkeys to whoever opens it, so the page never runs the KDF per file:
+// rewritten. The IV is taken over the bytes that are encrypted, so even another machine's gzip, compressing the same
+// content differently, gets another IV: no IV ever carries two plaintexts. A file already there that opens to the same
+// content is kept as it is, under its own IV, whatever this machine's gzip would write. The source's payload gets one
+// more script at its end, which hands the two subkeys to whoever opens it, so the page never runs the KDF per file:
 //   ;if(window.RESULTS_V2_PRIVATE){window.RESULTS_V2_PRIVATE.sealed_files={"enc":"<base64 kEnc>","name":"<base64 kName>"};}
 // A file that is in no source any more is removed from sealed/ (only <32 hex digits>.js names are touched; the names
 // every source of this run writes are kept).
@@ -49,7 +51,7 @@ import { fileURLToPath } from "node:url";
 
 const SITE = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ITERATIONS = 600000;   // OWASP 2023 for PBKDF2-HMAC-SHA256: ~0.3 s in a browser, the only brake on an offline guess
-const FILE_DIRS = ["pp", "pred", "pv", "ranks", "paired"];   // a source's per-problem (and per-metric) files, sealed one by one
+const FILE_DIRS = ["pp", "pred", "pv", "ranks", "paired", "hist"];   // a source's per-problem (and per-metric) files, sealed one by one
 const SEALED_NAME = /^[0-9a-f]{32}\.js$/;
 const FILE_LINE = /^\(window\.RESULTS_V2_SEALED_FILES=window\.RESULTS_V2_SEALED_FILES\|\|\{\}\)\["([0-9a-f]{32})"\]=\{"iv":"([A-Za-z0-9+/]+=*)","ct":"([A-Za-z0-9+/]+=*)"\};\n$/;
 const HANDOVER = "window.RESULTS_V2_PRIVATE.sealed_files=";
@@ -84,7 +86,7 @@ async function fileKeys(passphrase) {   // {enc, name}: the two 32-byte subkeys 
 }
 const hmac = (key, ...parts) => parts.reduce((h, p) => h.update(p), createHmac("sha256", key)).digest();
 const fileName = (kName, path) => hmac(kName, utf8("name\0" + path)).toString("hex").slice(0, 32);
-const fileIv = (kName, path, content) => hmac(kName, utf8("iv\0" + path + "\0"), content).subarray(0, 12);
+const fileIv = (kName, path, gz) => hmac(kName, utf8("iv\0" + path + "\0"), gz).subarray(0, 12);   // over the bytes encrypted
 function gzipFixed(content) {   // a header without time or OS: equal content, equal bytes, on any machine
   const gz = gzipSync(content, { level: 9 });
   gz.writeUInt32LE(0, 4);   // MTIME: none
@@ -183,13 +185,14 @@ for (let i = 0; i < sources.length; i++) {
     const content = readFileSync(f), name = fileName(keys[i].name, path), aad = utf8(release + "/" + path);
     if (names.has(name)) { fail("two per-problem files share the name " + name); }
     names.add(name);
-    const iv = fileIv(keys[i].name, path, content);
     const at = join(sealedDir, name + ".js");
     const there = existsSync(at) ? readFileSync(at, "utf8") : null;
-    const m = there && FILE_LINE.exec(there);
-    const old = m && Buffer.from(m[2], "base64").equals(iv) ? await openFile(there, keys[i].enc, aad) : null;
-    // this content under this IV is published already: its bytes stay, so no IV ever carries a second ciphertext
-    const line = old && old.equals(content) ? there : fileLine(name, iv, await encryptFile(keys[i].enc, iv, gzipFixed(content), aad));
+    const old = there ? await openFile(there, keys[i].enc, aad) : null;
+    let line = there;   // this content is published already: its bytes stay, under their own IV
+    if (!old || !old.equals(content)) {
+      const gz = gzipFixed(content), iv = fileIv(keys[i].name, path, gz);
+      line = fileLine(name, iv, await encryptFile(keys[i].enc, iv, gz, aad));
+    }
     files.push({ source: i, path, name, aad, content, line, at, changed: line !== there });
   }
   notes.push(payload.length + " file(s) from " + relative(SITE, src) + " (" + sources[i][1] + "): " +

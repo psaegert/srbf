@@ -2,14 +2,14 @@
 // only, no page: each test seals a stand-in overlay into a temporary directory and opens the result the way a page
 // does -- the overlay with the key (PBKDF2, AES-GCM, gzip), the two file keys it hands over, then each file by the name
 // those keys give its path, with the path as the additional data. The files sealed one by one are those under pp/,
-// pred/ and pv/ (per problem) and under ranks/ and paired/ (per metric).
+// pred/ and pv/ (per problem) and under ranks/, paired/ and hist/ (per metric).
 import { test, expect } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, existsSync, cpSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { webcrypto, pbkdf2Sync, createHash } from 'node:crypto';
+import { webcrypto, pbkdf2Sync, createHash, createHmac } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 
 const subtle = webcrypto.subtle;
@@ -25,8 +25,8 @@ test.skip(({ isMobile }) => isMobile, 'node only: one project is enough');
 test.describe.configure({ timeout: 120_000 });   // every seal runs PBKDF2 at 600k iterations several times
 
 // ---- a stand-in overlay, and sealing it ----------------------------------------------------------------------------
-// an ordinary payload script, a histogram, per-problem files under pp/, pred/ and pv/ that name their method, and a
-// per-metric file under ranks/ (at the same path in every stand-in: two overlays may share a path)
+// two ordinary payload scripts, per-problem files under pp/, pred/ and pv/ that name their method, and per-metric files
+// under ranks/ and hist/ (at the same paths in every stand-in: two overlays may share a path)
 function overlay(dir, method) {
   const pp = (r, d) => `window.RESULTS_V2_PP=window.RESULTS_V2_PP||{};(function(){var R=window.RESULTS_V2_PP;R["${REL}"]=R["${REL}"]||{};` +
     `R["${REL}"]["${method}|feynman|${r}|${d}"]={"n":3,"s":"AQMH","v":{"log10_fvu_val":"AH/8"}};})();\n`;
@@ -34,6 +34,7 @@ function overlay(dir, method) {
     'overlay.js': 'window.RESULTS_V2_PRIVATE = ' + JSON.stringify({
       base: '', methods: [{ key: method, label: method.toUpperCase() }], cells: {}, status: {}, timing: {},
       pp: { [method]: { 'feynman|16': [1, 2] } }, pred: { [method]: { 'feynman|16': [1] } }, pred_block: 500 }) + ';\n',
+    'paired.js': `window.RESULTS_V2_PAIRED=window.RESULTS_V2_PAIRED||{};window.RESULTS_V2_PAIRED["${REL}"]={"${method}|e2e":{}};\n`,
     'hist/log10_fvu_val.js': `window.RESULTS_V2_HIST=window.RESULTS_V2_HIST||{};window.RESULTS_V2_HIST["${REL}"]={"${method}":[1,2,3]};\n`,
     [`pp/${method}/feynman/16.1.js`]: pp(16, 1),
     [`pp/${method}/feynman/16.2.js`]: pp(16, 2),
@@ -46,7 +47,7 @@ function overlay(dir, method) {
     mkdirSync(dirname(join(dir, path)), { recursive: true });
     writeFileSync(join(dir, path), text);
   }
-  return Object.keys(files).filter((p) => /^(pp|pred|pv|ranks|paired)\//.test(p));   // the files sealed one by one
+  return Object.keys(files).filter((p) => /^(pp|pred|pv|ranks|paired|hist)\//.test(p));   // the files sealed one by one
 }
 const made = [];
 function scratch() { const d = mkdtempSync(join(tmpdir(), 'seal-files-')); made.push(d); return d; }
@@ -86,6 +87,7 @@ async function handedKeys(payload) {   // the file keys an opened overlay hands 
   const sf = run(payload).RESULTS_V2_PRIVATE.sealed_files;
   return importKeys(bytesOf(sf.enc), bytesOf(sf.name));
 }
+function ivOf(kName, path, gz) { return createHmac('sha256', kName).update('iv\0' + path + '\0').update(gz).digest().subarray(0, 12); }
 async function nameOf(keys, path) { return Buffer.from(await subtle.sign('HMAC', keys.name, utf8('name\0' + path))).toString('hex').slice(0, 32); }
 async function openLine(line, keys, path) {   // -> the content of one sealed file read as `path`, or null
   try {
@@ -108,10 +110,11 @@ test('a key holder opens every per-problem file by its name, and each file only 
   const opened = await openOverlays(readFileSync(out, 'utf8'), KEY);
   expect(opened).toHaveLength(1);
   expect(run(opened[0]).RESULTS_V2_PRIVATE.methods[0].key).toBe('hidden-method-a');
-  expect(opened[0]).toContain('RESULTS_V2_HIST');                    // the ordinary payload scripts are in the overlay
+  expect(opened[0]).toContain('RESULTS_V2_PAIRED');                  // the ordinary payload scripts are in the overlay
   expect(opened[0]).not.toContain('|feynman|16|1');                  // the per-problem files are not
   expect(opened[0]).not.toContain('RESULTS_V2_RANKS');                // nor the per-metric ones
-  expect(paths).toContain('ranks/log10_fvu_val.js');
+  expect(opened[0]).not.toContain('RESULTS_V2_HIST');
+  expect(paths).toEqual(expect.arrayContaining(['ranks/log10_fvu_val.js', 'hist/log10_fvu_val.js']));
   const keys = await handedKeys(opened[0]);
   for (const p of paths) { expect((await openFile(out, keys, p)) || '', p).toEqual(readFileSync(join(src, p))); }
   expect(Object.keys(sealedFiles(out))).toHaveLength(paths.length);
@@ -143,21 +146,22 @@ test('a reseal leaves every unchanged file byte for byte, and a changed file cha
   expect((await openFile(out, keys, paths[1])).toString()).toContain('"n":4');
 });
 
-test('a sealed file that holds the same content is kept, whatever gzip wrote: an IV never gets a second ciphertext', async () => {
+test('a sealed file that holds the same content is kept under its own IV, whatever gzip wrote', async () => {
   const dir = scratch(), src = join(dir, 'src'), out = join(dir, 'sealed.js');
   const paths = overlay(src, 'hidden-method-a');
   seal([src, out], { SRBF_SEAL_KEY: KEY });
   const P = run((await openOverlays(readFileSync(out, 'utf8'), KEY))[0]).RESULTS_V2_PRIVATE;
   const keys = await handedKeys((await openOverlays(readFileSync(out, 'utf8'), KEY))[0]);
-  // what another machine's gzip might have written: the same content, other gzip bytes, under the same IV and path
+  // what another machine's gzip might have written: the same content, other gzip bytes, and so another IV
   const at = join(dir, 'sealed', (await nameOf(keys, paths[0])) + '.js');
-  const W = run(readFileSync(at, 'utf8')), name = Object.keys(W.RESULTS_V2_SEALED_FILES)[0], iv = W.RESULTS_V2_SEALED_FILES[name].iv;
+  const W = run(readFileSync(at, 'utf8')), name = Object.keys(W.RESULTS_V2_SEALED_FILES)[0];
   const gz = gzipSync(readFileSync(join(src, paths[0])), { level: 9 });
   gz[9] = 3;   // the OS byte a Unix gzip writes
+  const iv = ivOf(bytesOf(P.sealed_files.name), paths[0], gz).toString('base64');
+  expect(iv).not.toEqual(W.RESULTS_V2_SEALED_FILES[name].iv);
   const k = await subtle.importKey('raw', bytesOf(P.sealed_files.enc), 'AES-GCM', false, ['encrypt']);
   const ct = Buffer.from(await subtle.encrypt({ name: 'AES-GCM', iv: bytesOf(iv), additionalData: utf8(REL + '/' + paths[0]) }, k, gz));
   const other = `(window.RESULTS_V2_SEALED_FILES=window.RESULTS_V2_SEALED_FILES||{})["${name}"]=${JSON.stringify({ iv, ct: ct.toString('base64') })};\n`;
-  expect(other).not.toEqual(readFileSync(at, 'utf8'));
   writeFileSync(at, other);
   expect(seal([src, out], { SRBF_SEAL_KEY: KEY })).toContain('0 written');
   expect(readFileSync(at, 'utf8')).toEqual(other);
@@ -178,7 +182,7 @@ test('a file withdrawn from the source leaves sealed/, and nothing else there is
   expect(Object.keys(after).sort()).toEqual(Object.keys(before).filter((n) => n !== gone).sort());
   for (const n of Object.keys(after)) { expect(after[n].equals(before[n]), n).toBe(true); }
   // a source without any per-problem file leaves no sealed file behind
-  for (const d of ['pp', 'pred', 'pv', 'ranks', 'paired']) { rmSync(join(src, d), { recursive: true, force: true }); }
+  for (const d of ['pp', 'pred', 'pv', 'ranks', 'paired', 'hist']) { rmSync(join(src, d), { recursive: true, force: true }); }
   seal([src, out], { SRBF_SEAL_KEY: KEY });
   expect(Object.keys(sealedFiles(out))).toEqual(['keep.txt']);
 });
@@ -215,6 +219,14 @@ test('the overlay hands over the two file keys, and a wrong key opens nothing', 
   const material = pbkdf2Sync(KEY, 'srbf-sealed-files/' + REL, 600000, 64, 'sha256');
   expect(Buffer.from(sf.enc, 'base64').equals(material.subarray(0, 32))).toBe(true);
   expect(Buffer.from(sf.name, 'base64').equals(material.subarray(32, 64))).toBe(true);
+  // each IV is the HMAC of the path and the very bytes it encrypts: an IV repeats only for identical plaintext
+  const encKey = await subtle.importKey('raw', material.subarray(0, 32), 'AES-GCM', false, ['decrypt']);
+  const named = await importKeys(material.subarray(0, 32), material.subarray(32, 64));
+  for (const p of paths) {
+    const W = run(readFileSync(join(dir, 'sealed', (await nameOf(named, p)) + '.js'), 'utf8')), env = Object.values(W.RESULTS_V2_SEALED_FILES)[0];
+    const gz = Buffer.from(await subtle.decrypt({ name: 'AES-GCM', iv: bytesOf(env.iv), additionalData: utf8(REL + '/' + p) }, encKey, bytesOf(env.ct)));
+    expect(env.iv, p).toEqual(ivOf(material.subarray(32, 64), p, gz).toString('base64'));
+  }
   // a wrong key opens no overlay, and what it would derive names no file and opens none
   const wrong = 'not-the-key-at-all-really';
   expect(await openOverlays(readFileSync(out, 'utf8'), wrong)).toEqual([]);
@@ -239,7 +251,7 @@ test('two sources sealed under two keys keep their files apart', async () => {
   const k1 = await handedKeys(one[0]), k2 = await handedKeys(two[0]);
   const files = sealedFiles(out);
   expect(Object.keys(files)).toHaveLength(pa.length + pb.length);   // no name shared, not even for a shared path
-  expect(pa.filter((p) => pb.includes(p))).toEqual(['ranks/log10_fvu_val.js']);
+  expect(pa.filter((p) => pb.includes(p))).toEqual(['hist/log10_fvu_val.js', 'ranks/log10_fvu_val.js']);
   for (const [own, other, ownSrc, otherSrc, keys, foreign] of [[pa, pb, a, b, k1, k2], [pb, pa, b, a, k2, k1]]) {
     for (const p of own) {
       expect(await openFile(out, keys, p) || '', p).toEqual(readFileSync(join(ownSrc, p)));
@@ -262,10 +274,10 @@ test('two sources sealed under two keys keep their files apart', async () => {
 test('a source without per-problem files is sealed exactly as before', async () => {
   const dir = scratch(), src = join(dir, 'src'), out = join(dir, 'sealed.js');
   overlay(src, 'hidden-method-a');
-  for (const d of ['pp', 'pred', 'pv', 'ranks', 'paired']) { rmSync(join(src, d), { recursive: true, force: true }); }
+  for (const d of ['pp', 'pred', 'pv', 'ranks', 'paired', 'hist']) { rmSync(join(src, d), { recursive: true, force: true }); }
   seal([src, out], { SRBF_SEAL_KEY: KEY });
   const opened = await openOverlays(readFileSync(out, 'utf8'), KEY);
-  expect(opened).toEqual([['hist/log10_fvu_val.js', 'overlay.js'].map((f) => readFileSync(join(src, f), 'utf8')).join('\n;\n')]);
+  expect(opened).toEqual([['overlay.js', 'paired.js'].map((f) => readFileSync(join(src, f), 'utf8')).join('\n;\n')]);
   expect(existsSync(join(dir, 'sealed'))).toBe(false);
 });
 

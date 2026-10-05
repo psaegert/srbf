@@ -8,3 +8,6 @@ test key in `site_v2.spec.mjs`; a page test serves them as `data/2026-09/sealed.
 Regenerate them from `results-site/` with:
 
     SRBF_SEAL_KEY='fixture-key-for-the-tests' node tools/seal.mjs 2026-09 tests/fixtures/sealed_files/source tests/fixtures/sealed_files/sealed.js
+
+A file in `sealed/` that still opens to the same content is kept as it is; to seal every file afresh (after a change
+of the format), remove `tests/fixtures/sealed_files/sealed/` first.
