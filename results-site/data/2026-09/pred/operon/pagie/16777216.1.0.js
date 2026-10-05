@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|pagie|16777216|1|0"]={"0":["+ 4.127 * 1.781 - - - - atan cosh * -1.949 x2 cos atan cosh * 1.915 x1 tanh cosh cosh * 1.915 x1 tanh tanh cosh cosh * 1.772 x1 tanh cosh * -2.388 x2",0]};})();
