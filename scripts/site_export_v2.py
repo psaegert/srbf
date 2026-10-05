@@ -24,7 +24,9 @@ Reads the per-problem judged rows of a campaign root (rows_full_<name>.csv or <n
 
 LOCAL-ONLY METHODS. The methods named in --public go into the release files the site ships. A method named in
 --private is written to --private-dir only, a directory outside the deployed tree (results-site/README.md,
-"Local-only methods"), with the same schema; the page merges it when a local build loads it. Such a method is
+"Local-only methods"), with the same schema; the page merges it when a local build loads it. Its per-problem files
+go there too (pp/<method>/, pred/<method>/; the ground truth's are the release's, public already), indexed in the overlay
+as "pp" and "pred" like the release's; results-site/tools/seal.mjs seals them one file at a time. Such a method is
 described in --methods-file, a JSON list of entries shaped like METHODS below, kept outside the repository.
 
 usage: site_export_v2.py <root> <release id> <out.js> [--title ...] [--notes ...] [--sizes catalog_mu.json]
@@ -682,9 +684,10 @@ def pp_flags(run: dict[str, Any] | None) -> int:
 
 
 def write_values(out_dir: str, rel: str, data: dict[str, dict[tuple[str, int], Rows]], keys: list[str],
-                 sizes: dict[str, int]) -> dict[str, dict[str, list[int]]]:
+                 sizes: dict[str, int], with_truth: bool = True) -> dict[str, dict[str, list[int]]]:
     """Write the Correlation view's files next to the release; returns the index the page reads, shaped like the
-    Predictions view's: {method: {"catalog|rung": [the runs whose files exist]}}. A run still in progress is left out."""
+    Predictions view's: {method: {"catalog|rung": [the runs whose files exist]}}. A run still in progress is left out.
+    with_truth=False writes the methods' files only: an overlay reads the ground truth's from the release."""
     def put(path: str, key: str, obj: Any) -> None:
         text = "window.RESULTS_V2_PP=window.RESULTS_V2_PP||{};(function(){var R=window.RESULTS_V2_PP;R[%s]=R[%s]||{};R[%s][%s]=%s;})();\n" % (
             json.dumps(rel), json.dumps(rel), json.dumps(rel), json.dumps(key), json.dumps(obj, separators=(",", ":")))
@@ -718,7 +721,7 @@ def write_values(out_dir: str, rel: str, data: dict[str, dict[tuple[str, int], R
                     if (codes != PP_NONE).any():
                         obj["v"][k] = pp_bytes(codes)
                 put(os.path.join(out_dir, "pp", m, c, f"{r}.{d}.js"), f"{m}|{c}|{r}|{d}", obj)
-    for c, rows_seen in sorted(truth.items()):
+    for c, rows_seen in sorted(truth.items()) if with_truth else []:
         n = sizes[c]
         obj = {"n": n, "v": {k: pp_bytes([pp_code(rows_seen[i].get(k), k, specs[k]) if i in rows_seen else PP_NONE for i in range(n)])
                              for k in PP_PROBLEM_KEYS}}
@@ -1436,8 +1439,8 @@ def main() -> None:
         print(f"{note}: {out_js} ({os.path.getsize(out_js) // 1024} kB), hist/ {len(hists)} files, paired {len(paired)} pairs; methods with data: {with_data}; status {payload['status']}")
 
     payload, hists, paired = build(public, rel_base(out_dir, site_dir))
-    pred, truth = load_expressions(a.root, public)
-    pred = {k: v for k, v in pred.items() if usable(k[0], k[2])}   # the budgets the release publishes, and no others
+    pred_all, truth = load_expressions(a.root, public + private)   # the rows are read once; each side keeps its own
+    pred = {k: v for k, v in pred_all.items() if k[0] in public and usable(k[0], k[2])}   # the budgets the release publishes, and no others
     canonical = canonical_truths(truth, a.engine, os.path.join(a.root, "canonical_truth_cache.json"))
     payload["pred"] = write_predictions(out_dir, a.release, pred, truth, sizes, canonical)
     payload["pred_block"] = PRED_BLOCK
@@ -1455,6 +1458,12 @@ def main() -> None:
         ppayload, phists, ppaired = build(private, rel_base(pdir, site_dir))
         contrasts([(ka, kb) for ka in private for kb in public], ppaired)   # private-vs-public contrasts stay private
         pranks = leagues([(ka, kb) for i, ka in enumerate(private) for kb in private[i + 1:]] + [(ka, kb) for ka in private for kb in public], private, payload["rank_keys"])   # the release's keys
+        # the Predictions and Correlations views' files of the private methods, next to the overlay (tools/seal.mjs seals
+        # them one file at a time); the ground truth's are the release's own, public already, so none are written here
+        ppred = {k: v for k, v in pred_all.items() if k[0] in private and usable(k[0], k[2])}
+        ppayload["pred"] = write_predictions(pdir, a.release, ppred, {}, sizes)
+        ppayload["pred_block"] = PRED_BLOCK
+        ppayload["pp"] = write_values(pdir, a.release, data, private, sizes, with_truth=False)
         write_set(ppayload, phists, ppaired, pranks, os.path.join(pdir, "results_v2_private.js"), pdir, "RESULTS_V2_PRIVATE", f"private overlay ({len(private)} method(s), never inside the deployed tree)")
 
 

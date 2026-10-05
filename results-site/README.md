@@ -21,6 +21,7 @@ explorer for the benchmark numbers, nothing more.
 | `data/<release>/pred/` | The Predictions view's files: every method's formula for every problem, as the judge read it (rounded to 4 significant digits), one file per method × problem set × budget × finished run × block of 500 problems (`pred/<method>/<set>/<budget>.<run>.<block>.js`), and the ground truth's (`pred/truth/<set>.<block>.js`). A file is written once its run is complete and never changes after. They come from the `predicted_expression` / `ground_truth_expression` columns of `srbf table`. |
 | `data/<release>/pv/` | What the paired contrasts and the pairwise rank outcomes read of every problem, exactly (float64): per method × problem set × budget (`pv/<method>/<set>/<budget>.js`, every run of both draws), each run's comparison score on every rank metric and each problem's value and share on the paired metrics, as `paired_cell` / `rank_pair_cell` in `scripts/site_export_v2.py` read them (`write_pair_values` documents the format; `results.js` indexes the files as `pv`). |
 | `pairstats.js` | Computes `paired.js`'s and `ranks.js`'s cells in the browser from `pv/`, at a budget a method ran (the same numbers, bit for bit) or between two of them (interpolated; the rule is in its header). `tests/test_pairstats_parity.py` holds it to the exporter under node. |
+| `data/<release>/sealed.js`, `data/<release>/sealed/` | The sealed overlays and their sealed per-problem files (see "Sharing an overlay with the people it belongs to"). Written by `tools/seal.mjs`, never by hand. |
 | `srbf-icon.svg`, `apple-touch-icon.png`, `srbf-social.png` | Brand assets (favicon, touch icon, `og:image` social card); canonical sources live in `../assets/brand/`. |
 
 ## Releases
@@ -66,7 +67,9 @@ them out of every public channel by construction, not by convention:
 
 - `scripts/site_export_v2.py --private <keys> --private-dir results-site/private/<release>`
   writes those methods to a separate directory (payload, histograms, paired contrasts, including contrasts
-  against public methods). The public payload, the pages, `explorer_v2.js` and the
+  against public methods, and their per-problem files `pp/<method>/` and `pred/<method>/`, indexed in the payload as
+  `pp` and `pred` like the release's; the ground truth's files are the release's own and are not copied there). The
+  public payload, the pages, `explorer_v2.js` and the
   repository carry no reference to them; the exporter refuses a key that is in both lists.
 - `results-site/private/` and `results-site/explorer.local.html` are git-ignored. `build_local.sh`
   writes `explorer.local.html` (the public explorer page plus one script tag that loads the private file) and
@@ -90,6 +93,29 @@ does not fit is indistinguishable from a release that ships no such file.
 
     SRBF_SEAL_KEY="$(cat ~/.config/srbf/seal-<release>.key)" node tools/seal.mjs <release>
 
+Several overlays, each under its own key (a key opens its own methods and no other):
+
+    node tools/seal.mjs <release> --source private/<release>=SRBF_SEAL_KEY --source private/<release>-b=SRBF_SEAL_KEY_B
+
+**Per-problem files are sealed one by one.** An overlay's `pp/`, `pred/` and `pv/` files (the Correlations and
+Predictions views read them, thousands per method) and its `ranks/` and `paired/` files (one per metric) do not go into
+`sealed.js`: it would grow several times over and be re-encrypted whole on every change. `tools/seal.mjs` seals each of them into its own file,
+`data/<release>/sealed/<name>.js`, which the page fetches only when a key holder opens a view that needs it:
+
+- From the overlay's key, PBKDF2-HMAC-SHA256 (salt `srbf-sealed-files/<release>`, 600k iterations, 512 bits) gives two
+  subkeys: the first 32 bytes encrypt (AES-256-GCM), the last 32 name (HMAC-SHA256).
+- A file's name is the first 32 hex digits of the HMAC of `name\0` and its path below the overlay
+  (e.g. `pp/<method>/feynman/16.1.js`): it gives away neither the method nor the path. The page computes the name
+  from the path it wants.
+- Its IV is the first 12 bytes of the HMAC of `iv\0`, the path, `\0` and the content, and the ciphertext is the
+  gzipped content encrypted with the path (`<release>/<path>`) as additional data, so a file only opens as itself.
+  Nothing is random: an unchanged file reseals to the same bytes and stays out of the next commit; a changed one gets a
+  new IV. A file no longer in any overlay is deleted from `sealed/`. Two overlays may hold the same path; their files
+  have different names, as their keys differ.
+- Each file is one line, `(window.RESULTS_V2_SEALED_FILES=window.RESULTS_V2_SEALED_FILES||{})["<name>"]={"iv":"…","ct":"…"};`.
+- The overlay in `sealed.js` ends with one more line that hands the two subkeys to whoever opens it
+  (`RESULTS_V2_PRIVATE.sealed_files = {enc, name}`, base64), so the page derives nothing per file.
+
 Three things this rests on, none of them optional:
 
 - **The key is generated, never chosen.** The sealed file is public, so guessing is offline and unlimited;
@@ -99,11 +125,14 @@ Three things this rests on, none of them optional:
   leaks later, everything inside it is exposed retroactively. Seal only what may live in public in that
   form, and only with the agreement of whoever owns the results.
 - **The guard checks it is sealed** (`tests/public_guard.py`): envelope shape, KDF strength, ciphertext
-  entropy and no plaintext left inside. The checker is run against a deliberately unsealed blob on every
-  invocation, so it cannot pass vacuously.
+  entropy and no plaintext left inside; and `data/<release>/sealed/` holds nothing but one-line envelopes named by
+  their own file names, whose ciphertext reads neither as text nor as an unencrypted gzip stream. The checker is run
+  against deliberately unsealed blobs on every invocation, so it cannot pass vacuously.
 
-`tests/fixtures/` holds a stand-in overlay and its sealed form, so the Playwright suite exercises the whole
-path — wrong key, right key, method merged — without any real payload.
+`tests/fixtures/` holds stand-in overlays and their sealed forms, so the Playwright suite exercises the whole
+path — wrong key, right key, method merged — without any real payload. `tests/fixtures/sealed_files/` is one with
+per-problem files (its README has the command that reseals it); `tests/seal_files.spec.mjs` seals stand-ins the
+same way and opens them as a page does.
 
 ## Testing
 
