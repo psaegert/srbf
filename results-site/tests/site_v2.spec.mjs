@@ -85,7 +85,7 @@ test('the paired view loads its contrasts and shows a baseline selector', async 
   const errors = collectErrors(page);
   await page.goto('/explorer.html?release=2026-09&v=paired&p=numeric_recovery_val');
   await expect(page.locator(V2 + ' select.v2base')).toBeVisible({ timeout: 15000 });
-  await expect.poll(async () => page.evaluate(() => Object.keys((window.RESULTS_V2_PAIRED || {})['2026-09'] || {}).length), { timeout: 15000 }).toBeGreaterThanOrEqual(1);
+  await expect.poll(async () => page.evaluate(() => Object.keys(((window.RESULTS_V2_PAIRCELLS || {})['2026-09'] || {}).numeric_recovery_val || {}).length), { timeout: 15000 }).toBeGreaterThanOrEqual(1);
   await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toBeVisible();
   expect(errors).toEqual([]);
 });
@@ -892,11 +892,60 @@ test('a method outside the budgets it was run at has no value there, and says wh
   }
 });
 
-test('displays that compare on finished budgets take the budget nearest the position', async ({ page }) => {
-  await page.goto('/explorer.html?release=2026-09&v=paired&r=1448&m=T8-20M,T8-120M');
-  await expect(page.locator(V2 + ' .v2view select[data-state="rung"]')).toHaveValue('1024');
-  await page.goto('/explorer.html?release=2026-09&v=ranks&x=rung&r=1448&m=T8-20M,T8-120M');
-  await expect(page.locator(V2 + ' .v2view select[data-state="rung"]')).toHaveValue('1024');
+test('Ranks and Paired differences read every method at the position, between its budgets too', async ({ page }) => {
+  await page.goto('/explorer.html?release=2026-09&v=ranks&pm=budget&r=1448&m=T8-20M,T8-120M');
+  const rows = page.locator(V2 + ' .v2ranktable tbody tr');
+  await expect(rows).toHaveCount(2, { timeout: 20000 });
+  for (const i of [0, 1]) { await expect(rows.nth(i).locator('td:nth-child(2)')).toHaveText('≈ 1,024 – 2,048'); }
+  await expect(page.locator(V2 + ' .v2view svg.v2rankchart')).toHaveAttribute('aria-label', /budget 1,448/);
+  await page.goto('/explorer.html?release=2026-09&v=paired&p=numeric_recovery_val&pm=budget&r=1448&m=T8-20M,T8-120M&b=T8-20M');
+  const table = page.locator(V2 + ' .v2table').last();
+  await expect(table).toContainText('at budget 1,448', { timeout: 20000 });
+  await expect(table.locator('tbody tr').first().locator('td').nth(1)).toContainText(/pp/);   // a contrast, not a dash
+});
+
+// The numbers themselves, against Python: tests/fixtures/pairpos holds three methods' per-problem files on feynman and the
+// exporter's cells along the slots (scripts/site_pairpos_fixture.py), and expected.json what the exporter's code and the
+// page's pooling (scripts/site_random_effects.py) give at four positions: at budgets two of them ran and the third did
+// not, between budgets for all three, and at a time.
+const PAIRPOS = new URL('./fixtures/pairpos/', import.meta.url);
+const PAIRPOS_EXPECTED = JSON.parse(readFileSync(new URL('expected.json', PAIRPOS), 'utf8'));
+async function routePairpos(page) {
+  await page.route('**/data/2026-09/results.js', async (route) => {
+    const res = await route.fetch();
+    await route.fulfill({ response: res, body: (await res.text()) + readFileSync(new URL('index.js', PAIRPOS), 'utf8') });
+  });
+  await page.route(/\/data\/2026-09\/(pv|ranks|paired)\/.*\.js$/, (route) => {
+    const rel = route.request().url().split('/data/2026-09/')[1];
+    let body = null; try { body = readFileSync(new URL(rel, PAIRPOS), 'utf8'); } catch (e) { body = null; }
+    return body === null ? route.fulfill({ status: 404, body: '' }) : route.fulfill({ contentType: 'text/javascript', body });
+  });
+}
+test('Ranks and Paired differences at a position show what the exporter computes there', async ({ page }) => {
+  const errors = collectErrors(page);
+  await routePairpos(page);
+  const label = { 'T8-20M': 'Flash-ANSR T8-20M', PySR: 'PySR', dsr: 'DSR' };
+  const pp = (d) => (d >= 0 ? '+' : '') + (100 * d).toFixed(1) + ' pp';
+  for (const [pos, want] of Object.entries(PAIRPOS_EXPECTED.positions)) {
+    const at = pos.charAt(0) === 't' ? 'pm=time&pt=' + pos.slice(1) : 'pm=budget&r=' + pos;
+    await page.goto('/explorer.html?release=2026-09&v=ranks&rm=log10_fvu_val&c=feynman&m=T8-20M,PySR,dsr&' + at);
+    const h2h = page.locator(V2 + ' .v2h2h');
+    await expect(h2h.locator('tbody tr'), pos).toHaveCount(3, { timeout: 20000 });
+    const cols = (await h2h.locator('thead th').allTextContents()).map((t) => t.trim());
+    for (const [pair, e] of Object.entries(want.chance_to_beat)) {
+      const [a, b] = pair.split('|');
+      const row = h2h.locator('tbody tr').filter({ has: page.locator('td:first-child', { hasText: new RegExp('^' + label[a] + '$') }) });
+      const cell = row.locator('td').nth(cols.indexOf(label[b]));
+      await expect(cell, pos + ' ' + pair).toContainText((100 * e.p).toFixed(1) + ' % [' + (100 * e.lo).toFixed(0) + ', ' + (100 * e.hi).toFixed(0) + ']');
+    }
+    await page.goto('/explorer.html?release=2026-09&v=paired&p=numeric_recovery_val&b=PySR&c=feynman&m=T8-20M,PySR,dsr&' + at);
+    const row = page.locator(V2 + ' .v2table').last().locator('tbody tr').filter({ hasText: label['T8-20M'] });
+    const w = want.paired;
+    await expect(row.locator('td').nth(1), pos + ' paired').toHaveText(pp(w.v) + ' [' + pp(w.lo) + ', ' + pp(w.hi) + ']', { timeout: 20000 });
+    await expect(row.locator('td').nth(2)).toHaveText(w.p < 0.001 ? '< 0.001' : w.p.toFixed(3));
+    await expect(row.locator('td').nth(3)).toHaveText(w.wins + ' / ' + w.losses + ' of ' + w.n);
+  }
+  expect(errors).toEqual([]);
 });
 
 test('the slider is continuous, and its arrows step to the budgets the shown methods were run at', async ({ page }) => {
@@ -1134,28 +1183,30 @@ test('ranks follow the selection: another metric, fewer methods, fewer catalogs'
   // only metrics that can be ranked are offered, and an exploratory one says so
   await page.locator(V2 + ' .v2viewbar .v2pick').click();
   const offered = await page.locator('.v2picker .v2pickitem').count();
-  expect(offered).toBe(await page.evaluate(() => window.RESULTS_V2_RANKS['2026-09'].keys.length));
+  expect(offered).toBe(await page.evaluate(() => window.RESULTS_V2.rank_keys.length));
   await page.locator('.v2picker .v2pickitem[data-k="mdl_ratio"]').click();
   await expect(page.locator(V2 + ' .v2view svg.v2rankchart')).toHaveAttribute('aria-label', /MDL Ratio/);
   await expect(page.locator(V2 + ' .v2viewbar .v2tag-primary')).toHaveCount(0);
   expect(page.url()).toContain('rm=mdl_ratio');
 });
 
-test('ranks hold the methods equal on reference-machine time when it exists', async ({ page }) => {
-  await page.goto('/explorer.html?release=2026-09&v=ranks&x=time');
+test('ranks read every method at the same time per problem on the reference machine when it exists', async ({ page }) => {
+  await page.goto('/explorer.html?release=2026-09&v=ranks&pm=time&pt=10');
   if (!(await hasRefTiming(page))) { test.skip(); }
   const chart = page.locator(V2 + ' .v2view svg.v2rankchart');
-  await expect(chart).toBeVisible({ timeout: 15000 });
-  await expect(chart).toHaveAttribute('aria-label', /s per problem/);
-  await expect(page.locator(V2 + ' .v2viewbar select[data-state="tbudget"]')).toBeVisible();
-  await expect(page.locator(V2 + ' .v2viewbar select[data-state="rung"]')).toHaveCount(0);
-  // every ranked method's budget was timed within the limit
-  const limit = await page.locator(V2 + ' .v2viewbar select[data-state="tbudget"]').evaluate((s) => parseFloat(s.options[s.selectedIndex].text));
-  const secs = await page.locator(V2 + ' .v2ranktable tbody tr td:nth-child(2) .v2ci-txt').allTextContents();
-  expect(secs.length).toBeGreaterThanOrEqual(2);
-  for (const t of secs) { expect(parseFloat(t)).toBeLessThanOrEqual(limit); }
-  await page.locator(V2 + ' .v2viewbar button[data-set="xaxis:rung"]').click();
-  await expect(chart).toHaveAttribute('aria-label', /budget \d+/);
+  await expect(chart).toBeVisible({ timeout: 20000 });
+  await expect(chart).toHaveAttribute('aria-label', /10 s per problem/);
+  await expect(page.locator(V2 + ' .v2viewbar .v2posunit')).toHaveText('s');
+  // every ranked method sits at 10 s: at a budget timed at 10 s, or between two whose times bracket it
+  const cells = await page.locator(V2 + ' .v2ranktable tbody tr td:nth-child(2)').evaluateAll((tds) => tds.map((td) => [...td.querySelectorAll('.v2ci-txt')].map((e) => parseFloat(e.textContent))));
+  expect(cells.length).toBeGreaterThanOrEqual(2);
+  for (const t of cells) {
+    if (t.length === 1) { expect(t[0]).toBeCloseTo(10, 0); } else { expect(t.length).toBe(2); expect(Math.min(t[0], t[1])).toBeLessThanOrEqual(10); expect(Math.max(t[0], t[1])).toBeGreaterThanOrEqual(10); }
+  }
+  await expect(page.locator(V2 + ' .v2view svg.v2chart').last()).toContainText('Comparisons won, by time');
+  await page.locator(V2 + ' .v2viewbar button[data-set="pm:budget"]').click();
+  await expect(chart).toHaveAttribute('aria-label', /budget [\d,]+/);
+  await expect(page.locator(V2 + ' .v2view svg.v2chart').last()).toContainText('Comparisons won, by budget');
 });
 
 test('a pooled number appears only where a method has finished every selected catalog', async ({ page }) => {
@@ -1190,54 +1241,46 @@ test('a pooled number appears only where a method has finished every selected ca
   await page.goto('/explorer.html?release=2026-09&v=ranks&x=rung&r=16&c=all');
   await expect(page.locator(V2 + ' .v2ranktable')).toBeVisible({ timeout: 15000 });
   await expect(page.locator(V2 + ' .v2ranktable')).not.toContainText('Fixture just begun');
-  await expect(page.locator(V2 + ' .v2view')).toContainText(/Fixture just begun (is|are) not ranked: (it has|they have) not finished all selected problem sets/);
+  await expect(page.locator(V2 + ' .v2view')).toContainText(/Fixture just begun is not ranked: (it has not finished all selected problem sets|its values per problem are not published)/);
 });
 
 
-test('a method without outcomes against another sits out of the ranking instead of emptying it', async ({ page }) => {
-  // the release rankings with every outcome between two ranked methods at budget 16 removed: what an overlay sealed
-  // before another method had results looks like
-  await page.route('**/data/2026-09/ranks.js', async (route) => {
+// The chart along the budgets reads the exporter's outcomes at every slot. A method without outcomes against another
+// there (an overlay sealed before the other's results changed) sits out of that point instead of emptying it.
+const PAIR_AT_16 = `var D = window.RESULTS_V2, full = D.methods.map(function (m) { return m.key; }).filter(function (k) { return D.catalogs.every(function (c) { return D.cells[k] && D.cells[k][c.key] && D.cells[k][c.key]['16']; }); });`;
+test('a method without outcomes against another sits out of a point along the budgets instead of emptying it', async ({ page }) => {
+  await page.route('**/data/2026-09/ranks/log10_fvu_val.js', async (route) => {
     const res = await route.fetch();
-    const cut = `;(function () { var R = window.RESULTS_V2_RANKS['2026-09'], D = window.RESULTS_V2;
-      var full = D.methods.map(function (m) { return m.key; }).filter(function (k) { return D.catalogs.every(function (c) { return D.cells[k] && D.cells[k][c.key] && D.cells[k][c.key]['16']; }); });
-      var key = Object.keys(R.pairs).filter(function (p) { var ab = p.split('|'); return full.indexOf(ab[0]) >= 0 && full.indexOf(ab[1]) >= 0; })[0];
-      Object.keys(R.pairs[key]).forEach(function (c) { delete R.pairs[key][c]['16']; });
+    const cut = `;(function () { ${PAIR_AT_16} var R = window.RESULTS_V2_RANKCELLS['2026-09'].log10_fvu_val;
+      var key = Object.keys(R).filter(function (p) { var ab = p.split('|'); return full.indexOf(ab[0]) >= 0 && full.indexOf(ab[1]) >= 0; })[0];
+      Object.keys(R[key]).forEach(function (c) { delete R[key][c]['16']; });
       window.FIXTURE_PAIR = key.split('|'); })();`;
     await route.fulfill({ response: res, body: (await res.text()) + cut });
   });
-  await page.goto('/explorer.html?release=2026-09&v=ranks&x=rung&r=16&c=all');
-  const table = page.locator(V2 + ' .v2ranktable').first();
-  await expect(table).toBeVisible({ timeout: 15000 });
+  await page.goto('/explorer.html?release=2026-09&v=ranks&pm=budget&r=16&c=all');
+  const ladder = page.locator(V2 + ' .v2view svg.v2chart').last();
+  await expect(ladder).toContainText('Comparisons won', { timeout: 20000 });
   const pair = await page.evaluate(() => window.FIXTURE_PAIR.map((k) => window.RESULTS_V2.methods.filter((m) => m.key === k)[0].label));
-  const names = await table.locator('tbody tr td:first-child').allTextContents();
-  const ranked = pair.filter((label) => names.some((n) => n.trim() === label));
-  expect(ranked.length).toBe(1);                                   // one of the two is ranked with everybody else
-  expect(names.length).toBeGreaterThanOrEqual(2);
-  const out = pair.filter((label) => ranked.indexOf(label) < 0)[0];
-  await expect(page.locator(V2 + ' .v2view')).toContainText(out + ' is not ranked: it has no results on the same problems as all other selected methods at budget 16.');
-  const vals = (await table.locator('tbody tr td:nth-child(3)').allTextContents()).map(Number);
-  expect(Math.abs(vals.reduce((a, b) => a + b, 0) - vals.length * (vals.length + 1) / 2)).toBeLessThan(0.02 * vals.length);
+  const text = await ladder.textContent();
+  expect(pair.filter((label) => text.indexOf(label + ' at budget 16: wins') >= 0).length).toBe(1);   // one of the two stays at 16
+  expect(pair.every((label) => text.indexOf(label + ' at budget 32: wins') >= 0)).toBe(true);        // and both elsewhere
+  await expect(page.locator(V2 + ' .v2ranktable tbody tr')).not.toHaveCount(0);                      // the snapshot computes its own
 });
 
-test('outcomes at a time limit that compared another rung than the method sits on now count as missing', async ({ page }) => {
-  await page.route('**/data/2026-09/ranks.js', async (route) => {
+test('outcomes an overlay computed against an older bracket of a release method count as missing', async ({ page }) => {
+  await page.route('**/data/2026-09/results.js', async (route) => {
     const res = await route.fetch();
-    const stale = `;(function () { var R = window.RESULTS_V2_RANKS['2026-09'];
-      var a = Object.keys(R.at).filter(function (k) { return Object.keys(R.at[k]).length > 3; })[0]; R.rungs = R.rungs || {};
-      Object.keys(R.pairs).forEach(function (p) { if (p.split('|').indexOf(a) < 0) { return; } R.rungs[p] = {}; R.budgets.forEach(function (b) { R.rungs[p][b] = [-1, -1]; }); });
-      window.FIXTURE_STALE = a; })();`;
+    const stale = `;(function () { ${PAIR_AT_16} var a = full[0], b = full[1]; D.slots.basis[a] = {}; D.slots.basis[a][b] = { '16': '00000000' };
+      window.FIXTURE_PAIR = [a, b]; })();`;
     await route.fulfill({ response: res, body: (await res.text()) + stale });
   });
-  await page.goto('/explorer.html?release=2026-09&v=ranks&x=time&c=all');
-  if (!(await hasRefTiming(page))) { test.skip(); }
-  const table = page.locator(V2 + ' .v2ranktable').first();
-  await expect(table).toBeVisible({ timeout: 15000 });
-  const label = await page.evaluate(() => window.RESULTS_V2.methods.filter((m) => m.key === window.FIXTURE_STALE)[0].label);
-  const names = (await table.locator('tbody tr td:first-child').allTextContents()).map((n) => n.trim());
-  expect(names).not.toContain(label);
-  expect(names.length).toBeGreaterThanOrEqual(2);
-  await expect(page.locator(V2 + ' .v2view')).toContainText(new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ' is not ranked: it has no results on the same problems as all other selected methods at [\\d.]+ s per problem'));
+  await page.goto('/explorer.html?release=2026-09&v=ranks&pm=budget&r=16&c=all');
+  const ladder = page.locator(V2 + ' .v2view svg.v2chart').last();
+  await expect(ladder).toContainText('Comparisons won', { timeout: 20000 });
+  const pair = await page.evaluate(() => window.FIXTURE_PAIR.map((k) => window.RESULTS_V2.methods.filter((m) => m.key === k)[0].label));
+  const text = await ladder.textContent();
+  expect(pair.filter((label) => text.indexOf(label + ' at budget 16: wins') >= 0).length).toBe(1);
+  expect(pair.every((label) => text.indexOf(label + ' at budget 32: wins') >= 0)).toBe(true);
 });
 
 // ---- design contract (2026-09-20): hints, labels, axes, the pinned column, the header ---------------------------
