@@ -56,7 +56,7 @@ def main() -> None:
     order = [m[0] for m in sx.METHODS if m[0] in METHODS]
     pairs = [(ka, kb) for i, ka in enumerate(order) for kb in order[i + 1:]]
     rungs = sorted({r for m in METHODS for (_c, r) in data[m] if sx.usable(m, r)})
-    slots = [str(r) for r in rungs] + [sx.budget_key(t) for t in sx.TIME_BUDGETS]
+    slots = [str(r) for r in rungs] + [sx.budget_key(t) for t in sx.TIME_SLOTS]
     at = sx.brackets(data, METHODS, sizes, timing, slots)
     ranks, paired = sx.slot_cells(data, pairs, at, slots, KEYS)
     cells = {m: {str(r): sx.summarize_cell(rows, sizes[CATALOG]) for (_c, r), rows in sorted(data[m].items()) if sx.usable(m, r)} for m in METHODS}
@@ -75,7 +75,7 @@ def main() -> None:
                 if keep:
                     os.makedirs(os.path.dirname(os.path.join(out, rel)), exist_ok=True)
                     shutil.copy(os.path.join(tmp, rel), os.path.join(out, rel))
-    index = {"pv": pv, "slots": {"rungs": rungs, "budgets": [sx.budget_key(t) for t in sx.TIME_BUDGETS], "seconds": sx.TIME_BUDGETS,
+    index = {"pv": pv, "slots": {"rungs": rungs, "budgets": [sx.budget_key(t) for t in sx.TIME_SLOTS], "seconds": sx.TIME_SLOTS,
                                  "at": at, "stamp": sx.stamps(at), "basis": {}},
              "timing": timing, "cells": cells, "rank_keys": [k for k in sx.RANK_KEYS if k not in sx.COPY_OF]}
     with open(os.path.join(out, "index.js"), "w") as fh:
