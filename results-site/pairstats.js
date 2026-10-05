@@ -1,15 +1,15 @@
 // pairstats.js: the explorer's paired contrasts and pairwise rank outcomes, computed in the browser at any position.
 //
-// The exporter (scripts/site_export_v2.py) ships the sums of paired_cell and rank_pair_cell at the budgets both methods
-// ran (paired.js, ranks.js), and what those two functions read of every problem (pv/<method>/<catalog>/<rung>.js,
-// write_pair_values; the format is described there). From the latter, pairedCell and rankPairCell below return what
-// paired_cell and rank_pair_cell return -- the same lists, keys and counts, and the same floats bit for bit
-// (tests/test_pairstats_parity.py) -- for a method at a budget it ran, and also BETWEEN two budgets it ran.
+// The exporter (scripts/site_export_v2.py) ships the cells of paired_cell_at and rank_pair_cell_at at its slots (the
+// release's budgets and time limits: ranks/<key>.js, paired/<key>.js), and what those two functions read of every
+// problem (pv/<method>/<rung>/frame.js and <key>.js, write_pair_values; the format is described there). From the
+// latter, pairedCell and rankPairCell below return what the exporter returns -- the same lists, keys and counts, and the
+// same floats bit for bit (tests/test_pairstats_parity.py) -- for a method at a budget it ran, and BETWEEN two budgets.
 //
-// A method at a position is at(lo, hi, w): lo and hi the decoded files (decode, or stored) of two budgets it ran on one
+// A method at a position is at(lo, hi, w): lo and hi the decoded files (file(), or decode) of two budgets it ran on one
 // problem set, w in [0, 1] where the position lies between them (the caller computes it as the page's bracket() does:
 // linearly in the logarithm of the budget or of the time). At w = 0 the method IS lo and at w = 1 it IS hi: nothing is
-// interpolated, and the sums are paired.js's and ranks.js's. Strictly between the two:
+// interpolated, and the cells are the exporter's at that budget. Strictly between the two:
 //   - only the problems the method has at BOTH budgets take part;
 //   - a problem's value (value_matrix) and share (rate_matrix) are (1 - w) * x_lo + w * x_hi, NaN where either is NaN;
 //   - the superiority of A over B on a problem is the bilinear mixture over A's two budgets and B's two:
@@ -68,22 +68,25 @@
     return out;
   }
   // A file's problems (ids ascending, as _problem_runs orders them), their runs (problem i's runs are off[i]..off[i+1]-1),
-  // and its columns, decoded when first read.
-  function decode(raw) {
+  // and its columns, decoded when first read. raw holds n, ids, k and ok (a frame's entry), and either the columns
+  // themselves (s, v, r: pv_cell's object) or none, when get(part, key) finds a column's spec (file() below).
+  function decode(raw, get) {
     var n = raw.n, gaps = column(raw.ids, n), k = column(raw.k, n), ids = new Float64Array(n), off = new Int32Array(n + 1), id = -1;
     for (var i = 0; i < n; i++) { id += gaps[i]; ids[i] = id; off[i + 1] = off[i] + k[i]; }
-    var f = { n: n, runs: off[n], ids: ids, off: off, raw: raw, cols: {} };
+    var f = { n: n, runs: off[n], ids: ids, off: off, raw: raw, cols: {},
+      get: get || function (part, key) {
+        var spec = raw[part] && raw[part][key];
+        if (!spec) { throw new Error("pv: the file has no " + PARTS[part] + " of " + key); }
+        return spec;
+      } };
     f.ok = column(raw.ok, f.runs);
     return f;
   }
+  var PARTS = { s: "scores", v: "values", r: "shares" };
   function col(f, part, key) {   // part: "s" scores per run, "v" values per problem, "r" shares per problem
-    var id = part + ":" + key, c = f.cols[id];
-    if (!c) {
-      var spec = f.raw[part] && f.raw[part][key];
-      if (!spec) { throw new Error("pv: the file has no " + ({ s: "scores", v: "values", r: "shares" })[part] + " of " + key); }
-      c = f.cols[id] = column(spec, part === "s" ? f.runs : f.n);
-    }
-    return c;
+    var id = part + ":" + key, spec = f.get(part, key), c = f.cols[id];
+    if (!c || c.spec !== spec) { c = f.cols[id] = { spec: spec, data: column(spec, part === "s" ? f.runs : f.n) }; }
+    return c.data;
   }
 
   // ---- a method at a position -------------------------------------------------------------------------------------
@@ -236,22 +239,68 @@
     return out;
   }
 
+  // ---- positions ------------------------------------------------------------------------------------------------
+  // The logarithm of a positive finite x, written with + - * / alone in the same order as the exporter's logd: the
+  // same double in both (Math.log and libm's log differ in the last bit now and then, and a w that differs in its last
+  // bit can tip a sum rounded to six decimals). x = m 2^e with m in [sqrt(1/2), sqrt(2)): log m = 2 atanh((m - 1) /
+  // (m + 1)) by its series (13 terms), plus e log 2.
+  var LN2 = 0.6931471805599453, SQRT_HALF = 0.7071067811865476, LOG_TERMS = 13, FREXP = new DataView(new ArrayBuffer(8));
+  function frexp(x) {   // [m, e] with x = m 2^e, m in [0.5, 1), exactly (x positive and finite)
+    var shift = 0;
+    FREXP.setFloat64(0, x);
+    if (((FREXP.getUint32(0) >>> 20) & 0x7ff) === 0) { FREXP.setFloat64(0, x * 18014398509481984); shift = 54; }   // subnormal: times 2^54
+    var hi = FREXP.getUint32(0), e = ((hi >>> 20) & 0x7ff) - 1022 - shift;
+    FREXP.setUint32(0, (hi & 0x800fffff) | (1022 << 20));
+    return [FREXP.getFloat64(0), e];
+  }
+  function logd(x) {
+    var me = frexp(x), m = me[0], e = me[1];
+    if (m < SQRT_HALF) { m = m * 2; e = e - 1; }
+    var z = (m - 1) / (m + 1), z2 = z * z, s = 1 / (2 * LOG_TERMS - 1);
+    for (var k = LOG_TERMS - 2; k >= 0; k--) { s = 1 / (2 * k + 1) + z2 * s; }
+    return e * LN2 + (2 * z) * s;
+  }
+  // Where x lies among points [[position, budget], ...] sorted by position (a method's complete budgets on a problem
+  // set, by budget or by reference time, as the page's points() lists them): {r1, r2, w}, at one of them (within 1e-9
+  // relative: w = 0) or between two neighbours, w = log(x / x1) / log(x2 / x1); null outside them. The exporter's
+  // bracket_in is the same, and D.slots.at holds its results: the page reads every position through this function.
+  function bracketIn(ps, x) {
+    var i;
+    if (!(x > 0)) { return null; }
+    for (i = 0; i < ps.length; i++) { if (Math.abs(ps[i][0] - x) <= 1e-9 * x) { return { r1: ps[i][1], r2: ps[i][1], w: 0 }; } }
+    for (i = 0; i + 1 < ps.length; i++) { if (ps[i][0] < x && x < ps[i + 1][0]) { return { r1: ps[i][1], r2: ps[i + 1][1], w: logd(x / ps[i][0]) / logd(ps[i + 1][0] / ps[i][0]) }; } }
+    return null;
+  }
+
   // ---- loading ----------------------------------------------------------------------------------------------------
-  // The file of a method on a problem set at a budget, relative to the release's base (D.pp's sibling index D.pv lists
-  // the files there are: {method: {"catalog|rung": [problems, runs]}}), and the decoded file once it has loaded.
-  function path(method, catalog, rung) { return "pv/" + method + "/" + catalog + "/" + rung + ".js"; }
-  var DECODED = {};
-  function stored(rel, method, catalog, rung) {
-    var G = typeof window !== "undefined" ? window : root, R = G && G.RESULTS_V2_PV, key = method + "|" + catalog + "|" + rung;
-    var raw = R && R[rel] && R[rel][key];
+  // pv/ per method x budget (D.pv = {method: {rung: [catalogs]}} lists them): one frame, and one file per key, each
+  // holding every problem set the method has finished at that budget. The page loads them with its ensure() from
+  // these paths, relative to the release's base; file() then reads a problem set out of what has loaded.
+  function baseKey(key) { return key.slice(-ANSWERED.length) === ANSWERED ? key.slice(0, -ANSWERED.length) : key; }
+  function framePath(method, rung) { return "pv/" + method + "/" + rung + "/frame.js"; }
+  function keyPath(method, rung, key) { return "pv/" + method + "/" + rung + "/" + baseKey(key) + ".js"; }
+  function store(rel) { var G = typeof window !== "undefined" ? window : root, R = G && G.RESULTS_V2_PV; return (R && R[rel]) || null; }
+  var FILES = {};
+  // The decoded file of a method on one problem set at one budget, for at(): built from its frame and the key files
+  // loaded so far (a key file that loads later is read when its column is first needed); null while the frame is not
+  // loaded or does not hold the problem set. Reading a column whose key file has not loaded throws, naming the file.
+  function file(rel, method, rung, catalog) {
+    var S = store(rel), frame = S && S[method + "|" + rung + "|frame"], raw = frame && frame[catalog];
     if (!raw) { return null; }
-    var id = rel + "|" + key, hit = DECODED[id];
-    if (!hit || hit.raw !== raw) { hit = DECODED[id] = decode(raw); }
+    var id = rel + "|" + method + "|" + rung + "|" + catalog, hit = FILES[id];
+    if (!hit || hit.raw !== raw) {
+      hit = FILES[id] = decode(raw, function (part, key) {
+        var T = store(rel), kf = T && T[method + "|" + rung + "|" + baseKey(key)], c = kf && kf[catalog], spec = c && c[part] && c[part][key];
+        if (!kf) { throw new Error("pv: " + keyPath(method, rung, key) + " is not loaded (the " + PARTS[part] + " of " + key + " on " + catalog + ")"); }
+        if (!spec) { throw new Error("pv: " + keyPath(method, rung, key) + " holds no " + PARTS[part] + " of " + key + " on " + catalog); }
+        return spec;
+      });
+    }
     return hit;
   }
 
   var API = { ANSWERED: ANSWERED, PAIRED_KEYS: PAIRED_KEYS, RATE_KEYS: RATE_KEYS, WORST: WORST,
-    decode: decode, column: column, at: at, pairedCell: pairedCell, rankPairCell: rankPairCell, path: path, stored: stored,
-    sums: sums, round6: round6, pairwise: pairwise };
+    framePath: framePath, keyPath: keyPath, file: file, decode: decode, column: column, at: at, bracketIn: bracketIn, logd: logd,
+    pairedCell: pairedCell, rankPairCell: rankPairCell, sums: sums, round6: round6, pairwise: pairwise };
   if (typeof module === "object" && module.exports) { module.exports = API; } else { root.PAIRSTATS = API; }
 })(typeof globalThis !== "undefined" ? globalThis : this);

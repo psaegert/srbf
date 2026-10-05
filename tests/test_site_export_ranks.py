@@ -50,13 +50,21 @@ def test_mean_ranks_follow_from_the_pairwise_outcomes_exactly() -> None:
         assert abs(1 + lost - direct[j]) < 1e-12
 
 
-def test_a_time_budget_buys_the_largest_rung_timed_within_it() -> None:
+def test_a_slot_brackets_a_method_over_its_finished_budgets() -> None:
+    """A slot reads every method where the page's position would: at a finished budget, between two (interpolated), or
+    nowhere outside its timed or run range."""
     sx = _exporter()
-    timing = {"m": {"1": 0.2, "2": 0.4, "4": 0.9, "8": 2.5}}
-    assert sx.rung_within(timing, "m", 1.0, {1, 2, 4, 8}) == 4
-    assert sx.rung_within(timing, "m", 1.0, {1, 2}) == 2                     # a rung without results cannot be read
-    assert sx.rung_within(timing, "m", 0.1, {1, 2, 4, 8}) is None            # cannot finish within the budget: sits out
-    assert sx.rung_within(timing, "untimed", 10.0, {1}) is None
+    pts = [(0.2, 1), (0.4, 2), (0.9, 4), (2.5, 8)]
+    assert sx.bracket_in(pts, 0.9) == (4, 4, 0.0)
+    r1, r2, w = sx.bracket_in(pts, 1.0)
+    assert (r1, r2) == (4, 8) and abs(w - math.log(1 / 0.9) / math.log(2.5 / 0.9)) < 1e-15
+    assert sx.bracket_in(pts, 0.1) is None and sx.bracket_in(pts, 3.0) is None
+    data = {"m": {("c", 1): {(1, i): {"success": 1.0} for i in range(3)}, ("c", 4): {(1, i): {"success": 1.0} for i in range(3)},
+                  ("c", 8): {(1, i): {"success": 1.0} for i in range(2)}}}             # 8 has not finished every problem
+    at = sx.brackets(data, ["m"], {"c": 3}, {"m": {"1": 0.2, "4": 0.9, "8": 2.5}}, ["2", "8", "t0.5", "t3", "t0.1"])
+    assert at["m"]["2"]["c"] == [1, 4, 0.5] and "8" not in at["m"] and "t3" not in at["m"] and "t0.1" not in at["m"]
+    assert at["m"]["t0.5"]["c"][:2] == [1, 4]
+    assert sx.brackets(data, ["m"], {"c": 3}, {}, ["t0.5"]) == {"m": {}}               # untimed: no place in time
 
 
 def test_a_metric_that_copies_another_in_every_cell_is_not_listed() -> None:
@@ -98,41 +106,16 @@ def test_every_ranked_metric_says_what_is_better() -> None:
     assert "r2_val" not in sx.RANK_KEYS and "predicted_log_prob" not in sx.RANK_KEYS
 
 
-def test_an_overlay_written_with_other_rank_keys_maps_onto_the_release_keys(tmp_path: Path) -> None:
-    """ranks.js files merge in whichever order they load; the release's key list wins, the overlay maps onto it."""
-    import json
-    import shutil
-    import subprocess
-
-    import pytest
-    if shutil.which("node") is None:
-        pytest.skip("node is not installed")
-    sx = _exporter()
-
-    def write(name: str, keys: list[str], main: bool, pairs: dict[str, Any]) -> None:
-        (tmp_path / name).write_text(sx.RANKS_JS % ('"r"', json.dumps(keys), "true" if main else "false", '["t1"]', "[1]", json.dumps(pairs), "{}", "{}"))
-
-    write("release.js", ["a", "b", "c"], True, {"x|y": {"cat": {"t1": [10, 6, 3, 2, 1, 5, 4]}}})
-    write("overlay.js", ["a", "c", "d"], False, {"x|z": {"cat": {"t1": [9, 7, 2, 4, 5, 1, 1]}}})
-    probe = ("global.window={};require(process.argv[1]);require(process.argv[2]);"
-             "process.stdout.write(JSON.stringify(window.RESULTS_V2_RANKS.r))")
-    for first, second in (("release.js", "overlay.js"), ("overlay.js", "release.js")):
-        merged = json.loads(subprocess.run(["node", "-e", probe, str(tmp_path / first), str(tmp_path / second)],
-                                           capture_output=True, text=True, check=True).stdout)
-        assert merged["keys"] == ["a", "b", "c"], first
-        assert merged["pairs"]["x|y"]["cat"]["t1"] == [10, 6, 3, 2, 1, 5, 4], first
-        assert merged["pairs"]["x|z"]["cat"]["t1"] == [9, 7, 2, None, None, 4, 5], first
-
-
-def test_the_public_guard_reads_every_method_a_written_ranks_js_names() -> None:
-    """The guard refuses to publish a ranks.js that names a private method; it must parse what the exporter writes."""
-    import json
+def test_the_public_guard_reads_every_method_a_written_cell_file_names(tmp_path: Path) -> None:
+    """The guard refuses to publish a ranks/ or paired/ file that names a private method; it must parse what the
+    exporter writes, both sides of every pair."""
     sx = _exporter()
     spec = importlib.util.spec_from_file_location("public_guard", ROOT / "results-site" / "tests" / "public_guard.py")
     assert spec is not None and spec.loader is not None
     guard = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(guard)
-    text = sx.RANKS_JS % ('"r"', json.dumps(["a"]), "true", '["t1"]', "[1]",
-                          json.dumps({"hidden-a|e2e": {"cat": {"t1": [3, 1, 1]}}}), json.dumps({"e2e": {"t1": 4}}),
-                          json.dumps({"hidden-b|e2e": {"t1": [4, 4]}}))
-    assert guard.rank_methods(text) == {"e2e", "hidden-a", "hidden-b"}
+    ranks = {"log10_fvu_val": {"hidden-a|e2e": {"cat": {"t1": [3, 1, 1]}}}}
+    paired = {"f1_score": {"e2e|hidden-b": {"cat": {"64": [1, 0, 0, 1, 0, 0, 0, 0]}}}, "f1_score@answered": {"hidden-c|e2e": {}}}
+    sx.write_slot_cells(str(tmp_path), "r", ranks, paired)
+    assert guard.cell_methods((tmp_path / "ranks" / "log10_fvu_val.js").read_text()) == {"e2e", "hidden-a"}
+    assert guard.cell_methods((tmp_path / "paired" / "f1_score.js").read_text()) == {"e2e", "hidden-b", "hidden-c"}
