@@ -482,7 +482,7 @@ def test_a_hand_computed_mixture(tmp_path: Path) -> None:
 
 # ---- the slots: ranks/<key>.js and paired/<key>.js -------------------------------------------------------------------
 def slots_of(data: dict[str, Any]) -> list[str]:
-    return [str(r) for r in sorted({r for m in data for (_c, r) in data[m]})] + [sx.budget_key(t) for t in sx.TIME_BUDGETS]
+    return [str(r) for r in sorted({r for m in data for (_c, r) in data[m]})] + [sx.budget_key(t) for t in sx.TIME_SLOTS]
 
 
 def slot_jobs(at: dict[str, Any], pairs: list[tuple[str, str]], slots: list[str], rank_keys: list[str],
@@ -542,7 +542,7 @@ def test_slot_cells_are_what_pairstats_computes_at_the_slot(tmp_path: Path) -> N
     data, sizes = fixture(tmp_path)
     g = slot_gate(tmp_path, data, sizes, TIMING, sx.RANK_KEYS)
     assert g["w_differ"] == [] and g["brackets"] == 0
-    assert g["cells"] == 0 and g["n_cells"] == 2 * 26 and g["between"] == 2 * 16
+    assert g["cells"] == 0 and g["n_cells"] == 2 * 62 and g["between"] == 2 * 52
     at = g["at"]
     # the brackets: exact hits, interpolation by budget and by time, nothing outside a ladder or at an unfinished budget
     assert at["B"]["2"]["small"] == [1, 4, 0.5] and at["C"].get("1") is None and at["B"]["t3"]["big"] == [4, 4, 0.0]

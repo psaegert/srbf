@@ -372,6 +372,11 @@ RANK_KEYS = ["log10_fvu_val",
 # at 1, a difference at 0.
 IDEAL = {"mdl_ratio": 1.0, "expr_length_ratio": 1.0, "n_constants_ratio": 1.0, "n_constants_delta": 0.0, "total_nestedness_delta": 0.0}
 TIME_BUDGETS = [0.1, 0.3, 1, 3, 10, 30, 100, 300, 1000]
+# The time slots the Ranks and Paired charts are drawn at (ranks/, paired/): a grid dense enough that a method timed over
+# less than a decade still has several points against another -- the R10 preferred numbers, ten per decade, from 0.1 to
+# 1000 s -- and every time limit of TIME_BUDGETS (which stays the list the time controls snap to).
+R10 = ["1", "1.25", "1.6", "2", "2.5", "3.15", "4", "5", "6.3", "8"]
+TIME_SLOTS = sorted({float(f"{m}e{e}") for e in range(-1, 3) for m in R10} | {1000.0} | {float(t) for t in TIME_BUDGETS})
 
 
 def registry_json() -> list[dict[str, Any]]:
@@ -1529,7 +1534,7 @@ def main() -> None:
     ap.add_argument("--engine", default="acj-5-4-llm", help="the SimpliPy engine the judge used (srbf table's default): the ground truths' canonical forms")
     ap.add_argument("--sizes", default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results-site", "data", "catalog_mu.json"),
                     help="every catalog's ground-truth description lengths (scripts/catalog_mu.py; default: results-site/data/catalog_mu.json)")
-    ap.add_argument("--site-dir", default=None, help="results-site directory (default: two levels above out.js); base paths are relative to it")
+    ap.add_argument("--site-dir", default=None, help="results-site directory (default: two levels above out.js); the private overlay's base path is relative to it (the release's is data/<release>/)")
     ap.add_argument("--public", default=",".join(m[0] for m in METHODS))
     ap.add_argument("--private", default="")
     ap.add_argument("--private-dir", default=None)
@@ -1633,12 +1638,12 @@ def main() -> None:
 
     # Every pair at every slot: every budget the page steps through (its "rungs") and every time limit, each method
     # bracketed over its complete budgets (brackets above); D.slots tells the page where every method sits.
-    payload, hists = build(public, rel_base(out_dir, site_dir))
-    slots = [str(r) for r in payload["rungs"]] + [budget_key(t) for t in TIME_BUDGETS]
+    payload, hists = build(public, f"data/{a.release}/")   # where the site serves a release, wherever this export writes it
+    slots = [str(r) for r in payload["rungs"]] + [budget_key(t) for t in TIME_SLOTS]
     at = brackets(data, public, sizes, timing_all, slots)
     pub = order(public)
     cells = slot_cells(data, [(ka, kb) for i, ka in enumerate(pub) for kb in pub[i + 1:]], at, slots, payload["rank_keys"])
-    payload["slots"] = {"rungs": payload["rungs"], "budgets": [budget_key(t) for t in TIME_BUDGETS], "seconds": TIME_BUDGETS,
+    payload["slots"] = {"rungs": payload["rungs"], "budgets": [budget_key(t) for t in TIME_SLOTS], "seconds": TIME_SLOTS,
                         "at": at, "stamp": stamps(at), "basis": {}}
     pred, truth = load_expressions(a.root, public)
     pred = {k: v for k, v in pred.items() if usable(k[0], k[2])}   # the budgets the release publishes, and no others
@@ -1658,13 +1663,13 @@ def main() -> None:
         ppayload, phists = build(private, rel_base(pdir, site_dir))
         # the overlay's pairs: its methods with one another and with every public method (private-vs-public stays
         # private), at every slot of the release and of its own budgets; the release's rank keys
-        pslots = [str(r) for r in sorted(set(payload["rungs"]) | set(ppayload["rungs"]))] + [budget_key(t) for t in TIME_BUDGETS]
+        pslots = [str(r) for r in sorted(set(payload["rungs"]) | set(ppayload["rungs"]))] + [budget_key(t) for t in TIME_SLOTS]
         priv = order(private)
         pat = brackets(data, priv + pub, sizes, timing_all, pslots)
         pcells = slot_cells(data, [(ka, kb) for i, ka in enumerate(priv) for kb in priv[i + 1:]] + [(ka, kb) for ka in priv for kb in pub],
                             pat, pslots, payload["rank_keys"])
         # basis: the release's stamps of the public partners these cells were computed against (fresh while they match)
-        ppayload["slots"] = {"rungs": ppayload["rungs"], "budgets": [budget_key(t) for t in TIME_BUDGETS], "seconds": TIME_BUDGETS,
+        ppayload["slots"] = {"rungs": ppayload["rungs"], "budgets": [budget_key(t) for t in TIME_SLOTS], "seconds": TIME_SLOTS,
                              "at": {m: pat[m] for m in priv}, "stamp": {}, "basis": {m: dict(payload["slots"]["stamp"]) for m in priv}}
         ppayload["pv"] = write_pair_values(pdir, a.release, data, private, sizes, payload["rank_keys"])
         write_set(ppayload, phists, pcells, os.path.join(pdir, "results_v2_private.js"), pdir, "RESULTS_V2_PRIVATE", f"private overlay ({len(private)} method(s), never inside the deployed tree)")
