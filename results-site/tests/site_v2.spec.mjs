@@ -1768,6 +1768,21 @@ test('the predictions view shows one problem: its true formula, and one row per 
   expect(errors).toEqual([]);
 });
 
+test('a power of a power is typeset with its brackets, never as a KaTeX error', async ({ page }) => {
+  const wrap = (key, obj) => `window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"][${JSON.stringify(key)}]=${JSON.stringify(obj)};})();`;
+  const truth = { 0: '* x1 x2' }, preds = { 0: ['* 0.3989 pow pow 0.6065 x1 x1', 0] };
+  await page.route('**/data/2026-09/results.js', async (route) => {
+    const res = await route.fetch();
+    await route.fulfill({ response: res, body: (await res.text()) + ';(function(){var D=window.RESULTS_V2;D.pred={"T8-20M":{"feynman|16":[1]}};D.pred_block=500;})();' });
+  });
+  await page.route('**/pred/truth/feynman.0.js', (route) => route.fulfill({ contentType: 'text/javascript', body: wrap('truth|feynman|0', truth) }));
+  await page.route('**/pred/T8-20M/feynman/16.1.0.js', (route) => route.fulfill({ contentType: 'text/javascript', body: wrap('T8-20M|feynman|16|1|0', preds) }));
+  await page.goto('/explorer.html?release=2026-09&v=preds&ps=feynman&pm=budget&r=16&pr=1&pn=1&m=T8-20M');
+  const f = page.locator(V2 + ' .v2predtable tbody tr td.v2predf').first();
+  await expect(f.locator('.katex')).toHaveCount(1, { timeout: 15000 });
+  await expect(page.locator(V2 + ' .katex-error')).toHaveCount(0);
+});
+
 test('the true formula comes with its simplified form: different, the same, or none', async ({ page }) => {
   const errors = collectErrors(page);
   const wrap = (key, obj) => `window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"][${JSON.stringify(key)}]=${JSON.stringify(obj)};})();`;

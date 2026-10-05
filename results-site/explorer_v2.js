@@ -39,9 +39,15 @@
       if (!D.methods.some(function (x) { return x.key === m.key; })) { D.methods.push(Object.assign({}, m, { local: !!withBase, overlay: true })); added.push(m.key); }
     });
     Object.assign(D.cells, P.cells || {}); Object.assign(D.status, P.status || {}); Object.assign(D.timing, P.timing || {});
+    // its values and formulas problem by problem: indexed like the release's, and, when it arrived with a key, each file
+    // sealed on its own under the overlay's file keys (sealedFile below)
+    ["pp", "pred", "pv"].forEach(function (k) { if (P[k]) { D[k] = Object.assign(D[k] || {}, P[k]); } });
+    if (P.pred_block && !D.pred_block) { D.pred_block = P.pred_block; }
+    if (P.sealed_files && !withBase) { (P.methods || []).forEach(function (m) { SEALKEY[m.key] = P.sealed_files; }); }
     if (withBase && P.base) { SOURCES.push({ base: P.base, local: true }); }
     return added;
   }
+  var SEALKEY = {};   // a method that arrived with a key -> the file keys its overlay carries
   mergeOverlay(window.RESULTS_V2_PRIVATE, true);
   var Z = 1.959964, LN2 = Math.log(2);
   var CATS = D.catalogs.map(function (c) { return c.key; });
@@ -264,7 +270,10 @@
 
   // ---- lazy payloads: histograms per metric, paired contrasts ----------------------------------------------------
   var loading = {}, failed = {};
+  // a file of a method that arrived with a key: its values or formulas problem by problem, sealed on its own
+  function sealedOwner(file) { var m = /^(pp|pred|pv)\/([^/]+)\//.exec(file); return m && SEALKEY[m[2]] ? SEALKEY[m[2]] : null; }
   function ensure(file, cb) {
+    var sk = sealedOwner(file); if (sk) { sealedFile(file, sk, cb); return; }
     SOURCES.forEach(function (s) {
       var key = s.base + file; if (loading[key] || failed[key]) { return; }
       loading[key] = "pending";
@@ -274,7 +283,10 @@
       document.head.appendChild(sc);
     });
   }
-  function ready(file) { return SOURCES.every(function (s) { return loading[s.base + file] === "done" || failed[s.base + file]; }); }
+  function ready(file) {
+    if (sealedOwner(file)) { return loading["sealed:" + file] === "done" || !!failed["sealed:" + file]; }
+    return SOURCES.every(function (s) { return loading[s.base + file] === "done" || failed[s.base + file]; });
+  }
   function histOf(k) { var H = window.RESULTS_V2_HIST && window.RESULTS_V2_HIST[REL]; return H && H[k]; }
   function pairedOf() { var Pd = window.RESULTS_V2_PAIRED && window.RESULTS_V2_PAIRED[REL]; return Pd || null; }
 
@@ -326,6 +338,35 @@
         return added;
       });
     });
+  }
+  // A sealed overlay's per-problem files are sealed one by one (tools/seal.mjs): each at sealed/<name>.js, where the name
+  // is an HMAC of the file's path under the overlay's name key, encrypted with AES-256-GCM under its file key, the
+  // path bound in as associated data. The overlay carries both keys, so a file costs no key derivation; a file is
+  // fetched only when a display asks for it, and one that does not open counts as missing.
+  var SEALKEYS = {};
+  function sealedKeys(sk, subtle) {
+    var id = sk.enc + "|" + sk.name;
+    return SEALKEYS[id] || (SEALKEYS[id] = Promise.all([
+      subtle.importKey("raw", bytesOf(sk.enc), { name: "AES-GCM" }, false, ["decrypt"]),
+      subtle.importKey("raw", bytesOf(sk.name), { name: "HMAC", hash: "SHA-256" }, false, ["sign"])]).then(function (ks) { return { enc: ks[0], name: ks[1] }; }));
+  }
+  function loadScript(src) { return new Promise(function (res, rej) { var sc = document.createElement("script"); sc.src = src; sc.async = true; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc); }); }
+  function sealedFile(file, sk, cb) {
+    var key = "sealed:" + file; if (loading[key] || failed[key]) { return; }
+    loading[key] = "pending";
+    var fail = function () { failed[key] = true; delete loading[key]; cb(); }, subtle = window.crypto && window.crypto.subtle, te = new TextEncoder();
+    if (!subtle || typeof DecompressionStream === "undefined") { fail(); return; }
+    sealedKeys(sk, subtle).then(function (k) {
+      return subtle.sign("HMAC", k.name, te.encode("name\u0000" + file)).then(function (mac) {
+        var name = Array.prototype.map.call(new Uint8Array(mac), function (b) { return (b < 16 ? "0" : "") + b.toString(16); }).join("").slice(0, 32);
+        return loadScript(D.base + "sealed/" + name + ".js").then(function () {
+          var env = (window.RESULTS_V2_SEALED_FILES || {})[name]; if (!env) { throw new Error("no such sealed file"); }
+          return subtle.decrypt({ name: "AES-GCM", iv: bytesOf(env.iv), additionalData: te.encode(REL + "/" + file) }, k.enc, bytesOf(env.ct));
+        });
+      });
+    }).then(function (gz) { return new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream("gzip"))).text(); })
+      .then(function (src) { (new Function(src))(); loading[key] = "done"; cb(); })   // run exactly as a <script> tag would run it
+      .catch(fail);
   }
   // The keys that opened something, remembered for this browser session (the first version kept one, as srbf.k).
   function savedKeys() {
@@ -1470,12 +1511,12 @@
       case "-": return { s: a.s + " - " + par(b, 2).s, p: 1 };
       case "*": { var l = a.num ? a : par(a, 2), r = par(b, 2), s2 = l.s + (l.num && !r.num ? " \\, " : " \\cdot ") + r.s; return { s: s2, p: s2.charAt(0) === "-" ? 1 : 2 }; }
       case "/": return { s: "\\frac{" + a.s + "}{" + b.s + "}", p: 9 };
-      case "pow": return { s: par(a, 9).s + "^{" + b.s + "}", p: 9 };
+      case "pow": return { s: (a.sup ? "\\left(" + a.s + "\\right)" : par(a, 9).s) + "^{" + b.s + "}", p: 9, sup: true };   // a power of a power keeps its brackets
       case "rootn": return { s: (b.s === "2" ? "\\sqrt{" : "\\sqrt[" + b.s + "]{") + a.s + "}", p: 9 };
       case "neg": return { s: "-" + par(a, 2).s, p: 1 };
       case "inv": return { s: "\\frac{1}{" + a.s + "}", p: 9 };
       case "abs": return { s: "\\left|" + a.s + "\\right|", p: 9 };
-      case "exp": return { s: "e^{" + a.s + "}", p: 9 };
+      case "exp": return { s: "e^{" + a.s + "}", p: 9, sup: true };
       default: return PRED_FN[n.t] && a ? { s: PRED_FN[n.t] + "\\left(" + a.s + "\\right)", p: 5 } : leafTex(n.t);
     }
   }
