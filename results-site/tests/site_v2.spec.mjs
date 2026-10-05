@@ -472,6 +472,44 @@ test('a method is added with its key, and a key that does not fit adds nothing',
   expect(errors).toEqual([]);
 });
 
+// a keyed overlay whose per-problem files are sealed one by one (tools/seal.mjs; tests/fixtures/sealed_files): the method
+// "Fixture Files" carries copies of T8-20M's feynman files at budgets 16 and 32
+const SEALED_FILES = new URL('./fixtures/sealed_files/', import.meta.url);
+async function routeSealedFiles(page) {
+  await page.route('**/data/2026-09/sealed.js', (route) => route.fulfill({ contentType: 'text/javascript', body: readFileSync(new URL('sealed.js', SEALED_FILES), 'utf8') }));
+  await page.route(/\/data\/2026-09\/sealed\/[0-9a-f]{32}\.js$/, (route) => {
+    const name = route.request().url().split('/').pop();
+    let body = null; try { body = readFileSync(new URL('sealed/' + name, SEALED_FILES), 'utf8'); } catch (e) { body = null; }
+    return body === null ? route.fulfill({ status: 404, body: '' }) : route.fulfill({ contentType: 'text/javascript', body });
+  });
+}
+
+test('a method added with a key brings its values and formulas problem by problem, each file sealed and fetched on its own', async ({ page }) => {
+  const errors = collectErrors(page);
+  await routeSealedFiles(page);
+  const fetched = new Set(); page.on('request', (r) => { const m = /\/sealed\/([0-9a-f]{32})\.js$/.exec(r.url()); if (m) { fetched.add(m[1]); } });
+  await page.goto('/explorer.html?release=2026-09&v=corr&cv=points&cx=mdl_ratio&cy=log10_fvu_val&c=feynman&m=T8-20M&pm=budget&r=16');
+  const hint = page.locator(V2 + ' .v2view p.v2hint', { hasText: 'One point per run' });
+  await expect(hint).toBeVisible({ timeout: 15000 });
+  const count = async () => +(await hint.textContent()).match(/One point per run, ([\d,]+) in all/)[1].replace(/,/g, '');
+  const one = await count();
+  await page.locator(V2 + ' .v2addmopen').click();
+  await page.locator(V2 + ' .v2addmkey').fill(FIXTURE_KEY);
+  await page.locator(V2 + ' [data-act="add-method-go"]').click();
+  await expect(page.locator(V2 + ' .v2methods')).toContainText('Fixture Files', { timeout: 20000 });
+  await expect.poll(count, { timeout: 15000 }).toBe(2 * one);              // its runs, drawn beside the copies they were made from
+  await expect(page.locator(V2 + ' .v2view svg.v2corr')).toContainText('Fixture Files');
+  expect(fetched.size).toBe(2);                                            // only its two runs at budget 16: nothing else is fetched
+  await page.locator(V2 + ' .v2tab[data-view="preds"]').click();           // and its formulas, as the copies say
+  const rows = page.locator(V2 + ' .v2predtable tbody tr');
+  await expect(rows).toHaveCount(2, { timeout: 15000 });
+  await expect(rows.nth(1)).toContainText('Fixture Files');
+  await expect(rows.nth(1).locator('td.v2predf .katex')).toHaveCount(1, { timeout: 15000 });
+  expect(await rows.nth(1).locator('td.v2predf').textContent()).toBe(await rows.nth(0).locator('td.v2predf').textContent());
+  expect(fetched.size).toBe(3);
+  expect(errors).toEqual([]);
+});
+
 // two overlays sealed under two keys into one file (tools/seal.mjs --source ... --source ...)
 const FIXTURE_TWO_KEY = 'a-second-fixture-key-for-the-tests';
 const FIXTURE_TWO = readFileSync(new URL('./fixtures/sealed_two_fixture.js', import.meta.url), 'utf8');
