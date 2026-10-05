@@ -130,13 +130,13 @@
         <h3>Same budget or same time</h3>
         <div>
           <p>
-            The ranking uses the methods and problem sets you select. Methods are compared either at
-            the same budget number, a rough comparison since their units differ, or at the same time:
-            each method at its largest finished budget that takes at most the chosen number of seconds
-            per problem on our timing workstation. A method that has not been timed yet, or whose
-            smallest budget already takes longer, is left out, and so is one without results on the
-            same problems as the others. A method whose largest budget stays under the time limit is
-            drawn hollow: with more budget, it might move up.
+            The ranking uses the methods and problem sets you select. Methods are compared at the same
+            time per problem on our timing workstation, or at the same budget number, a rough comparison
+            since their units differ. Where a method was run at that time or budget, its own results are
+            used. Between two budgets it was run at, each problem is read from both, weighted by where the
+            time or budget lies between them on a logarithmic scale. A method is left out where it has no
+            value: below the time or budget of its first run, above that of its last, before it has been
+            timed, or before it has finished every selected problem set there.
           </p>
         </div>
       </section>
@@ -146,7 +146,7 @@
         <div>
           <p>
             One ranking metric was chosen before the results were read: \(\log_{10}\) FVU on the
-            held-out points. Which time limit or budget to compare at depends on the use case (an answer
+            held-out points. Which time or budget to compare at depends on the use case (an answer
             within a second, or the best answer within minutes), so the page shows the ranking at every
             setting, and a ranking should be quoted together with its setting. Rankings by any other
             metric are for browsing, and a label next to the metric says which kind is on screen.
