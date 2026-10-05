@@ -431,8 +431,11 @@
     Object.keys(cs).forEach(function (k) { if (cs[k].state !== "complete") { return; } var v = time ? refTime(m, k) : +k; if (v > 0) { out.push([v, +k]); } });
     return out.sort(function (a, b) { return a[0] - b[0]; });
   }
-  // where x lies among the points [position, budget] (in order): at one of them (w = 0), or between two neighbours
+  // where x lies among the points [position, budget] (in order): at one of them (w = 0), or between two neighbours.
+  // pairstats.js, where the page has it, takes the logarithms with arithmetic of its own, the same as the exporter's:
+  // the browser's Math.log can differ from Python's in the last bit, and the weights must agree with the exporter's.
   function bracketIn(ps, x) {
+    if (typeof window !== "undefined" && window.PAIRSTATS && window.PAIRSTATS.bracketIn) { return window.PAIRSTATS.bracketIn(ps, x); }
     var i; if (!(x > 0)) { return null; }
     for (i = 0; i < ps.length; i++) { if (Math.abs(ps[i][0] - x) <= 1e-9 * x) { return { r1: ps[i][1], r2: ps[i][1], w: 0 }; } }
     for (i = 0; i + 1 < ps.length; i++) { if (ps[i][0] < x && x < ps[i + 1][0]) { return { r1: ps[i][1], r2: ps[i + 1][1], w: Math.log(x / ps[i][0]) / Math.log(ps[i + 1][0] / ps[i][0]) }; } }
