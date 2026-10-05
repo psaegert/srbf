@@ -2,8 +2,8 @@
 
 Fatal checks, run before the Playwright suite in CI and locally:
   1. no page (index.html and the pages around it) references a private/ path or a local page (*.local.html);
-  2. every method key in data/*/results.js, data/*/summary.js, data/*/hist/*.js, data/*/paired.js, data/*/ranks.js
-     and data/*/pred/ is
+  2. every method key in data/*/results.js, data/*/summary.js, data/*/hist/*.js, data/*/paired.js, data/*/ranks.js,
+     data/*/pred/ and data/*/pv/ is
      in the public allowlist below
      (the list names PUBLIC methods only; a private method's key must never appear here);
   3. every release payload carries the complete metric registry (at least the metric floor: the site's first
@@ -303,6 +303,14 @@ def main() -> int:
         extra = sorted(set(payload.get("pred") or {}) - PUBLIC_METHODS)
         if extra:
             failures.append(f"{js}: non-public method keys in the predictions index {extra}")
+        pv = js.parent / "pv"   # the inputs of the paired and rank statistics: one directory per method
+        if pv.is_dir():
+            extra = sorted(d.name for d in pv.iterdir() if d.is_dir() and d.name not in PUBLIC_METHODS)
+            if extra:
+                failures.append(f"{pv}: non-public method keys {extra}")
+        extra = sorted(set(payload.get("pv") or {}) - PUBLIC_METHODS)
+        if extra:
+            failures.append(f"{js}: non-public method keys in the per-problem pair index {extra}")
         rj = js.parent / "ranks.js"
         if rj.exists():
             named = rank_methods(rj.read_text(encoding="utf-8"))
