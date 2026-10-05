@@ -13,6 +13,9 @@ Reads the per-problem judged rows of a campaign root (rows_full_<name>.csv or <n
   <out dir>/pp/<method>/...      every problem's value of every continuous metric, one byte each, per method x catalog x
                                  rung x finished run (the Correlation view; write_values), and pp/truth/ the ground
                                  truth's properties per catalog.
+  <out dir>/pv/<method>/...      what paired_cell and rank_pair_cell read of every problem, exactly, per method x catalog
+                                 x rung (write_pair_values), for the page to compute both at any budget or time
+                                 (results-site/pairstats.js).
   <out dir>/paired.js            paired contrasts (a problem with itself within a draw, over the draws complete on both
                                  sides) per method pair x catalog x rung: 2x2 tables for the rate
                                  metrics (exact McNemar on the client), [n, sum d, sum d^2, better, worse] for the
@@ -1043,6 +1046,113 @@ def rank_pair_cell(rows_a: dict[Any, dict[str, Any]], rows_b: dict[Any, dict[str
     return out
 
 
+# ---- the inputs of paired_cell and rank_pair_cell, per problem (pv/) ---------------------------------------------
+# paired.js and ranks.js hold the two functions' sums at the budgets both methods ran. To read the Ranks and Paired
+# differences views at ANY position -- a budget between two a method ran, or a time per problem -- the page computes the
+# same sums itself (results-site/pairstats.js) from what the two functions read of each problem, shipped here: one file
+# per method x problem set x budget, every run the rows hold (both draws), window.RESULTS_V2_PV[release]
+# ["method|catalog|rung"]. The quantities are those the helpers above derive; the page derives no metric itself.
+#   n    the number of problems
+#   ids  their ids in _problem_runs's order (ascending), as first differences from -1
+#   k    each problem's number of runs, in that order; a problem's runs follow each other in "ok" and "s"
+#   ok   per run, 1 where it takes part in the answered-only reading (score_matrix's mask with answered=True); in the
+#        other reading every run takes part
+#   s    per run, score_matrix's score, for every rank key and every paired key that is not a rate
+#   v    per problem, value_matrix's value, for every paired key that is not a rate, and for one with a worst value
+#        (WORST) also its answered-only reading, key + ANSWERED
+#   r    per problem, rate_matrix's share, for every paired rate key
+# Every column is float64, exactly (-inf, +inf, NaN and the sign of zero included), written as the shortest of
+#   {"u": U}            a column of one value: U holds it
+#   {"u": U, "i": I}    U the distinct values, I each entry's index into U (uint8 when U has at most 256 values, else uint16)
+#   {"f": F}            the values themselves
+# U, I and F base64, little-endian. The writer checks that the columns mean what the page takes them to mean (every
+# run takes part in the reading over all runs, the matrices' padding in none; the answered-only reading of a paired key
+# is the shared mask over the same scores), and raises otherwise.
+PV_VALUE_KEYS = [k for k in PAIRED_KEYS if k not in RATE_KEYS]
+PV_RATE_KEYS = [k for k in PAIRED_KEYS if k in RATE_KEYS]
+
+
+def _b64(raw: bytes) -> str:
+    import base64
+    return base64.b64encode(raw).decode("ascii")
+
+
+def pv_column(x: Any) -> dict[str, str]:
+    """One column of a pv file, exactly (see above): distinct values are told apart by their bits, so -0.0 and NaN
+    survive the round trip."""
+    a = np.ascontiguousarray(np.asarray(x, dtype="<f8").reshape(-1))
+    u, inv = np.unique(a.view("<u8"), return_inverse=True)
+    vals = _b64(u.astype("<u8").view("<f8").tobytes())
+    if u.size == 1:
+        return {"u": vals}
+    if 1 < u.size <= 65536:
+        idx = inv.reshape(-1).astype("<u1" if u.size <= 256 else "<u2")
+        if 8 * u.size + idx.nbytes < a.nbytes:
+            return {"u": vals, "i": _b64(idx.tobytes())}
+    return {"f": _b64(a.tobytes())}
+
+
+def pv_cell(rows: dict[Any, dict[str, Any]], score_keys: list[str]) -> dict[str, Any]:
+    """One pv file's object: a method on one problem set at one budget (see above)."""
+    ids, runs = _problem_runs(rows)
+    k = np.asarray([len(rs) for rs in runs], dtype=np.int64)
+    exists = np.arange(_width(runs))[None, :] < k[:, None]
+    answered = [key for key in PV_VALUE_KEYS if key in WORST]
+    ok = score_matrix(rows, (answered or score_keys)[0], True)[2]
+    for key in answered:
+        _, sc, _mask = score_matrix(rows, key)
+        _, sc_a, mask_a = score_matrix(rows, key, True)
+        if not np.array_equal(mask_a, ok) or not np.array_equal(sc_a[mask_a].view("<u8"), sc[mask_a].view("<u8")):
+            raise ValueError(f"pv: the answered-only reading of {key!r} is not the shared mask over the same scores")
+    obj: dict[str, Any] = {"n": int(ids.size), "ids": pv_column(np.diff(ids, prepend=-1)), "k": pv_column(k),
+                           "ok": pv_column(ok[exists]), "s": {}, "v": {}, "r": {}}
+    for key in score_keys:
+        _, sc, mask = score_matrix(rows, key)
+        if not np.array_equal(mask, exists):
+            raise ValueError(f"pv: score_matrix({key!r}) does not take part in exactly the runs there are")
+        obj["s"][key] = pv_column(sc[exists])
+    for key in PV_VALUE_KEYS:
+        for name, ans in [(key, False)] + ([(key + ANSWERED, True)] if key in WORST else []):
+            obj["v"][name] = pv_column(value_matrix(rows, key, ans)[1])
+    for key in PV_RATE_KEYS:
+        obj["r"][key] = pv_column(rate_matrix(rows, key)[1])
+    return obj
+
+
+def write_pair_values(out_dir: str, rel: str, data: dict[str, dict[tuple[str, int], Rows]], keys: list[str],
+                      sizes: dict[str, int], rank_keys: list[str] | None = None) -> dict[str, dict[str, list[int]]]:
+    """Write pv/<method>/<catalog>/<rung>.js for every published cell of the methods `keys` -- the cells paired.js and
+    ranks.js read, one still in progress included -- with the scores of `rank_keys` (default RANK_KEYS) and of every
+    paired key that is not a rate. Returns the index the page reads: {method: {"catalog|rung": [problems, runs]}} (a
+    cell is complete when its problems are all of its catalog's). A file this call did not write is removed."""
+    score_keys = list(dict.fromkeys(list(RANK_KEYS if rank_keys is None else rank_keys) + PV_VALUE_KEYS))
+    index: dict[str, dict[str, list[int]]] = defaultdict(dict)
+    written: set[str] = set()
+    root = os.path.join(out_dir, "pv")
+    for m in keys:
+        for (c, r), rows in sorted(data.get(m, {}).items()):
+            if c not in sizes or not usable(m, r) or not rows:
+                continue
+            obj = pv_cell(rows, score_keys)
+            index[m][f"{c}|{r}"] = [obj["n"], int(sum(len(rs) for rs in _problem_runs(rows)[1]))]
+            text = "window.RESULTS_V2_PV=window.RESULTS_V2_PV||{};(function(){var R=window.RESULTS_V2_PV;R[%s]=R[%s]||{};R[%s][%s]=%s;})();\n" % (
+                json.dumps(rel), json.dumps(rel), json.dumps(rel), json.dumps(f"{m}|{c}|{r}"), json.dumps(obj, separators=(",", ":")))
+            path = os.path.join(root, m, c, f"{r}.js")
+            written.add(os.path.abspath(path))
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            if os.path.exists(path) and open(path).read() == text:
+                continue
+            with open(path, "w") as fh:
+                fh.write(text)
+    for d, _sub, files in os.walk(root, topdown=False) if os.path.isdir(root) else []:
+        for f in files:
+            if os.path.abspath(os.path.join(d, f)) not in written:
+                os.remove(os.path.join(d, f))
+        if d != root and not os.listdir(d):
+            os.rmdir(d)
+    return dict(index)
+
+
 def rung_within(timing: dict[str, Any], key: str, budget: float, have: set[int]) -> int | None:
     """The largest rung of `key` the reference machine timed at or under `budget` seconds, among the rungs in `have`
     (the caller passes the rungs the method has finished)."""
@@ -1332,6 +1442,8 @@ def main() -> None:
     payload["pred"] = write_predictions(out_dir, a.release, pred, truth, sizes, canonical)
     payload["pred_block"] = PRED_BLOCK
     payload["pp"] = write_values(out_dir, a.release, data, public, sizes)
+    # what paired_cell and rank_pair_cell read of every problem, for the page to compute both at any position (pv/)
+    payload["pv"] = write_pair_values(out_dir, a.release, data, public, sizes, payload["rank_keys"])
     payload["time_budgets"] = TIME_BUDGETS   # the time limits the Correlations view offers, as the Ranks view does
     ranks = leagues([(ka, kb) for i, ka in enumerate(public) for kb in public[i + 1:]], public, payload["rank_keys"])
     write_set(payload, hists, paired, ranks, a.out, out_dir, "RESULTS_V2", f"public release {a.release}")
