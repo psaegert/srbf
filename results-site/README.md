@@ -96,8 +96,9 @@ Several overlays, each under its own key (a key opens its own methods and no oth
     node tools/seal.mjs <release> --source private/<release>=SRBF_SEAL_KEY --source private/<release>-b=SRBF_SEAL_KEY_B
 
 **Per-problem files are sealed one by one.** An overlay's `pp/`, `pred/` and `pv/` files (the Correlations and
-Predictions views read them, thousands per method) and its `ranks/` and `paired/` files (one per metric) do not go into
-`sealed.js`: it would grow several times over and be re-encrypted whole on every change. `tools/seal.mjs` seals each of them into its own file,
+Predictions views read them, thousands per method) and its `ranks/`, `paired/` and `hist/` files (one per metric) do
+not go into `sealed.js`, which holds the overlay's own payload and nothing else: with them it would grow several times
+over and be re-encrypted whole on every change. `tools/seal.mjs` seals each of them into its own file,
 `data/<release>/sealed/<name>.js`, which the page fetches only when a key holder opens a view that needs it:
 
 - From the overlay's key, PBKDF2-HMAC-SHA256 (salt `srbf-sealed-files/<release>`, 600k iterations, 512 bits) gives two

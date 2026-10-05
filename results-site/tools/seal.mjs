@@ -16,8 +16,9 @@
 // and the GCM tag means a wrong key fails as an authentication error rather than as garbage.
 //
 // PER-PROBLEM FILES. The scripts under a source's pp/, pred/ and pv/ (the files of the Correlations and Predictions
-// views, one per method x problem set x budget x run) and under ranks/ and paired/ (one per metric) do not go into that
-// payload: there are thousands of them, and the page needs a few at a time. Each is sealed on its own into
+// views, one per method x problem set x budget x run) and under ranks/, paired/ and hist/ (one per metric) do not go
+// into that payload: there are thousands of them, and the page needs a few at a time, so the payload is the overlay
+// itself and a reseal changes little in git. Each is sealed on its own into
 // <out dir>/sealed/<name>.js (data/<release>/sealed/ for the default out file) and fetched only when a key holder opens
 // a view that reads it. Two sources may hold the same path: their names differ, as their keys do. Per source key P:
 //   material = PBKDF2-HMAC-SHA256(P, salt "srbf-sealed-files/<release>", 600000 iterations, 512 bits)
@@ -50,7 +51,7 @@ import { fileURLToPath } from "node:url";
 
 const SITE = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ITERATIONS = 600000;   // OWASP 2023 for PBKDF2-HMAC-SHA256: ~0.3 s in a browser, the only brake on an offline guess
-const FILE_DIRS = ["pp", "pred", "pv", "ranks", "paired"];   // a source's per-problem (and per-metric) files, sealed one by one
+const FILE_DIRS = ["pp", "pred", "pv", "ranks", "paired", "hist"];   // a source's per-problem (and per-metric) files, sealed one by one
 const SEALED_NAME = /^[0-9a-f]{32}\.js$/;
 const FILE_LINE = /^\(window\.RESULTS_V2_SEALED_FILES=window\.RESULTS_V2_SEALED_FILES\|\|\{\}\)\["([0-9a-f]{32})"\]=\{"iv":"([A-Za-z0-9+/]+=*)","ct":"([A-Za-z0-9+/]+=*)"\};\n$/;
 const HANDOVER = "window.RESULTS_V2_PRIVATE.sealed_files=";
