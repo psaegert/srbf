@@ -279,8 +279,8 @@
   var loading = {}, failed = {};
   // a file of a method that arrived with a key: its values or formulas problem by problem, sealed on its own
   function sealedOwner(file) { var m = /^(pp|pred|pv)\/([^/]+)\//.exec(file); return m && SEALKEY[m[2]] ? SEALKEY[m[2]] : null; }
-  // a file of per-key cells: the release's, and each keyed overlay's own, sealed under that overlay's keys
-  function shared(file) { return /^(ranks|paired)\//.test(file); }
+  // a file of per-key cells or histograms: the release's, and each keyed overlay's own, sealed under that overlay's keys
+  function shared(file) { return /^(ranks|paired|hist)\//.test(file); }
   function ensure(file, cb) {
     var sk = sealedOwner(file); if (sk) { sealedFile(file, sk, cb); return; }
     if (shared(file)) { OVERLAYKEYS.forEach(function (k) { sealedFile(file, k, cb); }); }
