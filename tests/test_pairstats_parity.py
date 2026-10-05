@@ -766,3 +766,68 @@ def test_pairstats_equals_the_exporter_on_real_rows(tmp_path: Path) -> None:
     print(f"real rows: {g['n_cells']} slot cells ({g['between']} with a method between budgets), {g['n_brackets']} brackets; "
           f"cell mismatches {g['cells']}, bracket mismatches {g['brackets']}, w differing {len(g['w_differ'])}")
     assert g["w_differ"] == [] and g["brackets"] == 0 and g["cells"] == 0
+
+
+# ---- the browser fixture (results-site/tests/fixtures/pairpos, scripts/site_pairpos_fixture.py) ---------------------
+FIXTURE = ROOT / "results-site" / "tests" / "fixtures" / "pairpos"
+FIXTURE_CHECK = r"""
+const fs = require("fs"), vm = require("vm"), path = require("path");
+globalThis.window = globalThis;
+const [PSJ, RES, FX] = process.argv.slice(1), PS = require(PSJ);
+vm.runInThisContext(fs.readFileSync(RES, "utf8") + fs.readFileSync(path.join(FX, "index.js"), "utf8"));
+const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
+["pv", "ranks", "paired"].forEach((s) => walk(path.join(FX, s)).forEach((f) => vm.runInThisContext(fs.readFileSync(f, "utf8"))));
+const D = window.RESULTS_V2, E = JSON.parse(fs.readFileSync(path.join(FX, "expected.json"), "utf8")), c = E.catalogs[0], rel = E.release;
+const refTime = (m, r) => { const t = (D.timing[m] || {})[String(r)]; return t > 0 ? t : null; };
+const points = (m, time) => { const cs = (D.cells[m] || {})[c] || {}, out = [];
+  Object.keys(cs).forEach((k) => { if (cs[k].state !== "complete") { return; } const v = time ? refTime(m, k) : +k; if (v > 0) { out.push([v, +k]); } });
+  return out.sort((a, b) => a[0] - b[0]); };
+const at = (m, pos) => { const time = pos[0] === "t", b = PS.bracketIn(points(m, time), time ? parseFloat(pos.slice(1)) : +pos);
+  return b && { b: [b.r1, b.r2, b.w], P: PS.at(PS.file(rel, m, b.r1, c), PS.file(rel, m, b.r2, c), b.w) }; };
+const out = { positions: {}, slots: [] };
+for (const pos of Object.keys(E.positions)) {
+  const e = E.positions[pos], o = out.positions[pos] = { brackets: {}, chance: {}, paired: null };
+  E.methods.forEach((m) => { const x = at(m, pos); o.brackets[m] = x && x.b; });
+  Object.keys(e.chance_to_beat).forEach((pk) => { const [a, b] = pk.split("|"); o.chance[pk] = PS.rankPairCell(at(a, pos).P, at(b, pos).P, ["log10_fvu_val"]); });
+  o.paired = PS.pairedCell(at("T8-20M", pos).P, at("PySR", pos).P, { keys: ["numeric_recovery_val"] }).m.numeric_recovery_val;
+}
+const RK = window.RESULTS_V2_RANKCELLS[rel], PC = window.RESULTS_V2_PAIRCELLS[rel];
+for (const key of Object.keys(RK)) { for (const pk of Object.keys(RK[key])) { const [a, b] = pk.split("|");
+  for (const slot of Object.keys(RK[key][pk][c])) { const A = at(a, slot), B = at(b, slot);
+    out.slots.push([key, pk, slot, RK[key][pk][c][slot], PS.rankPairCell(A.P, B.P, [key]), PC[key][pk][c][slot], PS.pairedCell(A.P, B.P, { keys: [key] }).m[key]]); } } }
+process.stdout.write(JSON.stringify(out));
+"""
+
+
+@pytest.mark.skipif(not (FIXTURE / "expected.json").exists() or not (ROOT / "results-site" / "data" / "2026-09" / "results.js").exists(),
+                    reason="no browser fixture or no release to append it to")
+def test_the_browser_fixture_is_what_the_page_computes() -> None:
+    """The page, holding the release with the fixture's index.js appended, brackets every method where expected.json
+    says, computes the cells expected.json holds, and the slot files' cells at every slot; expected.json's numbers are
+    the page's averaging (site_random_effects) of those cells."""
+    import site_random_effects as re_
+    done = subprocess.run([str(NODE), "-e", FIXTURE_CHECK, str(JS), str(ROOT / "results-site" / "data" / "2026-09" / "results.js"), str(FIXTURE)],
+                          capture_output=True, text=True, timeout=600)
+    assert done.returncode == 0, done.stderr[-4000:]
+    got = json.loads(done.stdout)
+    expected = json.loads((FIXTURE / "expected.json").read_text())
+    assert set(expected["positions"]) == {"1024", "2000", "1448", "t7"}
+    for pos, e in expected["positions"].items():
+        g = got["positions"][pos]
+        same(e["brackets"], g["brackets"], pos)
+        for pk, ch in e["chance_to_beat"].items():
+            same(ch["cell"], g["chance"][pk], f"{pos} {pk}")
+            f = re_.combine([re_.SetStat(ch["cell"][0], ch["cell"][1], ch["cell"][2])], "normal")
+            assert f is not None and (ch["p"], ch["lo"], ch["hi"]) == ((1 + f.mu) / 2, (1 + f.lo) / 2, (1 + f.hi) / 2)
+        same(e["paired"]["cell"], g["paired"], f"{pos} paired")
+        t = e["paired"]["cell"]
+        f = re_.combine([re_.SetStat(t[0], t[1], t[2])], "normal")
+        assert f is not None and (e["paired"]["v"], e["paired"]["lo"], e["paired"]["hi"], e["paired"]["p"]) == (f.mu, f.lo, f.hi, f.p)
+        assert (e["paired"]["wins"], e["paired"]["losses"], e["paired"]["n"]) == (t[3], t[4], t[0])
+    # a budget two methods ran exactly, one between; all between; a time
+    b = {pos: e["brackets"] for pos, e in expected["positions"].items()}
+    assert b["1024"]["T8-20M"][2] == 0 and b["1024"]["dsr"][2] > 0 and b["2000"]["dsr"][2] == 0 and all(x[2] > 0 for x in b["1448"].values())
+    assert len(got["slots"]) > 50
+    for key, pk, slot, rank_file, rank_js, paired_file, paired_js in got["slots"]:
+        same(rank_file, rank_js, f"ranks/{key} {pk} {slot}")
+        same(paired_file, paired_js, f"paired/{key} {pk} {slot}")
