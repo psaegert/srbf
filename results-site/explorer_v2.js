@@ -1482,7 +1482,8 @@
     var time = state.pm === "time", files = plots.map(function (p) { return "paired/" + p.key + ".js"; }), slots = slotsOf(time);
     if (!filesReady(files)) { return ctl + '<div class="v2viewbar">' + posControl(shown) + '</div><p class="v2hint">Loading the paired contrasts…</p>'; }
     var charts = inBlock(root.querySelector(".v2main"), plots.length, function () { return plots.map(function (p) { var series = [], ymin = Infinity, ymax = -Infinity, tmin = Infinity, tmax = -Infinity;
-      others.forEach(function (m) { var pts = []; slots.forEach(function (sl) { var x = sl.x, st = pairedSlotStat(p, m.key, base.key, sl.slot); if (!st || !isFinite(st.v)) { return; }
+      var ctx = p.key + (leftOut(p.key) ? "@answered" : "") + "|" + base.key + "|" + slotContext(pairCellsOf(p.key));
+      others.forEach(function (m) { var pts = []; slots.forEach(function (sl) { var x = sl.x, st = slotMemo("pair|" + ctx + "|" + m.key + "|" + sl.slot, function () { return pairedSlotStat(p, m.key, base.key, sl.slot); }); if (!st || !isFinite(st.v)) { return; }
           pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, title: m.label + " − " + base.label + " at " + posText(time ? "t" + x : x) + ": " + fmtDelta(p, st.v) + " [" + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + "], over " + st.n.toLocaleString() + " problems in " + st.S + " problem sets, p = " + fmtP(st.p) });
           [st.v, anyCI() ? st.lo : st.v, anyCI() ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } }); if (time) { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); } });
         if (pts.length) { series.push({ key: m.key, label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), dash: !!m.dash, pts: pts }); } });
@@ -1724,6 +1725,15 @@
     var ok = function (own, partner) { var bs = B[own] && B[own][partner]; return !bs || bs[slot] === undefined || bs[slot] === (stamp[partner] || {})[slot]; };
     return ok(a, b) && ok(b, a);
   }
+  // The charts along the slots do not move with the position: their points are kept between drawings, for as long as
+  // the methods, the problem sets, the metric and the cells loaded (a keyed overlay adds pairs) stay the same.
+  var SLOTMEMO = {}, SLOTMEMO_N = 0;
+  function slotMemo(id, fn) {
+    if (id in SLOTMEMO) { return SLOTMEMO[id]; }
+    if (++SLOTMEMO_N > 4000) { SLOTMEMO = {}; SLOTMEMO_N = 1; }
+    return (SLOTMEMO[id] = fn());
+  }
+  function slotContext(cells) { return state.cats.join(",") + "|" + Object.keys(cells || {}).length + "|" + OVERLAYKEYS.length; }
   function rankCellsOf(key) { var R = window.RESULTS_V2_RANKCELLS && window.RESULTS_V2_RANKCELLS[REL]; return (R && R[key]) || null; }
   function pairCellsOf(name) { var R = window.RESULTS_V2_PAIRCELLS && window.RESULTS_V2_PAIRCELLS[REL]; return (R && R[name]) || null; }
   // A ranking at a slot from the exporter's cells. A method without cells against another (an overlay sealed before
@@ -1832,7 +1842,8 @@
     var time = state.pm === "time", file = "ranks/" + p.key + ".js", head = '<h3 class="v2h">By ' + (time ? "time" : "budget") + "</h3>";
     if (!ready(file)) { ensure(file, scheduleRender); return head + '<p class="v2hint">Loading the rankings along the ' + (time ? "times" : "budgets") + "…</p>"; }
     var by = {}, tmin = Infinity, tmax = -Infinity;
-    slotsOf(time).forEach(function (sl) { var lg = rankingAtSlot(shown, sl.slot, p.key); if (lg.roster.length < 2 || !lg.cats.length) { return; }
+    var ctx = p.key + "|" + shown.map(function (m) { return m.key; }).join(",") + "|" + slotContext(rankCellsOf(p.key));
+    slotsOf(time).forEach(function (sl) { var lg = slotMemo("rank|" + ctx + "|" + sl.slot, function () { return rankingAtSlot(shown, sl.slot, p.key); }); if (lg.roster.length < 2 || !lg.cats.length) { return; }
       if (time) { tmin = Math.min(tmin, sl.x); tmax = Math.max(tmax, sl.x); }
       lg.roster.forEach(function (e) { (by[e.m.key] = by[e.m.key] || { m: e.m, pts: [] }).pts.push({ x: sl.x, v: e.share, lo: NaN, hi: NaN, title: e.m.label + " at " + posText(time ? "t" + sl.x : sl.x) + ": wins " + (100 * e.share).toFixed(1) + " % of its comparisons, average place " + e.rank.toFixed(2) + " of " + lg.k + ", " + lg.n.toLocaleString() + " problems" }); }); });
     var series = shown.filter(function (m) { return by[m.key]; }).map(function (m) { return { label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), dash: !!m.dash, pts: by[m.key].pts }; });
