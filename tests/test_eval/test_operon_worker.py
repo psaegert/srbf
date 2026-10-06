@@ -126,3 +126,22 @@ def test_the_noise_estimate_does_not_depend_on_its_threads():
     X, y = _data()
     # the same seeded forest; only the order its trees' predictions are summed in changes with the threads
     assert w.noise_level(X, y, 7, n_jobs=1) == pytest.approx(w.noise_level(X, y, 7, n_jobs=4), rel=1e-12)
+
+
+def test_the_generation_limit_never_ends_a_search_before_the_evaluation_budget(fake_operon):
+    """The author's 1,000 generations are a backstop, not a budget: below his 10^6 evaluations the limit is his, above
+    it the limit grows so that the evaluation count stays the only budget."""
+    assert w.AUTHOR_CONFIG["generations"] == 1000
+    for k in range(10, 28):
+        budget = 2 ** k
+        limit = w.generation_limit(budget)
+        assert limit >= 1000
+        assert limit * w.AUTHOR_CONFIG["population_size"] > budget      # each generation costs >= population_size
+    assert w.generation_limit(999_000) == 1000                           # the author's own budget: his limit
+    assert w.generation_limit(2 ** 23) == 8390                           # where 1,000 used to end every search
+    assert w.generation_limit(2 ** 23, {"pool_size": 500}) == 16779      # the pool, not the population, sets the cost
+    assert w.generation_limit(2 ** 23, {"generations": 50}) == 50        # a config that sets it keeps it
+    X, y = _data()
+    out = w.fit(X, y, x_val=[], variables=["v1", "v2"], meta={}, options={}, state=w.load({"max_evaluations": 2 ** 23}))
+    assert fake_operon.instances[-1].params["generations"] == 8390
+    assert out["extra"]["generation_limit"] == 8390 and not out["extra"]["hit_generation_cap"]

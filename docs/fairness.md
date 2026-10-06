@@ -98,7 +98,9 @@ The configs in the repository are labeled as follows, and a test keeps them that
 - **PySR, NeSymReS, E2E:** `upstream_default`.
 - **Operon:** `author_blessed`: the configuration its first author published for running it as a benchmark
   baseline, without its hyperparameter search. Its library defaults differ: one objective and no local
-  search, which no benchmark run by its authors has used.
+  search, which no benchmark run by its authors has used. Its generation limit is a backstop the author sets only
+  high enough for the evaluation budget to end a search first; srbf raises it with its larger budgets so that it
+  never ends a search, and the evaluation count stays the only budget, as the author intends.
 - **RILS-ROLS:** `author_blessed`: the configuration its first author committed for running it as a
   benchmark baseline (his SRBench submission), without the hyperparameter grid that the benchmark's
   maintainers searched around it. It differs from the library's defaults in the sample size, which it

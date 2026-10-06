@@ -67,7 +67,24 @@ AUTHOR_CONFIG = {
     "n_threads": 1,      # the author's default; the `threads` option (a resource) replaces it
     "max_time": None,    # no wall-clock stop: the budget is a count; srbf's worker timeout is the guard
 }
-GENERATION_CAP = AUTHOR_CONFIG["generations"]
+
+
+def generation_limit(max_evaluations, config=None):
+    """The generation limit a search runs with: the author's 1,000, raised where the budget could reach it.
+
+    The author's budget is the evaluation count (his library's, CLI's and SRBench submissions' 10^6); his generation
+    limit is a backstop, set "just large enough since we have an evaluation budget" (his SRBench 2021 configuration).
+    At 10^6 evaluations a search runs about 200 generations, so the limit never binds there. srbf's ladder goes on to
+    about 100 s per problem, far past his budget, where 1,000 generations would end every search first and the larger
+    budget would buy nothing. Each generation evaluates at least its pool of offspring (pool_size, or population_size
+    when it is None) once, so a search runs out of evaluations before ceil(max_evaluations / pool) + 1 generations:
+    at that limit the evaluation count stays the only budget, as the author intends. A config that sets
+    `generations` itself keeps it."""
+    params = {**AUTHOR_CONFIG, **(config or {})}
+    if "generations" in (config or {}):
+        return int(params["generations"])
+    pool = int(params.get("pool_size") or params["population_size"])
+    return max(int(AUTHOR_CONFIG["generations"]), -(-int(max_evaluations) // pool) + 1)
 
 
 def _require_operon():
@@ -129,6 +146,7 @@ def resolve_threads(value):
 def create_model(*, max_evaluations, uncertainty, random_state, config=None, threads=1):
     SymbolicRegressor = _require_operon()
     params = {**AUTHOR_CONFIG, "allowed_symbols": ALLOWED_SYMBOLS, "n_threads": int(threads), **(config or {})}
+    params["generations"] = generation_limit(max_evaluations, config)
     return SymbolicRegressor(**params, max_evaluations=int(max_evaluations), uncertainty=[float(uncertainty)],
                              random_state=int(random_state))
 
@@ -165,7 +183,8 @@ def fit(x, y, *, x_val, variables, meta, options, state):
                 "model_complexity"):
         if key in stats:
             extra[key] = int(stats[key])
-    extra["hit_generation_cap"] = bool(extra.get("generations", 0) >= GENERATION_CAP)
+    extra["generation_limit"] = generation_limit(state["max_evaluations"], state.get("config"))
+    extra["hit_generation_cap"] = bool(extra.get("generations", 0) >= extra["generation_limit"])
     try:
         extra["front"] = [
             {"expression": rootn_spelling(model.get_model_string(m["tree"], 40, names)), "length": int(m["length"]),
