@@ -637,7 +637,9 @@ def test_brackets_agree_with_the_page_bit_for_bit(tmp_path: Path) -> None:
                 expect.append(None if b is None else [b[0], b[1], np.float64(b[2]).tobytes().hex()])
     got = run_js(tmp_path, {"rel": REL, "files": [], "brackets": jobs})["brackets"]
     differ = [(j["x"], e, g) for j, e, g in zip(jobs, expect, got) if e != g]
-    assert len(jobs) > 1000 and sum(e is not None and e[2] != "0" * 16 for e in expect) > 500
+    # never vacuous: many of the brackets lie between two budgets (the board's timing holds far more points than the
+    # small table a checkout without it falls back on)
+    assert len(jobs) > 1000 and sum(e is not None and e[2] != "0" * 16 for e in expect) > (500 if path.exists() else 200)
     assert differ == [], f"{len(differ)} brackets differ, e.g. {differ[:3]}"
 
 
