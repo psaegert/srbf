@@ -544,7 +544,11 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 .explorer-v2 .v2posrail { position: relative; display: inline-flex; align-items: center; }
 .explorer-v2 .v2posrail i { position: absolute; bottom: 1px; width: 1px; height: 5px; background: var(--ink-faint); opacity: .55; pointer-events: none; }
 .explorer-v2 .v2pos { width: clamp(140px, 22vw, 280px); min-height: 28px; margin: 0; accent-color: var(--accent); cursor: pointer; }
-.explorer-v2 .v2posval { min-width: 5.5em; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); }
+.explorer-v2 .v2posbox { display: inline-flex; align-items: center; gap: 4px; }
+.explorer-v2 .v2posval { width: 6.5em; min-height: 28px; box-sizing: border-box; font: inherit; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right;
+  color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-ctl); padding: 3px 6px; }
+.explorer-v2 .v2posval:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.explorer-v2 .v2posunit { color: var(--ink-soft); }
 .explorer-v2 .v2tween { color: var(--ink-soft); margin-right: 2px; }
 /* shown, faded and hidden methods: the headline's legend entries are buttons; the explorer's boxes carry the state */
 .explorer-v2 .v2legitem { cursor: pointer; }
@@ -595,7 +599,7 @@ html[data-theme="dark"] .dir.down { color: #fbbf24; }
 .explorer-v2 .v2predtable code { font-size: 12px; white-space: normal; word-break: break-all; }
 .explorer-v2 .v2predna { color: var(--ink-faint); font-size: 12px; }
 .explorer-v2 .v2predmark { margin-right: 4px; font-size: 10.5px; }
-.explorer-v2 .v2predtable td.v2predmarks { white-space: nowrap; width: 1%; }
+.explorer-v2 .v2predtable td.v2predmarks, .explorer-v2 .v2predtable td.v2predat { white-space: nowrap; width: 1%; }
 .explorer-v2 .v2predprob { width: 5.5em; margin: 0 4px; }
 .explorer-v2 .v2predof { padding-right: 6px; white-space: nowrap; }
 

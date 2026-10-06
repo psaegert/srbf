@@ -15,10 +15,13 @@ explorer for the benchmark numbers, nothing more.
 | `pages.js` | The Progress page and the guide's protocol, from `data/<release>/summary.js`. |
 | `styles.css` | Standalone styling (light/dark aware), including the prose/metric-card styles for the prose sections. |
 | `theme.js` | The header's theme toggle (Auto / Dark / Light; one `srbf_theme` localStorage entry, set only on an explicit choice). |
-| `explorer_v2.js` | The explorer for benchmark releases from 2026-09 on (srbf 0.20 / flash-ansr 0.18, candidates ranked by the two-part code). Reads `window.RESULTS_V2` (schema 2) from `data/<release>/results.js`: the full metric registry (the metric floor of the site's first release plus SRR, MDL ratio, R², relative recovery, variable-set P/R, Pareto rank, ground-truth descriptors) and per method × catalog × rung the problems' counts, sums and sums of squares (a problem's value is the mean of its runs), so any catalog subset is averaged on the client over its catalogs by random effects (Paule–Mandel between-catalog variance, 95 % intervals over the selected catalogs (the weights held fixed), rates on the logit scale, ratios as geometric means; `scripts/site_random_effects.py` is the reference and the site suite checks the page against it). Six views: Curves (every plotted metric vs budget or reference-machine time), Table (every rung, or catalogs at one rung; TSV / CSV export), Catalogs (a shaded matrix of one metric), Distribution (one histogram per method, cumulative curves, a box per catalog, quartiles along the ladder; per-catalog rates for rate metrics), Ranks (average places from the pairwise chances to beat, averaged over catalogs, at one budget or within one reference-machine time limit; pairwise tests Holm-corrected, standings, head-to-head table, standings along the ladder), Paired Δ (each method against a baseline problem by problem: the mean difference over catalogs, tested on the difference for rates and on the per-problem superiority otherwise). Predictions (the formulas themselves, typeset with KaTeX from their prefix form, page by page, next to the true formula). Histograms (`data/<release>/hist/<metric>.js`), paired contrasts (`data/<release>/paired.js`) and the pairwise rank outcomes (`data/<release>/ranks.js`: per pair × catalog × slot `[n problems, sum and sum of squares of the first method's per-problem superiority, ...]` per rank metric, a slot being a rung or a time budget; mean ranks for any roster and any catalog subset follow from them on the client) load on demand. Controls that only one view can use (the budget a snapshot is taken at, how a distribution is drawn) sit on that view. State in the URL (shareable) and localStorage; colours in one `srbf_colors` cookie, written only on an explicit change; one-sentence popovers on every metric and term. No library, plain SVG. Each view declares the controls it uses (`USES`), and the sidebar hides the rest, so a control on screen can always change what is on screen. Charts are built for the width of the container they land in (`chartWidth` + a `ResizeObserver`), so one SVG unit is one CSS pixel and a 12 px label is 12 px at any window size. |
-| `data/<release>/results.js`, `hist/`, `paired.js`, `ranks.js` | One release, written by `scripts/site_export_v2.py` (see "Releases"). |
+| `explorer_v2.js` | The explorer for benchmark releases from 2026-09 on (srbf 0.20 / flash-ansr 0.18, candidates ranked by the two-part code). Reads `window.RESULTS_V2` (schema 2) from `data/<release>/results.js`: the full metric registry (the metric floor of the site's first release plus SRR, MDL ratio, R², relative recovery, variable-set P/R, Pareto rank, ground-truth descriptors) and per method × catalog × rung the problems' counts, sums and sums of squares (a problem's value is the mean of its runs), so any catalog subset is averaged on the client over its catalogs by random effects (Paule–Mandel between-catalog variance, 95 % intervals over the selected catalogs (the weights held fixed), rates on the logit scale, ratios as geometric means; `scripts/site_random_effects.py` is the reference and the site suite checks the page against it). Six views: Curves (every plotted metric vs budget or reference-machine time), Table (every rung, or catalogs at one rung; TSV / CSV export), Catalogs (a shaded matrix of one metric), Distribution (one histogram per method, cumulative curves, a box per catalog, quartiles along the ladder; per-catalog rates for rate metrics), Ranks (average places from the pairwise chances to beat, averaged over catalogs; pairwise tests Holm-corrected, standings, head-to-head table, standings along the budgets or times), Paired Δ (each method against a baseline problem by problem: the mean difference over catalogs, tested on the difference for rates and on the per-problem superiority otherwise), Correlations (two metrics problem by problem). Predictions (the formulas themselves, typeset with KaTeX from their prefix form, page by page, next to the true formula). Every view but Curves reads every method at one position, a time per problem (the default) or a budget, anywhere on a slider or typed into its box; between two budgets a method ran, its numbers are interpolated in the logarithm of the position, and the arrows step to the release's time limits or to the budgets the shown methods ran. Ranks and Paired Δ compute their snapshot at the position in the browser (`pairstats.js` from `pv/`); their charts along the budgets and times read the exporter's cells at every slot (`ranks/<metric>.js`, `paired/<metric>.js`; `D.slots` places every method at every slot by the same rule). Histograms (`data/<release>/hist/<metric>.js`) and these files load on demand, only for the metrics on screen. Controls that only one view can use (the position, how a distribution is drawn) sit on that view. State in the URL (shareable) and localStorage; colours in one `srbf_colors` cookie, written only on an explicit change; one-sentence popovers on every metric and term. No library, plain SVG. Each view declares the controls it uses (`USES`), and the sidebar hides the rest, so a control on screen can always change what is on screen. Charts are built for the width of the container they land in (`chartWidth` + a `ResizeObserver`), so one SVG unit is one CSS pixel and a 12 px label is 12 px at any window size. |
+| `data/<release>/results.js`, `hist/`, `ranks/`, `paired/` | One release, written by `scripts/site_export_v2.py` (see "Releases"). `ranks/<key>.js` and `paired/<key>.js` hold one metric's pairwise outcomes and paired contrasts per method pair × problem set × slot (every budget of the release and every time limit, each method placed by `results.js`'s `slots`), so a view loads only the metric it shows. |
 | `data/<release>/summary.js` | The few kB the Progress page and the guide read (the protocol's texts, every method's progress and times per budget, and which methods are finished, in progress and scheduled), written next to `results.js` by the same exporter. |
 | `data/<release>/pred/` | The Predictions view's files: every method's formula for every problem, as the judge read it (rounded to 4 significant digits), one file per method × problem set × budget × finished run × block of 500 problems (`pred/<method>/<set>/<budget>.<run>.<block>.js`), and the ground truth's (`pred/truth/<set>.<block>.js`). A file is written once its run is complete and never changes after. They come from the `predicted_expression` / `ground_truth_expression` columns of `srbf table`. |
+| `data/<release>/pv/` | What the paired contrasts and the pairwise rank outcomes read of every problem, exactly (float64): per method × budget, over the problem sets it has finished there, a frame (`pv/<method>/<budget>/frame.js`: the problems and their runs) and one file per metric (`pv/<method>/<budget>/<key>.js`: each run's comparison score, and each problem's value or share for a paired metric), as `paired_cell_at` / `rank_pair_cell_at` in `scripts/site_export_v2.py` read them (`write_pair_values` documents the format; `results.js` indexes the files as `pv`). |
+| `pairstats.js` | Computes the cells of `ranks/` and `paired/` in the browser from `pv/` at any position: at a budget a method ran, or between two of them (interpolated; the rule is in its header), bit for bit what the exporter computes at its slots. Also the one bracket rule (`bracketIn`, with a logarithm that gives the same double in Python and JavaScript). `tests/test_pairstats_parity.py` holds it to the exporter under node. |
+| `data/<release>/sealed.js`, `data/<release>/sealed/` | The sealed overlays and their sealed per-problem files (see "Sharing an overlay with the people it belongs to"). Written by `tools/seal.mjs`, never by hand. |
 | `srbf-icon.svg`, `apple-touch-icon.png`, `srbf-social.png` | Brand assets (favicon, touch icon, `og:image` social card); canonical sources live in `../assets/brand/`. |
 
 ## Releases
@@ -53,7 +56,7 @@ source. The catalog table reads `data/catalog_mu.json` (`scripts/catalog_mu.py`)
 it is complete once every problem has at least one run. The progress shown per method reads optional unit lists and completion marks in the root
 (`units_<key>_d<draw>.txt`, `markers/<key>.txt`); without them it counts the finished cells.
 
-The exporter writes `results.js` (registry + cells), `hist/<metric>.js` and `paired.js` next to it.
+The exporter writes `results.js` (registry + cells), `hist/<metric>.js`, `ranks/<key>.js`, `paired/<key>.js` and `pv/` next to it.
 
 A new release is a new `data/<id>/results.js`, and the script tag in `index.html` that loads it.
 
@@ -64,7 +67,9 @@ them out of every public channel by construction, not by convention:
 
 - `scripts/site_export_v2.py --private <keys> --private-dir results-site/private/<release>`
   writes those methods to a separate directory (payload, histograms, paired contrasts, including contrasts
-  against public methods). The public payload, the pages, `explorer_v2.js` and the
+  against public methods, and their per-problem files `pp/<method>/` and `pred/<method>/`, indexed in the payload as
+  `pp` and `pred` like the release's; the ground truth's files are the release's own and are not copied there). The
+  public payload, the pages, `explorer_v2.js` and the
   repository carry no reference to them; the exporter refuses a key that is in both lists.
 - `results-site/private/` and `results-site/explorer.local.html` are git-ignored. `build_local.sh`
   writes `explorer.local.html` (the public explorer page plus one script tag that loads the private file) and
@@ -72,7 +77,7 @@ them out of every public channel by construction, not by convention:
   `cd results-site && python3 -m http.server 8765` then open `/explorer.local.html`. The explorer marks
   such methods "local only".
 - `tests/public_guard.py` fails the deploy if a page mentions `private/` or a local page, if
-  any method key in `data/*/results.js`, `data/*/hist/*.js` or `data/*/paired.js` is outside the public
+  any method key in `data/*/results.js`, `data/*/hist/*.js`, `data/*/ranks/*.js` or `data/*/paired/*.js` is outside the public
   allowlist in that file, if a release payload lacks any metric of the floor, or if the private
   directory or the local page exists in the CI checkout. It runs before the Playwright suite.
 - Screenshots, artifacts, PR descriptions and issues are made from the public page only.
@@ -88,6 +93,32 @@ does not fit is indistinguishable from a release that ships no such file.
 
     SRBF_SEAL_KEY="$(cat ~/.config/srbf/seal-<release>.key)" node tools/seal.mjs <release>
 
+Several overlays, each under its own key (a key opens its own methods and no other):
+
+    node tools/seal.mjs <release> --source private/<release>=SRBF_SEAL_KEY --source private/<release>-b=SRBF_SEAL_KEY_B
+
+**Per-problem files are sealed one by one.** An overlay's `pp/`, `pred/` and `pv/` files (the Correlations and
+Predictions views read them, thousands per method) and its `ranks/`, `paired/` and `hist/` files (one per metric) do
+not go into `sealed.js`, which holds the overlay's own payload and nothing else: with them it would grow several times
+over and be re-encrypted whole on every change. `tools/seal.mjs` seals each of them into its own file,
+`data/<release>/sealed/<name>.js`, which the page fetches only when a key holder opens a view that needs it:
+
+- From the overlay's key, PBKDF2-HMAC-SHA256 (salt `srbf-sealed-files/<release>`, 600k iterations, 512 bits) gives two
+  subkeys: the first 32 bytes encrypt (AES-256-GCM), the last 32 name (HMAC-SHA256).
+- A file's name is the first 32 hex digits of the HMAC of `name\0` and its path below the overlay
+  (e.g. `pp/<method>/feynman/16.1.js`): it gives away neither the method nor the path. The page computes the name
+  from the path it wants.
+- The content is gzipped (with a fixed header). The IV is the first 12 bytes of the HMAC of `iv\0`, the path, `\0`
+  and those gzipped bytes, so an IV repeats only for identical plaintext; the ciphertext is the gzipped bytes encrypted
+  with the path (`<release>/<path>`) as additional data, so a file only opens as itself.
+  Nothing is random: an unchanged file reseals to the same bytes and stays out of the next commit (a file that still
+  opens to the same content is kept as it is, under its own IV, whatever gzip would write now); a changed one gets a
+  new IV. A file no longer in any overlay is deleted from `sealed/`. Two overlays may hold the same path; their files
+  have different names, as their keys differ.
+- Each file is one line, `(window.RESULTS_V2_SEALED_FILES=window.RESULTS_V2_SEALED_FILES||{})["<name>"]={"iv":"…","ct":"…"};`.
+- The overlay in `sealed.js` ends with one more line that hands the two subkeys to whoever opens it
+  (`RESULTS_V2_PRIVATE.sealed_files = {enc, name}`, base64), so the page derives nothing per file.
+
 Three things this rests on, none of them optional:
 
 - **The key is generated, never chosen.** The sealed file is public, so guessing is offline and unlimited;
@@ -97,11 +128,14 @@ Three things this rests on, none of them optional:
   leaks later, everything inside it is exposed retroactively. Seal only what may live in public in that
   form, and only with the agreement of whoever owns the results.
 - **The guard checks it is sealed** (`tests/public_guard.py`): envelope shape, KDF strength, ciphertext
-  entropy and no plaintext left inside. The checker is run against a deliberately unsealed blob on every
-  invocation, so it cannot pass vacuously.
+  entropy and no plaintext left inside; and `data/<release>/sealed/` holds nothing but one-line envelopes named by
+  their own file names, whose ciphertext reads neither as text nor as an unencrypted gzip stream. The checker is run
+  against deliberately unsealed blobs on every invocation, so it cannot pass vacuously.
 
-`tests/fixtures/` holds a stand-in overlay and its sealed form, so the Playwright suite exercises the whole
-path — wrong key, right key, method merged — without any real payload.
+`tests/fixtures/` holds stand-in overlays and their sealed forms, so the Playwright suite exercises the whole
+path — wrong key, right key, method merged — without any real payload. `tests/fixtures/sealed_files/` is one with
+per-problem files (its README has the command that reseals it); `tests/seal_files.spec.mjs` seals stand-ins the
+same way and opens them as a page does.
 
 ## Testing
 
