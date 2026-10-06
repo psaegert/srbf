@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["rilsrols|physo-astro|4194304|2|0"]={"0":["+ - 0.04591 / 1.756 + x1 0.8236 / 1.381 x1",0],"1":["+ + * * 3.4 x1 pow + * 0.6667 x1 1 2 * 1.133 x1 1.149",1]};})();
