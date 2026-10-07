@@ -1609,6 +1609,8 @@ def main() -> None:
         if os.path.exists(tpath):
             t = json.load(open(tpath))
             timing = {k: v for k, v in t.items() if k in keys and isinstance(v, dict)}
+            # a DNF budget has no time either, even if the reference machine finished it before a fit's memory error
+            timing = {k: {r: x for r, x in v.items() if not str(r).isdigit() or usable(k, int(r))} for k, v in timing.items()}
             timing_note = t.get("note", "")
         listed = listed_metrics(cells)
         payload: dict[str, Any]
