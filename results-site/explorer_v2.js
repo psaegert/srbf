@@ -137,15 +137,17 @@
   // A method drawn in the page's ink (the oracle) follows the theme: black on the light page, white on the dark one.
   function ink() { var v = window.getComputedStyle(document.documentElement).getPropertyValue("--ink"); return (v && v.trim()) || "#000000"; }
   // Three states per method (owner 2026-10-01): shown, faded, hidden. The headline starts every visit at its own default
-  // -- the three methods below shown, every other one faded (GP-GOMEA too since 2026-10-02) -- and a click on a name in
+  // -- the three methods below shown, the smaller Flash-ANSR models and their hybrid hidden (owner 2026-10-07: they
+  // clutter the plots), every other one faded (GP-GOMEA too since 2026-10-02) -- and a click on a name in
   // its legend cycles that method, shown -> hidden -> faded -> shown; nothing of it is stored. The explorer keeps its
   // own states, in its method boxes (the same cycle), with an adjustable strength for the faded ones, and leaves the
   // headline alone. A faded method is drawn in its colour blended into the chart's background (so 20 % of the colour,
   // 80 % background), still opaque: an overlap of its own line and points does not darken, and it is drawn behind every
   // shown method.
-  var FULL_DEFAULT = ["T8-120M", "T8-120M-pysr", "PySR"], HL_FADE = 0.2, FADE_DEFAULT = 0.2;
+  var FULL_DEFAULT = ["T8-120M", "T8-120M-pysr", "PySR"], HIDDEN_DEFAULT = ["T8-3M", "T8-20M", "T8-20M-pysr"], HL_FADE = 0.2, FADE_DEFAULT = 0.2;
   var hlVis = {}, HL_DRAWING = false;
-  function hlVisOf(k) { return hlVis[k] || (FULL_DEFAULT.indexOf(k) >= 0 ? "full" : "dim"); }
+  function hlDefault(k) { return FULL_DEFAULT.indexOf(k) >= 0 ? "full" : HIDDEN_DEFAULT.indexOf(k) >= 0 ? "hidden" : "dim"; }
+  function hlVisOf(k) { return hlVis[k] || hlDefault(k); }
   function exVisOf(k) { return state.methods.indexOf(k) < 0 ? "hidden" : (state.dim || []).indexOf(k) >= 0 ? "dim" : "full"; }
   function visOf(k) { return HL_DRAWING ? hlVisOf(k) : exVisOf(k); }
   function nextVis(v) { return v === "full" ? "hidden" : v === "hidden" ? "dim" : "full"; }
@@ -164,8 +166,8 @@
   var withData = function (m) { return D.cells[m.key] && Object.keys(D.cells[m.key]).length; };
   var VALID_DEFAULT = 90;
   var DEFAULTS = function () {
-    return { view: "curves", cats: CATS.slice(), methods: D.methods.filter(function (m) { return withData(m) && !m.off; }).map(function (m) { return m.key; }),
-      dim: D.methods.filter(function (m) { return withData(m) && !m.off && FULL_DEFAULT.indexOf(m.key) < 0; }).map(function (m) { return m.key; }), fade: FADE_DEFAULT,
+    return { view: "curves", cats: CATS.slice(), methods: D.methods.filter(function (m) { return withData(m) && !m.off && HIDDEN_DEFAULT.indexOf(m.key) < 0; }).map(function (m) { return m.key; }),
+      dim: D.methods.filter(function (m) { return withData(m) && !m.off && FULL_DEFAULT.indexOf(m.key) < 0 && HIDDEN_DEFAULT.indexOf(m.key) < 0; }).map(function (m) { return m.key; }), fade: FADE_DEFAULT,
       plots: D.metrics.filter(function (m) { return m.tier === "main"; }).map(function (m) { return { x: defaultAxis(), y: m.key }; }),
       focus: "numeric_recovery_val", stat: "mean", band: true, cross: false, xaxis: anyTime() ? "time" : "rung", rung: 64, base: null, tier: "main", q: "", rows: "rungs", pset: null, prun: 1, pprob: 0,
       // the Distribution view reads a continuous metric by default (a rate has no distribution over problems), the Ranks
@@ -179,7 +181,7 @@
       cx: "mdl_ratio", cy: "log10_fvu_val", cv: "contour", ca: null, cb: null };
   };
   var state = DEFAULTS();
-  var LS = "srbf-v2-" + REL + ".12";   // bumped whenever a default changes (.12 every display reads at a time by default; .11 GP-GOMEA faded by default; .10 shown, faded and hidden methods; .2 time axis, .3 mean, .4 bands, .5 per-view metrics, .6 complete pools only, .7 hollow markers, .8 failed predictions counted or left out, .9 methods marked off start unchecked), so a saved state cannot pin the old one
+  var LS = "srbf-v2-" + REL + ".13";   // bumped whenever a default changes (.13 the 3M and 20M Flash-ANSR models and their hybrid hidden by default; .12 every display reads at a time by default; .11 GP-GOMEA faded by default; .10 shown, faded and hidden methods; .2 time axis, .3 mean, .4 bands, .5 per-view metrics, .6 complete pools only, .7 hollow markers, .8 failed predictions counted or left out, .9 methods marked off start unchecked), so a saved state cannot pin the old one
   var rungChosen = false;   // a budget from a link or from storage is kept; otherwise the first render picks one that has data
   function loadState() {
     try { var s = JSON.parse(localStorage.getItem(LS) || "null"); if (s) { rungChosen = s.rung !== undefined; Object.keys(state).forEach(function (k) { if (s[k] !== undefined) { state[k] = s[k]; } }); } } catch (e) { /* no storage */ }
@@ -1061,7 +1063,7 @@
   function renderHeadline() {
     if (!headRoot) { return; }
     var ghosts = D.methods.filter(function (m) { return withData(m) && hlVisOf(m.key) === "hidden"; });
-    var changed = Object.keys(hlVis).some(function (k) { return hlVis[k] !== (FULL_DEFAULT.indexOf(k) >= 0 ? "full" : "dim"); });
+    var changed = Object.keys(hlVis).some(function (k) { return hlVis[k] !== hlDefault(k); });
     HL_DRAWING = true;
     try {
     headRoot.innerHTML = inBlock(headRoot, HEADLINE.length, function () { return withState(
