@@ -180,8 +180,13 @@ E2E_DEFAULT_MAX_RUNG = 256   # E2E is reported at its default settings only
 # method stays in progress even when every run planned so far is in.
 LADDER_TOP_S = 1000.0
 LADDER_END = {"e2e": "E2E runs at its default settings, which allow at most 256 candidates per bag."}
+# A budget that ran out of memory on the reference machine is a DNF, and the last budget below it is the method's last
+# achievable one (owner 2026-10-07). The timing queue records the first such budget per method; the board copies it to
+# <root>/dnf.json ({method: {"rung": budget, ...}}), and main() fills DNF from it: that budget and every larger one are
+# not published, Helix's results for them included, and the ladder ends there with the reason.
+DNF: dict[str, int] = {}
 # Budgets taken out of a method's plan on purpose; they no longer count as open runs.
-PLAN_DROPPED = {"T8-3M": {65536}, "T8-20M": {65536}, "T8-120M": {65536}}   # stopped; larger budgets come with a later model
+PLAN_DROPPED = {"T8-20M": {65536}, "T8-120M": {65536}}   # stopped; larger budgets come with a later model (T8-3M's 65,536 is being finished, 2026-10-07)
 CATALOG_GROUPS = {
     "physics": ["fastsrb", "feynman", "feynman-bonus", "srsd-dummy", "erbench-phybench", "erbench-densities", "physo-astro", "physo-class"],
     "classical": ["nguyen", "keijzer", "korns", "koza", "livermore", "livermore2", "vladislavleva", "jin", "neat", "pagie", "poly", "nonic", "sine", "meier", "r-rationals", "constant", "grammarvae"],
@@ -1410,9 +1415,9 @@ def write_pair_values(out_dir: str, rel: str, data: dict[str, dict[tuple[str, in
 
 def usable(key: str, r: int) -> bool:
     """Whether the release publishes method ``key`` at budget ``r``: any budget it was run at -- a method's ladder is in
-    its own unit (DSO samples in batches of 1,000 expressions, so its ladder doubles from 1,000) -- and E2E only up to its
-    default."""
-    return r >= 1 and not (key == "e2e" and r > E2E_DEFAULT_MAX_RUNG)
+    its own unit (DSO samples in batches of 1,000 expressions, so its ladder doubles from 1,000) -- E2E only up to its
+    default, and no method at or above a budget that ran out of memory on the reference machine (DNF)."""
+    return r >= 1 and not (key == "e2e" and r > E2E_DEFAULT_MAX_RUNG) and not (key in DNF and r >= DNF[key])
 
 
 def published_rungs(rungs: Any) -> list[int]:
@@ -1462,6 +1467,9 @@ def progress_of(rows_by_cell: dict[tuple[str, int], Any], sizes: dict[str, int],
 def ladder_end(key: str, timing: dict[str, Any]) -> tuple[str | None, str | None]:
     """(how the method's ladder ended, why): ('declared', reason) for a method that cannot run a larger budget,
     ('reached', None) once a measured time is at least LADDER_TOP_S / sqrt(2), else (None, None): larger budgets to come."""
+    if key in DNF:
+        label = next((m[1] for m in METHODS if m[0] == key), key)
+        return "declared", f"{label} ran out of memory on our timing workstation at budget {DNF[key]:,}, so its ladder ends at the budget below."
     if key in LADDER_END:
         return "declared", LADDER_END[key]
     seconds = [v for v in (timing.get(key) or {}).values() if isinstance(v, (int, float))]
@@ -1556,6 +1564,9 @@ def main() -> None:
         sys.exit("--private needs --private-dir")
     out_dir = os.path.dirname(os.path.abspath(a.out))
     site_dir = os.path.abspath(a.site_dir) if a.site_dir else os.path.abspath(os.path.join(out_dir, "..", ".."))
+    dpath = os.path.join(a.root, "dnf.json")
+    if os.path.exists(dpath):
+        DNF.update({k: int(v["rung"]) for k, v in json.load(open(dpath)).items() if isinstance(v, dict) and "rung" in v})
     data = load_rows(a.root)
     present: dict[str, int] = defaultdict(int)
     for mk in data:
