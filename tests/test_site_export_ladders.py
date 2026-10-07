@@ -20,3 +20,18 @@ def test_any_budget_a_method_ran_at_is_published() -> None:
 
 def test_the_explorer_steps_through_every_budget_with_data_in_order() -> None:
     assert export.published_rungs(["2000", 1024, "1000", 13000, 1024, "131072"]) == [1000, 1024, 2000, 13000, 131072]
+
+
+def test_a_budget_that_ran_out_of_memory_ends_the_ladder_below_it() -> None:
+    """owner 2026-10-07: out of memory on the reference machine = DNF; the last budget below it is the last achievable."""
+    export.DNF.clear()
+    try:
+        assert export.usable("udsr", 416000) and export.ladder_end("udsr", {})[0] is None
+        export.DNF["udsr"] = 416000
+        assert export.usable("udsr", 208000)
+        assert not export.usable("udsr", 416000) and not export.usable("udsr", 832000)
+        how, why = export.ladder_end("udsr", {"udsr": {"104000": 45.2}})
+        assert how == "declared" and "out of memory" in why and "416,000" in why and why.startswith("uDSR")
+        assert export.usable("dsr", 64000)                     # another method is not affected
+    finally:
+        export.DNF.clear()

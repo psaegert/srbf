@@ -47,9 +47,10 @@ def test_a_method_that_cannot_run_a_larger_budget_ends_early_with_its_reason():
 
 
 def test_dropped_budgets_are_not_planned():
-    """The T8 series' 65,536-draw runs were stopped; larger budgets come with a later model. They leave the plan."""
+    """The T8 series' 65,536-draw runs were stopped; larger budgets come with a later model. They leave the plan, except
+    T8-3M's, which is being finished (owner 2026-10-07: every method to at least 300 s, stage 1)."""
     assert all(65536 in rungs for rungs in export.PLAN_DROPPED.values())
-    assert set(export.PLAN_DROPPED) == {"T8-3M", "T8-20M", "T8-120M"}
+    assert set(export.PLAN_DROPPED) == {"T8-20M", "T8-120M"}
 
 
 def test_a_scheduled_method_leaves_the_line_once_the_release_carries_it():
