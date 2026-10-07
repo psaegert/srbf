@@ -1035,16 +1035,22 @@ test('Predictions show each method at its last budget within the position, and n
 });
 
 // ---- Shown, faded and hidden methods --------------------------------------------------------------------------------
-test('the headline shows three methods in full and fades the rest; a legend click cycles one, for this visit only', async ({ page }) => {
+test('the headline shows three methods in full, hides the smaller Flash-ANSR models and fades the rest; a legend click cycles one, for this visit only', async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 900 });
   await page.goto('/');
   const chart = page.locator('.headline-v2 svg.v2chart').first();
   await expect(chart).toBeVisible();
   const item = (k) => chart.locator('[data-cycle="' + k + '"]');
   for (const k of ['T8-120M', 'T8-120M-pysr', 'PySR']) { await expect(item(k)).toHaveAttribute('data-vis', 'full'); }
-  for (const k of ['gpgomea', 'T8-20M', 'e2e', 'T8-3M', 'nesymres-100M']) { await expect(item(k)).toHaveAttribute('data-vis', 'dim'); }
+  for (const k of ['gpgomea', 'e2e', 'nesymres-100M']) { await expect(item(k)).toHaveAttribute('data-vis', 'dim'); }
+  // hidden by default: gone from the plot, still in the legend, where a click brings them back
+  for (const k of ['T8-3M', 'T8-20M']) { await expect(item(k)).toHaveAttribute('data-vis', 'hidden'); }
+  await item('T8-20M').click();
+  await expect(item('T8-20M')).toHaveAttribute('data-vis', 'dim');
+  await page.locator('.headline-v2 [data-hlreset]').click();
+  await expect(item('T8-20M')).toHaveAttribute('data-vis', 'hidden');
   // a faded method: its colour blended into the background (20 %), fully opaque; a shown one: its colour
-  expect(await item('T8-20M').locator('line').getAttribute('stroke')).toMatch(/^color-mix\(in srgb, #[0-9a-f]{6} 20%, var\(--surface\)\)$/i);
+  expect(await item('e2e').locator('line').getAttribute('stroke')).toMatch(/^color-mix\(in srgb, #[0-9a-f]{6} 20%, var\(--surface\)\)$/i);
   expect(await item('T8-120M').locator('line').getAttribute('stroke')).toMatch(/^#[0-9a-f]{6}$/i);
   // drawn behind: every faded line comes before every shown one
   const order = await chart.evaluate((svg) => [...svg.querySelectorAll('polyline')].map((l) => l.getAttribute('stroke').startsWith('color-mix')));
@@ -1108,8 +1114,11 @@ test('in the explorer a box cycles its method: shown, hidden, faded; the faded o
   const dash = (k) => box(k).evaluate((el) => el.indeterminate);
   const m = () => new URL(page.url()).searchParams.get('m').split(',');
   await expect(box('T8-120M')).toBeChecked();
-  expect(await dash('T8-20M')).toBe(true);
-  expect(m()).toContain('~T8-20M');
+  expect(await dash('e2e')).toBe(true);
+  expect(m()).toContain('~e2e');
+  for (const k of ['T8-3M', 'T8-20M']) {   // hidden by default: unchecked, not in the link
+    await expect(box(k)).not.toBeChecked(); expect(await dash(k)).toBe(false); expect(m()).not.toContain(k); expect(m()).not.toContain('~' + k);
+  }
   await box('T8-120M').click();
   await expect(box('T8-120M')).not.toBeChecked(); expect(await dash('T8-120M')).toBe(false); expect(m()).not.toContain('T8-120M');
   await box('T8-120M').click();
@@ -1118,15 +1127,15 @@ test('in the explorer a box cycles its method: shown, hidden, faded; the faded o
   await expect(box('T8-120M')).toBeChecked(); expect(m()).toContain('T8-120M');
   const keyStroke = (label) => page.locator(V2 + ' .v2main svg.v2chart').first().evaluate((svg, lab) => {
     const t = [...svg.querySelectorAll('text.leg')].find((x) => x.textContent === lab); return t && t.previousElementSibling.getAttribute('stroke'); }, label);
-  expect(await keyStroke('Flash-ANSR T8-20M')).toMatch(/ 20%, var\(--surface\)\)$/);
-  await expect(page.locator(V2 + ' .v2meth:has(input[data-m="T8-20M"])')).toHaveClass(/v2faded/);   // the row itself is lighter
+  expect(await keyStroke('E2E 93M')).toMatch(/ 20%, var\(--surface\)\)$/);
+  await expect(page.locator(V2 + ' .v2meth:has(input[data-m="e2e"])')).toHaveClass(/v2faded/);   // the row itself is lighter
   await page.locator(V2 + ' .v2fade').evaluate((el) => { el.value = '0.6'; el.dispatchEvent(new Event('input', { bubbles: true })); });
-  await expect.poll(() => keyStroke('Flash-ANSR T8-20M')).toMatch(/ 60%, var\(--surface\)\)$/);
+  await expect.poll(() => keyStroke('E2E 93M')).toMatch(/ 60%, var\(--surface\)\)$/);
   expect(new URL(page.url()).searchParams.get('fa')).toBe('0.6');
   // the explorer's setting leaves the headline alone
   await page.setViewportSize({ width: 1400, height: 900 });
   await page.goto('/');
-  expect(await page.locator('.headline-v2 svg.v2chart').first().locator('[data-cycle="T8-20M"] line').getAttribute('stroke')).toMatch(/ 20%, var\(--surface\)\)$/);
+  expect(await page.locator('.headline-v2 svg.v2chart').first().locator('[data-cycle="e2e"] line').getAttribute('stroke')).toMatch(/ 20%, var\(--surface\)\)$/);
 });
 
 test('a link carries shown and faded methods', async ({ page }) => {
