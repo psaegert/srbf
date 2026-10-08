@@ -1,0 +1,1 @@
+window.RESULTS_V2_PV=window.RESULTS_V2_PV||{};(function(){var R=window.RESULTS_V2_PV;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["gpgomea|4194304|frame"]={"feynman-bonus":{"n":20,"ids":{"u":"AAAAAAAA8D8="},"k":{"u":"AAAAAAAA8D8="},"ok":{"u":"AAAAAAAA8D8="}},"srsd-dummy":{"n":120,"ids":{"u":"AAAAAAAA8D8="},"k":{"u":"AAAAAAAA8D8="},"ok":{"u":"AAAAAAAA8D8="}}};})();

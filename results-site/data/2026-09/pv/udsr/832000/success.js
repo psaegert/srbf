@@ -1,0 +1,1 @@
+window.RESULTS_V2_PV=window.RESULTS_V2_PV||{};(function(){var R=window.RESULTS_V2_PV;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["udsr|832000|success"]={"feynman":{"s":{"success":{"u":"AAAAAAAA8D8="}},"r":{"success":{"u":"AAAAAAAA8D8="}}},"feynman-bonus":{"s":{"success":{"u":"AAAAAAAA8D8="}},"r":{"success":{"u":"AAAAAAAA8D8="}}}};})();

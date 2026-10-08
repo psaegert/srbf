@@ -1,0 +1,1 @@
+window.RESULTS_V2_PV=window.RESULTS_V2_PV||{};(function(){var R=window.RESULTS_V2_PV;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|67108864|skeleton_match_raw"]={"feynman":{"s":{"skeleton_match_raw":{"u":"AAAAAAAAAAA="}}},"feynman-bonus":{"s":{"skeleton_match_raw":{"u":"AAAAAAAAAAA="}}}};})();
