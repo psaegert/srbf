@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|koza|67108864|2|0"]={"0":["+ -5.583e-07 * 1 + + sin * 2.457 x1 * -1.583 x1 * * 0.1272 x1 cosh * 2.7 x1",1],"1":["+ 0.8821 * -0.7507 sinh cos * sin cos * -1.565 x1 * -1.567 x1",0]};})();

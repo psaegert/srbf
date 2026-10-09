@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["qlattice|nonic|512|2|0"]={"0":["- * 7.855 * + * -0.8615 tanh tanh * - * -1.087 x1 1.285 - * 1.08 x1 1.277 0.6974 + + * 1.413 x1 2.144 - * 0.4379 x1 0.2927 1.001",0]};})();

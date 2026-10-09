@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|sine|134217728|1|0"]={"0":["+ 0.08294 * 1.874 sin * cos cos - cos cos * 2.435 x1 + sin * 6.307 x1 * 0.4611 x1 * tan sinh cos cos * 4.695 x1 cos + tan cos cos * 2.059 x1 + sin sin * 6.331 x1 * -0.8421 x1",0]};})();

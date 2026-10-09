@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["dsr|nonic|64000|1|0"]={"0":["* + -0.7201 - tan exp - * - 1.575 / x1 + 4.442 abs x1 x1 x1 x1 x1",0]};})();
