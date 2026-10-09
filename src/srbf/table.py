@@ -307,8 +307,12 @@ def _cache_key(tree: ResultTree, path: str, fingerprint: str) -> str:
     return hashlib.sha1(ident.encode()).hexdigest()
 
 
+def _cache_path(cache_dir: str, key: str) -> str:
+    return os.path.join(cache_dir, key[:2], key + ".pkl")
+
+
 def _cache_load(cache_dir: str, key: str) -> list[list[Any]] | None:
-    p = os.path.join(cache_dir, key[:2], key + ".pkl")
+    p = _cache_path(cache_dir, key)
     if not os.path.exists(p):
         return None
     try:
@@ -325,7 +329,7 @@ def _cache_store(cache_dir: str, key: str, rows: list[list[Any]]) -> None:
     tmp = os.path.join(d, f"{key}.{os.getpid()}.tmp")
     with open(tmp, "wb") as fh:
         pickle.dump(rows, fh, protocol=pickle.HIGHEST_PROTOCOL)
-    os.replace(tmp, os.path.join(d, key + ".pkl"))
+    os.replace(tmp, _cache_path(cache_dir, key))
 
 
 # ---- parallel judging -------------------------------------------------------------------------------------------
@@ -404,6 +408,11 @@ def build_table(trees: Iterable[ResultTree], out: str, *, engine: str = "acj-5-4
     (a result file that is still being written is the usual cause). When no file finishes for ``stall_timeout``
     seconds the pool is stopped and the table is written with what was judged (``stalled``); ``progress_path``
     then names the files that were in flight.
+
+    A cached file's rows are read when they are written, one file at a time: holding every cached file's rows until
+    the pool is through took 5 GB for the board's 23,000 files (2026-10-08), and the machine's memory guard stopped
+    the table on every refresh. A cache entry that cannot be read then is a miss like any other: the file is judged
+    in this process and stored again.
     """
     say = log or (lambda _msg: None)
     t0 = time.time()
@@ -411,21 +420,27 @@ def build_table(trees: Iterable[ResultTree], out: str, *, engine: str = "acj-5-4
     for tree in trees:
         jobs += [(tree, f) for f in result_files(tree, max_rung=max_rung)]
     jobs.sort(key=lambda j: (-os.path.getsize(j[1]), j[1], j[0].method, j[0].draw))
-    cached: dict[int, list[list[Any]]] = {}
+    cached: set[int] = set()
     keys: dict[int, str] = {}
     if cache_dir:
         fingerprint = judge_fingerprint(engine)
         for i, (tree, path) in enumerate(jobs):
             keys[i] = _cache_key(tree, path, fingerprint)
-            hit = _cache_load(cache_dir, keys[i])
-            if hit is not None:
-                cached[i] = hit
+            if os.path.exists(_cache_path(cache_dir, keys[i])):
+                cached.add(i)
     pending = [i for i in range(len(jobs)) if i not in cached]
     say(f"{len(jobs)} files: {len(pending)} to judge, {len(cached)} from the cache")
     if progress_path:
         open(progress_path, "w").close()
     errors: list[str] = []
-    n_rows, judged, stalled = 0, 0, False
+    n_rows, judged, from_cache, stalled = 0, 0, 0, False
+
+    def judged_now(i: int, rows: list[list[Any]], err: str | None) -> list[list[Any]]:
+        if err:
+            errors.append(err)
+        elif cache_dir:
+            _cache_store(cache_dir, keys[i], rows)
+        return rows
     tmp = out + ".tmp"
     with open(tmp, "w", newline="") as fh:
         writer = csv.writer(fh)
@@ -438,7 +453,14 @@ def build_table(trees: Iterable[ResultTree], out: str, *, engine: str = "acj-5-4
             results = pool.imap(_judge_job, [(jobs[i][0], jobs[i][1], engine, progress_path) for i in pending], chunksize=1) if pool else iter(())
             for i in range(len(jobs)):
                 if i in cached:
-                    rows = cached[i]
+                    hit = _cache_load(cache_dir, keys[i]) if cache_dir else None
+                    if hit is not None:
+                        rows = hit
+                        from_cache += 1
+                    else:
+                        _path, rows, err = _judge_job((jobs[i][0], jobs[i][1], engine, progress_path))
+                        rows = judged_now(i, rows, err)
+                        judged += 1
                 elif stalled:
                     continue
                 else:
@@ -449,10 +471,7 @@ def build_table(trees: Iterable[ResultTree], out: str, *, engine: str = "acj-5-4
                         stalled = True
                         continue
                     judged += 1
-                    if err:
-                        errors.append(err)
-                    elif cache_dir:
-                        _cache_store(cache_dir, keys[i], rows)
+                    rows = judged_now(i, rows, err)
                     if judged % 50 == 0 or judged == len(pending):
                         say(f"{judged}/{len(pending)} files judged, {time.time() - t0:.0f}s")
                 writer.writerows(rows)
@@ -462,7 +481,7 @@ def build_table(trees: Iterable[ResultTree], out: str, *, engine: str = "acj-5-4
                 pool.terminate() if stalled else pool.close()
                 pool.join()
     os.replace(tmp, out)
-    report = TableReport(files=len(jobs), judged=judged, from_cache=len(cached), rows=n_rows, errors=errors,
+    report = TableReport(files=len(jobs), judged=judged, from_cache=from_cache, rows=n_rows, errors=errors,
                          stalled=stalled, seconds=time.time() - t0)
     for e in errors:
         say(f"ERR {e}")

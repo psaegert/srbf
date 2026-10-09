@@ -2,6 +2,7 @@
 import csv
 import os
 import pickle
+import weakref
 
 import numpy as np
 import pytest
@@ -109,6 +110,56 @@ def test_the_cache_serves_a_file_until_it_changes(tmp_path):
     changed = build_table([tree], out, engine=ENGINE, workers=1, cache_dir=cache, log=None)
     assert (changed.judged, changed.from_cache) == (1, 1)
     assert sum(int(r[COLUMNS.index("symbolic_recovery")]) for r in _read(out)[1:]) == 1
+
+
+def test_cached_rows_are_read_one_file_at_a_time(tmp_path, monkeypatch):
+    """Holding every cached file's rows until the pool was through took 5 GB for the board's 23,000 files, and the
+    machine's memory guard stopped the table on every refresh (2026-10-08). A cached file's rows are read when they are
+    written: when one is read, at most the previous file's rows are still held."""
+    import srbf.table as table
+
+    for k in range(6):
+        _write(tmp_path, "toy", f"choices_{2 ** k:06d}.pkl", _snapshot([["+", "x1", "x2"]] * (k + 1)))
+    tree = ResultTree("m", 1, str(tmp_path / "tree"))
+    cache, out = str(tmp_path / "cache"), str(tmp_path / "t.csv")
+    build_table([tree], out, engine=ENGINE, workers=1, cache_dir=cache, log=None)
+    rows_first = _read(out)
+
+    class Rows(list):   # a list a weak reference can watch
+        pass
+
+    held, alive, load = [], [], table._cache_load
+
+    def watched(cache_dir, key):
+        alive.append(sum(r() is not None for r in held))
+        rows = load(cache_dir, key)
+        if rows is None:
+            return None
+        rows = Rows(rows)
+        held.append(weakref.ref(rows))
+        return rows
+
+    monkeypatch.setattr(table, "_cache_load", watched)
+    again = build_table([tree], out, engine=ENGINE, workers=1, cache_dir=cache, log=None)
+    assert (again.judged, again.from_cache) == (0, 6) and _read(out) == rows_first
+    assert len(alive) == 6 and max(alive) <= 1
+
+
+def test_a_cache_entry_that_cannot_be_read_is_judged_again_and_stored(tmp_path):
+    for k in range(3):
+        _write(tmp_path, "toy", f"choices_{2 ** k:06d}.pkl", _snapshot([["+", "x1", "x2"], ["*", "x1", "x2"]][: k % 2 + 1]))
+    tree = ResultTree("m", 1, str(tmp_path / "tree"))
+    cache, out = str(tmp_path / "cache"), str(tmp_path / "t.csv")
+    build_table([tree], out, engine=ENGINE, workers=1, cache_dir=cache, log=None)
+    rows_first = _read(out)
+    entries = sorted(p for p in (tmp_path / "cache").rglob("*.pkl"))
+    assert len(entries) == 3
+    entries[0].write_bytes(b"not a pickle")
+    again = build_table([tree], out, engine=ENGINE, workers=1, cache_dir=cache, log=None)
+    assert (again.judged, again.from_cache, again.errors) == (1, 2, []) and _read(out) == rows_first
+    assert isinstance(pickle.loads(entries[0].read_bytes()), list)   # stored again
+    third = build_table([tree], out, engine=ENGINE, workers=1, cache_dir=cache, log=None)
+    assert (third.judged, third.from_cache) == (0, 3)
 
 
 def test_a_ladder_counting_evaluations_samples_epochs_or_generations_is_read_like_any_other(tmp_path):
