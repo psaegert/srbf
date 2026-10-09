@@ -373,6 +373,16 @@ def _failed(row_columns: Mapping[str, Any], n_rows: int) -> list[bool]:
     return failed
 
 
+def _nestedness(prefix: Any, operator_arity: Mapping[str, int]) -> int | None:
+    """The function nesting of a skeleton; None when there is none or it is not one expression tree."""
+    if prefix is None:
+        return None
+    try:
+        return total_nestedness(prefix, operator_arity)
+    except ValueError:
+        return None
+
+
 def compute_derived_metrics(
     results: dict[str, Any],
     test_sets: Sequence[str],
@@ -690,14 +700,8 @@ def compute_derived_metrics(
                 r['recall_unique_variables'] = np.array(rec_uv)
 
                 # ── Nestedness ────────────────────────────────────
-                r['total_nestedness'] = np.array([
-                    total_nestedness(sk, operator_arity) if sk is not None else None
-                    for sk in skel_sim
-                ])
-                r['predicted_total_nestedness'] = np.array([
-                    total_nestedness(ps, operator_arity) if ps is not None else None
-                    for ps in pred_skel
-                ])
+                r['total_nestedness'] = np.array([_nestedness(sk, operator_arity) for sk in skel_sim])
+                r['predicted_total_nestedness'] = np.array([_nestedness(ps, operator_arity) for ps in pred_skel])
 
                 # ── A failed problem takes the worst value where the range has one ──
                 for column, worst in (WORST_VALUE if impute_failed else {}).items():

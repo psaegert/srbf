@@ -212,7 +212,7 @@ one the ground truth needs.
 | `skeleton_length_ratio` | predicted over true length; 1 is as long as the ground truth |
 | `n_constants`, `predicted_n_constants` | number of `<constant>` tokens in \(\bar\tau\) and \(\hat\tau\) |
 | `n_constants_delta` | predicted minus true number of constants; positive means excess free parameters |
-| `total_nestedness`, `predicted_total_nestedness` | over every chain of \(m\) directly nested unary operators, the excess \(m - 1\), summed: `sin(cos(x))` counts 1, `sin(cos(exp(x)))` counts 2, `sin(x) + cos(x)` counts 0 |
+| `total_nestedness`, `predicted_total_nestedness` | the most functions of one argument on any path from the root to a leaf: `sin(x)` counts 1, `sin(cos(x))` 2, `sin(x) + cos(x)` 1, `sin(x + cos(y))` 2. `neg` and `inv`, SimpliPy's spelling of subtraction and division, do not count, and powers and roots are binary operators |
 
 ### `predicted_mdl`, `ground_truth_mdl`, `mdl_ratio`
 

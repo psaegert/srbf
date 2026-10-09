@@ -351,13 +351,14 @@
         <article class="metric">
           <h4>Function Nesting Difference (Prediction − Ground Truth) <span class="dir one">0 is ideal</span></h4>
           <p>
-            Function nesting counts how deeply functions of one argument sit directly inside each
-            other: a chain of \(m\) such functions adds \(m - 1\), and separate chains add up. So
-            \(\sin(\log(x))\) counts 1, \(\sin(\log(\operatorname{arccosh}(x)))\) counts 2, and
-            \(\sin(x) + \log(x)\) counts 0. Deep chains such as \(\exp(\sin(\exp(x)))\) are rare in
-            natural laws and hard to interpret. The value shown is the prediction's nesting minus the
-            ground truth's, so 0 means equally nested. The Flash-ANSR paper reports the prediction's
-            own nesting instead.
+            Function nesting counts how deeply functions of one argument sit inside each other: the
+            most such functions on any path from the outside of the formula to a variable or constant.
+            So \(\sin(x)\) counts 1, \(\sin(\log(x))\) counts 2, \(\sin(x) + \log(x)\) counts 1 and
+            \(\sin(x + \log(y))\) counts 2. Negation, division, powers and roots are not counted. Deep
+            nesting such as \(\exp(\sin(\exp(x)))\) is rare in natural laws and hard to interpret. The
+            value shown is the prediction's nesting minus the ground truth's, so 0 means equally nested.
+            The Flash-ANSR paper reports the prediction's own nesting, by an earlier definition that
+            counted \(\sin(x)\) as 0.
           </p>
         </article>
         </div>
