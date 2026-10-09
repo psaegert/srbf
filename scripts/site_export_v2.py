@@ -44,6 +44,7 @@ import math
 import os
 import shutil
 import sys
+from array import array
 from collections import defaultdict
 from typing import Any, Mapping, NamedTuple
 import numpy as np
@@ -414,7 +415,55 @@ def fnum(s: str | None) -> float | None:
         return None
 
 
-Rows = dict[tuple[int, int], dict[str, Any]]   # (draw, row) -> {metric: value}
+#: The metrics a row holds, in the order a dict of them would iterate (a rate and a value of the same name: one entry).
+ROW_KEYS = list(dict.fromkeys(RATE_KEYS + CONT_KEYS))
+_ROW_INDEX = {k: i for i, k in enumerate(ROW_KEYS)}
+
+
+class Row(Mapping[str, Any]):
+    """One judged row's metrics, read-only: ``{metric: float | None}`` for every key of ROW_KEYS.
+
+    The values sit in one array of doubles and a bit mask marks the missing ones (None stays None, NaN stays NaN).
+    A dict per row took 1.85 kB, 5.3 GB for the board's 2.85 million rows (2026-10-09), and the machine's memory guard
+    stopped the export; a Row takes about a quarter of that."""
+
+    __slots__ = ("_values", "_missing")
+
+    def __init__(self, values: Mapping[str, float | None]) -> None:
+        self._values = array("d", [0.0]) * len(ROW_KEYS)   # allocated exactly (array("d", bytes(...)) over-allocates)
+        missing = 0
+        for i, k in enumerate(ROW_KEYS):
+            v = values.get(k)
+            if v is None:
+                missing |= 1 << i
+            else:
+                self._values[i] = v
+        self._missing = missing
+
+    def __getitem__(self, key: str) -> float | None:
+        i = _ROW_INDEX[key]
+        return None if self._missing >> i & 1 else self._values[i]
+
+    def get(self, key: str, default: Any = None) -> Any:
+        i = _ROW_INDEX.get(key)
+        if i is None:
+            return default
+        return None if self._missing >> i & 1 else self._values[i]
+
+    def __contains__(self, key: object) -> bool:
+        return key in _ROW_INDEX
+
+    def __iter__(self) -> Any:
+        return iter(ROW_KEYS)
+
+    def __len__(self) -> int:
+        return len(ROW_KEYS)
+
+    def __repr__(self) -> str:
+        return f"Row({dict(self)!r})"
+
+
+Rows = dict[tuple[int, int], Row]   # (draw, row) -> {metric: value}
 
 
 def load_rows(root: str) -> dict[str, dict[tuple[str, int], Rows]]:
@@ -432,7 +481,7 @@ def load_rows(root: str) -> dict[str, dict[tuple[str, int], Rows]]:
                 for k in CONT_KEYS:
                     v = fnum(r.get(k))
                     vals[k] = None if v is not None and NOT_COMPUTED.get(k) == v else v
-                data[r["model"]][(r["catalog"], int(r["rung"]))][(int(r.get("draw") or 1), int(r["row"]))] = vals
+                data[r["model"]][(r["catalog"], int(r["rung"]))][(int(r.get("draw") or 1), int(r["row"]))] = Row(vals)
     return data
 
 
@@ -688,7 +737,7 @@ def pp_bytes(codes: Any) -> str:
     return base64.b64encode(bytes(codes) if isinstance(codes, list) else np.asarray(codes, dtype=np.uint8).tobytes()).decode("ascii")
 
 
-def pp_flags(run: dict[str, Any] | None) -> int:
+def pp_flags(run: Mapping[str, Any] | None) -> int:
     if run is None:
         return 0
     return ((PP_SUCCESS if run.get("success") else 0) | (PP_NUMERIC if run.get("numeric_recovery_val") else 0)
@@ -711,7 +760,7 @@ def write_values(out_dir: str, rel: str, data: dict[str, dict[tuple[str, int], R
 
     specs = {k: pp_spec(k) for k in CONT_KEYS}
     index: dict[str, dict[str, list[int]]] = defaultdict(dict)
-    truth: dict[str, dict[int, dict[str, Any]]] = defaultdict(dict)   # catalog -> row -> the first run seen
+    truth: dict[str, dict[int, Mapping[str, Any]]] = defaultdict(dict)   # catalog -> row -> the first run seen
     for m in keys:
         for (c, r), rows in sorted(data.get(m, {}).items()):
             if c not in sizes or not usable(m, r):
@@ -746,22 +795,22 @@ def write_values(out_dir: str, rel: str, data: dict[str, dict[tuple[str, int], R
     return dict(index)
 
 
-def by_draw(rows: dict[Any, dict[str, Any]]) -> dict[int, dict[int, dict[str, Any]]]:
+def by_draw(rows: Mapping[Any, Mapping[str, Any]]) -> dict[int, dict[int, Mapping[str, Any]]]:
     """Rows keyed by (draw, row) split per draw; a bare row key counts as draw 1."""
-    out: dict[int, dict[int, dict[str, Any]]] = defaultdict(dict)
+    out: dict[int, dict[int, Mapping[str, Any]]] = defaultdict(dict)
     for k, v in rows.items():
         d, i = k if isinstance(k, tuple) else (1, k)
         out[d][i] = v
     return out
 
 
-def problems_of(rows: dict[Any, dict[str, Any]], expected: int | None) -> tuple[dict[int, list[dict[str, Any]]], bool, int]:
+def problems_of(rows: Mapping[Any, Mapping[str, Any]], expected: int | None) -> tuple[dict[int, list[Mapping[str, Any]]], bool, int]:
     """A cell's runs grouped by problem, over every run (draw) the rows hold (owner 2026-09-27: the problem is the unit).
     A problem's value is the mean of the runs it has, and every problem weighs the same, whatever its number of runs, so a
     run still in progress adds precision to the problems it has reached and moves no weight. The cell is complete once
     every problem of the set has at least one run. Returns the problems in row order, completeness and the fewest runs
     a problem has."""
-    per: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    per: dict[int, list[Mapping[str, Any]]] = defaultdict(list)
     for key in sorted(rows, key=lambda k: k if isinstance(k, tuple) else (1, k)):
         _d, i = key if isinstance(key, tuple) else (1, key)
         per[i].append(rows[key])
@@ -779,7 +828,7 @@ def transform(v: float | None, tf: str | None) -> float | None:
     return v
 
 
-def hist_of(problems: dict[int, list[dict[str, Any]]], key: str, lo: float, hi: float, answered: bool = False) -> list[Any] | None:
+def hist_of(problems: dict[int, list[Mapping[str, Any]]], key: str, lo: float, hi: float, answered: bool = False) -> list[Any] | None:
     """One histogram of a metric over a cell's problems, in its transformed space. Every problem weighs 1, shared by its
     runs; +-inf is clipped into the edge bins. A failed run of an unbounded metric counts as its worst value (owner
     2026-09-27), and the answered-only reading of a metric with a worst value (WORST) leaves the failed runs out."""
@@ -829,7 +878,7 @@ def _sums(xs: list[float]) -> list[float]:
     return [round(float(a.sum()), 6), round(float((a * a).sum()), 6)] if a.size else [0.0, 0.0]
 
 
-def problem_value(runs: list[dict[str, Any]], key: str, tf: str | None, answered: bool = False) -> tuple[bool, float | None]:
+def problem_value(runs: list[Mapping[str, Any]], key: str, tf: str | None, answered: bool = False) -> tuple[bool, float | None]:
     """(defined, value): whether any run has a value for `key`, and the mean of its runs' finite values in the metric's
     transformed space (None when none is finite). The answered-only reading skips the failed runs."""
     defined, vals = False, []
@@ -846,7 +895,7 @@ def problem_value(runs: list[dict[str, Any]], key: str, tf: str | None, answered
     return defined, (sum(vals) / len(vals) if vals else None)
 
 
-def summarize_cell(rows: dict[Any, dict[str, Any]], expected: int | None) -> dict[str, Any]:
+def summarize_cell(rows: Mapping[Any, Mapping[str, Any]], expected: int | None) -> dict[str, Any]:
     """A cell: its problems' values summed per metric, for the page to combine over problem sets.
     A rate: [problems, sum, sum of squares] of the problems' values (a problem's value is its share of hits over its runs).
     Any other metric: [problems with a value, problems with a finite value, sum, sum of squares] in its transformed space
@@ -908,7 +957,7 @@ def superiority(runs_a: list[dict[str, Any]], runs_b: list[dict[str, Any]], key:
 _MATRICES: dict[tuple[Any, ...], tuple[Any, Any]] = {}
 
 
-def _cached(rows: dict[Any, dict[str, Any]], tag: tuple[Any, ...], build: Any) -> Any:
+def _cached(rows: Mapping[Any, Mapping[str, Any]], tag: tuple[Any, ...], build: Any) -> Any:
     k = (id(rows),) + tag
     hit = _MATRICES.get(k)
     if hit is None or hit[0] is not rows:
@@ -916,14 +965,14 @@ def _cached(rows: dict[Any, dict[str, Any]], tag: tuple[Any, ...], build: Any) -
     return hit[1]
 
 
-def _problem_runs(rows: dict[Any, dict[str, Any]]) -> tuple[np.ndarray, list[list[dict[str, Any]]]]:
-    def build() -> tuple[np.ndarray, list[list[dict[str, Any]]]]:
+def _problem_runs(rows: Mapping[Any, Mapping[str, Any]]) -> tuple[np.ndarray, list[list[Mapping[str, Any]]]]:
+    def build() -> tuple[np.ndarray, list[list[Mapping[str, Any]]]]:
         per = problems_of(rows, None)[0]
         return np.asarray(list(per), dtype=np.int64), list(per.values())
     return _cached(rows, ("runs",), build)
 
 
-def _width(runs: list[list[dict[str, Any]]]) -> int:
+def _width(runs: list[list[Mapping[str, Any]]]) -> int:
     return max((len(r) for r in runs), default=0)
 
 
