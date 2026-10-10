@@ -276,7 +276,7 @@ METRICS = [
     ("n_constants", "Constant Count of the Ground Truth", "GT Constants", "Expression Properties", "cont", None, "more", "num1", (0.0, 32.0, None),
      "How many constants the true formula has."),
     ("predicted_total_nestedness", "Function Nesting of the Prediction", "Prediction Nesting", "Expression Properties", "cont", False, "more", "num1", (0.0, 16.0, None),
-     "How deeply functions sit directly inside each other in the predicted formula: sin(x) counts 0, sin(log(x)) counts 1, sin(log(exp(x))) counts 2, and separate chains add up."),
+     "How deeply functions sit inside each other in the predicted formula: the most functions on any path from the outside to a variable. sin(x) counts 1, sin(log(x)) 2, sin(x) + log(x) 1 and sin(x + log(y)) 2."),
     ("total_nestedness", "Function Nesting of the Ground Truth", "GT Nesting", "Expression Properties", "cont", None, "more", "num1", (0.0, 16.0, None),
      "The same for the true formula."),
     ("n_variables", "Variable Count of the Ground Truth", "GT Variables", "Expression Properties", "cont", None, "more", "num1", (0.0, 16.0, None),
