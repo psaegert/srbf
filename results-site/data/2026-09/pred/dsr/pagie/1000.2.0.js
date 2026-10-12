@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["dsr|pagie|1000|2|0"]={"0":["abs * 1.165 abs pow * tanh + tanh - pow * x2 x1 2 x2 0.1369 1.405 3",0]};})();

@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["gpgomea|physo-astro|77936|1|0"]={"0":["+ -1.637 * 1.039 rootn abs + + / 8.598 - -6.338 1e-06 rootn abs -14.4 2 / / 7.623 + x1 1e-06 + * x1 4.639 1e-06 2",0],"1":["+ 0.3849 * 0.06886 pow - * x1 - x1 1.438 - -3.541 * 9.725 x1 2",0]};})();

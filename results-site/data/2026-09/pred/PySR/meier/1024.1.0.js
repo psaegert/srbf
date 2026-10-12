@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|meier|1024|1|0"]={"0":["* x1 * + - * abs * / x1 + x1 x2 cos tan sinh x2 -3.64e-08 -1.822e-07 * x1 x2 / x2 + x1 x2",1],"1":["- * / / x1 * x2 x2 x2 -1.046 * / atanh x1 x2 + tan * x1 30.47 + tan * x1 30.47 / -1.009 * x2 x2",0]};})();

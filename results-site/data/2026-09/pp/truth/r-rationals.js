@@ -1,0 +1,1 @@
+window.RESULTS_V2_PP=window.RESULTS_V2_PP||{};(function(){var R=window.RESULTS_V2_PP;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["truth|r-rationals"]={"n":6,"v":{"ground_truth_mdl":"GB4pGB4p","skeleton_length":"DREXDREX","n_constants":"BAYGBAYG","total_nestedness":"AAAAAAAA","n_variables":"AQEBAQEB"}};})();

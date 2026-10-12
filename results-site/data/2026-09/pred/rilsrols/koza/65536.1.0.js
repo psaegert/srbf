@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["rilsrols|koza|65536|1|0"]={"0":["+ * 0.2824 sin * 3.801 sin x1 0.000307",0],"1":["- 0.4765 * 0.4925 cos + * log pow x1 2 sin * 1.745 pow x1 2 6.044",0]};})();

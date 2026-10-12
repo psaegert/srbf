@@ -1,4 +1,5 @@
 # Operon on FastSRB along its evaluation budget, 2^10 up to about 100 s per problem on the reference machine: pyoperon 0.6.1 in its first author's benchmark configuration
+# (its 1,000-generation backstop raised with the budget, operon_worker.generation_limit, so the evaluation count stays the only budget)
 # (see srbf/worker/models/operon_worker.py and docs/models.md), run in an environment of its own:
 #   python -m venv {{ROOT}}/envs/operon && {{ROOT}}/envs/operon/bin/pip install pyoperon==0.6.1 scikit-learn
 run:
@@ -20,11 +21,11 @@ run:
       threads: all              # every method gets the whole reference machine (owner 2026-09-30)
       max_evaluations: !sweep
         name: ladder
-        values: [1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608]
+        values: [1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728]
   runner:
     limit: null
     save_every: 8
     resume: true
     output: !sweep
       name: ladder
-      values: ['{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0001024.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0002048.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0004096.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0008192.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0016384.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0032768.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0065536.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0131072.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0262144.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0524288.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_1048576.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_2097152.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_4194304.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_8388608.pkl']
+      values: ['{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0001024.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0002048.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0004096.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0008192.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0016384.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0032768.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0065536.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0131072.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0262144.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_0524288.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_1048576.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_2097152.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_4194304.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_8388608.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_16777216.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_33554432.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_67108864.pkl', '{{ROOT}}/results/evaluation/scaling/operon/fastsrb/evals_134217728.pkl']

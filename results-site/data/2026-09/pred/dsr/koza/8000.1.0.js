@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["dsr|koza|8000|1|0"]={"0":["* pow + tan exp / / * * x1 0.9491 0.9491 x1 1.051 * x1 x1 2 x1",1],"1":["- pow abs - x1 + * 1 pow x1 3 5.977e-05 2 / neg tanh x1 + x1 1.261e+04",0]};})();

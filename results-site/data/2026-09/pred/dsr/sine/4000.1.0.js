@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["dsr|sine|4000|1|0"]={"0":["sin + * 3.112 rootn x1 2 * neg x1 - neg / x1 x1 -2.754",0]};})();

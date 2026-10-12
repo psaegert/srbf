@@ -1,0 +1,66 @@
+# Operon in the configuration SRBench 2021 published its ground-truth results with (cavalab/srbench,
+# experiment/methods/tuned/OperonRegressor.py): R^2 as the only objective, population and pool 500, 5 local
+# optimization steps, the operators + - * / exp log sin cos sqrt square and 1,000,000 evaluations. The benchmark's
+# maintainers chose these settings (from the grid search around the author's configuration), so the arm is
+# harness_tuned. It checks srbf's Operon against SRBench 2021's Feynman numbers (noise 0: 85.2 % of runs with test
+# R^2 > 0.999); the result is on the results site's Reproductions page. One thread, as in SRBench's runs (the
+# worker's default). One experiment per catalog; the environment as for configs/evaluation/scaling/operon_fastsrb.yaml.
+experiments:
+  feynman:
+    data_source:
+      catalog: feynman
+      sampling:
+        n_support: 512
+        n_validation: 512
+        noise: 0.0
+        problems_per_expression: 1
+    model_adapter:
+      type: subprocess
+      worker: operon
+      python: '{{ROOT}}/envs/operon/bin/python'
+      config_provenance: harness_tuned
+      simplipy_engine: acj-5-4-llm
+      timeout: 7200
+      options:
+        max_evaluations: 1000000
+        config:
+          objectives: [r2]
+          optimizer_iterations: 5
+          population_size: 500
+          pool_size: 500
+          generations: 100000
+          allowed_symbols: add,sub,mul,div,exp,log,sin,cos,sqrt,square,constant,variable
+    runner:
+      limit: null
+      save_every: 8
+      resume: true
+      output: '{{ROOT}}/results/evaluation/panels/operon_srbench2021/feynman/evals_1000000.pkl'
+  feynman-bonus:
+    data_source:
+      catalog: feynman-bonus
+      sampling:
+        n_support: 512
+        n_validation: 512
+        noise: 0.0
+        problems_per_expression: 1
+    model_adapter:
+      type: subprocess
+      worker: operon
+      python: '{{ROOT}}/envs/operon/bin/python'
+      config_provenance: harness_tuned
+      simplipy_engine: acj-5-4-llm
+      timeout: 7200
+      options:
+        max_evaluations: 1000000
+        config:
+          objectives: [r2]
+          optimizer_iterations: 5
+          population_size: 500
+          pool_size: 500
+          generations: 100000
+          allowed_symbols: add,sub,mul,div,exp,log,sin,cos,sqrt,square,constant,variable
+    runner:
+      limit: null
+      save_every: 8
+      resume: true
+      output: '{{ROOT}}/results/evaluation/panels/operon_srbench2021/feynman-bonus/evals_1000000.pkl'

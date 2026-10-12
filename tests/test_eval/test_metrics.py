@@ -6,6 +6,7 @@ import pytest
 
 from srbf.metrics.bootstrap import bootstrapped_metric_ci
 from srbf.metrics.numeric import fvu, is_perfect_fit
+from srbf.metrics.symbolic import total_nestedness
 from srbf.metrics.zss import build_tree, zss_tree_edit_distance
 
 
@@ -173,3 +174,33 @@ def test_bootstrap_band_profile_rows_give_pointwise_bands():
     assert est.shape == lo.shape == hi.shape == (4,)
     assert np.all(lo <= est) and np.all(est <= hi)
     np.testing.assert_allclose(est, [0.0, 1.0, 2.0, 3.0], atol=0.3)
+
+
+NESTING_ARITY = {"+": 2, "-": 2, "*": 2, "/": 2, "pow": 2, "rootn": 2,
+                 "sin": 1, "cos": 1, "exp": 1, "log": 1, "abs": 1, "neg": 1, "inv": 1}
+
+
+@pytest.mark.parametrize("prefix, depth", [
+    (["x1"], 0),
+    (["sin", "x1"], 1),
+    (["+", "sin", "x1", "cos", "x1"], 1),
+    (["sin", "cos", "x1"], 2),
+    (["sin", "+", "x1", "cos", "x2"], 2),                        # a binary operator does not break the nesting
+    (["exp", "+", "sin", "x1", "cos", "x1"], 2),
+    (["+", "x1", "neg", "x2"], 0),                               # x1 - x2, as SimpliPy spells it
+    (["*", "x1", "inv", "x2"], 0),                               # x1 / x2
+    (["neg", "sin", "cos", "x1"], 2),
+    (["rootn", "x1", "<constant>"], 0),                          # roots and powers are binary operators
+    (["sin", "pow", "exp", "x1", "<constant>"], 2),
+    (["*", "<constant>", "abs", "log", "x1"], 2),
+])
+def test_function_nesting_is_the_most_functions_on_a_path_to_a_leaf(prefix, depth) -> None:
+    """Owner 2026-10-09: nesting counts the functions applied, sin(x) = 1 and sin(cos(x)) = 2, as the deepest
+    stack of them; neg and inv spell subtraction and division and do not count."""
+    assert total_nestedness(prefix, NESTING_ARITY) == depth
+
+
+@pytest.mark.parametrize("prefix", [["sin"], ["+", "x1"], ["x1", "x2"], []])
+def test_function_nesting_needs_one_expression_tree(prefix) -> None:
+    with pytest.raises(ValueError):
+        total_nestedness(prefix, NESTING_ARITY)

@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["udsr|physo-astro|832000|1|0"]={"0":["/ * 1 cos * * 1 1 - 1 1 + * x1 1 + + * -0.2694 x1 * 1.05 pow x1 2 * 0.3776 pow x1 3",1],"1":["- * 1 + + + 1.149 * 4.242 x1 * 4.534 pow x1 2 * 1.511 pow x1 3 neg * pow neg cos pow 1 4 2 x1",1]};})();

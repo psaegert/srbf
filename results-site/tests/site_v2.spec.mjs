@@ -18,7 +18,7 @@ async function pick(page, trigger, key) {
   await page.locator(`.v2picker .v2pickitem[data-k="${key}"]`).click();
   await expect(page.locator('.v2picker')).toHaveCount(0);
 }
-const VIEWS = ['curves', 'table', 'matrix', 'dist', 'ranks', 'paired'];
+const VIEWS = ['curves', 'table', 'matrix', 'dist', 'corr', 'ranks', 'paired'];
 // the metric floor: the 20 metrics every release carries (those of the site's first release, under schema-2 keys)
 const LEGACY_METRICS = ['numeric_recovery_val', 'expr_length_ratio', 'log10_fvu_val', 'log10_fvu_fit', 'numeric_recovery_fit', 'success',
   'skeleton_match_raw', 'f1_score', 'precision_score', 'recall_score', 'edit_distance_norm', 'zss_edit_distance', 'expr_length_ratio_abserr',
@@ -31,6 +31,22 @@ test('the explorer\'s page opens on the explorer and renders its curves', async 
   await expect(page.locator(V2)).toBeVisible();
   await expect(page.locator(V2 + ' svg.v2chart').first()).toBeVisible();
   await expect(page.locator('#release-switch')).toHaveCount(0);   // one release: nothing to switch
+  expect(errors).toEqual([]);
+});
+
+test('a ladder that cannot go further ends in a square; every other point is a circle', async ({ page }) => {
+  // E2E is reported at its default settings, which stop at 256 candidates per bag (summary.ladder: "declared")
+  const errors = collectErrors(page);
+  await page.goto('/explorer.html?release=2026-09&v=curves');
+  await expect(page.locator(V2 + ' svg.v2chart').first()).toBeVisible();
+  const squares = page.locator(V2 + ' svg.v2chart rect.v2end');
+  await expect(squares.first()).toBeAttached();
+  const tips = await squares.locator('title').allTextContents();
+  expect(tips.length).toBeGreaterThan(0);
+  for (const t of tips) { expect(t).toMatch(/^E2E[^@]* (at budget|@) 256\b/); expect(t).toContain('default settings'); expect(t).not.toContain('..'); }
+  const e2eCircles = await page.locator(V2 + ' svg.v2chart circle title').evaluateAll((ts) => ts.map((t) => t.textContent).filter((t) => /^E2E[^@]* (at budget|@) 256\b/.test(t)));
+  expect(e2eCircles).toEqual([]);
+  await expect(page.locator(V2 + ' .v2endnote')).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -69,7 +85,7 @@ test('the paired view loads its contrasts and shows a baseline selector', async 
   const errors = collectErrors(page);
   await page.goto('/explorer.html?release=2026-09&v=paired&p=numeric_recovery_val');
   await expect(page.locator(V2 + ' select.v2base')).toBeVisible({ timeout: 15000 });
-  await expect.poll(async () => page.evaluate(() => Object.keys((window.RESULTS_V2_PAIRED || {})['2026-09'] || {}).length), { timeout: 15000 }).toBeGreaterThanOrEqual(1);
+  await expect.poll(async () => page.evaluate(() => Object.keys(((window.RESULTS_V2_PAIRCELLS || {})['2026-09'] || {}).numeric_recovery_val || {}).length), { timeout: 15000 }).toBeGreaterThanOrEqual(1);
   await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toBeVisible();
   expect(errors).toEqual([]);
 });
@@ -159,9 +175,10 @@ test('a curve walks its method\'s budgets in order, also on the time axis', asyn
   const series = await head.evaluate((svg) => [...svg.querySelectorAll('polyline')].map((pl) => {
     const col = pl.getAttribute('stroke');
     const verts = pl.getAttribute('points').trim().split(/\s+/).map((q) => q.split(',').map(Number));
-    const dots = [...svg.querySelectorAll('circle')].filter((c) => c.getAttribute('stroke') === col).map((c) => {
+    const dots = [...svg.querySelectorAll('circle, rect.v2end')].filter((c) => c.getAttribute('stroke') === col).map((c) => {
       const m = (c.querySelector('title') || { textContent: '' }).textContent.match(/ at budget (\d+)/);
-      return { x: +c.getAttribute('cx'), y: +c.getAttribute('cy'), b: m ? +m[1] : NaN };
+      const sq = c.tagName === 'rect';   // a ladder's declared end: a 6 px square centred on the point
+      return { x: sq ? +c.getAttribute('x') + 3 : +c.getAttribute('cx'), y: sq ? +c.getAttribute('y') + 3 : +c.getAttribute('cy'), b: m ? +m[1] : NaN };
     });
     return { col, verts, dots };
   }));
@@ -304,7 +321,7 @@ test('each display carries only the controls it can use', async ({ page }) => {
   // one budget, one metric, each chosen in one place: on the display's own bar, never repeated in the side panel
   for (const k of ['plots', 'xaxis', 'thin', 'focus', 'rung', 'rows']) { expect(matrix, k).not.toContain(k); }
   await expect(page.locator(V2 + ' .v2viewbar .v2viewpick')).toBeVisible();
-  await expect(page.locator(V2 + ' .v2viewbar select[data-state="rung"]')).toBeVisible();
+  await expect(page.locator(V2 + ' .v2viewbar input.v2pos')).toBeVisible();
   await page.locator(V2 + ' .v2tab[data-view="paired"]').click();
   await expect.poll(shown).toContain('base');
 });
@@ -455,6 +472,77 @@ test('a method is added with its key, and a key that does not fit adds nothing',
   expect(errors).toEqual([]);
 });
 
+// a keyed overlay whose per-problem files are sealed one by one (tools/seal.mjs; tests/fixtures/sealed_files): the method
+// "Fixture Files" carries copies of T8-20M's feynman files at budgets 16 and 32
+const SEALED_FILES = new URL('./fixtures/sealed_files/', import.meta.url);
+async function routeSealedFiles(page) {
+  await page.route('**/data/2026-09/sealed.js', (route) => route.fulfill({ contentType: 'text/javascript', body: readFileSync(new URL('sealed.js', SEALED_FILES), 'utf8') }));
+  await page.route(/\/data\/2026-09\/sealed\/[0-9a-f]{32}\.js$/, (route) => {
+    const name = route.request().url().split('/').pop();
+    let body = null; try { body = readFileSync(new URL('sealed/' + name, SEALED_FILES), 'utf8'); } catch (e) { body = null; }
+    return body === null ? route.fulfill({ status: 404, body: '' }) : route.fulfill({ contentType: 'text/javascript', body });
+  });
+}
+
+test('a method added with a key brings its values and formulas problem by problem, each file sealed and fetched on its own', async ({ page }) => {
+  const errors = collectErrors(page);
+  await routeSealedFiles(page);
+  const fetched = new Set(); page.on('request', (r) => { const m = /\/sealed\/([0-9a-f]{32})\.js$/.exec(r.url()); if (m) { fetched.add(m[1]); } });
+  await page.goto('/explorer.html?release=2026-09&v=corr&cv=points&cx=mdl_ratio&cy=log10_fvu_val&c=feynman&m=T8-20M&pm=budget&r=16');
+  const hint = page.locator(V2 + ' .v2view p.v2hint', { hasText: 'One point per run' });
+  await expect(hint).toBeVisible({ timeout: 15000 });
+  const count = async () => +(await hint.textContent()).match(/One point per run, ([\d,]+) in all/)[1].replace(/,/g, '');
+  const one = await count();
+  await page.locator(V2 + ' .v2addmopen').click();
+  await page.locator(V2 + ' .v2addmkey').fill(FIXTURE_KEY);
+  await page.locator(V2 + ' [data-act="add-method-go"]').click();
+  await expect(page.locator(V2 + ' .v2methods')).toContainText('Fixture Files', { timeout: 20000 });
+  await expect.poll(count, { timeout: 15000 }).toBe(2 * one);              // its runs, drawn beside the copies they were made from
+  await expect(page.locator(V2 + ' .v2view svg.v2corr')).toContainText('Fixture Files');
+  expect(fetched.size).toBe(2);                                            // only its two runs at budget 16: nothing else is fetched
+  await page.locator(V2 + ' .v2tab[data-view="preds"]').click();           // and its formulas, as the copies say
+  const rows = page.locator(V2 + ' .v2predtable tbody tr');
+  await expect(rows).toHaveCount(2, { timeout: 15000 });
+  await expect(rows.nth(1)).toContainText('Fixture Files');
+  await expect(rows.nth(1).locator('td.v2predf .katex')).toHaveCount(1, { timeout: 15000 });
+  expect(await rows.nth(1).locator('td.v2predf').textContent()).toBe(await rows.nth(0).locator('td.v2predf').textContent());
+  expect(fetched.size).toBe(3);
+  expect(errors).toEqual([]);
+});
+
+// two overlays sealed under two keys into one file (tools/seal.mjs --source ... --source ...)
+const FIXTURE_TWO_KEY = 'a-second-fixture-key-for-the-tests';
+const FIXTURE_TWO = readFileSync(new URL('./fixtures/sealed_two_fixture.js', import.meta.url), 'utf8');
+
+test('each key opens its own sealed overlay and no other, and the page remembers both', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.addInitScript({ content: FIXTURE_TWO });
+  await page.goto('/explorer.html?release=2026-09&v=curves');
+  const methods = page.locator(V2 + ' .v2methods .v2meth');
+  await expect(methods.first()).toBeVisible();
+  const before = await methods.count();
+  const one = page.locator(V2 + ' .v2methods input[type=checkbox][data-m="fixture-method"]');
+  const two = page.locator(V2 + ' .v2methods input[type=checkbox][data-m="fixture-method-two"]');
+  await page.locator(V2 + ' .v2addmopen').click();
+  // the second key opens the second overlay only
+  await page.locator(V2 + ' .v2addmkey').fill(FIXTURE_TWO_KEY);
+  await page.locator(V2 + ' [data-act="add-method-go"]').click();
+  await expect(two).toBeChecked({ timeout: 20000 });
+  expect(await one.count(), 'a key opens only its own overlay').toBe(0);
+  expect(await methods.count()).toBe(before + 1);
+  // the first key, which a page with one sealed payload has always read, opens the first only
+  await page.locator(V2 + ' .v2addmopen').click();
+  await page.locator(V2 + ' .v2addmkey').fill(FIXTURE_KEY);
+  await page.locator(V2 + ' [data-act="add-method-go"]').click();
+  await expect(one).toBeChecked({ timeout: 20000 });
+  expect(await methods.count()).toBe(before + 2);
+  // both keys are remembered for the session, and both overlays come back on a reload
+  await page.reload();
+  await expect(one).toBeAttached({ timeout: 20000 });
+  await expect(two).toBeAttached({ timeout: 20000 });
+  expect(errors).toEqual([]);
+});
+
 test('an untimed method leaves the time axis standing and is named under it', async ({ page }) => {
   const errors = collectErrors(page);
   await page.addInitScript({ content: FIXTURE });
@@ -588,9 +676,11 @@ test('a method marked off starts unchecked, and its checkbox shows it', async ({
   const box = page.locator(V2 + ' .v2methods input[type=checkbox][data-m="e2e"]');
   await expect(box).not.toBeChecked();
   await expect(chart.locator('text.leg', { hasText: 'E2E 93M' })).toHaveCount(0);
-  await expect(page.locator(V2 + ' .v2methods input[type=checkbox][data-m="T8-20M"]')).toBeChecked();
-  await box.check();
+  expect(await box.evaluate((el) => el.indeterminate)).toBe(false);   // hidden: neither ticked nor dashed
+  await expect(page.locator(V2 + ' .v2methods input[type=checkbox][data-m="T8-120M"]')).toBeChecked();
+  await box.click();   // hidden -> faded: back in the chart
   await expect(page.locator(V2 + ' .v2main svg.v2chart').first().locator('text.leg', { hasText: 'E2E 93M' })).toHaveCount(1);
+  expect(await box.evaluate((el) => el.indeterminate)).toBe(true);
 });
 
 test('a headline chart keeps its title and its y label off the frame', async ({ page }) => {
@@ -651,20 +741,22 @@ test('every reading of a distribution draws, and the choice travels in the link'
   expect(errors).toEqual([]);
 });
 
-test('the budget of a snapshot is stepped on the display itself', async ({ page }) => {
+test('the budget of a snapshot is set on the display itself, on a slider and by its marks', async ({ page }) => {
   await page.goto('/explorer.html?release=2026-09&v=dist&dm=log10_fvu_val&r=16');
-  const sel = page.locator(V2 + ' .v2viewbar select[data-state="rung"]');
-  await expect(sel).toHaveValue('16');
-  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('at budget 16');
-  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label^="higher"]').click();
-  await expect(sel).toHaveValue('32');
-  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('at budget 32');
+  const val = page.locator(V2 + ' .v2viewbar .v2posval'), chart = page.locator(V2 + ' .v2view svg.v2chart').first();
+  await expect(val).toHaveValue('16');
+  await expect(chart).toContainText('at budget 16');
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="larger budget"]').click();
+  await expect(val).toHaveValue('32');
+  await expect(chart).toContainText('at budget 32');
   await expect(page.locator(V2 + ' select.v2rung')).toBeHidden();   // the budget has one place: the display's bar
-  await sel.selectOption('8');
-  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toContainText('at budget 8');
-  // the Catalogs matrix and the by-catalog table carry the same stepper
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="smaller budget"]').click();
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="smaller budget"]').click();
+  await expect(chart).toContainText('at budget 8');
+  // the Problem sets view and the by-problem-set table carry the same control, at the same budget
   await page.locator(V2 + ' .v2tab[data-view="matrix"]').click();
-  await expect(page.locator(V2 + ' .v2viewbar select[data-state="rung"]')).toHaveValue('8');
+  await expect(page.locator(V2 + ' .v2viewbar .v2posval')).toHaveValue('8');
+  expect(new URL(page.url()).searchParams.get('r')).toBe('8');
 });
 
 test('a rate is shown per problem set, with a way to a distribution', async ({ page }) => {
@@ -679,7 +771,7 @@ test('a rate is shown per problem set, with a way to a distribution', async ({ p
 // measures them (a progress bar's class once shared the group's name and cut every group to 9 px).
 test('every button group shows its labels in full, each on one line', async ({ page }) => {
   for (const url of ['/explorer.html?release=2026-09&v=dist&r=16', '/explorer.html?release=2026-09&v=dist&dv=ecdf&r=16', '/explorer.html?release=2026-09&v=dist&dv=rungs&r=16',
-    '/explorer.html?release=2026-09&v=preds', '/explorer.html?release=2026-09&v=ranks&x=rung&r=16']) {
+    '/explorer.html?release=2026-09&v=preds', '/explorer.html?release=2026-09&v=ranks&x=rung&r=16', '/explorer.html?release=2026-09&v=corr&cv=vs']) {
     await page.goto(url);
     const btns = page.locator(V2 + ' .v2segbtn');
     await expect(btns.first()).toBeVisible({ timeout: 15000 });
@@ -737,6 +829,322 @@ test('the explorer averages over problem sets exactly as the reference does', ()
   expect(core.holm([0.01, 0.04, 0.03]).map((x) => +x.toFixed(6))).toEqual([0.03, 0.06, 0.06]);
 });
 
+// ---- Positions between budgets -------------------------------------------------------------------------------------
+// Tables, problem sets and distributions read every method at one budget or one time, anywhere on a slider. Between two
+// budgets a method was run at, every sum of a problem set is blended in the logarithm of the position; nothing is
+// extrapolated. The page's code is cut out and run on a fixture with known sums.
+test('a method between two of its budgets is read by blending them in the logarithm of the position', () => {
+  const src = readFileSync(new URL('../explorer_v2.js', import.meta.url), 'utf8');
+  const a = src.indexOf('  // ---- positions between the budgets'), b = src.indexOf('  function hasRung(');
+  expect(a).toBeGreaterThan(0); expect(b).toBeGreaterThan(a);
+  const D = { cells: { A: { s: {
+    '1': { state: 'complete', d: 2, n: 100, ok: 90, m: { rate: [100, 10, 10] }, a: { f1: [90, 90, 45, 30] }, e: { f1: 90 } },
+    '4': { state: 'complete', d: 2, n: 100, ok: 98, m: { rate: [100, 30, 30] }, a: { f1: [98, 98, 70, 60] }, e: { f1: 98 } },
+    '16': { state: 'running', n: 3, m: {} } } } } };
+  const times = { 1: 0.5, 4: 2 };
+  const addHist = (acc, hc) => { hc.forEach((pt) => { acc[pt[0]] += pt[1]; }); };
+  const core = new Function('D', 'state', 'refTime', 'addHist', src.slice(a, b) + '\nBETWEEN = true;\nreturn { cell: cell, histCell: histCell, posText: posText };')(
+    D, { pm: 'budget', rung: 2, pt: null }, (m, r) => times[String(r)] || null, addHist);
+  const r9 = (xs) => xs.map((x) => +x.toFixed(9));
+  const mid = core.cell('A', 's', 2);                               // log 2 lies halfway between log 1 and log 4
+  expect(mid.between).toEqual([1, 4]);
+  expect(r9(mid.m.rate)).toEqual([100, 20, 20]);
+  expect(r9(mid.a.f1)).toEqual([94, 94, 57.5, 45]);
+  expect(+mid.ok.toFixed(9)).toBe(94); expect(+mid.e.f1.toFixed(9)).toBe(94);
+  expect(core.cell('A', 's', 4)).toBe(D.cells.A.s['4']);            // a budget it was run at reads exactly as measured
+  expect(core.cell('A', 's', 8)).toBeNull();                        // nothing is extrapolated; an unfinished budget is no point
+  expect(core.cell('A', 's', 0.5)).toBeNull();
+  expect(+core.cell('A', 's', Math.pow(4, 0.25)).m.rate[1].toFixed(9)).toBe(15);   // a quarter of the way
+  const byTime = core.cell('A', 's', 't1');                         // 1 s lies halfway between 0.5 s and 2 s on a log scale
+  expect(byTime.between).toEqual([1, 4]); expect(+byTime.m.rate[1].toFixed(9)).toBe(20);
+  expect(core.cell('A', 's', 't2')).toBe(D.cells.A.s['4']);
+  expect(core.cell('A', 's', 't4')).toBeNull();
+  expect(core.histCell({ nb: 3, cells: { A: { s: { 1: [[0, 10]], 4: [[2, 10]] } } } }, 'A', 's', 2)).toEqual([5, 0, 5]);
+  expect(core.posText(1448.15)).toBe('budget 1,448'); expect(core.posText('t2.5')).toBe('2.5 s per problem');
+});
+
+test('the slider reads every method between its budgets, marks it, and reads by time too', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/explorer.html?release=2026-09&v=matrix&m=T8-20M&r=1448');
+  const val = page.locator(V2 + ' .v2viewbar .v2posval');
+  await expect(val).toHaveValue('1,448');
+  await expect(page.locator(V2 + ' .v2view')).toContainText('Interpolated: Flash-ANSR T8-20M between budgets 1,024 and 2,048.');
+  await expect(page.locator(V2 + ' .v2view .v2matrix .v2tween').first()).toBeVisible();   // and every such number carries the mark
+  const slider = page.locator(V2 + ' .v2viewbar input.v2pos');
+  await slider.evaluate((el) => { el.value = String(0.37 * (+el.max)); el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); });
+  await expect.poll(() => new URL(page.url()).searchParams.get('r')).not.toBe('1448');
+  await page.locator(V2 + ' .v2viewbar button[data-set="pm:time"]').click();
+  await expect(page.locator(V2 + ' .v2viewbar .v2posunit')).toHaveText('s');
+  await expect(page.locator(V2 + ' .v2view')).toContainText('s per problem');
+  expect(new URL(page.url()).searchParams.get('pm')).toBe('time');
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="longer time"]').click();
+  expect(+new URL(page.url()).searchParams.get('pt')).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});
+
+test('a method outside the budgets it was run at has no value there, and says where it runs', async ({ page }) => {
+  await page.goto('/explorer.html?release=2026-09&v=matrix&m=e2e,T8-20M&r=1448');
+  await expect(page.locator(V2 + ' .v2view')).toContainText('E2E 93M has no value at budget 1,448 (it runs at budgets 1 to 256).');
+  for (const v of ['matrix', 'dist&dm=log10_fvu_val', 'dist&dm=numeric_recovery_val', 'table&rows=cats']) {   // by time, every note speaks in seconds
+    await page.goto('/explorer.html?release=2026-09&v=' + v + '&pm=time&pt=0.05');
+    await expect(page.locator(V2 + ' .v2posunit')).toHaveText('s');
+    await expect(page.locator(V2 + ' .v2view')).not.toContainText(/budget t\d/);
+  }
+});
+
+test('Ranks and Paired differences read every method at the position, between its budgets too', async ({ page }) => {
+  await page.goto('/explorer.html?release=2026-09&v=ranks&pm=budget&r=1448&m=T8-20M,T8-120M');
+  const rows = page.locator(V2 + ' .v2ranktable tbody tr');
+  await expect(rows).toHaveCount(2, { timeout: 20000 });
+  for (const i of [0, 1]) { await expect(rows.nth(i).locator('td:nth-child(2)')).toHaveText('≈ 1,024 – 2,048'); }
+  await expect(page.locator(V2 + ' .v2view svg.v2rankchart')).toHaveAttribute('aria-label', /budget 1,448/);
+  await page.goto('/explorer.html?release=2026-09&v=paired&p=numeric_recovery_val&pm=budget&r=1448&m=T8-20M,T8-120M&b=T8-20M');
+  const table = page.locator(V2 + ' .v2table').last();
+  await expect(table).toContainText('at budget 1,448', { timeout: 20000 });
+  await expect(table.locator('tbody tr').first().locator('td').nth(1)).toContainText(/pp/);   // a contrast, not a dash
+});
+
+// The numbers themselves, against Python: tests/fixtures/pairpos holds three methods' per-problem files on feynman and the
+// exporter's cells along the slots (scripts/site_pairpos_fixture.py), and expected.json what the exporter's code and the
+// page's pooling (scripts/site_random_effects.py) give at four positions: at budgets two of them ran and the third did
+// not, between budgets for all three, and at a time.
+const PAIRPOS = new URL('./fixtures/pairpos/', import.meta.url);
+const PAIRPOS_EXPECTED = JSON.parse(readFileSync(new URL('expected.json', PAIRPOS), 'utf8'));
+async function routePairpos(page) {
+  await page.route('**/data/2026-09/results.js', async (route) => {
+    const res = await route.fetch();
+    await route.fulfill({ response: res, body: (await res.text()) + readFileSync(new URL('index.js', PAIRPOS), 'utf8') });
+  });
+  await page.route(/\/data\/2026-09\/(pv|ranks|paired)\/.*\.js$/, (route) => {
+    const rel = route.request().url().split('/data/2026-09/')[1];
+    let body = null; try { body = readFileSync(new URL(rel, PAIRPOS), 'utf8'); } catch (e) { body = null; }
+    return body === null ? route.fulfill({ status: 404, body: '' }) : route.fulfill({ contentType: 'text/javascript', body });
+  });
+}
+test('Ranks and Paired differences at a position show what the exporter computes there', async ({ page }) => {
+  const errors = collectErrors(page);
+  await routePairpos(page);
+  const label = { 'T8-20M': 'Flash-ANSR T8-20M', PySR: 'PySR', dsr: 'DSR' };
+  const pp = (d) => (d >= 0 ? '+' : '') + (100 * d).toFixed(1) + ' pp';
+  for (const [pos, want] of Object.entries(PAIRPOS_EXPECTED.positions)) {
+    const at = pos.charAt(0) === 't' ? 'pm=time&pt=' + pos.slice(1) : 'pm=budget&r=' + pos;
+    await page.goto('/explorer.html?release=2026-09&v=ranks&rm=log10_fvu_val&c=feynman&m=T8-20M,PySR,dsr&' + at);
+    const h2h = page.locator(V2 + ' .v2h2h');
+    await expect(h2h.locator('tbody tr'), pos).toHaveCount(3, { timeout: 20000 });
+    const cols = (await h2h.locator('thead th').allTextContents()).map((t) => t.trim());
+    for (const [pair, e] of Object.entries(want.chance_to_beat)) {
+      const [a, b] = pair.split('|');
+      const row = h2h.locator('tbody tr').filter({ has: page.locator('td:first-child', { hasText: new RegExp('^' + label[a] + '$') }) });
+      const cell = row.locator('td').nth(cols.indexOf(label[b]));
+      await expect(cell, pos + ' ' + pair).toContainText((100 * e.p).toFixed(1) + ' % [' + (100 * e.lo).toFixed(0) + ', ' + (100 * e.hi).toFixed(0) + ']');
+    }
+    await page.goto('/explorer.html?release=2026-09&v=paired&p=numeric_recovery_val&b=PySR&c=feynman&m=T8-20M,PySR,dsr&' + at);
+    const row = page.locator(V2 + ' .v2table').last().locator('tbody tr').filter({ hasText: label['T8-20M'] });
+    const w = want.paired;
+    await expect(row.locator('td').nth(1), pos + ' paired').toHaveText(pp(w.v) + ' [' + pp(w.lo) + ', ' + pp(w.hi) + ']', { timeout: 20000 });
+    await expect(row.locator('td').nth(2)).toHaveText(w.p < 0.001 ? '< 0.001' : w.p.toFixed(3));
+    await expect(row.locator('td').nth(3)).toHaveText(w.wins + ' / ' + w.losses + ' of ' + w.n);
+  }
+  expect(errors).toEqual([]);
+});
+
+test('the slider is continuous, and its arrows step to the budgets the shown methods were run at', async ({ page }) => {
+  await page.goto('/explorer.html?release=2026-09&v=matrix&m=T8-20M&r=1024');
+  const slider = page.locator(V2 + ' .v2viewbar input.v2pos'), val = page.locator(V2 + ' .v2viewbar .v2posval');
+  await slider.evaluate((el) => {   // just past 1,024: the position stays where it was put
+    const lo = +el.dataset.lo, hi = +el.dataset.hi; el.value = String(Math.log(1100 / lo) / Math.log(hi / lo));
+    el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect(val).toHaveValue('1,100');
+  expect(+new URL(page.url()).searchParams.get('r')).toBeCloseTo(1100, 0);
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="larger budget"]').click();
+  await expect(val).toHaveValue('2,048');
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="smaller budget"]').click();
+  await expect(val).toHaveValue('1,024');
+});
+
+// ---- One position for every display (owner 2026-10-05) ----------------------------------------------------------------
+// Every display but Curves reads every method at one position: a time per problem by default, the one budget every
+// method shares, or a budget. Any position on the slider or typed into its box is taken exactly; the arrows (buttons
+// and arrow keys) step to the next of the release's time limits, or to the next budget a shown method was run at.
+test('every display but Curves carries the position, and time is the default', async ({ page }) => {
+  for (const v of ['table&rows=cats', 'matrix', 'dist', 'corr', 'ranks', 'paired', 'preds']) {
+    await page.goto('/explorer.html?release=2026-09&v=' + v);
+    await expect(page.locator(V2 + ' .v2view input.v2pos'), v).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(V2 + ' .v2view button[data-set="pm:time"]'), v).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator(V2 + ' .v2view .v2posunit'), v).toHaveText('s');
+    expect(new URL(page.url()).searchParams.get('pm'), v).toBe('time');
+  }
+  await page.goto('/explorer.html?release=2026-09&v=curves');
+  await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toBeVisible({ timeout: 15000 });
+  await expect(page.locator(V2 + ' input.v2pos')).toHaveCount(0);
+});
+
+test('a time or a budget typed into the box is taken as typed, and the arrows step to the time limits', async ({ page }) => {
+  await page.goto('/explorer.html?release=2026-09&v=matrix&m=T8-20M&pm=time&pt=4.2');
+  const val = page.locator(V2 + ' .v2viewbar .v2posval'), url = () => new URL(page.url()).searchParams;
+  await expect(val).toHaveValue('4.2', { timeout: 15000 });
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="longer time"]').click();
+  await expect(val).toHaveValue('10'); expect(url().get('pt')).toBe('10');
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="shorter time"]').click();
+  await expect(val).toHaveValue('3');
+  await val.fill('7.25'); await val.press('Enter');
+  await expect.poll(() => url().get('pt')).toBe('7.25');
+  await expect(val).toHaveValue('7.25');
+  const slider = page.locator(V2 + ' .v2viewbar input.v2pos');   // the arrow keys step as the buttons do, and keep the focus
+  await slider.focus(); await page.keyboard.press('ArrowRight');
+  await expect.poll(() => url().get('pt')).toBe('10');
+  await expect(slider).toBeFocused();
+  await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowLeft');
+  await expect.poll(() => url().get('pt')).toBe('1');
+  await page.locator(V2 + ' .v2viewbar button[data-set="pm:budget"]').click();   // by budget, a typed budget stays as typed
+  await val.fill('1,100'); await val.press('Enter');
+  await expect.poll(() => url().get('r')).toBe('1100');
+  await expect(page.locator(V2 + ' .v2view')).toContainText('Interpolated: Flash-ANSR T8-20M between budgets 1,024 and 2,048.');
+});
+
+test('a link written before every display read at one position opens where it pointed', async ({ page }) => {
+  const val = page.locator(V2 + ' .v2viewbar .v2posval'), unit = page.locator(V2 + ' .v2viewbar .v2posunit');
+  await page.goto('/explorer.html?release=2026-09&v=ranks&x=time&t=t10');   // Ranks and Correlations kept their mode in x, a time limit in t
+  await expect(val).toHaveValue('10', { timeout: 15000 }); await expect(unit).toHaveText('s');
+  await page.goto('/explorer.html?release=2026-09&v=corr&x=rung&r=16');
+  await expect(val).toHaveValue('16', { timeout: 15000 }); await expect(unit).toHaveCount(0);
+  await page.goto('/explorer.html?release=2026-09&v=dist&x=time&r=16');      // a display read at a budget when its link had no pm
+  await expect(val).toHaveValue('16', { timeout: 15000 }); await expect(unit).toHaveCount(0);
+});
+
+test('Correlations between two budgets draw the runs of both, and the legend names the two', async ({ page }) => {
+  const count = async (r) => {
+    await page.goto(`/explorer.html?release=2026-09&v=corr&cv=points&cx=mdl_ratio&cy=log10_fvu_val&m=T8-20M&c=feynman&pm=budget&r=${r}`);
+    const hint = page.locator(V2 + ' .v2view p.v2hint', { hasText: 'One point per run' });
+    await expect(hint).toBeVisible({ timeout: 15000 });
+    return +(await hint.textContent()).match(/One point per run, ([\d,]+) in all/)[1].replace(/,/g, '');
+  };
+  const lo = await count(1024), hi = await count(2048), mid = await count(1448);
+  expect(lo).toBeGreaterThan(0); expect(mid).toBe(lo + hi);
+  await expect(page.locator(V2 + ' .v2view svg.v2corr')).toContainText('≈ budgets 1,024–2,048');
+});
+
+test('Predictions show each method at its last budget within the position, and name it', async ({ page }) => {
+  const at = page.locator(V2 + ' .v2predtable tbody tr td.v2predat').first();
+  await page.goto('/explorer.html?release=2026-09&v=preds&ps=feynman&pr=1&pn=1&m=T8-20M&pm=budget&r=1500');
+  await expect(at).toHaveText('1,024', { timeout: 15000 });
+  await page.goto('/explorer.html?release=2026-09&v=preds&ps=feynman&pr=1&pn=1&m=T8-20M&pm=time&pt=5');   // budget 1,024 takes 5.02 s
+  await expect(at).toHaveText('512 2.59 s', { timeout: 15000 });
+  await expect(page.locator(V2 + ' .v2view')).toContainText('from its last budget that takes at most 5 s per problem');
+});
+
+// ---- Shown, faded and hidden methods --------------------------------------------------------------------------------
+test('the headline shows three methods in full, hides the smaller Flash-ANSR models and fades the rest; a legend click cycles one, for this visit only', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto('/');
+  const chart = page.locator('.headline-v2 svg.v2chart').first();
+  await expect(chart).toBeVisible();
+  const item = (k) => chart.locator('[data-cycle="' + k + '"]');
+  for (const k of ['T8-120M', 'T8-120M-pysr', 'PySR']) { await expect(item(k)).toHaveAttribute('data-vis', 'full'); }
+  for (const k of ['gpgomea', 'e2e', 'nesymres-100M']) { await expect(item(k)).toHaveAttribute('data-vis', 'dim'); }
+  // hidden by default: gone from the plot, still in the legend, where a click brings them back
+  for (const k of ['T8-3M', 'T8-20M']) { await expect(item(k)).toHaveAttribute('data-vis', 'hidden'); }
+  await item('T8-20M').click();
+  await expect(item('T8-20M')).toHaveAttribute('data-vis', 'dim');
+  await page.locator('.headline-v2 [data-hlreset]').click();
+  await expect(item('T8-20M')).toHaveAttribute('data-vis', 'hidden');
+  // a faded method: its colour blended into the background (20 %), fully opaque; a shown one: its colour
+  expect(await item('e2e').locator('line').getAttribute('stroke')).toMatch(/^color-mix\(in srgb, #[0-9a-f]{6} 20%, var\(--surface\)\)$/i);
+  expect(await item('T8-120M').locator('line').getAttribute('stroke')).toMatch(/^#[0-9a-f]{6}$/i);
+  // drawn behind: every faded line comes before every shown one
+  const order = await chart.evaluate((svg) => [...svg.querySelectorAll('polyline')].map((l) => l.getAttribute('stroke').startsWith('color-mix')));
+  expect(order.indexOf(false)).toBeGreaterThan(0); expect(order.lastIndexOf(true)).toBeLessThan(order.indexOf(false));
+  await item('T8-120M').click();
+  await expect(item('T8-120M')).toHaveAttribute('data-vis', 'hidden');   // gone from the plot, still in the legend
+  await item('T8-120M').click();
+  await expect(item('T8-120M')).toHaveAttribute('data-vis', 'dim');
+  await item('T8-120M').click();
+  await expect(item('T8-120M')).toHaveAttribute('data-vis', 'full');
+  await item('PySR').focus(); await page.keyboard.press('Enter');
+  await expect(item('PySR')).toHaveAttribute('data-vis', 'hidden');
+  await page.locator('.headline-v2 [data-hlreset]').click();
+  await expect(item('PySR')).toHaveAttribute('data-vis', 'full');
+  await item('PySR').click();
+  await page.reload();   // nothing is stored: a new visit starts from the default
+  await expect(page.locator('.headline-v2 svg.v2chart').first().locator('[data-cycle="PySR"]')).toHaveAttribute('data-vis', 'full');
+});
+
+test('a headline legend keeps its order while a method cycles: shown, hidden, faded and back', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto('/');
+  const charts = page.locator('.headline-v2 svg.v2chart');
+  await expect(charts.first()).toBeVisible();
+  const orders = () => charts.evaluateAll((svgs) => svgs.map((svg) => [...svg.querySelectorAll('[data-cycle]')].map((g) => g.getAttribute('data-cycle'))));
+  const before = await orders();
+  expect(before.length).toBeGreaterThan(1);
+  for (const legend of before) { expect(legend.length).toBeGreaterThan(3); }
+  // a method in the middle of every legend, so that moving it would show
+  const k = before[0][Math.floor(before[0].length / 2)];
+  const next = { full: 'hidden', hidden: 'dim', dim: 'full' };
+  let vis = await charts.first().locator('[data-cycle="' + k + '"]').getAttribute('data-vis');
+  for (let i = 0; i < 3; i++) {   // through all three states, back to where it started
+    vis = next[vis];
+    await charts.first().locator('[data-cycle="' + k + '"]').click();
+    await expect(charts.first().locator('[data-cycle="' + k + '"]')).toHaveAttribute('data-vis', vis);
+    expect(await orders()).toEqual(before);
+  }
+});
+
+test('on a phone a legend tap keeps the page where it is: the tapped name stays under the finger', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  const charts = page.locator('.headline-v2 svg.v2chart');
+  expect(await charts.count()).toBeGreaterThan(1);
+  const last = charts.nth((await charts.count()) - 1);           // a chart far below the first one
+  const item = last.locator('[data-cycle]').nth(2), k = await item.getAttribute('data-cycle');
+  await item.scrollIntoViewIfNeeded();
+  const y0 = (await item.boundingBox()).y, s0 = await page.evaluate(() => window.scrollY);
+  expect(s0).toBeGreaterThan(400);
+  await item.click();
+  const again = last.locator('[data-cycle="' + k + '"]');
+  await expect(again).toHaveAttribute('data-vis', /.+/);
+  expect(Math.abs((await again.boundingBox()).y - y0)).toBeLessThan(2);
+  expect(await page.evaluate(() => document.activeElement && document.activeElement.closest('svg') === [...document.querySelectorAll('.headline-v2 svg.v2chart')].pop())).toBe(true);
+});
+
+test('in the explorer a box cycles its method: shown, hidden, faded; the faded opacity is set beside them', async ({ page }) => {
+  await page.goto('/explorer.html?release=2026-09&v=curves&p=rung~numeric_recovery_val');
+  const box = (k) => page.locator(V2 + ' .v2methods input[type=checkbox][data-m="' + k + '"]');
+  const dash = (k) => box(k).evaluate((el) => el.indeterminate);
+  const m = () => new URL(page.url()).searchParams.get('m').split(',');
+  await expect(box('T8-120M')).toBeChecked();
+  expect(await dash('e2e')).toBe(true);
+  expect(m()).toContain('~e2e');
+  for (const k of ['T8-3M', 'T8-20M']) {   // hidden by default: unchecked, not in the link
+    await expect(box(k)).not.toBeChecked(); expect(await dash(k)).toBe(false); expect(m()).not.toContain(k); expect(m()).not.toContain('~' + k);
+  }
+  await box('T8-120M').click();
+  await expect(box('T8-120M')).not.toBeChecked(); expect(await dash('T8-120M')).toBe(false); expect(m()).not.toContain('T8-120M');
+  await box('T8-120M').click();
+  expect(await dash('T8-120M')).toBe(true); expect(m()).toContain('~T8-120M');
+  await box('T8-120M').click();
+  await expect(box('T8-120M')).toBeChecked(); expect(m()).toContain('T8-120M');
+  const keyStroke = (label) => page.locator(V2 + ' .v2main svg.v2chart').first().evaluate((svg, lab) => {
+    const t = [...svg.querySelectorAll('text.leg')].find((x) => x.textContent === lab); return t && t.previousElementSibling.getAttribute('stroke'); }, label);
+  expect(await keyStroke('E2E 93M')).toMatch(/ 20%, var\(--surface\)\)$/);
+  await expect(page.locator(V2 + ' .v2meth:has(input[data-m="e2e"])')).toHaveClass(/v2faded/);   // the row itself is lighter
+  await page.locator(V2 + ' .v2fade').evaluate((el) => { el.value = '0.6'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+  await expect.poll(() => keyStroke('E2E 93M')).toMatch(/ 60%, var\(--surface\)\)$/);
+  expect(new URL(page.url()).searchParams.get('fa')).toBe('0.6');
+  // the explorer's setting leaves the headline alone
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto('/');
+  expect(await page.locator('.headline-v2 svg.v2chart').first().locator('[data-cycle="e2e"] line').getAttribute('stroke')).toMatch(/ 20%, var\(--surface\)\)$/);
+});
+
+test('a link carries shown and faded methods', async ({ page }) => {
+  await page.goto('/explorer.html?release=2026-09&v=curves&m=T8-120M,~e2e');
+  await expect(page.locator(V2 + ' .v2methods input[type=checkbox][data-m="T8-120M"]')).toBeChecked();
+  expect(await page.locator(V2 + ' .v2methods input[type=checkbox][data-m="e2e"]').evaluate((el) => el.indeterminate)).toBe(true);
+  await expect(page.locator(V2 + ' .v2methods input[type=checkbox][data-m="PySR"]')).not.toBeChecked();
+});
+
 // ---- Ranks ---------------------------------------------------------------------------------------------------------
 test('the ranks view places the methods, names what it ranks on and how it holds them equal', async ({ page }) => {
   const errors = collectErrors(page);
@@ -784,28 +1192,30 @@ test('ranks follow the selection: another metric, fewer methods, fewer catalogs'
   // only metrics that can be ranked are offered, and an exploratory one says so
   await page.locator(V2 + ' .v2viewbar .v2pick').click();
   const offered = await page.locator('.v2picker .v2pickitem').count();
-  expect(offered).toBe(await page.evaluate(() => window.RESULTS_V2_RANKS['2026-09'].keys.length));
+  expect(offered).toBe(await page.evaluate(() => window.RESULTS_V2.rank_keys.length));
   await page.locator('.v2picker .v2pickitem[data-k="mdl_ratio"]').click();
   await expect(page.locator(V2 + ' .v2view svg.v2rankchart')).toHaveAttribute('aria-label', /MDL Ratio/);
   await expect(page.locator(V2 + ' .v2viewbar .v2tag-primary')).toHaveCount(0);
   expect(page.url()).toContain('rm=mdl_ratio');
 });
 
-test('ranks hold the methods equal on reference-machine time when it exists', async ({ page }) => {
-  await page.goto('/explorer.html?release=2026-09&v=ranks&x=time');
+test('ranks read every method at the same time per problem on the reference machine when it exists', async ({ page }) => {
+  await page.goto('/explorer.html?release=2026-09&v=ranks&pm=time&pt=10');
   if (!(await hasRefTiming(page))) { test.skip(); }
   const chart = page.locator(V2 + ' .v2view svg.v2rankchart');
-  await expect(chart).toBeVisible({ timeout: 15000 });
-  await expect(chart).toHaveAttribute('aria-label', /s per problem/);
-  await expect(page.locator(V2 + ' .v2viewbar select[data-state="tbudget"]')).toBeVisible();
-  await expect(page.locator(V2 + ' .v2viewbar select[data-state="rung"]')).toHaveCount(0);
-  // every ranked method's budget was timed within the limit
-  const limit = await page.locator(V2 + ' .v2viewbar select[data-state="tbudget"]').evaluate((s) => parseFloat(s.options[s.selectedIndex].text));
-  const secs = await page.locator(V2 + ' .v2ranktable tbody tr td:nth-child(2) .v2ci-txt').allTextContents();
-  expect(secs.length).toBeGreaterThanOrEqual(2);
-  for (const t of secs) { expect(parseFloat(t)).toBeLessThanOrEqual(limit); }
-  await page.locator(V2 + ' .v2viewbar button[data-set="xaxis:rung"]').click();
-  await expect(chart).toHaveAttribute('aria-label', /budget \d+/);
+  await expect(chart).toBeVisible({ timeout: 20000 });
+  await expect(chart).toHaveAttribute('aria-label', /10 s per problem/);
+  await expect(page.locator(V2 + ' .v2viewbar .v2posunit')).toHaveText('s');
+  // every ranked method sits at 10 s: at a budget timed at 10 s, or between two whose times bracket it
+  const cells = await page.locator(V2 + ' .v2ranktable tbody tr td:nth-child(2)').evaluateAll((tds) => tds.map((td) => [...td.querySelectorAll('.v2ci-txt')].map((e) => parseFloat(e.textContent))));
+  expect(cells.length).toBeGreaterThanOrEqual(2);
+  for (const t of cells) {
+    if (t.length === 1) { expect(t[0]).toBeCloseTo(10, 0); } else { expect(t.length).toBe(2); expect(Math.min(t[0], t[1])).toBeLessThanOrEqual(10); expect(Math.max(t[0], t[1])).toBeGreaterThanOrEqual(10); }
+  }
+  await expect(page.locator(V2 + ' .v2view h3.v2h').last()).toHaveText('By time');   // the chart along the times
+  await page.locator(V2 + ' .v2viewbar button[data-set="pm:budget"]').click();
+  await expect(chart).toHaveAttribute('aria-label', /budget [\d,]+/);
+  await expect(page.locator(V2 + ' .v2view h3.v2h').last()).toHaveText('By budget');
 });
 
 test('a pooled number appears only where a method has finished every selected catalog', async ({ page }) => {
@@ -840,61 +1250,55 @@ test('a pooled number appears only where a method has finished every selected ca
   await page.goto('/explorer.html?release=2026-09&v=ranks&x=rung&r=16&c=all');
   await expect(page.locator(V2 + ' .v2ranktable')).toBeVisible({ timeout: 15000 });
   await expect(page.locator(V2 + ' .v2ranktable')).not.toContainText('Fixture just begun');
-  await expect(page.locator(V2 + ' .v2view')).toContainText(/Fixture just begun (is|are) not ranked: (it has|they have) not finished all selected problem sets/);
+  await expect(page.locator(V2 + ' .v2view')).toContainText(/Fixture just begun is not ranked: (it has not finished all selected problem sets|its values per problem are not published)/);
 });
 
 
-test('a method without outcomes against another sits out of the ranking instead of emptying it', async ({ page }) => {
-  // the release rankings with every outcome between two ranked methods at budget 16 removed: what an overlay sealed
-  // before another method had results looks like
-  await page.route('**/data/2026-09/ranks.js', async (route) => {
+// The chart along the budgets reads the exporter's outcomes at every slot. A method without outcomes against another
+// there (an overlay sealed before the other's results changed) sits out of that point instead of emptying it.
+const PAIR_AT_16 = `var D = window.RESULTS_V2, full = D.methods.map(function (m) { return m.key; }).filter(function (k) { return D.catalogs.every(function (c) { return D.cells[k] && D.cells[k][c.key] && D.cells[k][c.key]['16']; }); });`;
+test('a method without outcomes against another sits out of a point along the budgets instead of emptying it', async ({ page }) => {
+  await page.route('**/data/2026-09/ranks/log10_fvu_val.js', async (route) => {
     const res = await route.fetch();
-    const cut = `;(function () { var R = window.RESULTS_V2_RANKS['2026-09'], D = window.RESULTS_V2;
-      var full = D.methods.map(function (m) { return m.key; }).filter(function (k) { return D.catalogs.every(function (c) { return D.cells[k] && D.cells[k][c.key] && D.cells[k][c.key]['16']; }); });
-      var key = Object.keys(R.pairs).filter(function (p) { var ab = p.split('|'); return full.indexOf(ab[0]) >= 0 && full.indexOf(ab[1]) >= 0; })[0];
-      Object.keys(R.pairs[key]).forEach(function (c) { delete R.pairs[key][c]['16']; });
+    const cut = `;(function () { ${PAIR_AT_16} var R = window.RESULTS_V2_RANKCELLS['2026-09'].log10_fvu_val;
+      var key = Object.keys(R).filter(function (p) { var ab = p.split('|'); return full.indexOf(ab[0]) >= 0 && full.indexOf(ab[1]) >= 0; })[0];
+      Object.keys(R[key]).forEach(function (c) { delete R[key][c]['16']; });
       window.FIXTURE_PAIR = key.split('|'); })();`;
     await route.fulfill({ response: res, body: (await res.text()) + cut });
   });
-  await page.goto('/explorer.html?release=2026-09&v=ranks&x=rung&r=16&c=all');
-  const table = page.locator(V2 + ' .v2ranktable').first();
-  await expect(table).toBeVisible({ timeout: 15000 });
+  await page.goto('/explorer.html?release=2026-09&v=ranks&pm=budget&r=16&c=all');
+  const ladder = page.locator(V2 + ' .v2view svg.v2chart').last();
+  await expect(ladder).toContainText('Comparisons won', { timeout: 20000 });
   const pair = await page.evaluate(() => window.FIXTURE_PAIR.map((k) => window.RESULTS_V2.methods.filter((m) => m.key === k)[0].label));
-  const names = await table.locator('tbody tr td:first-child').allTextContents();
-  const ranked = pair.filter((label) => names.some((n) => n.trim() === label));
-  expect(ranked.length).toBe(1);                                   // one of the two is ranked with everybody else
-  expect(names.length).toBeGreaterThanOrEqual(2);
-  const out = pair.filter((label) => ranked.indexOf(label) < 0)[0];
-  await expect(page.locator(V2 + ' .v2view')).toContainText(out + ' is not ranked: it has no results on the same problems as all other selected methods at budget 16.');
-  const vals = (await table.locator('tbody tr td:nth-child(3)').allTextContents()).map(Number);
-  expect(Math.abs(vals.reduce((a, b) => a + b, 0) - vals.length * (vals.length + 1) / 2)).toBeLessThan(0.02 * vals.length);
+  const text = await ladder.textContent();
+  expect(pair.filter((label) => text.indexOf(label + ' at budget 16: wins') >= 0).length).toBe(1);   // one of the two stays at 16
+  expect(pair.every((label) => text.indexOf(label + ' at budget 32: wins') >= 0)).toBe(true);        // and both elsewhere
+  await expect(page.locator(V2 + ' .v2ranktable tbody tr')).not.toHaveCount(0);                      // the snapshot computes its own
 });
 
-test('outcomes at a time limit that compared another rung than the method sits on now count as missing', async ({ page }) => {
-  await page.route('**/data/2026-09/ranks.js', async (route) => {
+test('outcomes an overlay computed against an older bracket of a release method count as missing', async ({ page }) => {
+  await page.route('**/data/2026-09/results.js', async (route) => {
     const res = await route.fetch();
-    const stale = `;(function () { var R = window.RESULTS_V2_RANKS['2026-09'];
-      var a = Object.keys(R.at).filter(function (k) { return Object.keys(R.at[k]).length > 3; })[0]; R.rungs = R.rungs || {};
-      Object.keys(R.pairs).forEach(function (p) { if (p.split('|').indexOf(a) < 0) { return; } R.rungs[p] = {}; R.budgets.forEach(function (b) { R.rungs[p][b] = [-1, -1]; }); });
-      window.FIXTURE_STALE = a; })();`;
+    const stale = `;(function () { ${PAIR_AT_16} var a = full[0], b = full[1]; D.slots.basis[a] = {}; D.slots.basis[a][b] = { '16': '00000000' };
+      window.FIXTURE_PAIR = [a, b]; })();`;
     await route.fulfill({ response: res, body: (await res.text()) + stale });
   });
-  await page.goto('/explorer.html?release=2026-09&v=ranks&x=time&c=all');
-  if (!(await hasRefTiming(page))) { test.skip(); }
-  const table = page.locator(V2 + ' .v2ranktable').first();
-  await expect(table).toBeVisible({ timeout: 15000 });
-  const label = await page.evaluate(() => window.RESULTS_V2.methods.filter((m) => m.key === window.FIXTURE_STALE)[0].label);
-  const names = (await table.locator('tbody tr td:first-child').allTextContents()).map((n) => n.trim());
-  expect(names).not.toContain(label);
-  expect(names.length).toBeGreaterThanOrEqual(2);
-  await expect(page.locator(V2 + ' .v2view')).toContainText(new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ' is not ranked: it has no results on the same problems as all other selected methods at [\\d.]+ s per problem'));
+  await page.goto('/explorer.html?release=2026-09&v=ranks&pm=budget&r=16&c=all');
+  const ladder = page.locator(V2 + ' .v2view svg.v2chart').last();
+  await expect(ladder).toContainText('Comparisons won', { timeout: 20000 });
+  const pair = await page.evaluate(() => window.FIXTURE_PAIR.map((k) => window.RESULTS_V2.methods.filter((m) => m.key === k)[0].label));
+  const text = await ladder.textContent();
+  expect(pair.filter((label) => text.indexOf(label + ' at budget 16: wins') >= 0).length).toBe(1);
+  expect(pair.every((label) => text.indexOf(label + ' at budget 32: wins') >= 0)).toBe(true);
 });
 
 // ---- design contract (2026-09-20): hints, labels, axes, the pinned column, the header ---------------------------
 test('no hint opens empty, in any display', async ({ page }) => {
+  test.setTimeout(120_000);   // every distinct hint of eight displays is opened one by one
   for (const view of VIEWS) {
     await page.goto(`/explorer.html?release=2026-09&v=${view}&c=all`);
     await expect(page.locator(V2 + ' .v2tab.active')).toHaveAttribute('data-view', view);
+    await expect(page.locator(V2 + ' .v2view')).not.toContainText('Loading', { timeout: 20000 });   // a display still fetching redraws under the clicks
     await page.waitForTimeout(600);
     await page.evaluate(() => document.querySelectorAll('.explorer-v2 details').forEach((d) => { d.open = true; }));   // collapsed sections hold hints too
     // every dotted term and every "?" on screen (the headline, the side panel and the display), each distinct one once
@@ -1392,7 +1796,7 @@ const PIPELINE_WORDS = [/\bcatalogs?\b/i, /\brungs?\b/i, /\bdraws? (\d|per\b|of\
   /\bmu\b/i];
 test('every text of the 2026-09 explorer uses the reader\'s words', async ({ page }) => {
   test.setTimeout(120_000);
-  const urls = ['v=curves&x=time', 'v=curves&x=rung', 'v=table&rows=rungs', 'v=table&rows=cats', 'v=matrix',
+  const urls = ['v=curves&x=time', 'v=curves&x=rung', 'v=table&rows=rungs', 'v=table&rows=cats', 'v=matrix', 'v=matrix&r=1448', 'v=table&rows=cats&r=1448', 'v=dist&pm=time&pt=2', 'v=matrix&pm=time&pt=0.5',
     'v=dist&dm=log10_fvu_val&dv=hist', 'v=dist&dm=log10_fvu_val&dv=ecdf', 'v=dist&dm=log10_fvu_val&dv=cats',
     'v=dist&dm=log10_fvu_val&dv=rungs', 'v=dist&dm=numeric_recovery_val&dv=cats', 'v=ranks&x=rung&r=16', 'v=ranks&x=time', 'v=paired', 'v=preds'];
   const found = [];
@@ -1443,7 +1847,7 @@ test('the predictions view shows one problem: its true formula, and one row per 
   await expect(page.locator(V2 + ' .v2predtruth .katex')).toHaveCount(1);                  // the true formula, typeset
   await expect(rows.nth(0).locator('td.v2predf .katex')).toHaveCount(1);                   // the method's formula, typeset
   await expect(rows.nth(0).locator('.v2predmark')).toHaveText(['numeric', 'structure']);
-  await expect(rows.nth(1)).toContainText(/not finished yet|not run at budget 16/);         // a method without this run says so
+  await expect(rows.nth(1)).toContainText(/not finished|not published in this release/);  // a method without this run says so
   await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="next problem"]').click();
   await expect(rows.nth(0).locator('td.v2predf')).toHaveText('no usable formula');
   expect(page.url()).toContain('pn=2');
@@ -1456,6 +1860,47 @@ test('the predictions view shows one problem: its true formula, and one row per 
   expect(errors).toEqual([]);
 });
 
+test('a power of a power is typeset with its brackets, never as a KaTeX error', async ({ page }) => {
+  const wrap = (key, obj) => `window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"][${JSON.stringify(key)}]=${JSON.stringify(obj)};})();`;
+  const truth = { 0: '* x1 x2' }, preds = { 0: ['* 0.3989 pow pow 0.6065 x1 x1', 0] };
+  await page.route('**/data/2026-09/results.js', async (route) => {
+    const res = await route.fetch();
+    await route.fulfill({ response: res, body: (await res.text()) + ';(function(){var D=window.RESULTS_V2;D.pred={"T8-20M":{"feynman|16":[1]}};D.pred_block=500;})();' });
+  });
+  await page.route('**/pred/truth/feynman.0.js', (route) => route.fulfill({ contentType: 'text/javascript', body: wrap('truth|feynman|0', truth) }));
+  await page.route('**/pred/T8-20M/feynman/16.1.0.js', (route) => route.fulfill({ contentType: 'text/javascript', body: wrap('T8-20M|feynman|16|1|0', preds) }));
+  await page.goto('/explorer.html?release=2026-09&v=preds&ps=feynman&pm=budget&r=16&pr=1&pn=1&m=T8-20M');
+  const f = page.locator(V2 + ' .v2predtable tbody tr td.v2predf').first();
+  await expect(f.locator('.katex')).toHaveCount(1, { timeout: 15000 });
+  await expect(page.locator(V2 + ' .katex-error')).toHaveCount(0);
+});
+
+test('the true formula comes with its simplified form: different, the same, or none', async ({ page }) => {
+  const errors = collectErrors(page);
+  const wrap = (key, obj) => `window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"][${JSON.stringify(key)}]=${JSON.stringify(obj)};})();`;
+  const truth = {}, preds = {};
+  for (let i = 0; i < 100; i++) { truth[String(i)] = ['* x1 x1', 'pow x1 2']; preds[String(i)] = ['+ x1 1.5', 0]; }
+  truth['1'] = ['* x1 x2', '* x1 x2'];   // the canonical form is the stated one
+  truth['2'] = ['bad', null];            // the engine cannot read it
+  await page.route('**/data/2026-09/results.js', async (route) => {
+    const res = await route.fetch();
+    await route.fulfill({ response: res, body: (await res.text()) + ';(function(){var D=window.RESULTS_V2;D.pred={"T8-20M":{"feynman|16":[1]}};D.pred_block=500;})();' });
+  });
+  await page.route('**/pred/truth/feynman.0.js', (route) => route.fulfill({ contentType: 'text/javascript', body: wrap('truth|feynman|0', truth) }));
+  await page.route('**/pred/T8-20M/feynman/16.1.0.js', (route) => route.fulfill({ contentType: 'text/javascript', body: wrap('T8-20M|feynman|16|1|0', preds) }));
+  await page.goto('/explorer.html?release=2026-09&v=preds&ps=feynman&r=16&pr=1&pn=1&m=T8-20M');
+  const canon = page.locator(V2 + ' .v2predcanon');
+  await expect(canon.locator('.katex')).toHaveCount(1, { timeout: 15000 });               // x1*x1 -> x1^2, typeset
+  await expect(canon.locator('.v2help')).toHaveCount(1);                                  // what the form is, one ? away
+  expect(await canon.textContent()).not.toMatch(/\bcanon\b|canonical form/i);           // the reader's words, help included
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="next problem"]').click();
+  await expect(canon).toContainText('the same as stated');
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="next problem"]').click();
+  await expect(canon).toContainText('none: the engine cannot read this formula');
+  await expect(page.locator(V2 + ' .v2predtruth').first()).toContainText('bad');               // the stated formula is still shown
+  expect(errors).toEqual([]);
+});
+
 test('without published formulas the predictions view says so', async ({ page }) => {
   await page.route('**/data/2026-09/results.js', async (route) => {
     const res = await route.fetch();
@@ -1464,3 +1909,94 @@ test('without published formulas the predictions view says so', async ({ page })
   await page.goto('/explorer.html?release=2026-09&v=preds');
   await expect(page.locator(V2 + ' .v2view')).toContainText('The formulas are not published in this release yet.');
 });
+
+// ---- Correlations: two metrics problem by problem, from every problem's values (pp/) ------------------------------
+const CORR = '/explorer.html?release=2026-09&v=corr&m=T8-120M,T8-120M-pysr,PySR&c=all';
+// the largest budget at which T8-120M has finished every run of feynman: a single problem set weighs its problems equally
+async function feynmanRung(page) {
+  await page.goto('/explorer.html');
+  return page.evaluate(() => Math.max(...Object.keys(window.RESULTS_V2.pp['T8-120M']).filter((k) => k.startsWith('feynman|')).map((k) => +k.split('|')[1])));
+}
+
+test('every display of the Correlations view draws from a link, keeps it in the link and stays inside the page', async ({ page }) => {
+  const errors = collectErrors(page);
+  for (const [cv, sel] of [['contour', 'svg.v2corr path'], ['heat', 'svg.v2corr image'], ['points', 'svg.v2cpoints image'], ['trend', 'svg.v2corr circle'], ['matrix', 'svg.v2cmatrix .v2ccell'], ['vs', 'svg.v2corr image']]) {
+    await page.goto(`${CORR}&cv=${cv}&cx=mdl_ratio&cy=log10_fvu_val`);
+    await expect(page.locator(V2 + ' .v2tab.active')).toHaveAttribute('data-view', 'corr');
+    await expect(page.locator(V2 + ' ' + sel).first(), cv).toBeAttached({ timeout: 15000 });
+    expect(new URL(page.url()).searchParams.get('cv'), cv).toBe(cv);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow, cv).toBeLessThanOrEqual(0);
+  }
+  expect(errors).toEqual([]);
+});
+
+test('a value at its metric\'s bound sits in a strip, and the strip holds exactly those runs', async ({ page }) => {
+  const r = await feynmanRung(page);
+  await page.goto(`/explorer.html?release=2026-09&v=corr&cv=contour&cx=log10_fvu_val&cy=log10_fvu_val&m=T8-120M&c=feynman&x=rung&r=${r}`);
+  const table = page.locator(V2 + ' table.v2ctable');
+  await expect(table).toBeVisible({ timeout: 15000 });
+  const heads = await table.locator('thead th').allTextContents(), cells = await table.locator('tbody tr').first().locator('td').allTextContents();
+  const col = heads.findIndex((h) => /log10 FVU Val = -15\.65/.test(h));
+  expect(col, heads.join(' | ')).toBeGreaterThan(0);
+  // the same share counted straight from the files the page loaded, on the exporter's grid: an exact fit is log10 of
+  // the float64 epsilon, and it has its byte to itself
+  const expected = await page.evaluate((rung) => {
+    const D = window.RESULTS_V2, sp = D.metrics.find((m) => m.key === 'log10_fvu_val').pp, floor = Math.log10(Math.pow(2, -52));
+    const code = Math.round((floor - sp.lo) / (sp.hi - sp.lo) * 252), draws = D.pp['T8-120M']['feynman|' + rung], P = window.RESULTS_V2_PP['2026-09'];
+    let hit = 0, all = 0;
+    for (const d of draws) { const b = atob(P[`T8-120M|feynman|${rung}|${d}`].v.log10_fvu_val); for (let i = 0; i < b.length; i++) { all += 1 / draws.length; if (b.charCodeAt(i) === code) { hit += 1 / draws.length; } } }
+    return 100 * hit / all;
+  }, r);
+  expect(expected).toBeGreaterThan(5);   // feynman has exact fits at this budget: the comparison is not vacuous
+  expect(Math.abs(parseFloat(cells[col]) - expected)).toBeLessThan(0.051);
+});
+
+test('a run picked in the points display shows its formulas and opens in Predictions', async ({ page }) => {
+  const r = await feynmanRung(page);
+  await page.goto(`/explorer.html?release=2026-09&v=corr&cv=points&cx=mdl_ratio&cy=log10_fvu_val&m=T8-120M&c=feynman&x=rung&r=${r}`);
+  const svg = page.locator(V2 + ' svg.v2cpoints');
+  await expect(svg).toBeVisible({ timeout: 15000 });
+  // the strip of exact fits along the bottom is the widest strip and dense with runs: a tap along it lands on one
+  await svg.scrollIntoViewIfNeeded();
+  const strips = await svg.locator('rect.v2cstrip').evaluateAll((rs) => rs.map((e) => { const b = e.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height }; }));
+  const bottom = strips.sort((a, b) => b.w - a.w || b.y - a.y)[0];
+  let found = false;
+  for (let k = 1; k < 40 && !found; k++) {
+    await page.mouse.click(bottom.x + bottom.w * k / 40, bottom.y + bottom.h / 2);
+    found = await page.locator(V2 + ' .v2csel').waitFor({ state: 'visible', timeout: 400 }).then(() => true, () => false);
+  }
+  expect(found).toBe(true);
+  const sel = page.locator(V2 + ' .v2csel');
+  await expect(sel).toContainText('feynman, problem');
+  await expect(sel).toContainText('exactly -15.65');
+  await expect(sel.locator('.v2predtruthf').first()).not.toHaveText('');
+  const n = (await sel.locator('h3').textContent()).match(/problem (\d+), run (\d)/);
+  await sel.locator('[data-act="corr-open"]').click();
+  await expect(page.locator(V2 + ' .v2tab.active')).toHaveAttribute('data-view', 'preds');
+  await expect.poll(() => { const q = new URL(page.url()).searchParams; return [q.get('ps'), q.get('pn'), q.get('pr'), q.get('r')]; }).toEqual(['feynman', n[1], n[2], String(r)]);
+});
+
+test('a cell of the matrix of rank correlations draws its two metrics', async ({ page }) => {
+  await page.goto(`${CORR}&cv=matrix`);
+  const cell = page.locator(V2 + ' .v2ccell').nth(40);
+  await expect(cell).toBeAttached({ timeout: 15000 });
+  const tip = await cell.locator('title').textContent();
+  expect(tip).toMatch(/ρ = -?\d\.\d\d \[-?\d\.\d\d, -?\d\.\d\d\]/);   // every correlation comes with its interval
+  const [cx, cy] = [await cell.getAttribute('data-cx'), await cell.getAttribute('data-cy')];
+  await cell.click();
+  const q = new URL(page.url()).searchParams;
+  expect([q.get('cv'), q.get('cx'), q.get('cy')]).toEqual(['contour', cx, cy]);
+  await expect(page.locator(V2 + ' svg.v2corr').first()).toBeVisible();
+});
+
+test('one metric under two methods: the diagonal, and the problems both solve exactly in the corner', async ({ page }) => {
+  await page.goto(`${CORR}&cv=vs&cy=log10_fvu_val&ca=PySR&cb=T8-120M`);
+  const svg = page.locator(V2 + ' svg.v2corr');
+  await expect(svg).toBeVisible({ timeout: 15000 });
+  await expect(svg.locator('line.zero')).toHaveCount(1);
+  const corners = await svg.locator('rect.v2ccorner title').allTextContents();
+  expect(corners.some((t) => /% of the run pairs in both strips/.test(t))).toBe(true);
+  await expect(page.locator(V2 + ' .v2view')).toContainText('Paired differences');
+});
+

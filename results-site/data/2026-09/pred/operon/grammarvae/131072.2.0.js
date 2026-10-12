@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|grammarvae|131072|2|0"]={"0":["+ -0.002563 * 0.9917 + tanh * -0.1862 x1 - + cos tanh + sin * -5.241 x1 * 0.2299 x1 - + cos cos * -1.865 x1 * 1.005 x1 1.038 + + * -0.07892 x1 0.09669 / -0.2423 tanh tanh + * 105.4 x1 192.8",0]};})();

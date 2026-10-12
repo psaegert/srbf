@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|meier|4096|1|0"]={"0":["/ * x2 * + * x1 x1 -1.579e-07 - x2 -1.285e-07 + + x2 + x1 2.942e-08 * acos tanh sin x1 -1.422e-08",1],"1":["* + x1 * x2 2.05e-06 * * x1 * / + / / x1 x2 x2 / -9.611e-07 x2 x2 x1 + - x1 x2 x2",1]};})();

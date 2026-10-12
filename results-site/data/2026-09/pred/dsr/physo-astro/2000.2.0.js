@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["dsr|physo-astro|2000|2|0"]={"0":["inv abs * log pow cos - * x1 0.6504 + x1 0.5967 4 abs x1",0],"1":["* + 4.205 log x1 / neg / x1 0.5394 inv - neg / 0.4792 x1 x1",0]};})();

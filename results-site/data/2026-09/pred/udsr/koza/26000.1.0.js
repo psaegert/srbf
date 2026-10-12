@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["udsr|koza|26000|1|0"]={"0":["/ inv / log sin 1 + 0.1726 * -0.1726 pow x1 2 / inv x1 - pow x1 2 1",1],"1":["abs * 1 rootn pow + - * 1 1 1 - pow * x1 1 3 x1 4 2",1]};})();

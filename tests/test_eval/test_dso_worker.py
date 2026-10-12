@@ -473,3 +473,34 @@ def test_numba_functions_are_cached_on_disk_and_not_compiled_here(tmp_path, monk
     monkeypatch.setitem(sys.modules, module.__name__, module)
     assert w._cache_numba(str(tmp_path)) == str(tmp_path)
     assert type(twice._cache).__name__ != "NullCache" and not twice.signatures   # cached from now on, nothing compiled
+
+
+def test_a_search_that_raises_still_stops_its_pools_and_closes_its_session(fake_dso, monkeypatch):
+    """DSO can raise inside its search on some problems. The pool the fit opened must not outlive it: one left behind per
+    failed problem piles up, and its children keep the worker's socket open if the worker dies."""
+    calls = []
+
+    class Pool:
+        def terminate(self):
+            calls.append("terminate")
+
+        def join(self):
+            calls.append("join")
+
+    X, y = _data()
+    state = w.load({"arm": "udsr", "n_samples": 26000, "seed": 1})   # the warm-up runs before the search is broken
+    setup = Optimizer.setup
+
+    def setup_with_a_pool(self):
+        setup(self)
+        self.pool = Pool()
+
+    def raises(self):
+        raise AttributeError("'NoneType' object has no attribute 'evaluate'")
+
+    monkeypatch.setattr(Optimizer, "setup", setup_with_a_pool)
+    monkeypatch.setattr(Optimizer, "train_one_step", raises)
+    with pytest.raises(AttributeError):
+        w.fit(X, y, x_val=[], variables=["v1", "v2"], meta={}, options={}, state=state)
+    assert calls == ["terminate", "join"]
+    assert Optimizer.instances[-1].sess.closed and Program.cache == {}

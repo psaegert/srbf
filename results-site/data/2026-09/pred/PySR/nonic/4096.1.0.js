@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|nonic|4096|1|0"]={"0":["sinh + * - asinh atan * sin * asinh + sinh * x1 -0.8588 -0.9223 + x1 -1.531 + x1 -0.8575 -1.196 sinh + x1 0.6654 -0.3998",0]};})();
