@@ -149,7 +149,7 @@ complete config and the job array that runs it.
 | `worker_log` | none | a file that receives everything the worker prints |
 | `startup_timeout` | `600` | seconds the worker may take to start and run `load` |
 | `timeout` | none | seconds one `fit` may take. When it passes, the worker is stopped, the problem is recorded as an error and a new worker is started |
-| `max_restarts` | `1` | how many crashes or timeouts a run survives. After that every remaining problem is recorded as an error |
+| `max_restarts` | `1` | how many crashes or timeouts in a row a run survives; the count starts over whenever the worker answers a problem. After that every remaining problem is recorded as an error, without being tried |
 | `selection` | none | how to pick one of a worker's `candidates`. `{mode: mdl}` takes the shortest two-part code, the rule Flash-ANSR ranks its own candidates by (below) |
 
 **Picking among candidates.** With `selection: {mode: mdl}`, srbf evaluates every candidate as the

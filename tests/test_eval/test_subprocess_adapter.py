@@ -229,13 +229,26 @@ class TestFailureHandling:
             first = adapter.evaluate_sample(_sample(eq_id="slow")).to_mapping()
             assert first["prediction_success"] is False and first["error"].startswith("WorkerTimeout")
             assert adapter._restarts == 1 and adapter._process is not None        # restarted once
-            ok = adapter.evaluate_sample(_sample(eq_id="fine")).to_mapping()
-            assert ok["prediction_success"] is True
             second = adapter.evaluate_sample(_sample(eq_id="slow")).to_mapping()
             assert second["prediction_success"] is False
-            assert adapter._process is None                                        # budget exhausted
+            assert adapter._process is None                                        # two in a row: budget exhausted
             dead = adapter.evaluate_sample(_sample(eq_id="fine")).to_mapping()
             assert dead["prediction_success"] is False and dead["error"].startswith("worker unavailable")
+        finally:
+            adapter.close()
+
+    def test_failures_apart_do_not_exhaust_the_budget(self, engine, tmp_path) -> None:
+        """The budget counts failures in a row. A worker that times out on two problems of a catalog, with answered
+        problems between them, still tries every later problem (uDSR*, 2026-10-01: two 2-h timeouts in soose-fc left
+        100 of its 200 problems unattempted and recorded as failures)."""
+        adapter = SubprocessAdapter(worker=_write_worker(tmp_path, self.WORKER), simplipy_engine=engine,
+                                    timeout=0.5, max_restarts=1, drop_unused_variables=False)
+        adapter.prepare()
+        try:
+            outcomes = [adapter.evaluate_sample(_sample(eq_id=eq_id)).to_mapping()["prediction_success"]
+                        for eq_id in ("slow", "fine", "slow", "fine")]
+            assert outcomes == [False, True, False, True]          # the second timeout did not end the run
+            assert adapter._restarts == 0 and adapter._process is not None
         finally:
             adapter.close()
 
