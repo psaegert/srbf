@@ -10,15 +10,27 @@ Reads the per-problem judged rows of a campaign root (rows_full_<name>.csv or <n
                                  worst-value metric were filled in for failed predictions; status; timing.
   <out dir>/hist/<metric>.js     per-metric histograms of the same cells (pooled medians and the distribution view),
                                  loaded by the page on demand.
-  <out dir>/paired.js            paired contrasts (a problem with itself within a draw, over the draws complete on both
-                                 sides) per method pair x catalog x rung: 2x2 tables for the rate
-                                 metrics (exact McNemar on the client), [n, sum d, sum d^2, better, worse] for the
-                                 continuous ones; a worst-value metric also as "<key>@answered", over the problems both
-                                 methods have a prediction for.
+  <out dir>/pp/<method>/...      every problem's value of every continuous metric, one byte each, per method x catalog x
+                                 rung x finished run (the Correlation view; write_values), and pp/truth/ the ground
+                                 truth's properties per catalog.
+  <out dir>/pv/<method>/<rung>/   what paired_cell_at and rank_pair_cell_at read of every problem, exactly: a frame and
+                                 one file per key, per method x budget over the problem sets it has finished there
+                                 (write_pair_values), for the page to compute both at any budget or time
+                                 (results-site/pairstats.js).
+  <out dir>/ranks/<key>.js       per method pair x catalog x slot, [n, sum, sum of squares] of the first method's
+                                 per-problem superiority on one rank key (the Ranks view);
+  <out dir>/paired/<key>.js      per method pair x catalog x slot, one paired key's contrast (the Paired view): for a
+                                 rate [n, sum d, sum d^2, better, worse], for a continuous metric the differences and
+                                 the superiority; a worst-value metric also as "<key>@answered", over the problems
+                                 both methods have a prediction for. A slot is a position, a budget or a time per
+                                 problem, every method bracketed over its complete budgets (slot_cells; results.js
+                                 "slots" says where each method sits).
 
 LOCAL-ONLY METHODS. The methods named in --public go into the release files the site ships. A method named in
 --private is written to --private-dir only, a directory outside the deployed tree (results-site/README.md,
-"Local-only methods"), with the same schema; the page merges it when a local build loads it. Such a method is
+"Local-only methods"), with the same schema; the page merges it when a local build loads it. Its per-problem files
+go there too (pp/<method>/, pred/<method>/; the ground truth's are the release's, public already), indexed in the overlay
+as "pp" and "pred" like the release's; results-site/tools/seal.mjs seals them one file at a time. Such a method is
 described in --methods-file, a JSON list of entries shaped like METHODS below, kept outside the repository.
 
 usage: site_export_v2.py <root> <release id> <out.js> [--title ...] [--notes ...] [--sizes catalog_mu.json]
@@ -32,8 +44,9 @@ import math
 import os
 import shutil
 import sys
+from array import array
 from collections import defaultdict
-from typing import Any, Mapping
+from typing import Any, Mapping, NamedTuple
 import numpy as np
 
 # ---- registries -------------------------------------------------------------------------------------------------
@@ -62,10 +75,10 @@ METHODS = [
     ("gpgomea", "GP-GOMEA", "evaluations", "#11aaff", "baseline", "author_blessed", "gpgomea",
      "GP-GOMEA evolves a population of formulas and learns which of their parts belong together, so that it recombines "
      "them as whole units. It returns its best formula, with an intercept and a slope fitted by least squares."),
-    ("dsr", "DSR", "samples", "#885577", "baseline", "upstream_default", "dsr",
+    ("dsr", "DSR", "batches", "#885577", "baseline", "upstream_default", "dsr",
      "Deep Symbolic Regression: a neural network learns on the problem itself, by trial and error, to write formulas that "
      "fit better. It returns the formula that fits the given points best among all it wrote."),
-    ("udsr", "uDSR*", "samples", "#cc22aa", "baseline", "author_blessed", "udsr",
+    ("udsr", "uDSR*", "dso iterations", "#cc22aa", "baseline", "author_blessed", "udsr",
      "Unified Deep Symbolic Regression as publicly released: DSR combined with an evolutionary search and polynomial "
      "fitting. It returns the formula that fits the given points best among all it tried. The asterisk: the paper's "
      "version also uses a pre-trained network and a step from AI Feynman, which were never released."),
@@ -156,7 +169,10 @@ FLASH_ANSR_SELECTION = ("A neural network generates candidate formulas from the 
 # How each budget unit reads next to the method's name.
 PARAM_LABEL = {"candidates per bag": "budget: candidate formulas", "beam width": "budget: beam width",
                "iterations": "budget: search iterations", "draws": "budget: candidate formulas",
-               "restarts": "budget: fitting attempts"}
+               "restarts": "budget: fitting attempts",
+               # DSO counts its budget in expressions and stops only after whole iterations: the ladders double those
+               "batches": "budget: formulas tried, in batches of 1,000",
+               "dso iterations": "budget: formulas tried, in iterations of 13,000"}
 E2E_DEFAULT_MAX_RUNG = 256   # E2E is reported at its default settings only
 # Where a method's ladder ends. Every method's budgets double up to about LADDER_TOP_S seconds per problem on the
 # reference machine, where the time axis ends; the ladder has reached its end at the doubling nearest that on a log
@@ -165,8 +181,13 @@ E2E_DEFAULT_MAX_RUNG = 256   # E2E is reported at its default settings only
 # method stays in progress even when every run planned so far is in.
 LADDER_TOP_S = 1000.0
 LADDER_END = {"e2e": "E2E runs at its default settings, which allow at most 256 candidates per bag."}
+# A budget that ran out of memory on the reference machine is a DNF, and the last budget below it is the method's last
+# achievable one (owner 2026-10-07). The timing queue records the first such budget per method; the board copies it to
+# <root>/dnf.json ({method: {"rung": budget, ...}}), and main() fills DNF from it: that budget and every larger one are
+# not published, Helix's results for them included, and the ladder ends there with the reason.
+DNF: dict[str, int] = {}
 # Budgets taken out of a method's plan on purpose; they no longer count as open runs.
-PLAN_DROPPED = {"T8-3M": {65536}, "T8-20M": {65536}, "T8-120M": {65536}}   # stopped; larger budgets come with a later model
+PLAN_DROPPED = {"T8-20M": {65536}, "T8-120M": {65536}}   # stopped; larger budgets come with a later model (T8-3M's 65,536 is being finished, 2026-10-07)
 CATALOG_GROUPS = {
     "physics": ["fastsrb", "feynman", "feynman-bonus", "srsd-dummy", "erbench-phybench", "erbench-densities", "physo-astro", "physo-class"],
     "classical": ["nguyen", "keijzer", "korns", "koza", "livermore", "livermore2", "vladislavleva", "jin", "neat", "pagie", "poly", "nonic", "sine", "meier", "r-rationals", "constant", "grammarvae"],
@@ -256,7 +277,7 @@ METRICS = [
     ("n_constants", "Constant Count of the Ground Truth", "GT Constants", "Expression Properties", "cont", None, "more", "num1", (0.0, 32.0, None),
      "How many constants the true formula has."),
     ("predicted_total_nestedness", "Function Nesting of the Prediction", "Prediction Nesting", "Expression Properties", "cont", False, "more", "num1", (0.0, 16.0, None),
-     "How deeply functions sit directly inside each other in the predicted formula: sin(x) counts 0, sin(log(x)) counts 1, sin(log(exp(x))) counts 2, and separate chains add up."),
+     "How deeply functions sit inside each other in the predicted formula: the most functions on any path from the outside to a variable. sin(x) counts 1, sin(log(x)) 2, sin(x) + log(x) 1 and sin(x + log(y)) 2."),
     ("total_nestedness", "Function Nesting of the Ground Truth", "GT Nesting", "Expression Properties", "cont", None, "more", "num1", (0.0, 16.0, None),
      "The same for the true formula."),
     ("n_variables", "Variable Count of the Ground Truth", "GT Variables", "Expression Properties", "cont", None, "more", "num1", (0.0, 16.0, None),
@@ -264,8 +285,10 @@ METRICS = [
     # ---- what the method reports about its own choice ----
     ("predicted_log_prob", "Log-Probability of the Prediction", "Log-Prob", "Method Internals", "cont", True, "more", "num1", (-64.0, 0.0, None),
      "How probable the chosen formula was under the Flash-ANSR model itself, given the data: the logarithm of the probability of its sequence of symbols. Longer formulas have lower values. Only the Flash-ANSR models report it."),
-    ("predicted_score", "Selection Score", "Score", "Method Internals", "cont", False, "more", "num1", (-2048.0, 512.0, None),
-     "The score by which Flash-ANSR chose its formula: the error-plus-length score described under its name, in bits; lower is better. Only the Flash-ANSR entries report it."),
+    # flash-ansr stores its two-part code divided by (n/2) log2 10 (scoring.two_part_strength): the order of the code, on the
+    # scale of log10 FVU -- checked on 91,524 T8-120M rows, (score - log10 FVU) / bits = 2 / (512 log2 10) to every digit
+    ("predicted_score", "Selection Score", "Score", "Method Internals", "cont", False, "more", "num2", (-17.0, 3.0, None),
+     "The score by which Flash-ANSR chose its formula, on the scale of log10 FVU: its two-part code, (n/2) log2 FVU plus the formula's length in bits, divided by (n/2) log2 10. That is the formula's log10 FVU on the n given points plus 2 / (n log2 10) per bit of its length, about 0.0012 per bit at 512 points, so an exact fit 80 bits long scores about -15.56. Lower is better. Only the Flash-ANSR entries report it."),
     ("predicted_pareto_rank", "Pareto Rank of the Prediction", "Pareto Rank", "Method Internals", "cont", False, "more", "num1", (0.0, 64.0, None),
      "Where the chosen formula stands among Flash-ANSR's candidates when they are compared by error and length together. 0 means no other candidate is both more accurate and shorter. 1 means that holds once the candidates at 0 are set aside, and so on. Only the Flash-ANSR entries report it.")]
 # A metric that repeats another in EVERY published cell says nothing of its own, so the menu does not list it (its
@@ -295,12 +318,24 @@ UNBOUNDED_WORST = {"log10_fvu_val": math.inf, "log10_fvu_fit": math.inf, "r2_val
 # FVU is read no lower than log10(2^-23), and an R^2 no higher than 1 - 2^-23. {key: (floor, higher is better)}
 RECOVERY_FLOOR = {"log10_fvu_val": (math.log10(2.0 ** -23), False), "log10_fvu_fit": (math.log10(2.0 ** -23), False),
                   "r2_val": (1.0 - 2.0 ** -23, True), "r2_fit": (1.0 - 2.0 ** -23, True)}
+# A value a method writes where it did not compute the metric: a placeholder, read as no value. Flash-ANSR ranks by a
+# single score unless told to rank by Pareto fronts, and then writes -1 for the front (flash_ansr.scoring.
+# PARETO_RANK_NOT_COMPUTED; srbf passes it through: "-1 unless ranked by pareto").
+NOT_COMPUTED = {"predicted_pareto_rank": -1.0}
 ANSWERED = "@answered"   # suffix of a paired contrast taken over the problems BOTH methods have a prediction for
 COPY_OF = {"numeric_recovery_relative_val": "numeric_recovery_val", "numeric_recovery_relative_fit": "numeric_recovery_fit"}
 
 
 def listed_metrics(cells: dict[str, Any]) -> list[dict[str, Any]]:
-    """The metric registry without the entries that copy another metric in every cell of `cells`."""
+    """The metric registry without the entries that copy another metric in every cell of `cells`, and, once the
+    release has results, without a method's own report on its choice (Method Internals) that no cell holds: no
+    method of the release reports it (a Pareto rank without a Pareto ranking)."""
+    held = [cell.get("m") or {} for per_catalog in cells.values() for per_rung in per_catalog.values() for cell in per_rung.values()]
+    present = {k for m in held for k in m}
+
+    def unreported(entry: dict[str, Any]) -> bool:
+        return bool(held) and entry["group"] == "Method Internals" and entry["key"] not in present
+
     def copies(key: str, of: str) -> bool:
         seen = False
         for per_catalog in cells.values():
@@ -312,7 +347,7 @@ def listed_metrics(cells: dict[str, Any]) -> list[dict[str, Any]]:
                         if m.get(key) != m.get(of):
                             return False
         return seen
-    return [m for m in registry_json() if not (m["key"] in COPY_OF and copies(m["key"], COPY_OF[m["key"]]))]
+    return [m for m in registry_json() if not unreported(m) and not (m["key"] in COPY_OF and copies(m["key"], COPY_OF[m["key"]]))]
 
 
 RATE_KEYS = [m[0] for m in METRICS if m[4] == "rate"]
@@ -343,6 +378,11 @@ RANK_KEYS = ["log10_fvu_val",
 # at 1, a difference at 0.
 IDEAL = {"mdl_ratio": 1.0, "expr_length_ratio": 1.0, "n_constants_ratio": 1.0, "n_constants_delta": 0.0, "total_nestedness_delta": 0.0}
 TIME_BUDGETS = [0.1, 0.3, 1, 3, 10, 30, 100, 300, 1000]
+# The time slots the Ranks and Paired charts are drawn at (ranks/, paired/): a grid dense enough that a method timed over
+# less than a decade still has several points against another -- the R10 preferred numbers, ten per decade, from 0.1 to
+# 1000 s -- and every time limit of TIME_BUDGETS (which stays the list the time controls snap to).
+R10 = ["1", "1.25", "1.6", "2", "2.5", "3.15", "4", "5", "6.3", "8"]
+TIME_SLOTS = sorted({float(f"{m}e{e}") for e in range(-1, 3) for m in R10} | {1000.0} | {float(t) for t in TIME_BUDGETS})
 
 
 def registry_json() -> list[dict[str, Any]]:
@@ -359,6 +399,8 @@ def registry_json() -> list[dict[str, Any]]:
             m["median_via"] = MEDIAN_ONLY[k]
         if k in EVERY_PROBLEM:
             m["every"] = True
+        if kind == "cont" and hist:
+            m["pp"] = pp_spec(k)   # its grid in the per-problem files (the Correlation view)
         out.append(m)
     return out
 
@@ -373,7 +415,55 @@ def fnum(s: str | None) -> float | None:
         return None
 
 
-Rows = dict[tuple[int, int], dict[str, Any]]   # (draw, row) -> {metric: value}
+#: The metrics a row holds, in the order a dict of them would iterate (a rate and a value of the same name: one entry).
+ROW_KEYS = list(dict.fromkeys(RATE_KEYS + CONT_KEYS))
+_ROW_INDEX = {k: i for i, k in enumerate(ROW_KEYS)}
+
+
+class Row(Mapping[str, Any]):
+    """One judged row's metrics, read-only: ``{metric: float | None}`` for every key of ROW_KEYS.
+
+    The values sit in one array of doubles and a bit mask marks the missing ones (None stays None, NaN stays NaN).
+    A dict per row took 1.85 kB, 5.3 GB for the board's 2.85 million rows (2026-10-09), and the machine's memory guard
+    stopped the export; a Row takes about a quarter of that."""
+
+    __slots__ = ("_values", "_missing")
+
+    def __init__(self, values: Mapping[str, float | None]) -> None:
+        self._values = array("d", [0.0]) * len(ROW_KEYS)   # allocated exactly (array("d", bytes(...)) over-allocates)
+        missing = 0
+        for i, k in enumerate(ROW_KEYS):
+            v = values.get(k)
+            if v is None:
+                missing |= 1 << i
+            else:
+                self._values[i] = v
+        self._missing = missing
+
+    def __getitem__(self, key: str) -> float | None:
+        i = _ROW_INDEX[key]
+        return None if self._missing >> i & 1 else self._values[i]
+
+    def get(self, key: str, default: Any = None) -> Any:
+        i = _ROW_INDEX.get(key)
+        if i is None:
+            return default
+        return None if self._missing >> i & 1 else self._values[i]
+
+    def __contains__(self, key: object) -> bool:
+        return key in _ROW_INDEX
+
+    def __iter__(self) -> Any:
+        return iter(ROW_KEYS)
+
+    def __len__(self) -> int:
+        return len(ROW_KEYS)
+
+    def __repr__(self) -> str:
+        return f"Row({dict(self)!r})"
+
+
+Rows = dict[tuple[int, int], Row]   # (draw, row) -> {metric: value}
 
 
 def load_rows(root: str) -> dict[str, dict[tuple[str, int], Rows]]:
@@ -389,8 +479,9 @@ def load_rows(root: str) -> dict[str, dict[tuple[str, int], Rows]]:
                     v = fnum(r.get(k))
                     vals[k] = (0.0 if v is None else v) if k in r else None   # a column these rows do not have is no rate of 0
                 for k in CONT_KEYS:
-                    vals[k] = fnum(r.get(k))
-                data[r["model"]][(r["catalog"], int(r["rung"]))][(int(r.get("draw") or 1), int(r["row"]))] = vals
+                    v = fnum(r.get(k))
+                    vals[k] = None if v is not None and NOT_COMPUTED.get(k) == v else v
+                data[r["model"]][(r["catalog"], int(r["rung"]))][(int(r.get("draw") or 1), int(r["row"]))] = Row(vals)
     return data
 
 
@@ -529,22 +620,197 @@ def write_predictions(out_dir: str, rel: str, pred: Expressions, truth: dict[str
     return dict(index)
 
 
-def by_draw(rows: dict[Any, dict[str, Any]]) -> dict[int, dict[int, dict[str, Any]]]:
+# ---- every problem's values: the Correlation view ----------------------------------------------------------------
+# One file per method x problem set x budget x run, written once that run of the cell is complete (as the formulas
+# are, so a finished file never changes): every problem's value of every continuous metric, one byte each, so the page
+# can set any two metrics against each other problem by problem. A byte is the value's place on a fixed grid over the
+# metric's range, in the space its histogram uses (log2 for a ratio): 0..252 the grid, 253 below the range (-inf
+# included), 254 above it (+inf included), 255 no value. A whole-number metric is exact over lo..lo+252. A value
+# exactly at a bound of its metric -- an exact fit's log10 FVU, an overlap of 0 or 1 -- has the bound's byte to itself:
+# another value that would round onto it moves one step inwards, so the page can tell an exact fit from a near one.
+# The ground truth's own properties (EVERY_PROBLEM) are one file per problem set.
+PP_STEPS, PP_BELOW, PP_ABOVE, PP_NONE = 252, 253, 254, 255
+FVU_FLOOR = math.log10(float(np.finfo(float).eps))   # where srbf's log10 FVU stops: every exact fit sits here
+INTEGER_KEYS = {"n_constants_delta", "total_nestedness_delta", "edit_distance", "zss_edit_distance", "predicted_skeleton_prefix_length",
+                "skeleton_length", "predicted_n_constants", "n_constants", "predicted_total_nestedness", "total_nestedness",
+                "n_variables", "predicted_pareto_rank"}
+# A grid wider than the histogram's where the values of this release reach far beyond it (99th percentiles: E2E's
+# formulas 1,746 bits, MDL ratios to 40 and more).
+PP_RANGE = {"predicted_mdl": (0.0, 2016.0), "ground_truth_mdl": (0.0, 504.0), "mdl_ratio": (-8.0, 8.0),
+            "predicted_log_prob": (-160.0, 0.0)}
+# The bounds a metric's values can reach and pile up at: (lower, upper), None where there is none.
+_UNIT = (0.0, 1.0)
+PP_BOUNDS: dict[str, tuple[float | None, float | None]] = {
+    "log10_fvu_val": (FVU_FLOOR, None), "log10_fvu_fit": (FVU_FLOOR, None), "r2_val": (None, 1.0), "r2_fit": (None, 1.0),
+    "f1_score": _UNIT, "precision_score": _UNIT, "recall_score": _UNIT, "f1_score_unique_variables": _UNIT,
+    "precision_unique_variables": _UNIT, "recall_unique_variables": _UNIT, "edit_distance_norm": _UNIT,
+    "expr_length_ratio_abserr": (0.0, None)}
+PP_PROBLEM_KEYS = [k for k in CONT_KEYS if k in EVERY_PROBLEM]
+PP_RUN_KEYS = [k for k in CONT_KEYS if k not in EVERY_PROBLEM]
+PP_SUCCESS, PP_NUMERIC, PP_SYMBOLIC = 1, 2, 4   # the bits of a run's flag byte
+
+
+def pp_spec(key: str) -> dict[str, Any]:
+    """A metric's grid: lo and hi in its transformed space, whether it is a whole number, and its bounds."""
+    lo, hi, _tf = HIST_SPECS[key]
+    integer = key in INTEGER_KEYS
+    lo, hi = (lo, lo + PP_STEPS) if integer else PP_RANGE.get(key, (lo, hi))
+    b = PP_BOUNDS.get(key, (None, None))
+    return {"lo": lo, "hi": hi, "int": integer, "bounds": [b[0], b[1]]}
+
+
+def pp_code(v: float | None, key: str, spec: dict[str, Any]) -> int:
+    """One value's byte (see above); `v` as the rows hold it, before the metric's transform."""
+    if v is None or (isinstance(v, float) and math.isnan(v)):
+        return PP_NONE
+    lo_b, hi_b = spec["bounds"]
+    if not math.isinf(v):
+        v = transform(v, HIST_SPECS[key][2])
+        if v is None or math.isnan(v):
+            return PP_NONE
+    if math.isinf(v):
+        return PP_BELOW if v < 0 else PP_ABOVE
+    lo, hi = spec["lo"], spec["hi"]
+    if v < lo:
+        return PP_BELOW
+    if v > hi:
+        return PP_ABOVE
+    if spec["int"]:
+        return int(round(v - lo))
+    at = lambda x: int(round((x - lo) / (hi - lo) * PP_STEPS))   # noqa: E731 - the grid's byte for x
+    c = at(v)
+    if lo_b is not None and c == at(lo_b) and v != lo_b:
+        c += 1
+    if hi_b is not None and c == at(hi_b) and v != hi_b:
+        c -= 1
+    return c
+
+
+def pp_codes(vals: np.ndarray, failed: np.ndarray, key: str, spec: dict[str, Any]) -> np.ndarray:
+    """pp_code over a whole column at once (NaN = no value), with pp_run_value's worst value for a failed run of an
+    unbounded metric: the same bytes, value for value (tests/test_site_export_values.py checks it)."""
+    x = np.asarray(vals, dtype=float).copy()
+    if key in UNBOUNDED_WORST:
+        x[np.isnan(x) & failed] = UNBOUNDED_WORST[key]
+    out = np.full(x.shape, PP_NONE, dtype=np.uint8)
+    raw_inf = np.isinf(x)
+    t = x.copy()
+    tf = HIST_SPECS[key][2]
+    if tf in ("log2", "log10"):
+        fin = np.isfinite(x)
+        pos, zero = fin & (x > 0), fin & (x == 0)
+        t[fin] = np.nan
+        t[pos] = np.log2(x[pos]) if tf == "log2" else np.log10(x[pos])
+        t[zero] = -np.inf
+    lo, hi = spec["lo"], spec["hi"]
+    with np.errstate(invalid="ignore"):
+        below, above = (t < lo), (t > hi)
+    out[below] = PP_BELOW
+    out[above] = PP_ABOVE
+    out[raw_inf & (x < 0)] = PP_BELOW
+    out[raw_inf & (x > 0)] = PP_ABOVE
+    grid = np.isfinite(t) & ~below & ~above
+    if spec["int"]:
+        out[grid] = np.round(t[grid] - lo).astype(np.uint8)
+        return out
+    c = np.round((t[grid] - lo) / (hi - lo) * PP_STEPS).astype(np.int64)
+    lo_b, hi_b = spec["bounds"]
+    at = lambda b: int(round((b - lo) / (hi - lo) * PP_STEPS))   # noqa: E731 - the grid's byte for a bound
+    if lo_b is not None:
+        c[(c == at(lo_b)) & (t[grid] != lo_b)] += 1
+    if hi_b is not None:
+        c[(c == at(hi_b)) & (t[grid] != hi_b)] -= 1
+    out[grid] = c.astype(np.uint8)
+    return out
+
+
+def pp_run_value(run: dict[str, Any], key: str) -> float | None:
+    """A run's value as the distributions read it: a failed run of an unbounded metric takes its worst value."""
+    v = run.get(key)
+    if (v is None or (isinstance(v, float) and math.isnan(v))) and key in UNBOUNDED_WORST and not run.get("success"):
+        return UNBOUNDED_WORST[key]
+    return v
+
+
+def pp_bytes(codes: Any) -> str:
+    import base64
+    return base64.b64encode(bytes(codes) if isinstance(codes, list) else np.asarray(codes, dtype=np.uint8).tobytes()).decode("ascii")
+
+
+def pp_flags(run: Mapping[str, Any] | None) -> int:
+    if run is None:
+        return 0
+    return ((PP_SUCCESS if run.get("success") else 0) | (PP_NUMERIC if run.get("numeric_recovery_val") else 0)
+            | (PP_SYMBOLIC if run.get("symbolic_recovery") else 0))
+
+
+def write_values(out_dir: str, rel: str, data: dict[str, dict[tuple[str, int], Rows]], keys: list[str],
+                 sizes: dict[str, int], with_truth: bool = True) -> dict[str, dict[str, list[int]]]:
+    """Write the Correlation view's files next to the release; returns the index the page reads, shaped like the
+    Predictions view's: {method: {"catalog|rung": [the runs whose files exist]}}. A run still in progress is left out.
+    with_truth=False writes the methods' files only: an overlay reads the ground truth's from the release."""
+    def put(path: str, key: str, obj: Any) -> None:
+        text = "window.RESULTS_V2_PP=window.RESULTS_V2_PP||{};(function(){var R=window.RESULTS_V2_PP;R[%s]=R[%s]||{};R[%s][%s]=%s;})();\n" % (
+            json.dumps(rel), json.dumps(rel), json.dumps(rel), json.dumps(key), json.dumps(obj, separators=(",", ":")))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if os.path.exists(path) and open(path).read() == text:
+            return
+        with open(path, "w") as fh:
+            fh.write(text)
+
+    specs = {k: pp_spec(k) for k in CONT_KEYS}
+    index: dict[str, dict[str, list[int]]] = defaultdict(dict)
+    truth: dict[str, dict[int, Mapping[str, Any]]] = defaultdict(dict)   # catalog -> row -> the first run seen
+    for m in keys:
+        for (c, r), rows in sorted(data.get(m, {}).items()):
+            if c not in sizes or not usable(m, r):
+                continue
+            n = sizes[c]
+            for d, rs in sorted(by_draw(rows).items()):
+                for i, run in rs.items():
+                    truth[c].setdefault(i, run)
+                if len(rs) < n:
+                    continue
+                index[m].setdefault(f"{c}|{r}", []).append(d)
+                runs = [rs.get(i) for i in range(n)]
+                obj: dict[str, Any] = {"n": n, "s": pp_bytes([pp_flags(run) for run in runs]), "v": {}}
+                failed = np.asarray([run is not None and not run.get("success") for run in runs])
+                nan = float("nan")
+                for k in PP_RUN_KEYS:
+                    vals = np.asarray([nan if run is None or run.get(k) is None else run[k] for run in runs], dtype=float)
+                    codes = pp_codes(vals, failed, k, specs[k])
+                    if (codes != PP_NONE).any():
+                        obj["v"][k] = pp_bytes(codes)
+                put(os.path.join(out_dir, "pp", m, c, f"{r}.{d}.js"), f"{m}|{c}|{r}|{d}", obj)
+    for c, rows_seen in sorted(truth.items()) if with_truth else []:
+        n = sizes[c]
+        obj = {"n": n, "v": {k: pp_bytes([pp_code(rows_seen[i].get(k), k, specs[k]) if i in rows_seen else PP_NONE for i in range(n)])
+                             for k in PP_PROBLEM_KEYS}}
+        put(os.path.join(out_dir, "pp", "truth", f"{c}.js"), f"truth|{c}", obj)
+    # A method this release no longer holds leaves no files behind (as for the formulas).
+    pp_root = os.path.join(out_dir, "pp")
+    for name in sorted(os.listdir(pp_root)) if os.path.isdir(pp_root) else []:
+        if name != "truth" and name not in index and os.path.isdir(os.path.join(pp_root, name)):
+            shutil.rmtree(os.path.join(pp_root, name))
+    return dict(index)
+
+
+def by_draw(rows: Mapping[Any, Mapping[str, Any]]) -> dict[int, dict[int, Mapping[str, Any]]]:
     """Rows keyed by (draw, row) split per draw; a bare row key counts as draw 1."""
-    out: dict[int, dict[int, dict[str, Any]]] = defaultdict(dict)
+    out: dict[int, dict[int, Mapping[str, Any]]] = defaultdict(dict)
     for k, v in rows.items():
         d, i = k if isinstance(k, tuple) else (1, k)
         out[d][i] = v
     return out
 
 
-def problems_of(rows: dict[Any, dict[str, Any]], expected: int | None) -> tuple[dict[int, list[dict[str, Any]]], bool, int]:
+def problems_of(rows: Mapping[Any, Mapping[str, Any]], expected: int | None) -> tuple[dict[int, list[Mapping[str, Any]]], bool, int]:
     """A cell's runs grouped by problem, over every run (draw) the rows hold (owner 2026-09-27: the problem is the unit).
     A problem's value is the mean of the runs it has, and every problem weighs the same, whatever its number of runs, so a
     run still in progress adds precision to the problems it has reached and moves no weight. The cell is complete once
     every problem of the set has at least one run. Returns the problems in row order, completeness and the fewest runs
     a problem has."""
-    per: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    per: dict[int, list[Mapping[str, Any]]] = defaultdict(list)
     for key in sorted(rows, key=lambda k: k if isinstance(k, tuple) else (1, k)):
         _d, i = key if isinstance(key, tuple) else (1, key)
         per[i].append(rows[key])
@@ -562,7 +828,7 @@ def transform(v: float | None, tf: str | None) -> float | None:
     return v
 
 
-def hist_of(problems: dict[int, list[dict[str, Any]]], key: str, lo: float, hi: float, answered: bool = False) -> list[Any] | None:
+def hist_of(problems: dict[int, list[Mapping[str, Any]]], key: str, lo: float, hi: float, answered: bool = False) -> list[Any] | None:
     """One histogram of a metric over a cell's problems, in its transformed space. Every problem weighs 1, shared by its
     runs; +-inf is clipped into the edge bins. A failed run of an unbounded metric counts as its worst value (owner
     2026-09-27), and the answered-only reading of a metric with a worst value (WORST) leaves the failed runs out."""
@@ -612,7 +878,7 @@ def _sums(xs: list[float]) -> list[float]:
     return [round(float(a.sum()), 6), round(float((a * a).sum()), 6)] if a.size else [0.0, 0.0]
 
 
-def problem_value(runs: list[dict[str, Any]], key: str, tf: str | None, answered: bool = False) -> tuple[bool, float | None]:
+def problem_value(runs: list[Mapping[str, Any]], key: str, tf: str | None, answered: bool = False) -> tuple[bool, float | None]:
     """(defined, value): whether any run has a value for `key`, and the mean of its runs' finite values in the metric's
     transformed space (None when none is finite). The answered-only reading skips the failed runs."""
     defined, vals = False, []
@@ -629,7 +895,7 @@ def problem_value(runs: list[dict[str, Any]], key: str, tf: str | None, answered
     return defined, (sum(vals) / len(vals) if vals else None)
 
 
-def summarize_cell(rows: dict[Any, dict[str, Any]], expected: int | None) -> dict[str, Any]:
+def summarize_cell(rows: Mapping[Any, Mapping[str, Any]], expected: int | None) -> dict[str, Any]:
     """A cell: its problems' values summed per metric, for the page to combine over problem sets.
     A rate: [problems, sum, sum of squares] of the problems' values (a problem's value is its share of hits over its runs).
     Any other metric: [problems with a value, problems with a finite value, sum, sum of squares] in its transformed space
@@ -691,7 +957,7 @@ def superiority(runs_a: list[dict[str, Any]], runs_b: list[dict[str, Any]], key:
 _MATRICES: dict[tuple[Any, ...], tuple[Any, Any]] = {}
 
 
-def _cached(rows: dict[Any, dict[str, Any]], tag: tuple[Any, ...], build: Any) -> Any:
+def _cached(rows: Mapping[Any, Mapping[str, Any]], tag: tuple[Any, ...], build: Any) -> Any:
     k = (id(rows),) + tag
     hit = _MATRICES.get(k)
     if hit is None or hit[0] is not rows:
@@ -699,14 +965,14 @@ def _cached(rows: dict[Any, dict[str, Any]], tag: tuple[Any, ...], build: Any) -
     return hit[1]
 
 
-def _problem_runs(rows: dict[Any, dict[str, Any]]) -> tuple[np.ndarray, list[list[dict[str, Any]]]]:
-    def build() -> tuple[np.ndarray, list[list[dict[str, Any]]]]:
+def _problem_runs(rows: Mapping[Any, Mapping[str, Any]]) -> tuple[np.ndarray, list[list[Mapping[str, Any]]]]:
+    def build() -> tuple[np.ndarray, list[list[Mapping[str, Any]]]]:
         per = problems_of(rows, None)[0]
         return np.asarray(list(per), dtype=np.int64), list(per.values())
     return _cached(rows, ("runs",), build)
 
 
-def _width(runs: list[list[dict[str, Any]]]) -> int:
+def _width(runs: list[list[Mapping[str, Any]]]) -> int:
     return max((len(r) for r in runs), default=0)
 
 
@@ -770,48 +1036,8 @@ def superiority_of(sa: np.ndarray, ma: np.ndarray, sb: np.ndarray, mb: np.ndarra
     return np.where(ok, num / np.maximum(den, 1), 0.0), ok
 
 
-def paired_cell(rows_a: dict[Any, dict[str, Any]], rows_b: dict[Any, dict[str, Any]], expected: int | None = None) -> dict[str, Any] | None:
-    """Two methods on the problems both have, one problem at a time over every combination of their runs (runs of
-    different methods share the problem, not the points, so pairing them by run number would be arbitrary).
-    A rate: [problems, sum, sum of squares of the problems' differences, problems where the first does better, worse].
-    Any other metric: the difference of the problems' values where both have one, [problems, sum, sum of squares], then
-    the superiority over every problem (failures worst, recovered runs tied), [problems, sum, sum of squares, better,
-    worse]. A metric with a worst value also ships its answered-only reading (key + ANSWERED)."""
-    common, ja, jb = _align(_problem_runs(rows_a)[0], _problem_runs(rows_b)[0])
-    if not common.size:
-        return None
-    out: dict[str, Any] = {}
-    for k in PAIRED_KEYS:
-        if k in RATE_KEYS:
-            ds = rate_matrix(rows_a, k)[1][ja] - rate_matrix(rows_b, k)[1][jb]
-            out[k] = [int(ds.size)] + _sums(list(ds)) + [int((ds > 0).sum()), int((ds < 0).sum())]
-            continue
-        for name, answered in [(k, False)] + ([(k + ANSWERED, True)] if k in WORST else []):
-            va, vb = value_matrix(rows_a, k, answered)[1][ja], value_matrix(rows_b, k, answered)[1][jb]
-            both = np.isfinite(va) & np.isfinite(vb)
-            ds = (va - vb)[both]
-            _, sa, ma = score_matrix(rows_a, k, answered)
-            _, sb, mb = score_matrix(rows_b, k, answered)
-            sup, ok = superiority_of(sa[ja], ma[ja], sb[jb], mb[jb])
-            ss = sup[ok]
-            out[name] = [int(ds.size)] + _sums(list(ds)) + [int(ss.size)] + _sums(list(ss)) + [int((ss > 0).sum()), int((ss < 0).sum())]
-    return {"n": int(common.size), "m": out}
-
-
 def budget_key(t: float) -> str:
     return "t" + ("%g" % t)
-
-
-# ranks.js: the release's pairwise outcomes, merged with a key-opened overlay's in whichever order the two load. The
-# release's file sets the key list; a file written with another list (an overlay sealed before RANK_KEYS changed) is
-# mapped onto it, whichever loaded first, and a key it lacks is left empty, which the page reads as no outcome.
-RANKS_JS = ("window.RESULTS_V2_RANKS=window.RESULTS_V2_RANKS||{};(function(){var R=window.RESULTS_V2_RANKS,rel=%s,K=%s,MAIN=%s;"
-            "var X=R[rel]=R[rel]||{keys:K,budgets:%s,seconds:%s,at:{},pairs:{}};X.rungs=X.rungs||{};var P=%s;"
-            "var map=function(Q,from,to){var ix=to.map(function(k){return from.indexOf(k);});Object.keys(Q).forEach(function(pk){"
-            "Object.keys(Q[pk]).forEach(function(c){Object.keys(Q[pk][c]).forEach(function(sl){var t=Q[pk][c][sl],u=[t[0]];"
-            "ix.forEach(function(j){u.push(j<0?null:t[1+2*j],j<0?null:t[2+2*j]);});Q[pk][c][sl]=u;});});});};"
-            "if(X.keys.join()!==K.join()){if(MAIN){map(X.pairs,X.keys,K);X.keys=K;}else{map(P,K,X.keys);}}"
-            "Object.assign(X.at,%s);Object.assign(X.pairs,P);Object.assign(X.rungs,%s);})();\n")
 
 
 def rank_score(value: float | None, higher: bool | None, ideal: float | None = None) -> float:
@@ -829,33 +1055,418 @@ def rank_score(value: float | None, higher: bool | None, ideal: float | None = N
     return -abs(math.log(value)) if value > 0 and math.isfinite(value) else -math.inf
 
 
-def rank_pair_cell(rows_a: dict[Any, dict[str, Any]], rows_b: dict[Any, dict[str, Any]], expected: int | None = None,
-                   keys: list[str] | None = None) -> list[float] | None:
-    """[problems both methods have, then (sum, sum of squares) of the per-problem superiority per rank key]: the page
+# ---- two methods at a position: the paired contrasts and the pairwise rank outcomes ------------------------------
+# The page reads every method at one position (owner 2026-10-01, 2026-10-05): a budget, or a time per problem on the
+# reference machine ("t" + seconds). A method is bracketed over its COMPLETE budgets on a problem set, exactly as the
+# page's points() and bracketIn() do (explorer_v2.js): at one of them (within 1e-9 relative: w = 0), or between two
+# neighbours in the order of the position, at w = log(x / x1) / log(x2 / x1) (logd below); outside them it has no value. By time,
+# a budget sits at the seconds the reference machine measured for it (timing.json), and a budget without a time takes
+# no part. A method at a position is a Position: its problems and one term (weight 1) at a budget it ran, or two
+# terms, weights 1 - w and w, between two; only the problems it has at both budgets take part then.
+# On the problems both methods have, paired_cell_at and rank_pair_cell_at compute what results-site/pairstats.js
+# computes in the browser from pv/ (its header states the rule; tests/test_pairstats_parity.py holds the two together):
+# a problem's value and share are (1 - w) x_lo + w x_hi, and its superiority is the bilinear mixture of the run-pair
+# superiorities over both methods' terms, renormalised over the terms that have a run pair. With one term each, both
+# are exactly paired_cell and rank_pair_cell.
+class Position(NamedTuple):
+    """A method at a position on one problem set: its problems (ascending ids) and its terms, (weight, rows, where each
+    of its problems sits among the rows' problems)."""
+    ids: np.ndarray
+    terms: list[tuple[float, Any, np.ndarray]]
+
+
+def position(rows_lo: Any, rows_hi: Any = None, w: float = 0.0) -> Position:
+    """The method whose rows at its two budgets are rows_lo and rows_hi, at w between them (pairstats.js, at())."""
+    if rows_hi is None or rows_hi is rows_lo or w == 0 or w == 1:
+        rows = rows_hi if rows_hi is not None and w == 1 else rows_lo
+        ids = _problem_runs(rows)[0]
+        return Position(ids, [(1.0, rows, np.arange(ids.size))])
+    ids, ia, ib = _align(_problem_runs(rows_lo)[0], _problem_runs(rows_hi)[0])
+    return Position(ids, [(1 - w, rows_lo, ia), (w, rows_hi, ib)])
+
+
+def _at_problems(p: Position, j: np.ndarray, table: Any) -> np.ndarray:
+    """A per-problem quantity, table(rows) -> one value per problem of the rows, at the problems j of the position."""
+    if len(p.terms) == 1:
+        return table(p.terms[0][1])[p.terms[0][2][j]]
+    (w0, r0, i0), (w1, r1, i1) = p.terms
+    return w0 * table(r0)[i0[j]] + w1 * table(r1)[i1[j]]
+
+
+def _superiority_table(rows_a: Any, rows_b: Any, key: str, answered: bool, cache: dict[Any, Any] | None) -> tuple[Any, ...]:
+    """superiority_of over every problem two cells share: (rows_a, rows_b, ids, values, defined). A cache is meant for
+    one pair of methods on one problem set; it holds the rows, so that their ids cannot be reused while it lives."""
+    k = (id(rows_a), id(rows_b), key, answered)
+    hit = cache.get(k) if cache is not None else None
+    if hit is None or hit[0] is not rows_a or hit[1] is not rows_b:
+        common, ja, jb = _align(_problem_runs(rows_a)[0], _problem_runs(rows_b)[0])
+        _, sa, ma = score_matrix(rows_a, key, answered)
+        _, sb, mb = score_matrix(rows_b, key, answered)
+        hit = (rows_a, rows_b, common) + superiority_of(sa[ja], ma[ja], sb[jb], mb[jb])
+        if cache is not None:
+            cache[k] = hit
+    return hit
+
+
+def superiority_at(a: Position, b: Position, common: np.ndarray, key: str, answered: bool = False,
+                   cache: dict[Any, Any] | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """On the problems `common` of both positions: (superiority, defined), the bilinear mixture over their terms."""
+    acc, wsum = np.zeros(common.size), np.zeros(common.size)
+    for wa, ra, _ia in a.terms:
+        for wb, rb, _ib in b.terms:
+            _, _, ids, sup, ok = _superiority_table(ra, rb, key, answered, cache)
+            j = np.searchsorted(ids, common)
+            ww = wa * wb
+            acc = acc + np.where(ok[j], ww * sup[j], 0.0)   # a term without a run pair adds nothing: +0.0 changes no sum
+            wsum = wsum + np.where(ok[j], ww, 0.0)
+    ok = wsum > 0
+    return np.where(ok, acc / np.where(ok, wsum, 1.0), 0.0), ok
+
+
+def paired_cell_at(a: Position, b: Position, cache: dict[Any, Any] | None = None) -> dict[str, Any] | None:
+    """Two methods at their positions on the problems both have, one problem at a time over every combination of
+    their runs (runs of different methods share the problem, not the points, so pairing them by run number would be
+    arbitrary). A rate: [problems, sum, sum of squares of the problems' differences, problems where the first does
+    better, worse]. Any other metric: the difference of the problems' values where both have one, [problems, sum, sum
+    of squares], then the superiority over every problem (failures worst, recovered runs tied), [problems, sum, sum of
+    squares, better, worse]. A metric with a worst value also has its answered-only reading (key + ANSWERED)."""
+    common, ja, jb = _align(a.ids, b.ids)
+    if not common.size:
+        return None
+    out: dict[str, Any] = {}
+    for k in PAIRED_KEYS:
+        if k in RATE_KEYS:
+            def share(rows: Any, k: str = k) -> np.ndarray:
+                return rate_matrix(rows, k)[1]
+            ds = _at_problems(a, ja, share) - _at_problems(b, jb, share)
+            out[k] = [int(ds.size)] + _sums(list(ds)) + [int((ds > 0).sum()), int((ds < 0).sum())]
+            continue
+        for name, answered in [(k, False)] + ([(k + ANSWERED, True)] if k in WORST else []):
+            def value(rows: Any, k: str = k, answered: bool = answered) -> np.ndarray:
+                return value_matrix(rows, k, answered)[1]
+            va, vb = _at_problems(a, ja, value), _at_problems(b, jb, value)
+            both = np.isfinite(va) & np.isfinite(vb)
+            ds = (va - vb)[both]
+            sup, ok = superiority_at(a, b, common, k, answered, cache)
+            ss = sup[ok]
+            out[name] = [int(ds.size)] + _sums(list(ds)) + [int(ss.size)] + _sums(list(ss)) + [int((ss > 0).sum()), int((ss < 0).sum())]
+    return {"n": int(common.size), "m": out}
+
+
+def rank_pair_cell_at(a: Position, b: Position, keys: list[str] | None = None, cache: dict[Any, Any] | None = None) -> list[float] | None:
+    """[problems both positions have, then (sum, sum of squares) of the per-problem superiority per rank key]: the page
     combines them over problem sets into the chance that one method beats the other on a problem, and places from those."""
-    common, ja, jb = _align(_problem_runs(rows_a)[0], _problem_runs(rows_b)[0])
+    common = _align(a.ids, b.ids)[0]
     if not common.size:
         return None
     out: list[float] = [int(common.size)]
     for k in RANK_KEYS if keys is None else keys:
-        _, sa, ma = score_matrix(rows_a, k)
-        _, sb, mb = score_matrix(rows_b, k)
-        out += _sums(list(superiority_of(sa[ja], ma[ja], sb[jb], mb[jb])[0]))
+        out += _sums(list(superiority_at(a, b, common, k, False, cache)[0]))
     return out
 
 
-def rung_within(timing: dict[str, Any], key: str, budget: float, have: set[int]) -> int | None:
-    """The largest rung of `key` the reference machine timed at or under `budget` seconds, among the rungs in `have`
-    (the caller passes the rungs the method has finished)."""
-    fits = [int(r) for r, sec in (timing.get(key) or {}).items() if sec is not None and sec <= budget and int(r) in have]
-    return max(fits) if fits else None
+def paired_cell(rows_a: dict[Any, dict[str, Any]], rows_b: dict[Any, dict[str, Any]], expected: int | None = None) -> dict[str, Any] | None:
+    """paired_cell_at for two methods at budgets they ran."""
+    return paired_cell_at(position(rows_a), position(rows_b))
+
+
+def rank_pair_cell(rows_a: dict[Any, dict[str, Any]], rows_b: dict[Any, dict[str, Any]], expected: int | None = None,
+                   keys: list[str] | None = None) -> list[float] | None:
+    """rank_pair_cell_at for two methods at budgets they ran."""
+    return rank_pair_cell_at(position(rows_a), position(rows_b), keys)
+
+
+def ref_time(timing: Mapping[str, Any], key: str, r: int) -> float | None:
+    """The seconds per problem the reference machine measured for method `key` at budget r (the page's refTime)."""
+    t = (timing.get(key) or {}).get(str(r))
+    return float(t) if isinstance(t, (int, float)) and not isinstance(t, bool) and t > 0 else None
+
+
+# The logarithm the brackets use: libm's log and the browser's Math.log may differ in the last bit (on the board's
+# reference times they do, for about one bracket in five), and a w that differs in its last bit can tip a sum rounded
+# to six decimals. So w is computed with this log, written with + - * / alone, in the same order as pairstats.js's
+# logd: the same doubles in both. x = m 2^e with m in [sqrt(1/2), sqrt(2)), log m = 2 atanh((m - 1) / (m + 1)) by
+# its series (13 terms, |z| <= 0.172: below double precision), plus e log 2.
+LN2 = 0.6931471805599453
+SQRT_HALF = 0.7071067811865476
+LOG_TERMS = 13
+
+
+def logd(x: float) -> float:
+    """The natural logarithm of a positive finite x, the same double as pairstats.js's logd (within a few ulps of
+    math.log)."""
+    m, e = math.frexp(x)
+    if m < SQRT_HALF:
+        m, e = m * 2.0, e - 1
+    z = (m - 1.0) / (m + 1.0)
+    z2 = z * z
+    s = 1.0 / (2 * LOG_TERMS - 1)
+    for k in range(LOG_TERMS - 2, -1, -1):
+        s = 1.0 / (2 * k + 1) + z2 * s
+    return e * LN2 + (2.0 * z) * s
+
+
+def bracket_in(points: list[tuple[float, int]], x: float) -> tuple[int, int, float] | None:
+    """Where x lies among points [(position, budget)] in order (pairstats.js's bracketIn): (r1, r2, w)."""
+    if not x > 0:
+        return None
+    for p, r in points:
+        if abs(p - x) <= 1e-9 * x:
+            return (r, r, 0.0)
+    for (p1, r1), (p2, r2) in zip(points, points[1:]):
+        if p1 < x < p2:
+            return (r1, r2, logd(x / p1) / logd(p2 / p1))
+    return None
+
+
+def slot_value(slot: str) -> tuple[bool, float]:
+    """(by time, the position) of a slot: a budget ("1024") or a time per problem ("t10")."""
+    return (True, float(slot[1:])) if slot.startswith("t") else (False, float(slot))
+
+
+def brackets(data: dict[str, dict[tuple[str, int], Rows]], keys: list[str], sizes: dict[str, int], timing: Mapping[str, Any],
+             slots: list[str]) -> dict[str, dict[str, dict[str, list[float]]]]:
+    """{method: {slot: {catalog: [r1, r2, w]}}}: every method of `keys` at every slot, on every problem set where it
+    has a value there (over its complete, published budgets: the cells the page pools)."""
+    out: dict[str, dict[str, dict[str, list[float]]]] = {}
+    for m in keys:
+        done: dict[str, list[int]] = defaultdict(list)
+        for (c, r), rows in sorted(data.get(m, {}).items()):
+            if c in sizes and usable(m, r) and rows and problems_of(rows, sizes[c])[1]:
+                done[c].append(r)
+        at: dict[str, dict[str, list[float]]] = {}
+        for slot in slots:
+            by_time, x = slot_value(slot)
+            for c, rs in sorted(done.items()):
+                pts = [(ref_time(timing, m, r), r) if by_time else (float(r), r) for r in rs]
+                b = bracket_in(sorted(((p, r) for p, r in pts if p is not None and p > 0), key=lambda pr: pr[0]), x)
+                if b is not None:
+                    at.setdefault(slot, {})[c] = [b[0], b[1], b[2]]
+        out[m] = at
+    return out
+
+
+def stamps(at: dict[str, dict[str, dict[str, list[float]]]]) -> dict[str, dict[str, str]]:
+    """A short hash of a method's brackets at each slot over every problem set: an overlay records its public partners'
+    (the index's "basis") so that the page can tell when one has moved since the overlay was written."""
+    import hashlib
+    return {m: {slot: hashlib.sha1(json.dumps(per, sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:8]
+                for slot, per in at_m.items()} for m, at_m in at.items()}
+
+
+def slot_cells(data: dict[str, dict[tuple[str, int], Rows]], pairs: list[tuple[str, str]], at: dict[str, dict[str, dict[str, list[float]]]],
+               slots: list[str], rank_keys: list[str]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Every pair at every slot on every problem set where both methods have a bracket: ({rank key: {pair: {catalog:
+    {slot: [n, sum, sum of squares]}}}}, {paired name: {pair: {catalog: {slot: entry}}}}), entry as paired_cell_at's."""
+    ranks: dict[str, Any] = {k: {} for k in rank_keys}
+    paired: dict[str, Any] = {name: {} for k in PAIRED_KEYS for name in [k] + ([k + ANSWERED] if k in WORST and k not in RATE_KEYS else [])}
+    for ka, kb in pairs:
+        pk = ka + "|" + kb
+        cats = sorted({c for s in slots for c in at.get(ka, {}).get(s, {})} & {c for s in slots for c in at.get(kb, {}).get(s, {})})
+        for c in cats:
+            cache: dict[Any, Any] = {}
+            for slot in slots:
+                ba, bb = at.get(ka, {}).get(slot, {}).get(c), at.get(kb, {}).get(slot, {}).get(c)
+                if ba is None or bb is None:
+                    continue
+                pa = position(data[ka][(c, int(ba[0]))], data[ka][(c, int(ba[1]))], ba[2])
+                pb = position(data[kb][(c, int(bb[0]))], data[kb][(c, int(bb[1]))], bb[2])
+                rc = rank_pair_cell_at(pa, pb, rank_keys, cache)
+                pc = paired_cell_at(pa, pb, cache)
+                if rc is not None:
+                    for i, k in enumerate(rank_keys):
+                        ranks[k].setdefault(pk, {}).setdefault(c, {})[slot] = [rc[0], rc[1 + 2 * i], rc[2 + 2 * i]]
+                if pc is not None:
+                    for name, entry in pc["m"].items():
+                        paired[name].setdefault(pk, {}).setdefault(c, {})[slot] = entry
+    return ranks, paired
+
+
+def _write_if_changed(path: str, text: str) -> None:
+    """Write `text` unless the file holds it already: a file changes only when its bytes do."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if os.path.exists(path):
+        with open(path) as fh:
+            if fh.read() == text:
+                return
+    with open(path, "w") as fh:
+        fh.write(text)
+
+
+def _prune(root: str, written: set[str]) -> None:
+    """Remove every file under `root` this export did not write, and the directories left empty."""
+    for d, _sub, files in os.walk(root, topdown=False) if os.path.isdir(root) else []:
+        for f in files:
+            if os.path.abspath(os.path.join(d, f)) not in written:
+                os.remove(os.path.join(d, f))
+        if d != root and not os.listdir(d):
+            os.rmdir(d)
+
+
+# ranks/<key>.js and paired/<key>.js: one metric's cells, {name: {pair: {catalog: {slot: ...}}}}, merged pair by pair
+# into window.RESULTS_V2_RANKCELLS[release][name] / window.RESULTS_V2_PAIRCELLS[release][name], so a key-opened
+# overlay's files add their pairs to the release's whichever loads first. paired/<key>.js of a metric with a worst
+# value holds its answered-only reading too (name key + ANSWERED).
+CELLS_JS = ("window.%s=window.%s||{};(function(){var R=window.%s,rel=%s;var X=R[rel]=R[rel]||{};var P=%s;"
+            "Object.keys(P).forEach(function(k){var Y=X[k]=X[k]||{};Object.keys(P[k]).forEach(function(p){Y[p]=P[k][p];});});})();\n")
+
+
+def write_slot_cells(out_dir: str, rel: str, ranks: dict[str, Any], paired: dict[str, Any]) -> None:
+    """Write ranks/<key>.js and paired/<key>.js (every key, a key without cells too), remove the files of keys no
+    longer written, and the single ranks.js and paired.js they replace."""
+    def text(var: str, obj: Any) -> str:
+        return CELLS_JS % (var, var, var, json.dumps(rel), json.dumps(obj, separators=(",", ":")))
+    written: set[str] = set()
+    for k, pairs in ranks.items():
+        path = os.path.join(out_dir, "ranks", k + ".js")
+        written.add(os.path.abspath(path))
+        _write_if_changed(path, text("RESULTS_V2_RANKCELLS", {k: pairs}))
+    for k in dict.fromkeys(name.split(ANSWERED)[0] for name in paired):
+        path = os.path.join(out_dir, "paired", k + ".js")
+        written.add(os.path.abspath(path))
+        _write_if_changed(path, text("RESULTS_V2_PAIRCELLS", {name: paired[name] for name in (k, k + ANSWERED) if name in paired}))
+    for sub in ("ranks", "paired"):
+        _prune(os.path.join(out_dir, sub), written)
+    for old in ("ranks.js", "paired.js"):
+        if os.path.exists(os.path.join(out_dir, old)):
+            os.remove(os.path.join(out_dir, old))
+
+
+# ---- the inputs of paired_cell_at and rank_pair_cell_at, per problem (pv/) ----------------------------------------
+# To read the Ranks and Paired views at ANY position the page computes the cells itself (results-site/pairstats.js)
+# from what paired_cell_at and rank_pair_cell_at read of each problem, shipped here per method x budget, every problem
+# set where the method has finished that budget (its complete cells: the ones the page pools), all of its runs (both
+# draws). A view loads one frame and the files of the keys it shows:
+#   pv/<method>/<rung>/frame.js  window.RESULTS_V2_PV[release]["method|rung|frame"] = {catalog: {n, ids, k, ok}}
+#   pv/<method>/<rung>/<key>.js  window.RESULTS_V2_PV[release]["method|rung|key"] = {catalog: {"s": {key: S},
+#                                "v": {key: V, key + ANSWERED: V}, "r": {key: R}}}, for every rank key and paired key
+#   n    the number of problems
+#   ids  their ids in _problem_runs's order (ascending), as first differences from -1
+#   k    each problem's number of runs, in that order; a problem's runs follow each other in "ok" and S
+#   ok   per run, 1 where it takes part in the answered-only reading (score_matrix's mask with answered=True); in the
+#        other reading every run takes part
+#   S    per run, score_matrix's score
+#   V    per problem, value_matrix's value (a paired key that is not a rate; one with a worst value, WORST, also in its
+#        answered-only reading, key + ANSWERED)
+#   R    per problem, rate_matrix's share (a paired rate key)
+# The page derives no metric itself. Every column is float64, exactly (-inf, +inf, NaN and the sign of zero
+# included), written as the shortest of
+#   {"u": U}            a column of one value: U holds it
+#   {"u": U, "i": I}    U the distinct values, I each entry's index into U (uint8 when U has at most 256 values, else uint16)
+#   {"f": F}            the values themselves
+# U, I and F base64, little-endian. The writer checks that the columns mean what the page takes them to mean (every
+# run takes part in the reading over all runs, the matrices' padding in none; the answered-only reading of a paired key
+# is the shared mask over the same scores), and raises otherwise. The release's index: {method: {rung: [catalogs]}}.
+PV_VALUE_KEYS = [k for k in PAIRED_KEYS if k not in RATE_KEYS]
+PV_RATE_KEYS = [k for k in PAIRED_KEYS if k in RATE_KEYS]
+PV_JS = "window.RESULTS_V2_PV=window.RESULTS_V2_PV||{};(function(){var R=window.RESULTS_V2_PV;R[%s]=R[%s]||{};R[%s][%s]=%s;})();\n"
+
+
+def _b64(raw: bytes) -> str:
+    import base64
+    return base64.b64encode(raw).decode("ascii")
+
+
+def pv_column(x: Any) -> dict[str, str]:
+    """One column of a pv file, exactly (see above): distinct values are told apart by their bits, so -0.0 and NaN
+    survive the round trip."""
+    a = np.ascontiguousarray(np.asarray(x, dtype="<f8").reshape(-1))
+    u, inv = np.unique(a.view("<u8"), return_inverse=True)
+    vals = _b64(u.astype("<u8").view("<f8").tobytes())
+    if u.size == 1:
+        return {"u": vals}
+    if 1 < u.size <= 65536:
+        idx = inv.reshape(-1).astype("<u1" if u.size <= 256 else "<u2")
+        if 8 * u.size + idx.nbytes < a.nbytes:
+            return {"u": vals, "i": _b64(idx.tobytes())}
+    return {"f": _b64(a.tobytes())}
+
+
+def _pv_runs(rows: dict[Any, dict[str, Any]]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """(problem ids, runs per problem, where the matrices hold a run)."""
+    ids, runs = _problem_runs(rows)
+    k = np.asarray([len(rs) for rs in runs], dtype=np.int64)
+    return ids, k, np.arange(_width(runs))[None, :] < k[:, None]
+
+
+def _pv_answered(rows: dict[Any, dict[str, Any]], key: str) -> np.ndarray:
+    """The answered-only mask (one for every key; checked for the paired keys that read it)."""
+    keys = [k for k in PV_VALUE_KEYS if k in WORST] or [key]
+    ok = score_matrix(rows, keys[0], True)[2]
+    for k in keys:
+        _, sc, _mask = score_matrix(rows, k)
+        _, sc_a, mask_a = score_matrix(rows, k, True)
+        if not np.array_equal(mask_a, ok) or not np.array_equal(sc_a[mask_a].view("<u8"), sc[mask_a].view("<u8")):
+            raise ValueError(f"pv: the answered-only reading of {k!r} is not the shared mask over the same scores")
+    return ok
+
+
+def pv_frame(rows: dict[Any, dict[str, Any]]) -> dict[str, Any]:
+    """A pv frame's entry for one problem set: n, ids, k, ok."""
+    ids, k, exists = _pv_runs(rows)
+    ok = _pv_answered(rows, RANK_KEYS[0])
+    return {"n": int(ids.size), "ids": pv_column(np.diff(ids, prepend=-1)), "k": pv_column(k), "ok": pv_column(ok[exists])}
+
+
+def pv_key(rows: dict[Any, dict[str, Any]], key: str) -> dict[str, Any]:
+    """A pv key file's entry for one problem set: the key's scores, and its values or shares when it is a paired key."""
+    _ids, _k, exists = _pv_runs(rows)
+    _, sc, mask = score_matrix(rows, key)
+    if not np.array_equal(mask, exists):
+        raise ValueError(f"pv: score_matrix({key!r}) does not take part in exactly the runs there are")
+    obj: dict[str, Any] = {"s": {key: pv_column(sc[exists])}}
+    if key in PV_VALUE_KEYS:
+        obj["v"] = {name: pv_column(value_matrix(rows, key, ans)[1]) for name, ans in [(key, False)] + ([(key + ANSWERED, True)] if key in WORST else [])}
+    if key in PV_RATE_KEYS:
+        obj["r"] = {key: pv_column(rate_matrix(rows, key)[1])}
+    return obj
+
+
+def pv_cell(rows: dict[Any, dict[str, Any]], score_keys: list[str]) -> dict[str, Any]:
+    """Everything pv/ holds of one method on one problem set at one budget, as one object: the frame's entry with every
+    key's columns merged in (what pairstats.js's decode() reads)."""
+    obj = pv_frame(rows)
+    obj.update({"s": {}, "v": {}, "r": {}})
+    for key in score_keys:
+        for part, cols in pv_key(rows, key).items():
+            obj[part].update(cols)
+    return obj
+
+
+def write_pair_values(out_dir: str, rel: str, data: dict[str, dict[tuple[str, int], Rows]], keys: list[str],
+                      sizes: dict[str, int], rank_keys: list[str] | None = None) -> dict[str, dict[str, list[str]]]:
+    """Write pv/ (see above) for the methods `keys`: a frame and one file per key of `rank_keys` (default RANK_KEYS)
+    and of PAIRED_KEYS, per method x budget, over the problem sets where the method has finished that budget. Returns
+    the index the page reads, {method: {rung: [catalogs]}}. A file is rewritten only when its bytes change; a file this
+    call did not write is removed."""
+    file_keys = list(dict.fromkeys(list(RANK_KEYS if rank_keys is None else rank_keys) + PAIRED_KEYS))
+    index: dict[str, dict[str, list[str]]] = defaultdict(dict)
+    written: set[str] = set()
+    root = os.path.join(out_dir, "pv")
+
+    def put(path: str, name: str, obj: Any) -> None:
+        written.add(os.path.abspath(path))
+        _write_if_changed(path, PV_JS % (json.dumps(rel), json.dumps(rel), json.dumps(rel), json.dumps(name), json.dumps(obj, separators=(",", ":"))))
+    for m in keys:
+        by_rung: dict[int, list[tuple[str, Any]]] = defaultdict(list)
+        for (c, r), rows in sorted(data.get(m, {}).items()):
+            if c in sizes and usable(m, r) and rows and problems_of(rows, sizes[c])[1]:
+                by_rung[r].append((c, rows))
+        for r, cells in sorted(by_rung.items()):
+            base = os.path.join(root, m, str(r))
+            put(os.path.join(base, "frame.js"), f"{m}|{r}|frame", {c: pv_frame(rows) for c, rows in cells})
+            for key in file_keys:
+                put(os.path.join(base, key + ".js"), f"{m}|{r}|{key}", {c: pv_key(rows, key) for c, rows in cells})
+            index[m][str(r)] = [c for c, _ in cells]
+    _prune(root, written)
+    return dict(index)
 
 
 def usable(key: str, r: int) -> bool:
     """Whether the release publishes method ``key`` at budget ``r``: any budget it was run at -- a method's ladder is in
-    its own unit (DSO samples in batches of 1,000 expressions, so its ladder doubles from 1,000) -- and E2E only up to its
-    default."""
-    return r >= 1 and not (key == "e2e" and r > E2E_DEFAULT_MAX_RUNG)
+    its own unit (DSO samples in batches of 1,000 expressions, so its ladder doubles from 1,000) -- E2E only up to its
+    default, and no method at or above a budget that ran out of memory on the reference machine (DNF)."""
+    return r >= 1 and not (key == "e2e" and r > E2E_DEFAULT_MAX_RUNG) and not (key in DNF and r >= DNF[key])
 
 
 def published_rungs(rungs: Any) -> list[int]:
@@ -905,6 +1516,9 @@ def progress_of(rows_by_cell: dict[tuple[str, int], Any], sizes: dict[str, int],
 def ladder_end(key: str, timing: dict[str, Any]) -> tuple[str | None, str | None]:
     """(how the method's ladder ended, why): ('declared', reason) for a method that cannot run a larger budget,
     ('reached', None) once a measured time is at least LADDER_TOP_S / sqrt(2), else (None, None): larger budgets to come."""
+    if key in DNF:
+        label = next((m[1] for m in METHODS if m[0] == key), key)
+        return "declared", f"{label} ran out of memory on our timing workstation at budget {DNF[key]:,}, so its ladder ends at the budget below."
     if key in LADDER_END:
         return "declared", LADDER_END[key]
     seconds = [v for v in (timing.get(key) or {}).values() if isinstance(v, (int, float))]
@@ -978,7 +1592,7 @@ def main() -> None:
     ap.add_argument("--engine", default="acj-5-4-llm", help="the SimpliPy engine the judge used (srbf table's default): the ground truths' canonical forms")
     ap.add_argument("--sizes", default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results-site", "data", "catalog_mu.json"),
                     help="every catalog's ground-truth description lengths (scripts/catalog_mu.py; default: results-site/data/catalog_mu.json)")
-    ap.add_argument("--site-dir", default=None, help="results-site directory (default: two levels above out.js); base paths are relative to it")
+    ap.add_argument("--site-dir", default=None, help="results-site directory (default: two levels above out.js); the private overlay's base path is relative to it (the release's is data/<release>/)")
     ap.add_argument("--public", default=",".join(m[0] for m in METHODS))
     ap.add_argument("--private", default="")
     ap.add_argument("--private-dir", default=None)
@@ -999,6 +1613,9 @@ def main() -> None:
         sys.exit("--private needs --private-dir")
     out_dir = os.path.dirname(os.path.abspath(a.out))
     site_dir = os.path.abspath(a.site_dir) if a.site_dir else os.path.abspath(os.path.join(out_dir, "..", ".."))
+    dpath = os.path.join(a.root, "dnf.json")
+    if os.path.exists(dpath):
+        DNF.update({k: int(v["rung"]) for k, v in json.load(open(dpath)).items() if isinstance(v, dict) and "rung" in v})
     data = load_rows(a.root)
     present: dict[str, int] = defaultdict(int)
     for mk in data:
@@ -1007,54 +1624,12 @@ def main() -> None:
     cats = catalog_meta(a.sizes, present)
     sizes = {c["key"]: c["laws"] for c in cats}
 
-    def contrasts(pairs: list[tuple[str, str]], paired: dict[str, Any]) -> None:
-        for ka, kb in pairs:
-            for (c, r), rows_a in sorted(data.get(ka, {}).items(), key=lambda kv: kv[0]):   # a fixed order, whatever the table's
-                rows_b = data.get(kb, {}).get((c, r))
-                if not rows_b or not usable(ka, r) or not usable(kb, r):
-                    continue
-                pc = paired_cell(rows_a, rows_b, sizes.get(c))
-                if pc:
-                    paired.setdefault(ka + "|" + kb, {}).setdefault(c, {})[str(r)] = pc
-
     tpath0 = os.path.join(a.root, "timing.json")
     timing_all: dict[str, Any] = {}
     if os.path.exists(tpath0):
         timing_all = {k: v for k, v in json.load(open(tpath0)).items() if isinstance(v, dict) and not k.startswith("__")}
 
-    def leagues(pairs: list[tuple[str, str]], keys: list[str], rank_keys: list[str]) -> dict[str, Any]:
-        """Pairwise rank outcomes for `pairs`, and for every method of `keys` the rung a time budget buys it."""
-        rungs_of = {k: {r for (_c, r) in data.get(k, {}) if usable(k, r)} for k in {x for p in pairs for x in p} | set(keys)}
-        # a time budget buys a rung the method has FINISHED: every catalog, every problem (the site shows no pooled number
-        # for a rung that is still running, so a budget must not point at one)
-        finished = {k: {r for r in rungs_of[k] if all(problems_of(data[k].get((c, r), {}), n)[1] for c, n in sizes.items())} for k in rungs_of}
-        at: dict[str, dict[str, int]] = {k: {} for k in rungs_of}
-        for k in rungs_of:
-            for t in TIME_BUDGETS:
-                r = rung_within(timing_all, k, t, finished[k])
-                if r is not None:
-                    at[k][budget_key(t)] = r
-        out: dict[str, Any] = {}
-        # which rungs a time-budget outcome compared: an overlay is sealed less often than the release is refreshed,
-        # and its outcomes against a public method are only valid while that method still sits on the same rung
-        compared: dict[str, dict[str, list[int]]] = {}
-        for ka, kb in pairs:
-            slots = [(str(r), r, r) for r in sorted(rungs_of[ka] & rungs_of[kb])]
-            timed = [(b, at[ka][b], at[kb][b]) for b in (budget_key(t) for t in TIME_BUDGETS) if b in at[ka] and b in at[kb]]
-            compared[ka + "|" + kb] = {b: [ra, rb] for b, ra, rb in timed}
-            slots += timed
-            for slot, ra, rb in slots:
-                for c in sizes:
-                    rows_a, rows_b = data.get(ka, {}).get((c, ra)), data.get(kb, {}).get((c, rb))
-                    if not rows_a or not rows_b:
-                        continue
-                    pc = rank_pair_cell(rows_a, rows_b, sizes.get(c), rank_keys)
-                    if pc:
-                        out.setdefault(ka + "|" + kb, {}).setdefault(c, {})[slot] = pc
-        return {"keys": rank_keys, "budgets": [budget_key(t) for t in TIME_BUDGETS], "seconds": TIME_BUDGETS,
-                "at": {k: at[k] for k in keys}, "pairs": out, "rungs": {k: v for k, v in compared.items() if k in out and v}}
-
-    def build(keys: list[str], base: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    def build(keys: list[str], base: str) -> tuple[dict[str, Any], dict[str, Any]]:
         methods = [m for m in METHODS if m[0] in keys]
         cells: dict[str, Any] = {}
         hists: dict[str, Any] = {k: {} for k in HIST_SPECS}
@@ -1077,15 +1652,14 @@ def main() -> None:
             published = {cr: rows for cr, rows in data.get(key, {}).items() if usable(key, cr[1])}
             status[key] = status_of(published, sizes, plans[key])
             progress[key] = progress_of(published, sizes, plans[key])
-        paired: dict[str, Any] = {}
-        mkeys = [m[0] for m in methods]
-        contrasts([(ka, kb) for i, ka in enumerate(mkeys) for kb in mkeys[i + 1:]], paired)
         timing: dict[str, Any] = {}
         timing_note = ""
         tpath = os.path.join(a.root, "timing.json")
         if os.path.exists(tpath):
             t = json.load(open(tpath))
             timing = {k: v for k, v in t.items() if k in keys and isinstance(v, dict)}
+            # a DNF budget has no time either, even if the reference machine finished it before a fit's memory error
+            timing = {k: {r: x for r, x in v.items() if not str(r).isdigit() or usable(k, int(r))} for k, v in timing.items()}
             timing_note = t.get("note", "")
         listed = listed_metrics(cells)
         payload: dict[str, Any]
@@ -1105,9 +1679,9 @@ def main() -> None:
                                for k, l, p, col, g, prov, _, sel in methods],
                    "cells": cells, "status": status, "progress": progress, "timing": timing, "timing_note": timing_note}
         payload["summary"] = progress_summary(payload["methods"], status, timing)
-        return payload, hists, paired
+        return payload, hists
 
-    def write_set(payload: dict[str, Any], hists: dict[str, Any], paired: dict[str, Any], ranks: dict[str, Any], out_js: str, out_dir: str, var: str, note: str) -> None:
+    def write_set(payload: dict[str, Any], hists: dict[str, Any], cells: tuple[dict[str, Any], dict[str, Any]], out_js: str, out_dir: str, var: str, note: str) -> None:
         os.makedirs(os.path.join(out_dir, "hist"), exist_ok=True)
         with open(out_js, "w") as fh:
             fh.write(f"window.{var} = " + json.dumps(payload, separators=(",", ":")) + ";\n")
@@ -1117,32 +1691,57 @@ def main() -> None:
             with open(os.path.join(out_dir, "hist", hist_file(hk)), "w") as fh:
                 fh.write("window.RESULTS_V2_HIST=window.RESULTS_V2_HIST||{};(function(){var R=window.RESULTS_V2_HIST;R[%s]=R[%s]||{};var H=R[%s];H[%s]=H[%s]||{lo:%s,hi:%s,nb:%d,cells:{}};Object.assign(H[%s].cells,%s);})();\n" % (
                     rel, rel, rel, json.dumps(hk), json.dumps(hk), lo, hi, NB, json.dumps(hk), json.dumps(per, separators=(",", ":"))))
-        with open(os.path.join(out_dir, "paired.js"), "w") as fh:
-            fh.write("window.RESULTS_V2_PAIRED=window.RESULTS_V2_PAIRED||{};(function(){var R=window.RESULTS_V2_PAIRED;R[%s]=R[%s]||{};Object.assign(R[%s],%s);})();\n" % (
-                rel, rel, rel, json.dumps(paired, separators=(",", ":"))))
-        with open(os.path.join(out_dir, "ranks.js"), "w") as fh:   # merged like paired.js: an overlay adds its pairs and its own budget rungs
-            fh.write(RANKS_JS % (rel, json.dumps(ranks["keys"]), "true" if var == "RESULTS_V2" else "false", json.dumps(ranks["budgets"]), json.dumps(ranks["seconds"]), json.dumps(ranks["pairs"], separators=(",", ":")),
-                                 json.dumps(ranks["at"], separators=(",", ":")), json.dumps(ranks.get("rungs", {}), separators=(",", ":"))))
+        write_slot_cells(out_dir, payload["release"]["id"], *cells)
         with_data = [k for k in payload["cells"] if payload["cells"][k]]
-        print(f"{note}: {out_js} ({os.path.getsize(out_js) // 1024} kB), hist/ {len(hists)} files, paired {len(paired)} pairs; methods with data: {with_data}; status {payload['status']}")
+        pairs = {pk for per in cells[0].values() for pk in per}
+        print(f"{note}: {out_js} ({os.path.getsize(out_js) // 1024} kB), hist/ {len(hists)} files, ranks/ and paired/ {len(pairs)} pairs; methods with data: {with_data}; status {payload['status']}")
 
-    payload, hists, paired = build(public, rel_base(out_dir, site_dir))
-    pred, truth = load_expressions(a.root, public)
-    pred = {k: v for k, v in pred.items() if usable(k[0], k[2])}   # the budgets the release publishes, and no others
+    def order(keys: list[str]) -> list[str]:
+        return [m[0] for m in METHODS if m[0] in keys]
+
+    # Every pair at every slot: every budget the page steps through (its "rungs") and every time limit, each method
+    # bracketed over its complete budgets (brackets above); D.slots tells the page where every method sits.
+    payload, hists = build(public, f"data/{a.release}/")   # where the site serves a release, wherever this export writes it
+    slots = [str(r) for r in payload["rungs"]] + [budget_key(t) for t in TIME_SLOTS]
+    at = brackets(data, public, sizes, timing_all, slots)
+    pub = order(public)
+    cells = slot_cells(data, [(ka, kb) for i, ka in enumerate(pub) for kb in pub[i + 1:]], at, slots, payload["rank_keys"])
+    payload["slots"] = {"rungs": payload["rungs"], "budgets": [budget_key(t) for t in TIME_SLOTS], "seconds": TIME_SLOTS,
+                        "at": at, "stamp": stamps(at), "basis": {}}
+    pred_all, truth = load_expressions(a.root, public + private)   # the rows are read once; each side keeps its own
+    pred = {k: v for k, v in pred_all.items() if k[0] in public and usable(k[0], k[2])}   # the budgets the release publishes, and no others
     canonical = canonical_truths(truth, a.engine, os.path.join(a.root, "canonical_truth_cache.json"))
     payload["pred"] = write_predictions(out_dir, a.release, pred, truth, sizes, canonical)
     payload["pred_block"] = PRED_BLOCK
-    ranks = leagues([(ka, kb) for i, ka in enumerate(public) for kb in public[i + 1:]], public, payload["rank_keys"])
-    write_set(payload, hists, paired, ranks, a.out, out_dir, "RESULTS_V2", f"public release {a.release}")
+    payload["pp"] = write_values(out_dir, a.release, data, public, sizes)
+    # what paired_cell_at and rank_pair_cell_at read of every problem, for the page to compute both at any position (pv/)
+    payload["pv"] = write_pair_values(out_dir, a.release, data, public, sizes, payload["rank_keys"])
+    payload["time_budgets"] = TIME_BUDGETS   # the time limits the Correlations view offers, as the Ranks view does
+    write_set(payload, hists, cells, a.out, out_dir, "RESULTS_V2", f"public release {a.release}")
     with open(os.path.join(out_dir, "summary.js"), "w") as fh:   # the Progress page and the guide read this, not results.js
         fh.write("window.RESULTS_V2_SUMMARY = " + json.dumps(summary_payload(payload), separators=(",", ":")) + ";\n")
     if private:
         pdir = os.path.abspath(a.private_dir)
         os.makedirs(pdir, exist_ok=True)
-        ppayload, phists, ppaired = build(private, rel_base(pdir, site_dir))
-        contrasts([(ka, kb) for ka in private for kb in public], ppaired)   # private-vs-public contrasts stay private
-        pranks = leagues([(ka, kb) for i, ka in enumerate(private) for kb in private[i + 1:]] + [(ka, kb) for ka in private for kb in public], private, payload["rank_keys"])   # the release's keys
-        write_set(ppayload, phists, ppaired, pranks, os.path.join(pdir, "results_v2_private.js"), pdir, "RESULTS_V2_PRIVATE", f"private overlay ({len(private)} method(s), never inside the deployed tree)")
+        ppayload, phists = build(private, rel_base(pdir, site_dir))
+        # the overlay's pairs: its methods with one another and with every public method (private-vs-public stays
+        # private), at every slot of the release and of its own budgets; the release's rank keys
+        pslots = [str(r) for r in sorted(set(payload["rungs"]) | set(ppayload["rungs"]))] + [budget_key(t) for t in TIME_SLOTS]
+        priv = order(private)
+        pat = brackets(data, priv + pub, sizes, timing_all, pslots)
+        pcells = slot_cells(data, [(ka, kb) for i, ka in enumerate(priv) for kb in priv[i + 1:]] + [(ka, kb) for ka in priv for kb in pub],
+                            pat, pslots, payload["rank_keys"])
+        # basis: the release's stamps of the public partners these cells were computed against (fresh while they match)
+        ppayload["slots"] = {"rungs": ppayload["rungs"], "budgets": [budget_key(t) for t in TIME_SLOTS], "seconds": TIME_SLOTS,
+                             "at": {m: pat[m] for m in priv}, "stamp": {}, "basis": {m: dict(payload["slots"]["stamp"]) for m in priv}}
+        ppayload["pv"] = write_pair_values(pdir, a.release, data, private, sizes, payload["rank_keys"])
+        # the Predictions and Correlations views' files of the private methods, next to the overlay (tools/seal.mjs seals
+        # them one file at a time); the ground truth's are the release's own, public already, so none are written here
+        ppred = {k: v for k, v in pred_all.items() if k[0] in private and usable(k[0], k[2])}
+        ppayload["pred"] = write_predictions(pdir, a.release, ppred, {}, sizes)
+        ppayload["pred_block"] = PRED_BLOCK
+        ppayload["pp"] = write_values(pdir, a.release, data, private, sizes, with_truth=False)
+        write_set(ppayload, phists, pcells, os.path.join(pdir, "results_v2_private.js"), pdir, "RESULTS_V2_PRIVATE", f"private overlay ({len(private)} method(s), never inside the deployed tree)")
 
 
 if __name__ == "__main__":

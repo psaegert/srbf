@@ -135,9 +135,43 @@ def reading(res: dict[str, Any]) -> str:
     return "srbf's runs succeed " + ("less" if low else "more") + " often than the published ones."
 
 
+def link(url: str, text: str) -> str:
+    return f'<a href="{esc(url)}" target="_blank" rel="noopener">{esc(text)}</a>'
+
+
+def citation_html(m: dict[str, Any]) -> str:
+    """A method's card header: its name, its own paper as the headline citation (title linked, then the authors and
+    the venue), and, in a smaller line, where the compared numbers come from when that is not the method's paper."""
+    paper = m["paper"]
+    parts = [f'<h3>{esc(m["method"])}</h3>',
+             f'<p class="repro-paper">{link(paper["url"], paper["title"])}</p>',
+             f'<p class="repro-byline">{esc(paper["authors"])} · {esc(paper["venue"])}</p>']
+    res = m.get("results")
+    if res:
+        parts.append(f'<p class="repro-results-src">Published results from {esc(res["name"])}: {esc(res["authors"])}, '
+                     f'{link(res["url"], res["title"])}, {esc(res["venue"])}</p>')
+    return '<header class="repro-head">' + "".join(parts) + "</header>"
+
+
+def p_values(res: dict[str, Any]) -> list[float]:
+    return [res["p"]] if res["kind"] == "ranks" else [r["p"] for r in res["runs"]]
+
+
+def verdict_html(res: dict[str, Any]) -> str:
+    """The comparison's headline: p (one per srbf run) and the reading of it in words."""
+    ps = [fmt_p(p) for p in p_values(res)]
+    shown = ps[0] if len(ps) == 1 else ", ".join(ps[:-1]) + " and " + ps[-1]
+    differs = "1" if any(p < ALPHA for p in p_values(res)) else "0"
+    return (f'<p class="repro-verdict" data-differs="{differs}"><span class="repro-p">p = {esc(shown)}</span> '
+            f'<span class="repro-verdict-text">{esc(reading(res))}</span></p>')
+
+
 def row_html(row: dict[str, Any], res: dict[str, Any], base: Path) -> str:
+    """One comparison: the measure, the headline (p and its reading), the table, then the published side (its
+    protocol and where the number comes from, with the figure or results file) and after it srbf's side."""
     pub, srbf = row["published"], row["srbf"]
-    lines = [f'<p class="repro-what">{esc(row["what"])}</p>',
+    lines = [f'<h4 class="repro-what">{esc(row["what"])}</h4>',
+             verdict_html(res),
              '<div class="repro-scroll"><table class="repro-table">',
              '<thead><tr><th scope="col"></th><th scope="col">Result</th><th scope="col">p</th></tr></thead><tbody>',
              f'<tr><th scope="row">Published</th><td>{esc(pub["value"])}</td><td></td></tr>']
@@ -151,20 +185,18 @@ def row_html(row: dict[str, Any], res: dict[str, Any], base: Path) -> str:
             lines.append(f'<tr><th scope="row">{name}</th><td>{r["k"]} of {r["n"]} ({pct(r["rate"])}, '
                          f'95 % interval {100 * r["lo"]:.1f} to {100 * r["hi"]:.1f} %)</td><td>{fmt_p(r["p"])}</td></tr>')
     lines.append("</tbody></table></div>")
-    extra = ""
     if res.get("expected") is not None:
         n = res["runs"][0]["n"]
-        extra = (f' If srbf solved each problem with its published success rate, it would solve '
-                 f'{res["expected"]:.1f} of {n} on average.')
-    lines.append(f'<p class="repro-reading">{esc(reading(res))}{esc(extra)}</p>')
+        lines.append(f'<p class="repro-expect">If srbf solved each problem with its published success rate, it would '
+                     f'solve {res["expected"]:.1f} of {n} on average.</p>')
     if row.get("note"):
         lines.append(f'<p class="repro-note">{esc(row["note"])}</p>')
+    lines.append('<div class="repro-side repro-published"><h5>Published</h5>'
+                 f'<p>{esc(pub["where"])}. {esc(pub["protocol"])}.</p>{sources_html(row, base)}</div>')
     config = (f' Settings: <a href="{esc(REPO + srbf["config"])}" target="_blank" rel="noopener">'
               f'<code>{esc(srbf["config"])}</code></a>.' if srbf.get("config") else "")
-    lines.append('<dl class="repro-protocol">'
-                 f'<dt>Published</dt><dd>{esc(pub["where"])}. {esc(pub["protocol"])}.</dd>'
-                 f'<dt>srbf</dt><dd>{esc(srbf["problems"])}. {esc(srbf["protocol"])}.{config}</dd></dl>')
-    lines.append(sources_html(row, base))
+    lines.append('<div class="repro-side repro-srbf"><h5>srbf</h5>'
+                 f'<p>{esc(srbf["problems"])}. {esc(srbf["protocol"])}.{config}</p></div>')
     return "\n".join(line for line in lines if line)
 
 
@@ -188,17 +220,18 @@ def sources_html(row: dict[str, Any], base: Path) -> str:
             parts.append(f'<figure class="repro-source"><a href="{esc(href)}" target="_blank" rel="noopener">'
                          f'<img src="{esc(href)}" width="{w}" height="{h}" loading="lazy" alt="{esc(src["caption"])}" />'
                          f'</a><figcaption>{esc(src["caption"])}</figcaption></figure>')
+        # a lead-in line and what it introduces stay together: the sources' spacing falls between the groups
         if "reading" in src:
             rd = src["reading"]
-            parts.append(f'<p class="repro-codecap">How the number was read from the figure:</p>'
-                         f'<p class="repro-reading-text">{esc(rd["text"])}</p>'
-                         f'<p class="repro-codecap">To read it again from the paper\'s own PDF, which the script '
-                         f'downloads and checks:</p><pre class="repro-code"><code>pip install pymupdf\n'
-                         f'python scripts/read_published_figures.py {esc(rd["script"])}</code></pre>')
+            parts.append(f'<div class="repro-step"><p class="repro-codecap">How the number was read from the figure:</p>'
+                         f'<p class="repro-reading-text">{esc(rd["text"])}</p></div>'
+                         f'<div class="repro-step"><p class="repro-codecap">To read it again from the paper\'s own PDF, '
+                         f'which the script downloads and checks:</p><pre class="repro-code"><code>pip install pymupdf\n'
+                         f'python scripts/read_published_figures.py {esc(rd["script"])}</code></pre></div>')
         if "code" in src:
-            parts.append(f'<p class="repro-codecap">The published results file '
+            parts.append(f'<div class="repro-step"><p class="repro-codecap">The published results file '
                          f'(<a href="{esc(src["file"])}" target="_blank" rel="noopener">pinned on GitHub</a>) and the '
-                         f'computation:</p><pre class="repro-code"><code>{esc(src["code"])}</code></pre>')
+                         f'computation:</p><pre class="repro-code"><code>{esc(src["code"])}</code></pre></div>')
     return f'<div class="repro-sources">{"".join(parts)}</div>' if parts else ""
 
 
@@ -207,19 +240,19 @@ def slug(name: str) -> str:
 
 
 def build(data: dict[str, Any], base: Path) -> str:
-    parts = ['<section id="compared" class="prose">', "<h2>Methods with a matching published result</h2>"]
+    """Every method as one self-contained card: the compared ones with their comparisons, the rest with the reason."""
+    parts = ['<section id="compared" class="prose">', "<h2>Methods with a matching published result</h2>",
+             '<div class="repro-cards">']
     for m in data["compared"]:
-        rows = "\n".join(f'<div class="repro-row">\n{row_html(r, evaluate(r, base), base)}\n</div>' for r in m["rows"])
-        parts.append(f'<section class="topic" id="repro-{slug(m["method"])}"><h3>{esc(m["method"])}</h3><div>'
-                     f'<p class="repro-src"><a href="{esc(m["source"]["url"])}" target="_blank" rel="noopener">'
-                     f'{esc(m["source"]["cite"])}</a></p>\n{rows}\n</div></section>')
-    parts.append("</section>")
-    parts += ['<section id="not-compared" class="prose">', "<h2>Not compared yet</h2>"]
+        rows = "\n".join(f'<section class="repro-comparison">\n{row_html(r, evaluate(r, base), base)}\n</section>'
+                         for r in m["rows"])
+        parts.append(f'<article class="repro-card" id="repro-{slug(m["method"])}">{citation_html(m)}\n{rows}\n</article>')
+    parts += ["</div>", "</section>", '<section id="not-compared" class="prose">', "<h2>Not compared yet</h2>",
+              '<div class="repro-cards">']
     for m in data["not_compared"]:
-        parts.append(f'<section class="topic" id="repro-{slug(m["method"])}"><h3>{esc(m["method"])}</h3><div>'
-                     f'<p class="repro-src"><a href="{esc(m["url"])}" target="_blank" rel="noopener">{esc(m["cite"])}</a></p>'
-                     f'<p>{esc(m["reason"])}</p></div></section>')
-    parts.append("</section>")
+        parts.append(f'<article class="repro-card" id="repro-{slug(m["method"])}">{citation_html(m)}'
+                     f'<p class="repro-reason">{esc(m["reason"])}</p></article>')
+    parts += ["</div>", "</section>"]
     return "\n".join(parts)
 
 

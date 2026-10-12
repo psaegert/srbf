@@ -71,6 +71,24 @@ def test_every_row_reads_its_published_side_and_its_counts() -> None:
     assert {m["method"] for m in data["compared"]}.isdisjoint({m["method"] for m in data["not_compared"]})
 
 
+def test_every_method_cites_its_own_paper_and_where_its_numbers_come_from() -> None:
+    """The page is also a list of baselines (owner 2026-10-02): every method's card opens with the method's own paper
+    (title linked, then authors and venue); where the compared numbers come from a benchmark rather than that paper,
+    a second, smaller citation names it."""
+    data = _rows()
+    for m in data["compared"] + data["not_compared"]:
+        paper = m["paper"]
+        assert all(paper.get(k) for k in ("title", "authors", "venue", "url")), m["method"]
+        assert paper["url"].startswith("https://"), m["method"]
+        if "results" in m:
+            assert all(m["results"].get(k) for k in ("name", "title", "authors", "venue", "url")), m["method"]
+            assert m["results"]["url"] != paper["url"], f"{m['method']}: a results source that is the paper itself"
+        head = repro.citation_html(m)
+        assert head.index(paper["title"].replace("'", "&#x27;")) < head.index("repro-byline")
+        assert ("repro-results-src" in head) == ("results" in m)
+    assert all("results" in m for m in data["not_compared"])     # each names where a published result exists
+
+
 def test_a_count_that_disagrees_with_its_per_problem_file_is_refused() -> None:
     row = next(r for m in _rows()["compared"] for r in m["rows"] if r["test"]["kind"] == "per_problem")
     bad = copy.deepcopy(row)

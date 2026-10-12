@@ -12,10 +12,14 @@
 #   count        the published number is one fit per problem: Fisher's exact test of the two counts
 #   ranks        srbf's fits ranked among the published fits of the same dataset: the mean rank against the mean
 #                of ranks drawn uniformly at random
+# Per method: `paper` is the method's own publication (the page's headline citation, linked); `results` is where the
+# compared numbers come from when that is not the method's paper (a benchmark the authors submitted the method to).
 compared:
   - method: E2E
-    source:
-      cite: Kamienny, d'Ascoli, Lample and Charton, End-to-end symbolic regression with transformers, NeurIPS 2022
+    paper:
+      title: End-to-end symbolic regression with transformers
+      authors: Kamienny, d'Ascoli, Lample and Charton
+      venue: NeurIPS 2022
       url: https://arxiv.org/abs/2204.10532
     rows:
       - what: Feynman laws with test R² above 0.99
@@ -48,8 +52,16 @@ compared:
         test: {kind: rate, rate: 0.8655}
 
   - method: GP-GOMEA
-    source:
-      cite: La Cava et al., Contemporary Symbolic Regression Methods and their Relative Performance (SRBench 2021), NeurIPS Datasets and Benchmarks 2021
+    paper:
+      title: Improving model-based genetic programming for symbolic regression of small expressions
+      authors: Virgolin, Alderliesten, Witteveen and Bosman
+      venue: Evolutionary Computation 29(2), 2021
+      url: https://arxiv.org/abs/1904.02050
+    results:
+      title: Contemporary Symbolic Regression Methods and their Relative Performance
+      name: SRBench 2021
+      authors: La Cava et al.
+      venue: NeurIPS Datasets and Benchmarks 2021
       url: https://arxiv.org/abs/2107.14351
     rows:
       - what: Feynman laws with test R² above 0.999
@@ -81,8 +93,10 @@ compared:
         test: {kind: per_problem, file: reproductions/gpgomea_srbench_feynman.csv}
 
   - method: NeSymReS
-    source:
-      cite: Biggio, Bendinelli, Neitz, Lucchi and Parascandolo, Neural Symbolic Regression that Scales, ICML 2021
+    paper:
+      title: Neural Symbolic Regression that Scales
+      authors: Biggio, Bendinelli, Neitz, Lucchi and Parascandolo
+      venue: ICML 2021
       url: https://arxiv.org/abs/2106.06427
     rows:
       - what: Feynman laws on which over 95 % of the test points are within 5 % of the true value
@@ -141,8 +155,16 @@ compared:
         test: {kind: count, k: 49, n: 52}
 
   - method: Operon
-    source:
-      cite: La Cava et al., Contemporary Symbolic Regression Methods and their Relative Performance (SRBench 2021), NeurIPS Datasets and Benchmarks 2021
+    paper:
+      title: "Operon C++: an efficient genetic programming framework for symbolic regression"
+      authors: Burlacu, Kronberger and Kommenda
+      venue: GECCO 2020 Companion
+      url: https://doi.org/10.1145/3377929.3398099
+    results:
+      title: Contemporary Symbolic Regression Methods and their Relative Performance
+      name: SRBench 2021
+      authors: La Cava et al.
+      venue: NeurIPS Datasets and Benchmarks 2021
       url: https://arxiv.org/abs/2107.14351
     rows:
       - what: Feynman laws with test R² above 0.999
@@ -174,8 +196,16 @@ compared:
         test: {kind: per_problem, file: reproductions/operon_srbench_feynman.csv}
 
   - method: QLattice
-    source:
-      cite: "Imai Aldeia et al., Call for Action: Towards the Next Generation of Symbolic Regression Benchmarks (SRBench 2025), GECCO 2025 Companion"
+    paper:
+      title: An Approach to Symbolic Regression Using Feyn
+      authors: Broløs, Machado, Cave, Kasak, Stentoft-Hansen, Batanero, Jelen and Wilstrup
+      venue: arXiv 2021
+      url: https://arxiv.org/abs/2104.05417
+    results:
+      title: "Call for Action: Towards the Next Generation of Symbolic Regression Benchmarks"
+      name: SRBench 2025
+      authors: Imai Aldeia et al.
+      venue: GECCO 2025 Companion
       url: https://github.com/cavalab/srbench/tree/srbench_2025
     rows:
       - what: >-
@@ -200,8 +230,10 @@ compared:
         test: {kind: ranks}
 
   - method: RILS-ROLS
-    source:
-      cite: "Kartelj and Djukanović, RILS-ROLS: robust symbolic regression via iterated local search and ordinary least squares, Journal of Big Data 10, 71 (2023)"
+    paper:
+      title: "RILS-ROLS: robust symbolic regression via iterated local search and ordinary least squares"
+      authors: Kartelj and Djukanović
+      venue: Journal of Big Data 10, 71 (2023)
       url: https://doi.org/10.1186/s40537-023-00743-2
     rows:
       - what: Feynman laws with test R² above 0.999
@@ -232,22 +264,49 @@ compared:
 
 not_compared:
   - method: DSR
-    cite: La Cava et al., Contemporary Symbolic Regression Methods and their Relative Performance (SRBench 2021), NeurIPS Datasets and Benchmarks 2021
-    url: https://arxiv.org/abs/2107.14351
+    paper:
+      title: "Deep symbolic regression: Recovering mathematical expressions from data via risk-seeking policy gradients"
+      authors: Petersen, Landajuela, Mundhenk, Santiago, Kim and Kim
+      venue: ICLR 2021
+      url: https://arxiv.org/abs/1912.04871
+    results:
+      title: Contemporary Symbolic Regression Methods and their Relative Performance
+      name: SRBench 2021
+      authors: La Cava et al.
+      venue: NeurIPS Datasets and Benchmarks 2021
+      url: https://arxiv.org/abs/2107.14351
     reason: >-
       SRBench 2021 reports DSR on the Feynman laws: 22.6 % of its fits reach a test R² above 0.999, at 1,000,000
       expressions per fit. srbf's own runs of DSR use at most 16,000 expressions, so a comparison needs a run of
       srbf's DSR at SRBench's settings.
   - method: PySR
-    cite: "Imai Aldeia et al., Call for Action: Towards the Next Generation of Symbolic Regression Benchmarks (SRBench 2025), GECCO 2025 Companion"
-    url: https://github.com/cavalab/srbench/tree/srbench_2025
+    paper:
+      title: Interpretable Machine Learning for Science with PySR and SymbolicRegression.jl
+      authors: Cranmer
+      venue: arXiv 2023
+      url: https://arxiv.org/abs/2305.01582
+    results:
+      title: "Call for Action: Towards the Next Generation of Symbolic Regression Benchmarks"
+      name: SRBench 2025
+      authors: Imai Aldeia et al.
+      venue: GECCO 2025 Companion
+      url: https://github.com/cavalab/srbench/tree/srbench_2025
     reason: >-
       SRBench 2025 reports PySR on the physics datasets QLattice is compared on above, 30 fits per dataset with
       50 minutes each. A comparison needs a run of srbf's PySR inside SRBench's protocol, as for QLattice. PySR's
       own paper evaluates it on empirical laws that are not among srbf's problems.
   - method: uDSR*
-    cite: "Imai Aldeia et al., Call for Action: Towards the Next Generation of Symbolic Regression Benchmarks (SRBench 2025), GECCO 2025 Companion"
-    url: https://github.com/cavalab/srbench/tree/srbench_2025
+    paper:
+      title: A Unified Framework for Deep Symbolic Regression
+      authors: Landajuela, Lee, Yang, Glatt, Santiago, Aravena, Mundhenk, Mulcahy and Petersen
+      venue: NeurIPS 2022
+      url: https://proceedings.neurips.cc/paper_files/paper/2022/hash/dbca58f35bddc6e4003b2dd80e42f838-Abstract-Conference.html
+    results:
+      title: "Call for Action: Towards the Next Generation of Symbolic Regression Benchmarks"
+      name: SRBench 2025
+      authors: Imai Aldeia et al.
+      venue: GECCO 2025 Companion
+      url: https://github.com/cavalab/srbench/tree/srbench_2025
     reason: >-
       SRBench 2025 reports uDSR on twelve datasets of its black-box track, 30 fits per dataset. A comparison needs a
       run of srbf's uDSR inside SRBench's protocol. The uDSR paper's own results use 2 million expressions per

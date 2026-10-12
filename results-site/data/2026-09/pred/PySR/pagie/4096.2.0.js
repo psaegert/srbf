@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|pagie|4096|2|0"]={"0":["+ pow tanh asinh * x2 x2 2 * pow tanh * pow + cosh x1 -0.9853 + pow 0.4123 abs x1 0.3225 1.224 1.678 0.9978",0]};})();

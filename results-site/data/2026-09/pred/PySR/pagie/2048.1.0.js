@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|pagie|2048|1|0"]={"0":["+ pow sin atan * x1 x1 2 pow cos atan / inv x2 x2 2",1]};})();

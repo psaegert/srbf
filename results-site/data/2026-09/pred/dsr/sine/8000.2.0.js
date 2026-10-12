@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["dsr|sine|8000|2|0"]={"0":["- x1 - + - x1 sin abs + + -0.1453 * - * tanh x1 -3.351 -3.389 x1 x1 x1 x1",0]};})();

@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|physo-astro|524288|2|0"]={"0":["+ 0.0216 * 1.473 / sinh sinh exp * -0.8222 x1 * 1.562 x1",0],"1":["+ -1.047e-06 * 1 + * 4.534 x1 - * * 18.05 x1 + * * 3.725 x1 * 0.02247 x1 * 0.2512 x1 -1.149",1]};})();

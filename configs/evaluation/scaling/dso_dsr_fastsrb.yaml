@@ -28,11 +28,11 @@ run:
       arm: dsr
       n_samples: !sweep
         name: ladder
-        values: [1000, 2000, 4000, 8000, 16000]
+        values: [1000, 2000, 4000, 8000, 16000, 32000]
   runner:
     limit: null
     save_every: 8
     resume: true
     output: !sweep
       name: ladder
-      values: ['{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0001000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0002000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0004000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0008000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0016000.pkl']
+      values: ['{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0001000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0002000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0004000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0008000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0016000.pkl', '{{ROOT}}/results/evaluation/scaling/dso-dsr/fastsrb/samples_0032000.pkl']

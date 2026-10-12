@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["dsr|pagie|8000|1|0"]={"0":["exp pow pow abs - pow tanh abs * - / / abs x1 46.85 + 1.274 x2 x1 x2 4 0.1141 2 2",0]};})();

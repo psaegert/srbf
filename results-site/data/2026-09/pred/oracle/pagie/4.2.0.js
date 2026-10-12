@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["oracle|pagie|4|2|0"]={"0":["- / * 9 inv + inv pow x2 4 3 2 / 2 - inv pow x1 4 6",0]};})();

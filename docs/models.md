@@ -9,6 +9,7 @@ block. To enter a method of your own, see [Adding your method](adapters.md).
 | `pysr` | [PySR](#pysr) | `pip install pysr`, in an environment of its own if you like |
 | `subprocess`, `worker: operon` | [Operon](#operon) | `pip install pyoperon==0.6.1 scikit-learn`, in an environment of its own |
 | `subprocess`, `worker: rilsrols` | [RILS-ROLS](#rils-rols) | `scripts/envs/build_rilsrols_env.sh`, an environment of its own |
+| `subprocess`, `worker: tisr` | [TiSR](#tisr) | `scripts/envs/build_tisr_env.sh envs/tisr`: Julia and TiSR in an environment of their own |
 | `nesymres` | [NeSymReS](#nesymres) | clone, patch, download weights |
 | `e2e` | [E2E](#e2e) | clone, patch, download weights |
 | `subprocess`, `worker: dso` | [DSR and uDSR\*](#dso) | `scripts/envs/build_dso_env.sh`: a conda environment with Python 3.7 |
@@ -203,7 +204,12 @@ and division.
   thread the evaluation budget is counted in parallel and a run is not reproducible exactly.
 
 The worker stores the whole Pareto front in the `front` column. `configs/evaluation/scaling/operon_fastsrb.yaml`
-sweeps the evaluations in doublings from 2^10 up to about 100 s per problem on the reference machine.
+sweeps the evaluations in doublings from 2^10 to 2^27, about 100 s per problem on the reference machine. The author's
+configuration also limits a search to 1,000 generations, as a backstop rather than a budget: his SRBench 2021
+configuration sets it only high enough for the evaluation budget to end a search first, and at his 10^6 evaluations a
+search runs about 200 generations. Past about 5 x 10^6 evaluations those 1,000 generations would end every search first, so the worker raises
+the limit with the budget to one it cannot reach (`generation_limit`), and the evaluation count stays the only budget.
+The result records the limit used and whether a search reached it.
 
 ## RILS-ROLS
 
@@ -282,8 +288,102 @@ same data and seed, the changed and the unchanged build take the same steps and 
   data and seed give the same answer on the same machine.
 
 `configs/evaluation/scaling/rilsrols_fastsrb.yaml` sweeps the fitness evaluations in doublings from 2^6, the first
-power of two above the method's first step (scoring the perturbations of its starting model), up to 2^21, about
+power of two above the method's first step (scoring the perturbations of its starting model), up to 2^22, about
 100 s per problem on the reference machine.
+
+## TiSR
+
+```bash
+scripts/envs/build_tisr_env.sh envs/tisr     # needs uv, curl and git; downloads Julia and compiles TiSR
+```
+
+TiSR (thermodynamics-informed symbolic regression; Martinek, Frotscher, Richter and Herzog) is genetic programming
+in Julia: NSGA-II on islands, the constants of new expressions fitted by Levenberg–Marquardt, and a hall of fame,
+the Pareto front of fit error against complexity. It runs through the [worker protocol](adapters.md) as
+`worker: tisr` and calls Julia through juliacall. TiSR is licensed under the Apache License 2.0.
+
+The build script creates the environment: Python 3.12 with juliacall, Julia 1.12.7, and TiSR at commit `9e628e6` of
+its main branch (January 2026), with every Julia package at the version of the lock file
+(`scripts/envs/tisr/Manifest.toml`), resolved from TiSR's own compatibility bounds, all in a Julia depot of the
+environment's own. The worker points juliacall at this Julia and depot and starts it with one thread.
+
+The configuration is TiSR's own defaults at that commit:
+- 20 islands of 50 expressions, each breeding about 50 new expressions per generation;
+- expressions of at most 30 nodes;
+- residuals weighted by 1/|y|, so that the search fits the relative error;
+- constants fitted on half of the islands, by up to 10 Levenberg–Marquardt iterations (Nelder–Mead for one fit in
+  ten);
+- an expression seen recently is rejected with probability 0.9;
+- the hall of fame on the weighted squared error and a weighted node count.
+
+On a system whose `libstdc++` is older than Julia 1.12 needs (`GLIBCXX_3.4.26`, missing on RHEL 8 and its
+relatives), put Julia's own first for the worker: `env: {LD_LIBRARY_PATH: <prefix>/julia-1.12.7/lib/julia}` in the
+config. Without it juliacall loads the system's and stops with "version `GLIBCXX_3.4.26' not found".
+
+srbf sets the operators, the budget (a number of generations), the seed and the threads. TiSR runs on one thread
+unless it is told otherwise; given more, it breeds and fits the islands of a generation in parallel, as its
+documentation describes, and the benchmark gives it the whole machine (`threads: all`). BLAS stays at one thread so
+that the islands do not each start a BLAS pool on the same cores.
+
+**Every run spends its whole budget.** TiSR ends a search at the first of four conditions: the number of
+generations, a wall-clock limit (300 s by default), a user callback, or `q` typed on its input. The worker keeps only
+the number of generations: it raises the wall-clock limit to a guard far above every budget of the ladder, leaves the
+callback at TiSR's default, which never stops, and gives the search no input. A constant fit inside a generation ends
+at TiSR's own iteration limits and convergence test, which end that fit, not the search.
+
+```yaml
+model_adapter:
+  type: subprocess
+  worker: tisr
+  python: "{{ROOT}}/envs/tisr/bin/python"
+  config_provenance: harness_tuned   # srbf picks the answer (selection), so the maintainers chose part of it
+  simplipy_engine: acj-5-4-llm
+  timeout: 7200
+  selection: {mode: mdl}       # TiSR picks no answer; without this every problem counts as failed
+  options:
+    generations: 64
+    threads: all
+```
+
+| key | default | meaning |
+|---|---|---|
+| `options.generations` | `512` | TiSR's number of generations: the budget |
+| `options.threads` | `1` | the threads Julia starts with, or `all`; with more than one, TiSR breeds and fits its islands in parallel |
+| `options.seed` | `0` | mixed with a hash of the problem's data into the run's seed |
+| `options.time_guard` | `3600` | TiSR's wall-clock limit in seconds, a guard; the `hit_time_guard` column marks a run it stopped |
+| `options.warmup` | `true` | run a throwaway fit when the worker starts, so that compiling TiSR is not part of the first problem's time |
+| `options.config`, `options.config_by_problem` | none | TiSR settings that replace its defaults, for every problem or per problem; for side experiments only, which are then `harness_tuned`; they cannot set a stop |
+| `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
+
+**Operators.** TiSR takes any Julia function as an operator, so it searches over all the operators the expressions
+are written in: `+ - * / ^ rootn` and `neg abs inv sin cos tan asin acos atan sinh cosh tanh asinh acosh atanh exp
+log`. Its evaluator refuses a logarithm of a number that is not positive, a division by zero and a power of a
+negative base before computing them, and drops the expression; any other function that fails stops the whole search.
+The worker therefore gives TiSR `asin acos acosh atanh` as functions that return NaN outside their domain, as srbf
+evaluates them, so that TiSR drops such an expression as well. `rootn` needs an integer index, which a fitted
+constant rarely is; TiSR writes roots as powers.
+
+**No single answer of its own.** A TiSR search returns its hall of fame, and TiSR defines no rule that picks one
+expression from it: its README and example sort the hall of fame for the user to inspect, and its export functions
+order their tables by the fit error. The worker therefore returns the whole hall of fame as the problem's candidates,
+and srbf picks one only when the config sets `selection` ([Picking among candidates](adapters.md#the-config-keys)):
+`{mode: mdl}`, the two-part code srbf ranks Flash-ANSR's candidates with, is srbf's rule and not TiSR's. Without it
+every problem is recorded as failed. Either way the row carries the whole hall of fame in the `hall_of_fame` column,
+each member written in the benchmark's syntax with every constant at full precision, with TiSR's measures of it and
+with its `string_deviation`, how far the string's values are from TiSR's own.
+
+**What to know when reading the results:**
+- The weights 1/|y| make the search fit relative errors. TiSR replaces the infinite weight of a zero target by
+  1e100, and such a point dominates the fit.
+- TiSR's runs are not reproducible from the seed: two fits of the same data with the same seed can return different
+  halls of fame. TiSR picks parents by their rank and crowding, and an expression that has not been through a
+  selection yet, as all of an island's first expressions, carries values that TiSR never set. srbf runs TiSR as it
+  is.
+
+`configs/evaluation/scaling/tisr_fastsrb.yaml` sweeps the generations in doublings from 1 to 2048, about 100 s per
+problem on the reference machine. `configs/evaluation/panels/tisr_fastsrb2025_fastsrb.yaml` runs the protocol of the
+FastSRB paper, whose complexity cap per problem is taken from the ground truth, as a check against that paper's
+numbers.
 
 ## NeSymReS
 
@@ -407,8 +507,10 @@ model_adapter:
 | `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
 
 **Budget.** DSO checks `n_samples` after each iteration: an iteration is 1,000 expressions for DSR and 500 + 25 ×
-500 = 13,000 for uDSR\*, so the ladders count whole iterations. A search stops early once an expression fits the
-data to a normalized mean squared error below 1e-12, which happens only on noiseless data.
+500 = 13,000 for uDSR\*, so the ladders count whole iterations and double them: DSR's `n_samples` is 1,000 × 2^k,
+uDSR\*'s 13,000 × 2^k. A budget between two multiples of an iteration would run to the next one. A search stops
+early once an expression fits the data to a normalized mean squared error below 1e-12, which happens only on
+noiseless data.
 
 **Operators.** DSO searches over the operators it has among those the expressions are written in:
 
@@ -556,8 +658,9 @@ powers and roots, `abs`, `tan`, or the inverse and hyperbolic functions. It expr
 The worker also stores GP-GOMEA's own printed model in the `model_string` column.
 `configs/evaluation/scaling/gpgomea_fastsrb.yaml` sweeps the evaluations in doublings, from 2^14,
 the first power of two above the cost of one generation, up to about 100 s per problem on the
-reference machine. Between 2^16 and 2^18 it takes quarter steps (2^16.25, 2^16.5, ...), so that its
-points stay about evenly spaced in time where the stalls set in.
+reference machine. Between 2^16 and 2^18 it takes quarter steps (2^16.25, 2^16.5, ...), and between
+2^16.75 and 2^17, where the time grows tenfold within one quarter step, sixteenth steps (2^16.8125, 2^16.875,
+2^16.9375), so that its points stay about evenly spaced in time where the stalls set in.
 `configs/evaluation/panels/gpgomea_srbench2021_feynman.yaml` runs the configuration that SRBench 2021
 published its GP-GOMEA results with, on the Feynman catalogs.
 
@@ -628,7 +731,8 @@ empty mapping there, which states the same thing, every input numerical.
 
 The worker stores the other models the method returned in the `diverse` column, and the largest deviation of the
 expression from the model's own predictions in `string_deviation` and `string_deviation_val`.
-`configs/evaluation/scaling/qlattice_fastsrb.yaml` sweeps the epochs in doublings from 1 to 16.
+`configs/evaluation/scaling/qlattice_fastsrb.yaml` sweeps the epochs in doublings from 1 to 256, about 100 s per
+problem on the reference machine.
 
 ## Sampling and enumeration baselines
 
