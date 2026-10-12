@@ -13,19 +13,25 @@ the compiler's sysroot to glibc 2.17, whose libraries the linker of gcc 11.2 can
 The configuration is the one GP-GOMEA's first author committed for running it as a benchmark baseline (SRBench
 2021, cavalab/srbench commit 71ae717, experiment/methods/GPGOMEARegressor.py) without the harness's hyperparameter
 grid: GP-GOMEA with the linkage-tree FOS, linear scaling, ephemeral random constants, the interleaved multistart
-scheme off, one thread; everything else at the wrapper's defaults (population 500, initial tree height 4, elitism
-1). srbf sets only what it sets for every method: the operators (the benchmark's operators as far as GP-GOMEA has
-them), the budget (a count of evaluations) and the seed. The wall-clock limit is SRBench's 7,200 s, a guard that
-the ladder never reaches. See docs/models.md.
+scheme off, one thread (the ``threads`` option, a resource, gives it more); everything else at the wrapper's
+defaults (population 500, initial tree height 4, elitism 1). srbf sets only what it sets for every method: the
+operators (the benchmark's operators as far as GP-GOMEA has them), the budget (a count of evaluations), the seed and
+the threads. The wall-clock limit is SRBench's 7,200 s, a guard that the ladder never reaches. See docs/models.md.
 
 ``options`` (from the config's ``model_adapter`` block):
 
 * ``max_evaluations`` (int, 500,000, the author's value): the budget, the compute axis of the scaling sweeps.
   GP-GOMEA counts one evaluation per fitness evaluation of a whole tree, the initial population's included, and
   checks the budget between generations, so a run overshoots it by up to one generation.
+* ``threads`` (int or ``"all"``, 1): the threads GP-GOMEA runs on, passed as its ``parallel`` setting (its
+  OpenMP team: GP-GOMEA calls ``omp_set_num_threads`` with it). A resource, not a search setting, so it leaves the
+  configuration's provenance alone. 1 is the author's configuration; ``"all"`` is every CPU this process may run on
+  (the benchmark's runs, owner 2026-09-30: every method gets the whole reference machine). With more than one thread
+  the evaluation count races, so a run is not reproducible exactly.
 * ``seed`` (int, 0): mixed with a hash of the problem's data into the run's seed, so a problem's fit is
   reproducible and two draws of a law (fresh data) get different seeds.
-* ``config`` (dict, none): settings that replace the author configuration's, ``functions`` included. For side
+* ``config`` (dict, none): settings that replace the author configuration's, ``functions`` included (not
+  ``parallel``: ``threads`` sets it). For side
   experiments only, such as reproducing a published configuration; a config that sets it is ``harness_tuned``,
   and published results never set it.
 
@@ -68,8 +74,11 @@ import signal
 import time
 import traceback
 
-for _variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
-    os.environ.setdefault(_variable, "1")   # one thread, and a single-threaded process to fork each fit from
+# numpy's BLAS in this process only: its own work here is bookkeeping on small arrays, and each fit is forked from
+# it, which a live BLAS thread pool makes unsafe. GP-GOMEA's threads are its OpenMP team in the fit's child, which
+# its ``parallel`` setting sizes (``threads``); no cap here reaches it.
+for _variable in ("OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ.setdefault(_variable, "1")
 
 import numpy as np  # noqa: E402 - after the thread settings, which numpy reads when it loads
 
@@ -96,10 +105,10 @@ AUTHOR_CONFIG = {
     "unifdepthvar": True, "tournament": 4, "elitism": 1,
     "ims": False, "syntuniqinit": 1000, "popsize": 500,
     "initmaxtreeheight": 4, "maxtreeheight": 17, "maxsize": 1000,
-    "parallel": False,   # one thread: with more, the evaluation count races and a run is irreproducible
+    "parallel": False,   # the author's one thread; the `threads` option (a resource) replaces it per run
     "caching": False, "silent": True,
 }
-SET_PER_FIT = ("evaluations", "seed")
+SET_PER_FIT = ("evaluations", "seed", "parallel")
 
 # Seconds the worker waits beyond the guard for a fit's child before it stops it (the budget is checked only
 # between generations, and a generation of a large configuration takes a while).
@@ -372,7 +381,19 @@ def run_method(X, Y, params, wait):
         child.join(5)
 
 
-def build_params(max_evaluations, seed, config=None):
+def resolve_threads(value):
+    """The ``threads`` option as a count: an int >= 1, or ``"all"`` = the CPUs this process may run on."""
+    if value == "all":
+        try:
+            return len(os.sched_getaffinity(0))
+        except AttributeError:   # no affinity call on this platform
+            return os.cpu_count() or 1
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError("threads must be an int >= 1 or 'all', got %r" % (value,))
+    return value
+
+
+def build_params(max_evaluations, seed, config=None, threads=1):
     config = dict(config or {})
     unknown = sorted(set(config) - set(AUTHOR_CONFIG))
     fixed = sorted(set(config) & set(SET_PER_FIT))
@@ -384,13 +405,14 @@ def build_params(max_evaluations, seed, config=None):
         raise ValueError("the worker cannot state GP-GOMEA's %s in the benchmark's operators" % ", ".join(unstated))
     if not 0 < int(max_evaluations) < 2 ** 31:
         raise ValueError("max_evaluations must be in [1, 2**31), got %r" % max_evaluations)
-    return {**AUTHOR_CONFIG, **config, "evaluations": int(max_evaluations), "seed": int(seed)}
+    return {**AUTHOR_CONFIG, **config, "evaluations": int(max_evaluations), "seed": int(seed),
+            "parallel": False if int(threads) == 1 else int(threads)}
 
 
 def load(options):
     state = {"max_evaluations": int(options.get("max_evaluations", 500_000)), "seed": int(options.get("seed", 0)),
-             "config": dict(options.get("config") or {})}
-    build_params(state["max_evaluations"], 0, state["config"])      # a bad option fails at start, not per problem
+             "config": dict(options.get("config") or {}), "threads": resolve_threads(options.get("threads", 1))}
+    build_params(state["max_evaluations"], 0, state["config"], state["threads"])   # a bad option fails at start
     _require_gpgomea()   # imported once here, so every fit's child inherits it (the import runs no C++ code)
     return state
 
@@ -408,8 +430,9 @@ def fit(x, y, *, x_val, variables, meta, options, state):
     X = np.ascontiguousarray(np.asarray(x, dtype=np.float64))
     Y = np.ascontiguousarray(np.asarray(y, dtype=np.float64).ravel())
     seed = run_seed(X, Y, state["seed"])
-    params = build_params(state["max_evaluations"], seed, state.get("config"))
-    extra = {"seed": seed, "max_evaluations": state["max_evaluations"]}
+    threads = state.get("threads", 1)
+    params = build_params(state["max_evaluations"], seed, state.get("config"), threads)
+    extra = {"seed": seed, "max_evaluations": state["max_evaluations"], "threads": threads}
     limit = int(params["time"])                  # seconds; not positive = no limit
     report = run_method(X, Y, params, wait=limit + GRACE_SECONDS if limit > 0 else None)
     if "error" in report:

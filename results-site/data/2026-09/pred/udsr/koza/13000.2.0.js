@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["udsr|koza|13000|2|0"]={"0":["+ + * 1 x1 * -2 pow x1 3 + pow abs pow - 1 1 3 2 * pow abs x1 4 x1",1],"1":["* * + pow neg x1 2 - pow log 1 3 1 x1 / * + pow x1 2 - log 1 1 x1 1",1]};})();

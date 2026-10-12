@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["dsr|meier|16000|1|0"]={"0":["/ pow abs x2 4 cos - x1 - 1.571 x2",0],"1":["- pow + / x1 * + exp x2 + * x1 - -0.004457 tanh x1 0.739 x2 1.005 3 x1",0]};})();

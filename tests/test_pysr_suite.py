@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 import srbf  # noqa: F401  (registers the !sweep tag)
 from srbf.config import load_config, select_experiment
 
@@ -69,3 +71,24 @@ def test_up_to_leaves_the_rungs_above_for_a_later_call(tmp_path: Path) -> None:
                           "--full-suite", "--model-name", "pysr", "--root", str(tmp_path), "--experiments", "nguyen",
                           "--up-to", "2", "--dry-run"], check=True, capture_output=True, text=True).stdout
     assert "ladder=1" in out and "ladder=2" in out and "ladder=4" not in out
+
+
+def test_a_timed_unit_gets_no_thread_cap(tmp_path: Path, monkeypatch) -> None:
+    """Every method gets the whole reference machine (owner 2026-09-30): a thread cap in the caller's environment
+    does not reach the timed `srbf run`."""
+    rtl = _module("run_timing_ladder")
+    _config(tmp_path)
+    for cap in rtl.THREAD_CAPS:
+        monkeypatch.setenv(cap, "1")
+    seen = []
+
+    def fake_call(cmd, env=None, **kwargs):
+        seen.append(dict(env))
+        raise SystemExit(0)
+
+    monkeypatch.setattr(rtl.subprocess, "call", fake_call)
+    monkeypatch.setattr(sys, "argv", ["run_timing_ladder.py", "-c", str(tmp_path / "pysr_suite.yaml"), "--full-suite",
+                                      "--model-name", "pysr", "--root", str(tmp_path), "--experiments", "nguyen", "--up-to", "1"])
+    with pytest.raises(SystemExit):
+        rtl.main()
+    assert seen and not {"OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"} & set(seen[0])

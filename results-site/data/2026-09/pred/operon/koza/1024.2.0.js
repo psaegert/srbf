@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|koza|1024|2|0"]={"0":["+ -0.4069 * 0.467 asin tanh exp - rootn * 1.431 x1 3 * 0.4734 x1",0],"1":["+ 0.1469 * -0.3556 log cosh cos / * * -1.192 x1 2.773 -1.194",0]};})();

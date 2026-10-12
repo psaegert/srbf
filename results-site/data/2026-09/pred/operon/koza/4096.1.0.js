@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|koza|4096|1|0"]={"0":["+ 0.002612 * 1.136 tan / sin * 1.241 x1 cosh * 3.412 x1",0],"1":["+ 7.956 * -6.75 sinh abs tanh / cosh * 2.613 x1 * 1.551 x1",0]};})();

@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-120M-pysr|koza|512|2|0"]={"0":["+ x1 / * 119 * pow x1 2 - + * 0.6711 x1 sin neg x1 / 0.001476 / -0.2 asin x1 19",0],"1":["asin * 21.19 * pow tanh - sin x1 * 0.8422 x1 2 + / asin x1 x1 0.9",0]};})();

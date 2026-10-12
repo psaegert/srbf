@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|sine|16384|1|0"]={"0":["+ 0.2817 * 1.221 * cos * -0.6121 x1 tanh pow / * 0.46 x1 0.2317 sin atan rootn * 15.56 x1 3",0]};})();

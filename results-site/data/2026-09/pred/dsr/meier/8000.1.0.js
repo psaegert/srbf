@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["dsr|meier|8000|1|0"]={"0":["/ * x1 pow * * x1 1.034 x2 3 * / cos x1 cos exp x1 + x1 x2",0],"1":["* / neg pow + + / 0.06011 inv / + - pow x1 3 x2 x1 x2 x1 x1 3 x2 0.6843",0]};})();

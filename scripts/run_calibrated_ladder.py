@@ -25,6 +25,12 @@ from typing import Any, Mapping
 from srbf.config import build_catalog_source, load_run_config, select_experiment
 
 
+THREAD_CAPS = ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS",
+               "BLIS_NUM_THREADS")
+"""Environment variables that cap a library's thread pool; the timed runs get none of them (every method gets the
+whole reference machine)."""
+
+
 def parse_rule(text: str) -> list[tuple[int, int]]:
     """``"50:10,10:2"`` -> [(50, 10), (10, 2)], largest threshold first."""
     rule = []
@@ -95,7 +101,11 @@ def main() -> int:
     print(f"{len(plan)} units: {len(experiments)} experiments x {len(ladder)} rungs; whole suite up to {a.full_up_to}, "
           f"subset rule {a.subset_rule} above; root {a.root}; model {model}", flush=True)
     env = dict(os.environ, PYTHONUNBUFFERED="1")
-    env.setdefault("OMP_NUM_THREADS", "1")
+    # Every method gets the whole machine (owner 2026-09-30): the harness caps no thread pool. A cap inherited from
+    # the caller's environment is dropped too; a method that wants per-process limits (Flash-ANSR's refinement
+    # workers pin their own BLAS pools) sets them itself.
+    for cap in THREAD_CAPS:
+        env.pop(cap, None)
     done = skipped = 0
     for e, c, n in plan:
         tag = f"{e}_{c:06d}" + (f".subset-1-of-{n}" if n > 1 else "")

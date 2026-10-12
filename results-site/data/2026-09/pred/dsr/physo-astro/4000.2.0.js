@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["dsr|physo-astro|4000|2|0"]={"0":["neg / 0.5056 neg / + -0.001197 / x1 / rootn inv + 0.2224 * x1 x1 2 x1 x1",0],"1":["pow inv / 1.723 + + x1 / tanh pow log + 6.283 x1 4 0.5227 x1 3",0]};})();

@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["gpgomea|koza|120194|1|0"]={"0":["+ 5.456e-05 * 2.378 * * * * -0.221 x1 / x1 * x1 + 1 / 1e-06 abs x1 - pow x1 2 rootn abs 0.918 2 + cos * x1 x1 cos + x1 x1",0],"1":["+ 12.28 * -12.28 cos * * x1 sin -0.417 - * x1 x1 sin 1.507",0]};})();

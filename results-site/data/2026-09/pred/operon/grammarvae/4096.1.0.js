@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|grammarvae|4096|1|0"]={"0":["+ 0.001623 * 1.001 / - atan / rootn * 2.665 x1 3 * 0.4142 x1 * * 1.923 x1 -1.105 cosh exp 0.3293",0]};})();

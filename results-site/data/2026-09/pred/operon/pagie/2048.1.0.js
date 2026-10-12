@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|pagie|2048|1|0"]={"0":["+ 1.798 * -0.9557 pow exp * -0.3415 x2 * 2.094 x2",0]};})();

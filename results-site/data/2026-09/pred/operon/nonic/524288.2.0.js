@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|nonic|524288|2|0"]={"0":["+ -0.0004568 * 1 * * 0.9112 x1 sinh + rootn cos sin sinh + -0.5639 * -1.132 x1 3 * sin atan - 4.199 exp * -1.437 x1 * exp * 0.7153 x1 * 1.022 x1",0]};})();

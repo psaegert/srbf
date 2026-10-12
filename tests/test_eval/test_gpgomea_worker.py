@@ -209,3 +209,19 @@ def test_the_configuration_names_only_arguments_the_real_regressor_takes():
     accepted = set(inspect.signature(pygpgomea.GPGOMEARegressor.__init__).parameters)
     assert set(w.AUTHOR_CONFIG) | set(w.SET_PER_FIT) <= accepted
     assert set(inspect.signature(_Regressor.__init__).parameters) == accepted
+
+
+def test_threads_are_a_resource_default_one_and_all_means_every_cpu(fake_gpgomea):
+    X, y = _data()
+    out = _fit(X, y, w.load({"max_evaluations": 65536}))
+    assert _params()["parallel"] is False and out["extra"]["threads"] == 1      # the author's one thread
+    out = _fit(X, y, w.load({"max_evaluations": 65536, "threads": 4, "config": {"popsize": 1000}}))
+    assert _params()["parallel"] == 4 and _params()["popsize"] == 1000 and out["extra"]["threads"] == 4
+    cpus = len(os.sched_getaffinity(0))
+    out = _fit(X, y, w.load({"max_evaluations": 65536, "threads": "all"}))
+    assert _params()["parallel"] == (False if cpus == 1 else cpus) and out["extra"]["threads"] == cpus
+    for bad in (0, -1, "many", 2.5, True):
+        with pytest.raises(ValueError, match="threads"):
+            w.load({"threads": bad})
+    with pytest.raises(ValueError, match="parallel"):
+        w.load({"config": {"parallel": 8}})                                      # threads sets it, not config

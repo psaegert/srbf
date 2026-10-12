@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|meier|262144|1|0"]={"0":["+ -0.01589 * 0.7289 * / * * -0.01711 x2 * 19.91 x1 + * 2.772 x2 * 2.767 x1 cosh * -3.263 x2",0],"1":["+ 3.931e+04 * 0.9978 / / sinh * 4.91 x1 * 0.2531 x2 * 0.3521 x2",0]};})();

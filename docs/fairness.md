@@ -80,12 +80,14 @@ run:
 | label | meaning |
 |---|---|
 | `upstream_default` | the method's own released defaults, apart from the operator vocabulary and the swept budget; nothing was tuned in either direction |
-| `author_blessed` | the method's authors supplied or approved the configuration |
-| `harness_tuned` | the benchmark maintainers chose the configuration |
+| `author_blessed` | the configuration the method's authors use to benchmark it: supplied, approved or published by them |
+| `harness_tuned` | the benchmark maintainers chose the configuration, or part of it |
 
 The label is validated when the config is loaded and stored in every result file, next to the
 record of what ran ([Results](results.md#what-a-result-file-records)). A config without the key is
-read as `harness_tuned`: an unlabeled configuration was chosen by whoever assembled it.
+read as `harness_tuned`: an unlabeled configuration was chosen by whoever assembled it. A config that sets
+`selection` is `harness_tuned` too: srbf, not the method, then picks the method's answer
+([Picking among candidates](adapters.md#the-config-keys)).
 
 The configs in the repository are labeled as follows, and a test keeps them that way:
 
@@ -96,11 +98,18 @@ The configs in the repository are labeled as follows, and a test keeps them that
 - **PySR, NeSymReS, E2E:** `upstream_default`.
 - **Operon:** `author_blessed`: the configuration its first author published for running it as a benchmark
   baseline, without its hyperparameter search. Its library defaults differ: one objective and no local
-  search, which no benchmark run by its authors has used.
+  search, which no benchmark run by its authors has used. Its generation limit is a backstop the author sets only
+  high enough for the evaluation budget to end a search first; srbf raises it with its larger budgets so that it
+  never ends a search, and the evaluation count stays the only budget, as the author intends.
 - **RILS-ROLS:** `author_blessed`: the configuration its first author committed for running it as a
   benchmark baseline (his SRBench submission), without the hyperparameter grid that the benchmark's
   maintainers searched around it. It differs from the library's defaults in the sample size, which it
   lets the method choose; on up to 10,000 points the method takes them all, as the default does.
+- **TiSR:** `harness_tuned`: its own defaults at the pinned commit of its main branch, but that version returns
+  a hall of fame and no single answer, so srbf picks one with `selection: {mode: mdl}`, a rule the maintainers
+  chose. A TiSR release that returns its own answer would run as `upstream_default`. The protocol of its author's
+  benchmark paper, with its operators and forbidden nestings and a complexity cap per problem taken from the ground
+  truth, runs as a `harness_tuned` config under `configs/evaluation/panels/`, a check against the paper's numbers.
 - **Flash-ANSR, every size:** `author_blessed`. For these entries the method's authors and the
   benchmark's maintainers are the same people, which is exactly what the label discloses. Any
   method's authors get the same slot on the same terms.
@@ -113,6 +122,9 @@ The configs in the repository are labeled as follows, and a test keeps them that
   benchmark baseline (SRBench 2021), without the hyperparameter grid that the benchmark's maintainers
   searched around it. Its library defaults differ: they run the interleaved multistart scheme, which
   the author turned off for benchmarking, and stop after 60 seconds.
+- **QLattice:** `author_blessed`: the configuration its authors submitted to SRBench, their own loop for 200
+  epochs with models ranked by feyn's `wide_parsimony` criterion. The library's `auto_run` defaults differ: 10
+  epochs and the Bayesian information criterion.
 - **Bingo:** `author_blessed`: the configuration its authors ship for benchmarking and submitted to
   SRBench. Its library defaults differ: stack size 32, no simplification, crossover and mutation
   probability 0.4, and the four arithmetic operators only.

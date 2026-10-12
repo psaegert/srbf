@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["gpgomea|grammarvae|110218|2|0"]={"0":["+ 0.3333 * 1 * exp - - x1 x1 exp -31.49 + sin pow x1 2 x1",1]};})();

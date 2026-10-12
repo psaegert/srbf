@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|sine|16384|2|0"]={"0":["+ 0.03023 * 1.182 tan tanh sin + sin * 1.049 x1 - 0.4968 * 0.127 x1",0]};})();

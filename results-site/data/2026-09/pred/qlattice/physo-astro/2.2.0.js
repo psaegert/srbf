@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["qlattice|physo-astro|2|2|0"]={"0":["- * 0.5754 pow / 1 + * 0.9557 x1 0.1429 2 0.01777",0],"1":["+ * -25.84 + tanh - * 0.394 x1 0.08147 * exp - * 0.2746 x1 0.6254 + * -1.684 x1 2.334 31.39",0]};})();

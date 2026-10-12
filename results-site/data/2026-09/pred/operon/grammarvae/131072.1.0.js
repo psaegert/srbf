@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|grammarvae|131072|1|0"]={"0":["+ -0.1575 * 0.9993 - rootn acos sin abs atan + -10.43 * -8.891 x1 3 - 0.7824 + * 0.9967 x1 rootn sin abs atan + -5.221 * -2.437 x1 2",0]};})();

@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["qlattice|meier|2|2|0"]={"0":["- * 5.701 + * 0.07891 x1 0.08741 0.6981",0],"1":["- * -1170 + * -0.02457 x2 0.000771 6782",0]};})();

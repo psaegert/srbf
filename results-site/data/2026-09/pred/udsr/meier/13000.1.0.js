@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["udsr|meier|13000|1|0"]={"0":["* * * x2 / / x1 neg x2 * -1 x1 * x1 / * x2 x2 + x1 x2 x1",3],"1":["* * * 16 pow x2 2 * x1 / / pow / * 1 * 1 x1 + x2 x2 3 1 + x2 x2 / x1 x2",3]};})();

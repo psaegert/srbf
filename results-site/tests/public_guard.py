@@ -2,8 +2,8 @@
 
 Fatal checks, run before the Playwright suite in CI and locally:
   1. no page (index.html and the pages around it) references a private/ path or a local page (*.local.html);
-  2. every method key in data/*/results.js, data/*/summary.js, data/*/hist/*.js, data/*/paired.js, data/*/ranks.js
-     and data/*/pred/ is
+  2. every method key in data/*/results.js (its slots and indexes included), data/*/summary.js, data/*/hist/*.js,
+     data/*/ranks/*.js, data/*/paired/*.js, data/*/pred/ and data/*/pv/ is
      in the public allowlist below
      (the list names PUBLIC methods only; a private method's key must never appear here);
   3. every release payload carries the complete metric registry (at least the metric floor: the site's first
@@ -17,6 +17,8 @@ Fatal checks, run before the Playwright suite in CI and locally:
   6. a sealed payload, if one is present, is sealed: the envelope carries only its own fields, the KDF is strong
      enough to be worth having, and the ciphertext reads as ciphertext (high entropy, no plaintext left in it).
      The checker is run against a deliberately bad envelope on every invocation, so it cannot pass vacuously;
+     the same holds for every file under data/*/sealed/ (the files tools/seal.mjs seals one by one): one
+     envelope line, named by its own file name, an IV of 12 bytes, ciphertext that reads as ciphertext, nothing else;
   7. no text a reader can see in a release payload (the protocol texts, the timing note, the labels and
      descriptions of metrics, methods and catalogs) matches a banned pattern. The page lint reads index.html and the
      explorer's strings; a payload is written by the exporter from files outside this repository, so it is read here,
@@ -24,20 +26,27 @@ Fatal checks, run before the Playwright suite in CI and locally:
      included (results-site/private/banned_patterns.json, git-ignored and absent in CI).
 """
 import base64
+import gzip
 import json
 import math
 import os
 import re
 import sys
+import tempfile
+import zlib
 from pathlib import Path
 from typing import Any
 
 SITE = Path(__file__).resolve().parents[1]
-PUBLIC_METHODS = {"e2e", "nesymres-100M", "PySR", "T8-3M", "T8-20M", "T8-120M", "T8-20M-pysr", "prior"}
+# T8-120M-pysr replaced T8-20M-pysr on the page (2026-09-29); the 20M hybrid stays admissible, it is public-safe.
+# The oracle is public (owner 2026-09-25: "as all other methods, in black with a dashed line ... it is important that we
+# show it"; its results reached the board 2026-10-05).
+PUBLIC_METHODS = {"e2e", "nesymres-100M", "PySR", "operon", "gpgomea", "dsr", "udsr", "rilsrols", "qlattice", "T8-3M", "T8-20M",
+                  "T8-120M", "T8-120M-pysr", "T8-20M-pysr", "oracle"}
 # Methods with results that are withheld from the public page: the key checks below catch their keys, these their names
-# in the texts. None at present (T8-20M-pysr was withheld 2026-09-28 until its re-run under the two-part code; that
-# re-run is what the page now shows).
-WITHHELD_NAMES: dict[str, str] = {}
+# in the texts. The Flash-ANSR prior is private since 2026-09-30 (owner: "hidden from the site ... private with a key");
+# it lives in the sealed overlay. (T8-20M-pysr was withheld 2026-09-28 until its re-run under the two-part code.)
+WITHHELD_NAMES: dict[str, str] = {r"Flash-ANSR prior": "the prior is private: sealed overlay only (owner 2026-09-30)"}
 # the metric floor: the site's first release's 21 metrics under the schema-2 keys (symbolic_recovery there = skeleton_match_raw here,
 # prediction_success_rate = success), plus the release's own headline metrics
 REQUIRED_METRICS = {
@@ -62,8 +71,8 @@ def keys_in_wrapped(text: str, pattern: str) -> set[str] | None:
 
 
 def _object_after(text: str, *markers: str) -> dict | None:
-    """The first JSON object that directly follows one of `markers` (a ranks.js hands its objects over as
-    Object.assign(target, {...}) or, for the pairs it may first map onto another key list, as `var P={...}`)."""
+    """The first JSON object that directly follows one of `markers` (a per-key cell file hands its cells over as
+    `var P={...}`)."""
     for marker in markers:
         i = text.find(marker)
         while i >= 0:
@@ -77,14 +86,13 @@ def _object_after(text: str, *markers: str) -> dict | None:
     return None
 
 
-def rank_methods(text: str) -> set[str] | None:
-    """Every method key a ranks.js names: the methods with a time-budget rung, both sides of every pair, and both
-    sides of every record of which rungs a time-limit outcome compared."""
-    at, pairs = _object_after(text, ".at,"), _object_after(text, ".pairs,", "var P=")
-    if at is None or pairs is None:
+def cell_methods(text: str) -> set[str] | None:
+    """Every method key a ranks/<key>.js or paired/<key>.js names: both sides of every pair, for every metric the file
+    hands over (as `var P={metric: {pair: ...}}`)."""
+    cells = _object_after(text, "var P=")
+    if cells is None or not all(isinstance(per, dict) for per in cells.values()):
         return None
-    rungs = _object_after(text, ".rungs,") or {}
-    return set(at) | {k for pair in list(pairs) + list(rungs) for k in pair.split("|")}
+    return {k for per in cells.values() for pair in per for k in pair.split("|")}
 
 
 SEALED_FIELDS = {"v", "kdf", "iter", "salt", "iv", "ct"}
@@ -107,15 +115,37 @@ def entropy(data: bytes) -> float:
 
 
 def check_sealed(text: str, name: str) -> list[str]:
-    """Everything that must hold for a sealed payload, whatever it holds."""
-    bad = []
-    m = re.search(r"window\.RESULTS_V2_SEALED\[[^\]]*\]=(\{.*\});\s*$", text, re.S)
-    if not m:
+    """Everything that must hold for a sealed file, whatever it holds: one line with the envelope a page has always read
+    (RESULTS_V2_SEALED), at most one more with the envelopes sealed under further keys (RESULTS_V2_SEALED_MORE, written
+    first by tools/seal.mjs --source ...), nothing else; and every envelope passes the same checks."""
+    first, more, envs = None, None, []
+    for line in text.strip().split("\n"):
+        m = re.search(r"window\.RESULTS_V2_SEALED\[[^\]]*\]=(\{.*\});$", line)
+        n = re.fullmatch(r"window\.RESULTS_V2_SEALED_MORE=window\.RESULTS_V2_SEALED_MORE\|\|\{\};"
+                         r"window\.RESULTS_V2_SEALED_MORE\[[^\]]*\]=(\[.*\]);", line)
+        if m and first is None:
+            first = m.group(1)
+        elif n and more is None:
+            more = n.group(1)
+        else:
+            return [f"{name}: a line that is neither a sealed envelope nor the further ones, or one of them twice"]
+    if first is None:
         return [f"{name}: not a sealed envelope"]
     try:
-        env = json.loads(m.group(1))
+        envs = [json.loads(first)] + (json.loads(more) if more is not None else [])
     except ValueError:
         return [f"{name}: envelope is not JSON"]
+    if not all(isinstance(e, dict) for e in envs):
+        return [f"{name}: the further envelopes are not a list of envelopes"]
+    bad: list[str] = []
+    for i, env in enumerate(envs):
+        bad.extend(check_envelope(env, name if i == 0 else f"{name} (envelope {i + 1})"))
+    return bad
+
+
+def check_envelope(env: dict[str, Any], name: str) -> list[str]:
+    """One envelope: its own fields only, a strong KDF, and ciphertext that does not read as plaintext."""
+    bad = []
     if set(env) != SEALED_FIELDS:
         bad.append(f"{name}: envelope fields {sorted(set(env) ^ SEALED_FIELDS)} (only {sorted(SEALED_FIELDS)} belong here)")
     if env.get("kdf") != "PBKDF2-SHA256" or int(env.get("iter", 0)) < MIN_ITERATIONS:
@@ -131,6 +161,67 @@ def check_sealed(text: str, name: str) -> list[str]:
     for tell in PLAINTEXT_TELLS:
         if tell in ct:
             bad.append(f"{name}: ciphertext contains {tell!r}")
+    return bad
+
+
+# A file sealed on its own (tools/seal.mjs): exactly this line, named by its own file name. The line's text
+# is fixed but for the name (32 hex digits) and two base64 strings, so no method key or path can be in it.
+SEALED_FILE = re.compile(r'\(window\.RESULTS_V2_SEALED_FILES=window\.RESULTS_V2_SEALED_FILES\|\|\{\}\)\["([0-9a-f]{32})"\]='
+                         r'\{"iv":"([A-Za-z0-9+/]+={0,2})","ct":"([A-Za-z0-9+/]+={0,2})"\};\n?')
+SEALED_FILE_NAME = re.compile(r"[0-9a-f]{32}\.js")
+GCM_TAG, MIN_GZIP = 16, 20   # bytes: AES-GCM's tag, and the shortest gzip stream (header, an empty block, trailer)
+# a byte of text: printable ASCII, tab, newline, carriage return. Ciphertext has 98/256 of them; text has nothing else.
+TEXT_BYTES = frozenset(range(0x20, 0x7f)) | {0x09, 0x0a, 0x0d}
+
+
+def check_sealed_file(text: str, name: str, stem: str) -> list[str]:
+    """One file sealed on its own: the envelope line and nothing else, its own name inside, and ciphertext that is neither
+    plaintext nor a gzip stream left unencrypted. A file can be a few hundred bytes, too short for the entropy test of a
+    whole payload; the share of text bytes tells text from ciphertext at any length the format allows (a text file sits
+    at 1, ciphertext at 98/256, and the bar is six standard deviations above that)."""
+    m = SEALED_FILE.fullmatch(text)
+    if not m:
+        return [f"{name}: not one sealed-file envelope line"]
+    bad = [] if m.group(1) == stem else [f"{name}: the envelope is named {m.group(1)}, the file {stem}"]
+    try:
+        iv, ct = base64.b64decode(m.group(2), validate=True), base64.b64decode(m.group(3), validate=True)
+    except Exception:
+        return bad + [f"{name}: IV or ciphertext is not base64"]
+    if len(iv) != 12:
+        bad.append(f"{name}: an IV of {len(iv)} bytes (AES-GCM's is 12)")
+    if len(ct) < GCM_TAG + MIN_GZIP:
+        return bad + [f"{name}: ciphertext is {len(ct)} bytes, shorter than any sealed file"]
+    for tell in PLAINTEXT_TELLS:
+        if tell in ct:
+            bad.append(f"{name}: ciphertext contains {tell!r}")
+    try:
+        zlib.decompress(ct, 47)   # a gzip or zlib stream: compressed, never encrypted
+        bad.append(f"{name}: the ciphertext is a compressed stream, not ciphertext")
+    except zlib.error:
+        pass
+    n, p0 = len(ct), len(TEXT_BYTES) / 256
+    if sum(b in TEXT_BYTES for b in ct) > n * p0 + 6 * math.sqrt(n * p0 * (1 - p0)):
+        bad.append(f"{name}: ciphertext reads as text")
+    if n >= 1024 and entropy(ct) < 7.5:
+        bad.append(f"{name}: ciphertext entropy {entropy(ct):.2f} bits/byte reads as plaintext")
+    return bad
+
+
+def check_sealed_dir(sd: Path) -> list[str]:
+    """data/<release>/sealed/ holds files sealed one by one and nothing else."""
+    if not sd.is_dir():
+        return [f"{sd}: not a directory of sealed files"]
+    bad = []
+    for f in sorted(sd.rglob("*")):
+        if f.is_dir() or f.parent != sd or not SEALED_FILE_NAME.fullmatch(f.name):
+            bad.append(f"{f}: not a file sealed one by one (only <32 hex digits>.js belong in {sd.name}/)")
+            continue
+        try:
+            text = f.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            bad.append(f"{f}: not text")
+            continue
+        bad.extend(check_sealed_file(text, str(f), f.name[:-3]))
     return bad
 
 
@@ -153,11 +244,15 @@ def payload_texts(node: Any, path: str = "") -> list[tuple[str, str]]:
 
 def method_keys(payload: Any) -> set[str]:
     """Every method key a release payload or its summary names: its methods, their cells, status, progress and times,
-    and the finished and in-progress lists of the progress summary (a scheduled method is named by its label only)."""
+    the finished and in-progress lists of the progress summary (a scheduled method is named by its label only), and
+    the methods its slots place."""
     summary = payload.get("summary") or {}
+    slots = payload.get("slots") or {}   # where every method sits at every slot; an overlay's record of its partners
+    basis = slots.get("basis") or {}
     return ({mm["key"] for mm in payload.get("methods", [])} | set(payload.get("cells", payload.get("data", {})))
             | set(payload.get("status", {})) | set(payload.get("progress", {})) | set(payload.get("timing", {}))
-            | set(summary.get("finished", [])) | set(summary.get("in_progress", [])))
+            | set(summary.get("finished", [])) | set(summary.get("in_progress", []))
+            | set(slots.get("at") or {}) | set(slots.get("stamp") or {}) | set(basis) | {q for per in basis.values() for q in per})
 
 
 def check_payload_texts(payload: Any, name: str, banned: dict[str, str]) -> list[str]:
@@ -183,6 +278,17 @@ def selftest() -> list[str]:
                 "ct": base64.b64encode(plain).decode()}
     text = "window.RESULTS_V2_SEALED[\"t\"]=" + json.dumps(envelope) + ";\n"
     bad = [] if check_sealed(text, "selftest") else ["selftest: check_sealed accepted a plaintext payload"]
+    # a plaintext payload behind a sealed one is as plain: every envelope is checked
+    sealed_first = {"v": 1, "kdf": "PBKDF2-SHA256", "iter": 600000, "salt": "AA==", "iv": "AA==",
+                    "ct": base64.b64encode(bytes(range(256)) * 8).decode()}
+    two = ("window.RESULTS_V2_SEALED_MORE=window.RESULTS_V2_SEALED_MORE||{};window.RESULTS_V2_SEALED_MORE[\"t\"]="
+           + json.dumps([envelope]) + ";\nwindow.RESULTS_V2_SEALED=window.RESULTS_V2_SEALED||{};window.RESULTS_V2_SEALED[\"t\"]="
+           + json.dumps(sealed_first) + ";\n")
+    if check_sealed(two.replace(json.dumps([envelope]), json.dumps([sealed_first])), "selftest"):
+        bad.append("selftest: check_sealed refused two sealed envelopes")
+    if not check_sealed(two, "selftest"):
+        bad.append("selftest: check_sealed accepted a plaintext envelope behind a sealed one")
+    bad.extend(selftest_sealed_files())
     probe = SITE / "data" / ".guard_selftest.js"
     try:
         probe.write_text('window.X={"fit_time":[1,2]};\n', encoding="utf-8")
@@ -190,24 +296,61 @@ def selftest() -> list[str]:
             bad.append("selftest: check_no_as_run_time accepted an as-run time metric")
     finally:
         probe.unlink(missing_ok=True)
-    ranks = ('window.RESULTS_V2_RANKS=window.RESULTS_V2_RANKS||{};(function(){var R=window.RESULTS_V2_RANKS;R["t"]=R["t"]||{};'
-             'Object.assign(R["t"].at,{"e2e":{"t1":4}});Object.assign(R["t"].pairs,{"hidden-method|e2e":{"nguyen":{"4":[12,3,4]}}});})();\n')
-    if "hidden-method" not in (rank_methods(ranks) or set()):
-        bad.append("selftest: rank_methods missed a method named only in a pair")
-    compared = ranks.replace("})();", 'Object.assign(R["t"].rungs,{"other-hidden|e2e":{"t1":[4,4]}});})();')
-    mapped = ('window.RESULTS_V2_RANKS=window.RESULTS_V2_RANKS||{};(function(){var R=window.RESULTS_V2_RANKS,rel="t",K=["a"],MAIN=true;'
-              'var X=R[rel]=R[rel]||{keys:K,at:{},pairs:{}};var P={"mapped-hidden|e2e":{"nguyen":{"4":[12,3,4]}}};'
-              'Object.assign(X.at,{"e2e":{"t1":4}});Object.assign(X.pairs,P);Object.assign(X.rungs,{});})();\n')
-    if "mapped-hidden" not in (rank_methods(mapped) or set()):
-        bad.append("selftest: rank_methods missed a method named in pairs handed over as var P")
-    if not {"hidden-method", "other-hidden"} <= (rank_methods(compared) or set()):
-        bad.append("selftest: rank_methods missed a method named only in the compared-rungs record")
+    cells = ('window.RESULTS_V2_RANKCELLS=window.RESULTS_V2_RANKCELLS||{};(function(){var R=window.RESULTS_V2_RANKCELLS,rel="t";'
+             'var X=R[rel]=R[rel]||{};var P={"log10_fvu_val":{"e2e|hidden-method":{"nguyen":{"64":[12,3,4],"t10":[12,1,2]}}}};'
+             'Object.keys(P).forEach(function(k){var Y=X[k]=X[k]||{};Object.keys(P[k]).forEach(function(p){Y[p]=P[k][p];});});})();\n')
+    if "hidden-method" not in (cell_methods(cells) or set()):
+        bad.append("selftest: cell_methods missed a method named only in a pair of a ranks/ file")
+    two = cells.replace('{"log10_fvu_val":', '{"f1_score":{},"f1_score@answered":{"other-hidden|e2e":{}},"log10_fvu_val":')
+    if not {"hidden-method", "other-hidden"} <= (cell_methods(two) or set()):
+        bad.append("selftest: cell_methods missed a method named in the answered-only reading of a paired/ file")
+    placed = {"slots": {"at": {"hidden-at": {}}, "stamp": {"hidden-stamp": {}}, "basis": {"e2e": {"hidden-partner": {}}}}}
+    if not {"hidden-at", "hidden-stamp", "hidden-partner"} <= method_keys(placed):
+        bad.append("selftest: method_keys missed a method named only in the slots")
     if not {"hidden-a", "hidden-b"} <= method_keys({"summary": {"finished": ["hidden-a"], "in_progress": ["hidden-b"], "scheduled": []}}):
         bad.append("selftest: method_keys missed a method named only in the progress summary")
     probe_payload = {"release": {"scoring": "fine"}, "timing_note": "measured on the forbidden-host", "cells": {"m": "the forbidden-host is numeric bulk"}}
     hits = check_payload_texts(probe_payload, "selftest", {r"forbidden-host": "selftest"})
     if len(hits) != 1 or "/timing_note" not in hits[0]:
         bad.append("selftest: check_payload_texts did not flag a banned word in a reader-facing text (or read the numeric bulk)")
+    return bad
+
+
+def selftest_sealed_files() -> list[str]:
+    """The sealed-file check rejects a plaintext file, an unencrypted gzip stream, a misnamed envelope and a stray
+    file, and accepts what tools/seal.mjs writes (the committed fixture, tests/fixtures/sealed_files/sealed/)."""
+    bad = []
+    stem = "0123456789abcdef" * 2
+
+    def line(name: str, iv: bytes, ct: bytes) -> str:
+        return ('(window.RESULTS_V2_SEALED_FILES=window.RESULTS_V2_SEALED_FILES||{})["%s"]={"iv":"%s","ct":"%s"};\n'
+                % (name, base64.b64encode(iv).decode(), base64.b64encode(ct).decode()))
+    plain = b'window.RESULTS_V2_PP=window.RESULTS_V2_PP||{};R["2026-09"]["hidden|feynman|16|1"]={"n":100,"s":"AwEBAQEB"};'
+    ciphertext = bytes((i * 167 + 13) % 256 for i in range(600))
+    if check_sealed_file(line(stem, bytes(12), ciphertext), "selftest", stem):
+        bad.append("selftest: check_sealed_file refused a well-formed sealed file")
+    for what, text in [("a plaintext file", plain.decode() + "\n"),
+                       ("plaintext in an envelope", line(stem, bytes(12), plain)),
+                       ("an unencrypted gzip stream", line(stem, bytes(12), gzip.compress(plain * 8))),
+                       ("an envelope named for another file", line("f" * 32, bytes(12), ciphertext)),
+                       ("an IV of the wrong length", line(stem, bytes(16), ciphertext)),
+                       ("a second line", line(stem, bytes(12), ciphertext) + plain.decode() + "\n")]:
+        if not check_sealed_file(text, "selftest", stem):
+            bad.append(f"selftest: check_sealed_file accepted {what}")
+    with tempfile.TemporaryDirectory() as tmp:
+        sd = Path(tmp) / "sealed"
+        sd.mkdir()
+        (sd / f"{stem}.js").write_bytes(plain + b"\n")
+        (sd / "notes.txt").write_text("a stray file")
+        found = check_sealed_dir(sd)
+        if not any(f"{stem}.js" in f for f in found) or not any("notes.txt" in f for f in found):
+            bad.append("selftest: check_sealed_dir accepted a plaintext file or a stray file under sealed/")
+    written = sorted((Path(__file__).resolve().parent / "fixtures" / "sealed_files" / "sealed").glob("*.js"))
+    if not written:
+        bad.append("selftest: no sealed files in tests/fixtures/sealed_files/sealed/ to check against")
+    for f in written:
+        if check_sealed_file(f.read_text(encoding="utf-8"), str(f), f.name[:-3]):
+            bad.append(f"selftest: check_sealed_file refused {f.name}, which tools/seal.mjs wrote")
     return bad
 
 
@@ -250,15 +393,13 @@ def main() -> int:
             extra = sorted(ks - PUBLIC_METHODS)
             if extra:
                 failures.append(f"{hj}: non-public method keys {extra}")
-        pj = js.parent / "paired.js"
-        if pj.exists():
-            ks = keys_in_wrapped(pj.read_text(encoding="utf-8"), r"Object\.assign\(R\[[^\]]*\],(\{.*\})\);\}\)\(\);\s*$")
-            if ks is None:
-                failures.append(f"{pj}: not a paired file")
-            else:
-                extra = sorted({k for pair in ks for k in pair.split("|")} - PUBLIC_METHODS)
-                if extra:
-                    failures.append(f"{pj}: non-public method keys {extra}")
+        for sub in ("ranks", "paired"):   # the per-key cells along the slots: both sides of every pair
+            for cj in sorted((js.parent / sub).glob("*.js")):
+                named = cell_methods(cj.read_text(encoding="utf-8"))
+                if named is None:
+                    failures.append(f"{cj}: not a per-key cell file")
+                elif named - PUBLIC_METHODS:
+                    failures.append(f"{cj}: non-public method keys {sorted(named - PUBLIC_METHODS)}")
         pd = js.parent / "pred"   # the Predictions view's files: one directory per method, and the ground truth
         if pd.is_dir():
             extra = sorted(d.name for d in pd.iterdir() if d.is_dir() and d.name != "truth" and d.name not in PUBLIC_METHODS)
@@ -267,18 +408,21 @@ def main() -> int:
         extra = sorted(set(payload.get("pred") or {}) - PUBLIC_METHODS)
         if extra:
             failures.append(f"{js}: non-public method keys in the predictions index {extra}")
-        rj = js.parent / "ranks.js"
-        if rj.exists():
-            named = rank_methods(rj.read_text(encoding="utf-8"))
-            if named is None:
-                failures.append(f"{rj}: not a ranks file")
-            elif sorted(named - PUBLIC_METHODS):
-                failures.append(f"{rj}: non-public method keys {sorted(named - PUBLIC_METHODS)}")
+        pv = js.parent / "pv"   # the inputs of the paired and rank statistics: one directory per method
+        if pv.is_dir():
+            extra = sorted(d.name for d in pv.iterdir() if d.is_dir() and d.name not in PUBLIC_METHODS)
+            if extra:
+                failures.append(f"{pv}: non-public method keys {extra}")
+        extra = sorted(set(payload.get("pv") or {}) - PUBLIC_METHODS)
+        if extra:
+            failures.append(f"{js}: non-public method keys in the per-problem pair index {extra}")
     for pub in sorted((SITE / "data").rglob("*.js")):
         if pub.name != "sealed.js":     # the sealed payload is encrypted and is not a published number
             failures.extend(check_no_as_run_time(pub))
     for sj in sorted((SITE / "data").glob("*/sealed.js")):
         failures.extend(check_sealed(sj.read_text(encoding="utf-8"), str(sj)))
+    for sd in sorted((SITE / "data").glob("*/sealed")):   # the files sealed one by one (per problem, per metric)
+        failures.extend(check_sealed_dir(sd))
     if os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"):
         for p in ("private", "index.local.html", "results.local.html", "explorer.local.html"):
             if (SITE / p).exists():

@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["PySR|koza|512|1|0"]={"0":["atan atanh + * sin + tan x1 - x1 * + + x1 sin tan * x1 0.8271 x1 -0.6896 0.2037 tan tan * x1 0.1957",1],"1":["* * cos asin / x1 1 cos asin x1 * x1 * cos asin * 1 x1 * x1 cos asin x1",1]};})();

@@ -379,6 +379,15 @@ def test_a_failed_problem_has_no_value_where_the_range_has_no_end(failed_skeleto
     assert np.isnan(float(scored["r2_val"][2])) and np.isnan(float(scored["log10_fvu_val"][2]))
 
 
+def test_a_prediction_that_is_not_one_tree_has_no_nesting_and_the_rest_is_scored() -> None:
+    snapshot = _three_problems_one_failed(None)
+    snapshot["predicted_skeleton_prefix"][1] = ["sin", "x2", "x1"]       # tokens left over: not one tree
+    scored = derive_metrics(snapshot, operator_arity={"+": 2, "sin": 1})
+    assert scored["predicted_total_nestedness"][0] == 0 and scored["predicted_total_nestedness"][1] is None
+    assert list(scored["total_nestedness"]) == [0, 0, 0]
+    assert scored["predicted_skeleton_prefix_length"][1] is not None
+
+
 def test_a_placeholder_row_is_not_a_failed_problem() -> None:
     snapshot = _three_problems_one_failed(None)
     snapshot["placeholder"] = [False, False, True]

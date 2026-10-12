@@ -6,11 +6,140 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Results site: the Flash-ANSR prior starts unchecked in the explorer.** A method can be marked `off` in the exporter's
+  `METHOD_STYLE`; the explorer leaves it out of its default selection, and a link naming it or its checkbox shows it.
+  The prior is the first such method. The headline charts are unchanged. Saved explorer settings start over once
+  (storage key .9), so an earlier visit cannot keep the old default.
+
+### Fixed
+- **Results site: a curve on the time axis follows its method's budgets.** The chart re-sorted every series by x, so on
+  the time axis points were joined in the order of their measured times. Where a larger budget was timed faster than a
+  smaller one (PySR at 1 and 2 iterations: 2.58 and 2.03 s per problem; E2E at 4 and 8 candidates), the line dipped
+  through a point out of budget order. Series keep the order their budgets come in; the band already followed the
+  path. A site test checks that every headline curve visits its points in increasing budget order.
+
+### Changed
+- **Results site: the hybrid shown is Flash-ANSR T8-120M + PySR.** It replaces Flash-ANSR T8-20M + PySR on the page
+  (`T8-120M-pysr` in the exporter's methods and the public guard's list). The 20M hybrid keeps its entry in a lighter
+  purple for local exports and stays admissible to the guard. Like every method, the 120M hybrid shows a rung once that
+  rung is complete, and on the time axis once the reference machine has timed it.
+
+## [0.21.0] - 2026-09-28
+
 ### Added
+- **Operon as a subprocess worker** (`worker: operon`): pyoperon 0.6.1's `SymbolicRegressor` in the configuration
+  its first author published for benchmarking (NSGA-II on R² and length, one Levenberg–Marquardt step per individual,
+  population 1,000, length at most 50, depth at most 10, MDL selection from the Pareto front), without its
+  hyperparameter search. srbf sets the operators and a budget in evaluations (rung files `evals_<n>.pkl`); the whole
+  Pareto front is stored.
+- **DSO as a subprocess worker** (`worker: dso`; DSO v3.0.0 in its own Python 3.7 environment,
+  `scripts/envs/build_dso_env.sh`): `options.arm: dsr` runs DSO's shipped regression defaults, `udsr` the uDSR paper's
+  benchmark configuration (uDSR\*: priority-queue training, GP-meld, the LINEAR token). Three patches, documented in
+  `docs/models.md`: GP-meld evaluates the trees it breeds, LINEAR's inverse table gains `neg` and `n4`, and a GP-meld
+  clone shares the primitive set. On the NGGP Nguyen anchor the uDSR\* path recovers 14 of 15 runs.
+- **GP-GOMEA as a subprocess worker** (`worker: gpgomea`): the original GP-GOMEA at commit 6a92cb6, the one SRBench 2021
+  ran, in its first author's benchmark configuration. Its protected operators are written as the functions it
+  computes, and the linear-scaling coefficients are recomputed in float64. On SRBench 2021's Feynman protocol it
+  recovers 71.7 % (published: 70.9 %).
+- **RILS-ROLS as a subprocess worker** (`worker: rilsrols`): rils-rols 1.6.7 in its first author's SRBench
+  configuration, with an output-only patch that prints constants at full precision; the budget is fit calls
+  (`evals_<n>.pkl`). On Feynman it recovers 81.7 % (published: 82.59 %).
+- **The Flash-ANSR oracle**: with `generation_config.method: oracle` (flash-ansr's `OracleConfig`), the Flash-ANSR adapter
+  hands the model each problem's ground truth as its only candidate, which shows how well the fitting does when the
+  form is given. A ladder over the refiner's restarts (`restarts_<n>.pkl`,
+  `configs/evaluation/scaling/flash-ansr-v25.0-T8-oracle_srbf.yaml`).
+- **`srbf table`** judges result trees (every method, draw, catalog, rung and shard) into one CSV with every metric, in
+  parallel and with a per-file cache. With `scripts/site_timing.py` (the time axis from reference-machine result files;
+  `--pattern` names a method's own rung files) and `scripts/catalog_mu.py`, the results site is rebuilt from the result
+  files with srbf alone.
+- **QLattice as a subprocess worker** (`worker: qlattice`): feyn 3.5.0 through its authors' SRBench loop (200 epochs,
+  at most 10 edges, `wide_parsimony`, squared error). srbf sets the operators, the budget (`n_epochs`, rung files
+  `epochs_<n>.pkl`) and the seed; the answer is the first model the loop returns, written at full precision, with
+  feyn's protected functions written out where they clip. `scripts/envs/build_qlattice_env.sh` builds a pinned
+  Python 3.12 environment; feyn runs offline without a licence key (CC BY-NC-ND 4.0: research use). On SRBench 2025's
+  first-principles data it reproduces the published QLattice accuracy: mean mid-rank 0.41 among the published runs
+  (2 epochs: 0.07).
 - **The `flash_ansr_hybrid` adapter type is built in again.** The hybrid method moved into flash-ansr 0.19
   (`flash_ansr.hybrid`); srbf's adapter hands it each problem through its evaluation path (`HybridRegressor.solve`)
   and records the answer like every adapter. Configs that named the private plugin (`hybrid_adapter:build`) use
   `type: flash_ansr_hybrid`. `pip install srbf[hybrid]` brings flash-ansr with PySR; flash-ansr 0.19 is allowed.
+- **`srbf table` stores the expressions it judged:** `predicted_expression` (in the ground truth's variable names and
+  the engine's spelling) and `ground_truth_expression`, as prefix tokens at full precision.
+- **The results site's Predictions view:** one problem at a time, the true formula and every method's formula, typeset,
+  with whether each recovered it. `scripts/site_export_v2.py` writes one file per method, problem set, budget,
+  finished run and block of 500 problems; a finished file never changes.
+- **`srbf status -c CONFIG`**: how far every run of a config is (`done`, `started`, `not started`, with the
+  row counts), without loading a model; the exit code is 0 when every run is done.
+  `Benchmark.runs_from_config(..., build_adapter=False)` is the same from Python.
+- **An adapter from your own package**: `model_adapter.type: mypackage.module:function` names a builder
+  function; nothing in srbf has to be edited for an in-process adapter.
+- **What a worker reports about itself is stored with the results**: `__meta__["worker"]` holds the return
+  value of the worker's `info()` (its interpreter, package versions, checkpoint).
+- **Symbolic recovery at three levels of masking.** `symbolic_recovery` masks every number (the structure is
+  the ground truth's); `symbolic_recovery_mask_fittable` masks only the fittable constants, so exponents and root
+  indices have to be the ground truth's as well; `symbolic_recovery_mask_none` also asks for the constants, measured as
+  numeric recovery is. Each level implies the one before it, and agreement at a stricter level is a witness
+  at the looser one. The two new columns need an engine.
+- **`precision_score`, `recall_score` and `edit_distance_norm`** among the derived metrics: the two parts of
+  the token F1, and the edit distance over the length of the longer sequence.
+- **The documentation is tested against the package** (`tests/test_docs.py`): every command, flag, adapter
+  type, suite catalog and derived metric is documented; every documented flag, import and repository path
+  exists; every example parses; and the site builds with broken links as errors.
+
+### Changed
+- **srbf no longer depends on flash-ansr, and its root is `SRBF_ROOT`.** `{{ROOT}}` in a config stands for the
+  `SRBF_ROOT` directory (the current directory when it is unset); `FLASH_ANSR_ROOT` means nothing to srbf any more,
+  so a script that set only it must set `SRBF_ROOT`. srbf reads its configs and resolves `{{ROOT}}` itself
+  (`srbf.paths`). flash-ansr is an optional install, `pip install "srbf[flash-ansr]"`, needed only by the adapters
+  built on it (`flash_ansr`, and `flash_ansr_hybrid` through `srbf[hybrid]`) and by the two baselines that fit their
+  constants with its refiner (`lample_charton`, `brute_force`); they import it when they are built and say how to
+  install it when it is missing. A run of any other method never imports it: the FVU the NeSymReS and hybrid adapters
+  record is srbf's own `srbf.metrics.fvu`, and the run's provenance reads flash-ansr's version without importing it.
+  Flash-ANSR checkpoints are downloaded with `hf download <checkpoint> --local-dir "$SRBF_ROOT/models/<checkpoint>"`.
+  CI runs the suite with and without flash-ansr, and a test imports every srbf module where flash-ansr cannot be
+  imported.
+- **The results site averages over problem sets, with the problem as the unit.** A problem's value is the mean of
+  its runs, and the catalogs are combined by a random-effects average (Paule–Mandel between-catalog variance,
+  intervals over these problem sets, rates on the logit scale, ratios as geometric means), so erbench-syneq no longer decides
+  a pooled number on its own; tables and tooltips add where one more catalog would fall. Paired contrasts compare
+  every run of one method with every run of the other and test over catalogs (rates on the difference, other metrics
+  on the per-problem superiority); ranks are built from the pairwise chances to beat, with Holm-corrected pairwise
+  tests in place of Friedman and the Nemenyi critical difference. Two predictions that both meet Numeric Recovery tie
+  in comparisons, and a failed run counts as worst in the medians, distributions, ranks and comparisons of log10 FVU
+  and R². The time axis averages the catalogs the same way. `scripts/site_random_effects.py` is the reference; the
+  site suite runs the page's own code against it.
+- **`log10_fvu` is floored at the float64 epsilon** (`srbf.metrics.numeric.LOG10_FVU_FLOOR`, \(\log_{10} 2^{-52}
+  \approx -15.65\)). An exact fit used to be \(-\infty\), which every mean left out, while the same formula written
+  another way landed at finite rounding noise anywhere down to about \(-320\), which every mean took in: on the
+  2026-09 board, 22 % of T8-120M's usable predictions sat below the float64 epsilon and at budget 128 values below
+  \(-20\) made 45 % of its mean's sum. Below the epsilon the unexplained variance is smaller than about one rounding
+  unit of the variance it is divided by, so all of these are one value now, and an exact fit counts in a mean.
+  Blow-ups stay \(+\infty\). The judge's fingerprint changes, so `srbf table` re-judges its cache.
+- **The results site is written for a first-time reader.** Every hint, popover, metric definition, method note and
+  protocol text, and the prose below the explorer, say what they mean in plain words ("problem set", "budget",
+  "run"; no pipeline vocabulary), with the longer explanations moved to a from-scratch "How to read the results"
+  section. The Numeric Recovery threshold is described as what it is (FVU at most 2^-23: a typical error of at most
+  0.035 % of the values' spread). A method missing at a budget is said to be not run there, or not finished yet;
+  the export carries each method's planned budgets for that. `copy_lint.py` and a rendered-text test in the site
+  suite keep the pipeline's words out.
+- **A worker is handed the problem and nothing of the ground truth.** `meta` carries the problem's identifiers and
+  sampling parameters (`benchmark_eq_id`, `eval_row_index`, `n_support`, `noise_level`, the variable
+  names); the ground truth's skeleton, expression, constants and complexity stay on srbf's side.
+- **Every method sees every column.** `drop_unused_variables` (and the PySR block's `padding`, and
+  `remove_padding` of the NeSymReS and E2E adapters) selected the columns the ground truth uses before handing a problem
+  over. The keys are still accepted, and ignored.
+- **The documentation is rewritten**: a quickstart that needs no GPU and no model, a concepts page, a command
+  reference, a metric reference with the definition of every derived column, the 29 catalogs with their
+  sources and licenses, and one page each for running, results, paired comparisons, models, adapters and
+  fairness.
+- The results explorer lists a metric that repeats another in every published cell only once: recovery
+  relative to the reference ground truth equals numeric recovery wherever the targets are computed from the ground truth.
+- The tables and figures of `srbf.analysis` take a metric by the name of its column as well as a `Metric`.
+  The report's table shows its `Scaling` column only when a run has a ladder.
+- `scripts/run_timing_ladder.py` measures on any machine; `--host NAME` restricts it to one.
+- **Rung-file names live in `srbf/rungs.py`**, and they and the out-of-process workers are left out of the judge's
+  fingerprint: a new budget unit or a new worker no longer re-judges every cached file.
 
 ### Fixed
 - **E2E's and NeSymReS's square roots and absolute values are read.** Both baselines print through SymPy, which
@@ -75,82 +204,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `srbf new` printed the `{{ROOT}}` token of the config language inside a shell command, and `srbf run -v`
   inside the path it reported; both print the real path. `srbf analyze` wrote `nan` as the budget of a
   method without a ladder when it stood next to one with a ladder.
-
-### Changed
-- **srbf no longer depends on flash-ansr, and its root is `SRBF_ROOT`.** `{{ROOT}}` in a config stands for the
-  `SRBF_ROOT` directory (the current directory when it is unset); `FLASH_ANSR_ROOT` means nothing to srbf any more,
-  so a script that set only it must set `SRBF_ROOT`. srbf reads its configs and resolves `{{ROOT}}` itself
-  (`srbf.paths`). flash-ansr is an optional install, `pip install "srbf[flash-ansr]"`, needed only by the adapters
-  built on it (`flash_ansr`, and `flash_ansr_hybrid` through `srbf[hybrid]`) and by the two baselines that fit their
-  constants with its refiner (`lample_charton`, `brute_force`); they import it when they are built and say how to
-  install it when it is missing. A run of any other method never imports it: the FVU the NeSymReS and hybrid adapters
-  record is srbf's own `srbf.metrics.fvu`, and the run's provenance reads flash-ansr's version without importing it.
-  Flash-ANSR checkpoints are downloaded with `hf download <checkpoint> --local-dir "$SRBF_ROOT/models/<checkpoint>"`.
-  CI runs the suite with and without flash-ansr, and a test imports every srbf module where flash-ansr cannot be
-  imported.
-- **The results site averages over problem sets, with the problem as the unit.** A problem's value is the mean of
-  its runs, and the catalogs are combined by a random-effects average (Paule–Mandel between-catalog variance,
-  intervals over these problem sets, rates on the logit scale, ratios as geometric means), so erbench-syneq no longer decides
-  a pooled number on its own; tables and tooltips add where one more catalog would fall. Paired contrasts compare
-  every run of one method with every run of the other and test over catalogs (rates on the difference, other metrics
-  on the per-problem superiority); ranks are built from the pairwise chances to beat, with Holm-corrected pairwise
-  tests in place of Friedman and the Nemenyi critical difference. Two predictions that both meet Numeric Recovery tie
-  in comparisons, and a failed run counts as worst in the medians, distributions, ranks and comparisons of log10 FVU
-  and R². The time axis averages the catalogs the same way. `scripts/site_random_effects.py` is the reference; the
-  site suite runs the page's own code against it.
-- **`log10_fvu` is floored at the float64 epsilon** (`srbf.metrics.numeric.LOG10_FVU_FLOOR`, \(\log_{10} 2^{-52}
-  \approx -15.65\)). An exact fit used to be \(-\infty\), which every mean left out, while the same formula written
-  another way landed at finite rounding noise anywhere down to about \(-320\), which every mean took in: on the
-  2026-09 board, 22 % of T8-120M's usable predictions sat below the float64 epsilon and at budget 128 values below
-  \(-20\) made 45 % of its mean's sum. Below the epsilon the unexplained variance is smaller than about one rounding
-  unit of the variance it is divided by, so all of these are one value now, and an exact fit counts in a mean.
-  Blow-ups stay \(+\infty\). The judge's fingerprint changes, so `srbf table` re-judges its cache.
-- **The results site is written for a first-time reader.** Every hint, popover, metric definition, method note and
-  protocol text, and the prose below the explorer, say what they mean in plain words ("problem set", "budget",
-  "run"; no pipeline vocabulary), with the longer explanations moved to a from-scratch "How to read the results"
-  section. The Numeric Recovery threshold is described as what it is (FVU at most 2^-23: a typical error of at most
-  0.035 % of the values' spread). A method missing at a budget is said to be not run there, or not finished yet;
-  the export carries each method's planned budgets for that. `copy_lint.py` and a rendered-text test in the site
-  suite keep the pipeline's words out.
-- **A worker is handed the problem and nothing of the ground truth.** `meta` carries the problem's identifiers and
-  sampling parameters (`benchmark_eq_id`, `eval_row_index`, `n_support`, `noise_level`, the variable
-  names); the ground truth's skeleton, expression, constants and complexity stay on srbf's side.
-- **Every method sees every column.** `drop_unused_variables` (and the PySR block's `padding`, and
-  `remove_padding` of the NeSymReS and E2E adapters) selected the columns the ground truth uses before handing a problem
-  over. The keys are still accepted, and ignored.
-- **The documentation is rewritten**: a quickstart that needs no GPU and no model, a concepts page, a command
-  reference, a metric reference with the definition of every derived column, the 29 catalogs with their
-  sources and licenses, and one page each for running, results, paired comparisons, models, adapters and
-  fairness.
-- The results explorer lists a metric that repeats another in every published cell only once: recovery
-  relative to the reference ground truth equals numeric recovery wherever the targets are computed from the ground truth.
-- The tables and figures of `srbf.analysis` take a metric by the name of its column as well as a `Metric`.
-  The report's table shows its `Scaling` column only when a run has a ladder.
-- `scripts/run_timing_ladder.py` measures on any machine; `--host NAME` restricts it to one.
-
-### Added
-- **`srbf table` stores the expressions it judged:** `predicted_expression` (in the ground truth's variable names and
-  the engine's spelling) and `ground_truth_expression`, as prefix tokens at full precision.
-- **The results site's Predictions view:** one problem at a time, the true formula and every method's formula, typeset,
-  with whether each recovered it. `scripts/site_export_v2.py` writes one file per method, problem set, budget,
-  finished run and block of 500 problems; a finished file never changes.
-- **`srbf status -c CONFIG`**: how far every run of a config is (`done`, `started`, `not started`, with the
-  row counts), without loading a model; the exit code is 0 when every run is done.
-  `Benchmark.runs_from_config(..., build_adapter=False)` is the same from Python.
-- **An adapter from your own package**: `model_adapter.type: mypackage.module:function` names a builder
-  function; nothing in srbf has to be edited for an in-process adapter.
-- **What a worker reports about itself is stored with the results**: `__meta__["worker"]` holds the return
-  value of the worker's `info()` (its interpreter, package versions, checkpoint).
-- **Symbolic recovery at three levels of masking.** `symbolic_recovery` masks every number (the structure is
-  the ground truth's); `symbolic_recovery_mask_fittable` masks only the fittable constants, so exponents and root
-  indices have to be the ground truth's as well; `symbolic_recovery_mask_none` also asks for the constants, measured as
-  numeric recovery is. Each level implies the one before it, and agreement at a stricter level is a witness
-  at the looser one. The two new columns need an engine.
-- **`precision_score`, `recall_score` and `edit_distance_norm`** among the derived metrics: the two parts of
-  the token F1, and the edit distance over the length of the longer sequence.
-- **The documentation is tested against the package** (`tests/test_docs.py`): every command, flag, adapter
-  type, suite catalog and derived metric is documented; every documented flag, import and repository path
-  exists; every example parses; and the site builds with broken links as errors.
 
 ### Removed
 - The results site's 2026-07 (paper) release: its explorer, data and prose. Its links open the current page.
