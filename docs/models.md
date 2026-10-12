@@ -546,11 +546,16 @@ method; its docstring gives the details.
   configuration, its one configuration, with the whole machine available to it. DSO pins its TensorFlow session to
   one thread itself. GP-meld's own evaluation pool (`parallel_eval`) stays off: it sends every new expression
   through the pool and back, and made uDSR* slower in every run we timed.
-- DSO forks its reward pool anew for every fit, from a process that already runs TensorFlow's and the numerical
-  libraries' threads, and a forked process can then wait forever on a lock one of those threads held. DSR's config
-  therefore uses srbf's hang policy ([Adapters](adapters.md)), as PySR's does: a problem whose worker stops using the
-  CPU for 60 seconds, or runs 30 times longer than the run's median problem, is tried once more in a fresh worker,
-  and a second hang fails it. Every hang is logged.
+- Every fit runs in a child process of its own, and its answer comes back through a pipe. DSO builds its reward pool
+  with `fork` inside every fit, and a process that has already run a fit carries TensorFlow's and numba's thread
+  pools, so forking from it can deadlock: DSR hung this way on the reference machine. The worker never runs a fit
+  itself, so each fit's pool is forked from a process that has started no threads. numba's compiled functions are
+  cached on disk by the warm-up and loaded by every later fit, so no fit pays for compilation. A fit child dies with
+  the worker, and one that dies or runs past `max_seconds` plus 15 minutes fails its problem. The answers are the same
+  as in-process fits (80 of 80 in the stress test when this was built, 2026-09-30), and `fit_time` does not include the fork.
+- DSR's config also keeps srbf's hang policy ([Adapters](adapters.md)) as a backstop, as PySR's does: a problem
+  whose worker stops using the CPU for 60 seconds, or runs 30 times longer than the run's median problem, is tried
+  once more in a fresh worker, and a second hang fails it. Every hang is logged.
 
 The worker stores the Pareto front of complexity against reward over every expression evaluated in the `front`
 column, and the expressions and iterations used in `nevals` and `iterations`.
