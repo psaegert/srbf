@@ -125,6 +125,9 @@ The configs in the repository are labeled as follows, and a test keeps them that
 - **QLattice:** `author_blessed`: the configuration its authors submitted to SRBench, their own loop for 200
   epochs with models ranked by feyn's `wide_parsimony` criterion. The library's `auto_run` defaults differ: 10
   epochs and the Bayesian information criterion.
+- **Bingo:** `author_blessed`: the configuration its authors ship for benchmarking and submitted to
+  SRBench. Its library defaults differ: stack size 32, no simplification, crossover and mutation
+  probability 0.4, and the four arithmetic operators only.
 
 ## Submitting a configuration for your method
 

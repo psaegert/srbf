@@ -1,0 +1,59 @@
+# Bingo against its published ground-truth number: Randall, Townsend, Hochhalter and Bomarito, GECCO 2022 Companion,
+# Sec. 5.2 (SRBench 2021's ground-truth protocol: 1,000,000 evaluations or 8 h per dataset, no tuning; noise 0:
+# 64 % of runs with test R^2 > 0.999 over 119 Feynman + 14 Strogatz problems). The authors' benchmark configuration
+# with their own operator list (+ - * / sin cos exp log sqrt) instead of srbf's, 1,000,000 evaluations, the 8 h limit
+# (never reached), and SRBench-sized data: a 75/25 split of 10,000 points, above the 1,200 training points from which
+# Bingo evolves on a fitness-predictor island, as it did on the published data. The operator list and the data size
+# are the maintainers' choices, so the arm is harness_tuned. The environment as for
+# configs/evaluation/scaling/bingo_fastsrb.yaml.
+experiments:
+  feynman:
+    data_source:
+      catalog: feynman
+      sampling:
+        n_support: 7500
+        n_validation: 2500
+        noise: 0.0
+        problems_per_expression: 1
+    model_adapter:
+      type: subprocess
+      worker: bingo
+      python: '{{ROOT}}/envs/bingo/bin/python'
+      config_provenance: harness_tuned
+      simplipy_engine: acj-5-4-llm
+      timeout: 32000
+      options:
+        max_evals: 1000000
+        config:
+          operators: ['+', '-', '*', '/', 'sin', 'cos', 'exp', 'log', 'sqrt']
+          max_time: 28800
+    runner:
+      limit: null
+      save_every: 1
+      resume: true
+      output: '{{ROOT}}/results/evaluation/panels/bingo_gecco2022/feynman/evals_1000000.pkl'
+  feynman-bonus:
+    data_source:
+      catalog: feynman-bonus
+      sampling:
+        n_support: 7500
+        n_validation: 2500
+        noise: 0.0
+        problems_per_expression: 1
+    model_adapter:
+      type: subprocess
+      worker: bingo
+      python: '{{ROOT}}/envs/bingo/bin/python'
+      config_provenance: harness_tuned
+      simplipy_engine: acj-5-4-llm
+      timeout: 32000
+      options:
+        max_evals: 1000000
+        config:
+          operators: ['+', '-', '*', '/', 'sin', 'cos', 'exp', 'log', 'sqrt']
+          max_time: 28800
+    runner:
+      limit: null
+      save_every: 1
+      resume: true
+      output: '{{ROOT}}/results/evaluation/panels/bingo_gecco2022/feynman-bonus/evals_1000000.pkl'

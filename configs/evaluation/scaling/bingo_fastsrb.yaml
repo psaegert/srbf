@@ -1,0 +1,30 @@
+# Bingo on FastSRB along its evaluation budget, 2^14 up to about 100 s per problem on the reference machine (rung times
+# provisional): bingo-nasa 0.5.7 in its authors' benchmark configuration (see srbf/worker/models/bingo_worker.py and
+# docs/models.md), run in an environment of its own:
+#   scripts/envs/build_bingo_env.sh {{ROOT}}/envs/bingo
+run:
+  data_source:
+    catalog: fastsrb
+    sampling:
+      n_support: 512
+      n_validation: 512
+      noise: 0.0
+      problems_per_expression: 1
+  model_adapter:
+    type: subprocess
+    worker: bingo
+    python: '{{ROOT}}/envs/bingo/bin/python'
+    config_provenance: author_blessed
+    simplipy_engine: acj-5-4-llm
+    timeout: 7200
+    options:
+      max_evals: !sweep
+        name: ladder
+        values: [16384, 32768, 65536, 131072, 262144, 524288, 1048576]
+  runner:
+    limit: null
+    save_every: 8
+    resume: true
+    output: !sweep
+      name: ladder
+      values: ['{{ROOT}}/results/evaluation/scaling/bingo/fastsrb/evals_0016384.pkl', '{{ROOT}}/results/evaluation/scaling/bingo/fastsrb/evals_0032768.pkl', '{{ROOT}}/results/evaluation/scaling/bingo/fastsrb/evals_0065536.pkl', '{{ROOT}}/results/evaluation/scaling/bingo/fastsrb/evals_0131072.pkl', '{{ROOT}}/results/evaluation/scaling/bingo/fastsrb/evals_0262144.pkl', '{{ROOT}}/results/evaluation/scaling/bingo/fastsrb/evals_0524288.pkl', '{{ROOT}}/results/evaluation/scaling/bingo/fastsrb/evals_1048576.pkl']
