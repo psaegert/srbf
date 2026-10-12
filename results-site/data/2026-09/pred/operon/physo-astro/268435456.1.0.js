@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["operon|physo-astro|268435456|1|0"]={"0":["+ 0.01809 * 0.7827 / sinh exp * -1.116 x1 tanh * 0.6703 x1",0],"1":["+ 0.0003078 * 0.9999 - * acos * 0.1629 x1 cosh rootn * 9.315 x1 2 + 0.4054 * 2.783 x1",1]};})();
