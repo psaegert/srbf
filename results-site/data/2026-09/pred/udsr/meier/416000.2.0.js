@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["udsr|meier|416000|2|0"]={"0":["* * / 1 + x2 x1 * x2 * + x2 rootn * * log 1 / x2 + x2 x1 1 2 x1 x1",3],"1":["* / / 1 / * inv + + / + + + * -0.5403 x2 * -1 pow x2 2 * * -1 x1 x2 * 1 pow x1 3 / x2 1 + cos 1 / x2 1 x1 x2 x1 x2 x1",1]};})();
