@@ -65,13 +65,15 @@ def note(suite_keys: list[str]) -> str:
 
 def rungs_in(directory: Path, pattern: str) -> list[int]:
     """Every rung some catalog of `directory` has a file for."""
-    # any zero-padded width ({rung:05d}, {rung:06d}, Operon's and the other evaluation ladders' {rung:07d}) or none ({rung})
-    parts = re.split(r"\{rung(?::0?(\d+)d)?\}", pattern)
-    if len(parts) != 3:
+    # A width pads to AT LEAST that many digits ({rung:07d} names 2^24 evals_16777216.pkl), so a file is a rung's when
+    # the pattern spells that rung as exactly its name, whatever the width ({rung:05d}, {rung:06d}, {rung:07d}, {rung}).
+    parts = re.split(r"\{rung(?::0?\d+d)?\}", pattern)
+    if len(parts) != 2:
         raise ValueError(f"a rung-file pattern names the rung exactly once: {pattern!r}")
-    head, width, tail = parts
-    rx = re.compile("^" + re.escape(head) + (rf"(\d{{{width}}})" if width else r"(\d+)") + re.escape(tail) + "$")
-    found = {int(m.group(1)) for p in directory.glob("*/*") if (m := rx.match(p.name))}
+    head, tail = parts
+    rx = re.compile("^" + re.escape(head) + r"(\d+)" + re.escape(tail) + "$")
+    found = {int(m.group(1)) for p in directory.glob("*/*")
+             if (m := rx.match(p.name)) and pattern.format(rung=int(m.group(1))) == p.name}
     return sorted(found)
 
 
