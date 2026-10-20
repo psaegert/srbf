@@ -107,3 +107,15 @@ def test_rung_files_of_any_width_are_found(tmp_path) -> None:
     assert site_timing.rungs_in(tmp_path, "evals_{rung:07d}.pkl") == [1024, 2048]
     assert site_timing.rungs_in(tmp_path, "choices_{rung:06d}.pkl") == [1024]
     assert site_timing.rungs_in(tmp_path, "epochs_{rung:05d}.pkl") == [4]
+
+
+def test_rungs_wider_than_the_padding_are_found(tmp_path) -> None:
+    """A width pads to at least that many digits: Operon's 2^24..2^28 files (evals_16777216.pkl .. evals_268435456.pkl)
+    are longer than seven, and the site's Operon time axis stopped at 2^23 (14 of 19 budgets)."""
+    (tmp_path / "fastsrb").mkdir()
+    for name in ("evals_8388608.pkl", "evals_16777216.pkl", "evals_268435456.pkl", "evals_00001024.pkl", "choices_1234567.pkl"):
+        (tmp_path / "fastsrb" / name).write_text("")
+    # evals_00001024.pkl is no rung's file: {rung:07d} spells 1024 as 0001024
+    assert site_timing.rungs_in(tmp_path, "evals_{rung:07d}.pkl") == [8388608, 16777216, 268435456]
+    assert site_timing.rungs_in(tmp_path, "choices_{rung:06d}.pkl") == [1234567]
+    assert site_timing.rungs_in(tmp_path, "evals_{rung}.pkl") == [8388608, 16777216, 268435456]
