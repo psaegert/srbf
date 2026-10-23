@@ -546,6 +546,21 @@ def compute_derived_metrics(
                         if column in r:
                             r[column] = np.asarray(r[column], dtype=bool) & answered
 
+                # ── No test split: the validation metrics stay empty ──
+                # A data catalog whose authors give no test split has no validation points (owner 2026-10-17: "if
+                # people fail to tell us what to test on, we don't"). Its validation metrics are not a miss and not a
+                # perfect fit; they do not exist: NaN for the analysis metrics, None for the recovery rates.
+                if 'y_val' in r:
+                    r['n_validation'] = np.array([0 if yv is None else int(np.asarray(yv).shape[0]) for yv in r['y_val']])
+                    no_test = r['n_validation'] == 0
+                    if no_test.any():
+                        for column in ('fvu_val', 'log10_fvu_val', 'r2_val', 'only_approx_fvu_val', 'only_approx_log10_fvu_val'):
+                            if column in r:
+                                r[column] = np.where(no_test, np.nan, np.asarray(r[column], dtype=float))
+                        for column in ('numeric_recovery_val', 'numeric_recovery_relative_val'):
+                            if column in r:
+                                r[column] = np.array([None if nt else bool(v) for v, nt in zip(r[column], no_test)], dtype=object)
+
                 if 'skeleton_simplified' not in r:
                     r['skeleton_simplified'] = list(r['skeleton'])
 
@@ -616,10 +631,11 @@ def compute_derived_metrics(
                         for agrees, miss, fp in zip(r['symbolic_recovery'], failed, fittable_pairs)
                     ])
                     if 'numeric_recovery_val' in r:
+                        # "all numbers right" is read on the validation points: without them it is not defined
                         r['symbolic_recovery_mask_none'] = np.array([
-                            bool(typed) and bool(numeric)
+                            None if numeric is None else bool(typed) and bool(numeric)
                             for typed, numeric in zip(r['symbolic_recovery_mask_fittable'], r['numeric_recovery_val'])
-                        ])
+                        ], dtype=object)
 
                 # ── Length ratio ──────────────────────────────────
                 r['skeleton_length_ratio'] = np.array([

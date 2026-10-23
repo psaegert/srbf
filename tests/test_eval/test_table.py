@@ -237,3 +237,23 @@ def test_a_prediction_the_spelling_cannot_walk_stays_as_written_and_the_file_is_
     path = _write(tmp_path, "toy", "choices_000001.pkl", snap)
     rows = judge_result_file(path, method="m", engine=engine)
     assert len(rows) == 2 and _col(rows, "symbolic_recovery")[0] == 1
+
+
+def test_a_problem_without_validation_points_has_no_validation_metrics(tmp_path, engine):
+    """A data catalog whose authors give no test split has no validation points (owner 2026-10-17: "if people fail to
+    tell us what to test on, we don't"): its validation metrics are empty -- neither a miss nor a perfect fit -- while
+    a problem with validation points next to it is judged as before."""
+    snap = _snapshot([["+", "x1", "x2"], ["+", "x1", "x2"], ["*", "x1", "x2"]])
+    for i in (1, 2):                                       # rows 1 and 2: no validation points
+        snap["y_val"][i] = np.empty((0,))
+        snap["y_pred_val"][i] = np.empty((0,))
+    rows = judge_result_file(_write(tmp_path, "toy", "choices_000008.pkl", snap), method="m", engine=engine)
+    assert _col(rows, "n_validation") == [16.0, 0.0, 0.0]
+    assert _col(rows, "numeric_recovery_val") == [1, "", ""]          # empty, not 0 (a miss) and not 1
+    assert _col(rows, "symbolic_recovery_mask_none") == [1, "", ""]
+    assert _col(rows, "numeric_recovery_fit") == [1, 1, 1]           # the fit split is judged as always (the toy
+    #                                                                  predictions all reproduce y numerically)
+    assert _col(rows, "symbolic_recovery") == [1, 1, 0]
+    lf = _col(rows, "log10_fvu_val")
+    assert np.isfinite(lf[0]) and all(isinstance(v, float) and np.isnan(v) for v in lf[1:])
+    assert np.isfinite(_col(rows, "log10_fvu_fit")[1])
