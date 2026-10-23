@@ -10,7 +10,10 @@ site is built from this table.
 Row semantics:
 
 * rate columns (``success``, the numeric and symbolic recoveries, ``skeleton_match_raw``) are defined for every
-  problem: a failed prediction is a miss (0), not a missing value;
+  problem: a failed prediction is a miss (0), not a missing value. The one exception: a problem without validation
+  points (a data catalog whose authors give no test split, ``n_validation`` 0) has no validation-split rates
+  (``numeric_recovery_val``, ``numeric_recovery_relative_val``, ``symbolic_recovery_mask_none``): they are empty, as
+  its validation analysis columns are;
 * analysis columns (FVU, R², distances, lengths, MDL, ...) describe the predictions that were made and are empty for a
   failed one, except the metrics whose range has a worst value (:data:`srbf.result_processing.WORST_VALUE`), which a
   failed prediction takes;
@@ -52,15 +55,18 @@ ANALYSIS_COLUMNS = ["log10_fvu_val", "log10_fvu_fit", "r2_val", "r2_fit", "mdl_r
                     "total_nestedness_delta", "f1_score_unique_variables", "precision_unique_variables",
                     "recall_unique_variables", "predicted_log_prob", "predicted_score", "predicted_pareto_rank",
                     "fit_time", "generation_time"]
-GROUND_TRUTH_COLUMNS = ["skeleton_length", "ground_truth_mdl", "n_constants", "total_nestedness", "n_variables", "n_support"]
+GROUND_TRUTH_COLUMNS = ["skeleton_length", "ground_truth_mdl", "n_constants", "total_nestedness", "n_variables", "n_support",
+                        "n_validation"]
 #: The expressions themselves, as the judge read them: prefix tokens joined by spaces, numbers at full precision. The
 #: prediction is in the ground truth's variable names and the engine's spelling; empty when the method gave none.
 EXPRESSION_COLUMNS = ["predicted_expression", "ground_truth_expression"]
 #: The table's columns, in order.
 COLUMNS = ID_COLUMNS + RATE_COLUMNS + ANALYSIS_COLUMNS + GROUND_TRUTH_COLUMNS + EXPRESSION_COLUMNS
 #: Bumped whenever a row's content changes without a change to srbf's source (it is part of the cache key).
-TABLE_VERSION = 1
+TABLE_VERSION = 2   # 2: n_validation, and empty validation rates without validation points
 
+#: The rates read on the validation points: empty for a problem without them.
+_VALIDATION_RATES = {"numeric_recovery_val", "numeric_recovery_relative_val", "symbolic_recovery_mask_none"}
 _RECOVERIES = ["numeric_recovery_val", "numeric_recovery_fit", "numeric_recovery_relative_val", "numeric_recovery_relative_fit",
                "symbolic_recovery", "symbolic_recovery_mask_fittable", "symbolic_recovery_mask_none"]
 _DERIVED_WHEN_ANSWERED = ["log10_fvu_val", "log10_fvu_fit", "r2_val", "r2_fit", "mdl_ratio", "predicted_mdl", "f1_score",
@@ -229,8 +235,13 @@ def judge_result_file(path: str, *, method: str, draw: int = 1, engine: Any, fir
         ps = list(ps) if (ok and ps is not None) else None
         # rates: a miss unless the prediction succeeded and the judge said yes
         r["success"] = int(ok)
+        n_val = got("n_validation", i)
+        no_test = n_val is not None and int(n_val) == 0
         for k in _RECOVERIES:
             v = got(k, i)
+            if no_test and k in _VALIDATION_RATES:
+                r[k] = ""            # no validation points: not a miss, not defined
+                continue
             r[k] = int(bool(v)) if (ok and v is not None) else 0
         r["skeleton_match_raw"] = int(ok and ps is not None and sk is not None and ps == sk)
         # ground truth
@@ -240,6 +251,7 @@ def judge_result_file(path: str, *, method: str, draw: int = 1, engine: Any, fir
         r["total_nestedness"] = _number(got("total_nestedness", i))
         r["n_variables"] = _number(got("n_variables", i))
         r["n_support"] = _number(raw("n_support", i))
+        r["n_validation"] = _number(n_val)
         pe, ge = raw("predicted_expression_prefix", i), raw("ground_truth_prefix", i)
         r["predicted_expression"] = " ".join(map(str, pe)) if (ok and pe is not None) else ""
         r["ground_truth_expression"] = " ".join(map(str, ge)) if ge is not None else ""

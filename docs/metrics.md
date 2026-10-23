@@ -125,6 +125,14 @@ data set unexplained, a prediction with FVU \(8 \times 10^{-4}\) counts as recov
 is 0 and the criterion is numeric recovery exactly. That is the case for all 29 catalogs of the
 srbf suite, so there the two columns agree on every problem.
 
+### `n_validation`: problems without a test split
+
+The number of validation (test) points of the problem. It is 0 for a data catalog whose authors give no test split
+or procedure: srbf then does not invent one. Such a problem has no validation metrics at all: `fvu_val`, `log10_fvu_val` and `r2_val` are empty, and
+the validation rates `numeric_recovery_val`, `numeric_recovery_relative_val` and `symbolic_recovery_mask_none` are
+empty too, neither a miss nor a hit. Every summary leaves the problem out of them; its support-split metrics are
+judged as usual.
+
 ## Symbolic agreement
 
 All columns of this group compare the **judged skeleton** of the prediction with \(\bar\tau\),

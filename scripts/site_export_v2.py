@@ -351,6 +351,17 @@ def listed_metrics(cells: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 RATE_KEYS = [m[0] for m in METRICS if m[4] == "rate"]
+#: Rates read on the validation points. A problem without them (a data catalog whose authors give no test split, owner
+#: 2026-10-17) has none of these: srbf's table leaves them empty, and every summary leaves the problem out of them.
+VALIDATION_RATES = {"numeric_recovery_val", "numeric_recovery_relative_val", "symbolic_recovery_mask_none"}
+
+
+def problem_share(runs: list[Mapping[str, Any]], key: str) -> float | None:
+    """A problem's share of hits over the runs where the rate is defined; None where it is defined for none."""
+    defined = [r[key] for r in runs if r[key] is not None]
+    return sum(1.0 if v else 0.0 for v in defined) / len(defined) if defined else None
+
+
 CONT_KEYS = [m[0] for m in METRICS if m[4] == "cont"]
 HIST_SPECS = {m[0]: m[8] for m in METRICS if m[8]}
 METRIC_HIGHER = {m[0]: m[5] for m in METRICS}
@@ -475,8 +486,12 @@ def load_rows(root: str) -> dict[str, dict[tuple[str, int], Rows]]:
         with open(path) as fh:
             for r in csv.DictReader(fh):
                 vals: dict[str, float | None] = {}
+                no_test = fnum(r.get("n_validation")) == 0
                 for k in RATE_KEYS:
                     v = fnum(r.get(k))
+                    if v is None and no_test and k in VALIDATION_RATES:
+                        vals[k] = None   # no validation points (a data catalog without a test split): not defined, not a miss
+                        continue
                     vals[k] = (0.0 if v is None else v) if k in r else None   # a column these rows do not have is no rate of 0
                 for k in CONT_KEYS:
                     v = fnum(r.get(k))
@@ -906,7 +921,7 @@ def summarize_cell(rows: Mapping[Any, Mapping[str, Any]], expected: int | None) 
                             "ok": int(sum(1 for runs in problems.values() if any(r["success"] for r in runs))), "m": {}}
     for k in RATE_KEYS:
         if any(r[k] is not None for runs in problems.values() for r in runs):
-            xs = [sum(1.0 if r[k] else 0.0 for r in runs) / len(runs) for runs in problems.values()]
+            xs = [x for x in (problem_share(runs, k) for runs in problems.values()) if x is not None]
             cell["m"][k] = [len(xs)] + _sums(xs)
     for k in CONT_KEYS:
         tf = HIST_SPECS[k][2] if k in HIST_SPECS else None
@@ -1010,10 +1025,11 @@ def value_matrix(rows: dict[Any, dict[str, Any]], key: str, answered: bool = Fal
 
 
 def rate_matrix(rows: dict[Any, dict[str, Any]], key: str) -> tuple[np.ndarray, np.ndarray]:
-    """(problem ids, each problem's share of hits over its runs)."""
+    """(problem ids, each problem's share of hits over its runs; NaN where the rate is defined for none of them)."""
     def build() -> tuple[np.ndarray, np.ndarray]:
         ids, runs = _problem_runs(rows)
-        return ids, np.asarray([sum(1.0 if r[key] else 0.0 for r in rs) / len(rs) for rs in runs])
+        shares = [problem_share(rs, key) for rs in runs]
+        return ids, np.asarray([np.nan if x is None else x for x in shares], dtype=float)
     return _cached(rows, ("rate", key), build)
 
 
@@ -1139,6 +1155,7 @@ def paired_cell_at(a: Position, b: Position, cache: dict[Any, Any] | None = None
             def share(rows: Any, k: str = k) -> np.ndarray:
                 return rate_matrix(rows, k)[1]
             ds = _at_problems(a, ja, share) - _at_problems(b, jb, share)
+            ds = ds[np.isfinite(ds)]          # a problem without validation points has no validation rate to compare
             out[k] = [int(ds.size)] + _sums(list(ds)) + [int((ds > 0).sum()), int((ds < 0).sum())]
             continue
         for name, answered in [(k, False)] + ([(k + ANSWERED, True)] if k in WORST else []):
