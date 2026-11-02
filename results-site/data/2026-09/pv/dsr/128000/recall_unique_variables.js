@@ -1,0 +1,1 @@
+window.RESULTS_V2_PV=window.RESULTS_V2_PV||{};(function(){var R=window.RESULTS_V2_PV;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["dsr|128000|recall_unique_variables"]={"feynman-bonus":{"s":{"recall_unique_variables":{"u":"AAAAAAAAAAAAAABgVVXVPwAAAAAAAOA/AAAAoCRJ4j8AAABAMzPjPwAAAGBVVeU/AAAAAAAA6D8AAACgmZnpPwAAAAAAAPA/","i":"AwEAAAgABwYAAAAHAAQCAAUAAAA="}}}};})();

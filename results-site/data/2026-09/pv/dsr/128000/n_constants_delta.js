@@ -1,0 +1,1 @@
+window.RESULTS_V2_PV=window.RESULTS_V2_PV||{};(function(){var R=window.RESULTS_V2_PV;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["dsr|128000|n_constants_delta"]={"feynman-bonus":{"s":{"n_constants_delta":{"u":"AAAAAAAAAIAAAAAAAADwvwAAAAAAAADAAAAAAAAACMAAAAAAAAAYwAAAAAAAAPD/","i":"BAMFBQEFAQAFBQUDBQACBQIFBQU="}}}};})();

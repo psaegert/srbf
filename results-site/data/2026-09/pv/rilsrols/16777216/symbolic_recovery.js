@@ -1,0 +1,1 @@
+window.RESULTS_V2_PV=window.RESULTS_V2_PV||{};(function(){var R=window.RESULTS_V2_PV;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["rilsrols|16777216|symbolic_recovery"]={"feynman-bonus":{"s":{"symbolic_recovery":{"u":"AAAAAAAAAAAAAAAAAADwPw==","i":"AAAAAAAAAAAAAAAAAAAAAAABAAA="}},"r":{"symbolic_recovery":{"u":"AAAAAAAAAAAAAAAAAADwPw==","i":"AAAAAAAAAAAAAAAAAAAAAAABAAA="}}}};})();

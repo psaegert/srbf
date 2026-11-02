@@ -1,0 +1,1 @@
+window.RESULTS_V2_PV=window.RESULTS_V2_PV||{};(function(){var R=window.RESULTS_V2_PV;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["dsr|128000|log10_fvu_fit"]={"feynman-bonus":{"s":{"log10_fvu_fit":{"u":"JV1Un6WktT9gpFh8LCzQPz0TWCWo8eQ/8zWYJeaM6z/Z2JXmDLnvPzM7O4Y4V/I/4QJFdVtx/D+in9K2138AQL1PMBgDfQJAAAAAAAAA8P8=","i":"AwEJCQYJCAQJCQkHCQAFCQIJCQk="}}}};})();

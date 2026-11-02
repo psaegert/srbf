@@ -1,0 +1,1 @@
+window.RESULTS_V2_PV=window.RESULTS_V2_PV||{};(function(){var R=window.RESULTS_V2_PV;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["qlattice|1024|precision_score"]={"feynman-bonus":{"s":{"precision_score":{"u":"AAAAAAAA5D8AAABgZmbmPwAAAAAAAOg/AAAAQI7j6D8AAAAAAADsPwAAACDHcew/AAAAwMzM7D8AAAAAAADwPw==","i":"AwYHBwQFAQYFAAIHBQMDBQUFBwY="}}}};})();

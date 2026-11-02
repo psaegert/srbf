@@ -1,0 +1,1 @@
+window.RESULTS_V2_PV=window.RESULTS_V2_PV||{};(function(){var R=window.RESULTS_V2_PV;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["dsr|128000|edit_distance_norm"]={"feynman-bonus":{"s":{"edit_distance_norm":{"u":"KK+hvIby2r8AAAAAAADkv8P1KFyPwuW/AAAAAAAA6L8YhmEYhmHov7rooosuuui/L7rooosu6r9aWlpaWlrqv0tLS0tLS+u/AAAAAAAA8P8=","i":"CAYJCQAJBAcJCQkBCQMFCQIJCQk="}}}};})();

@@ -1,0 +1,1 @@
+window.RESULTS_V2_PV=window.RESULTS_V2_PV||{};(function(){var R=window.RESULTS_V2_PV;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-120M-pysr|32768|n_constants_ratio"]={"constant":{"s":{"n_constants_ratio":{"u":"AAAAAAAAAIAgmprH94/Mv0yYv+wj89m/UhSB+q5Y4L/vOfr+Qi7mv5quCmcQHeu/","i":"AwEEAgIEAAAAAAAAAAAABQQEBAQ="}}}};})();

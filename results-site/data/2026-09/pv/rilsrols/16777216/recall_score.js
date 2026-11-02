@@ -1,0 +1,1 @@
+window.RESULTS_V2_PV=window.RESULTS_V2_PV||{};(function(){var R=window.RESULTS_V2_PV;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["rilsrols|16777216|recall_score"]={"feynman-bonus":{"s":{"recall_score":{"u":"AAAAAAAA6D8AAACgqqrqPwAAAMC7u+s/AAAAIMdx7D8AAADgRRftPwAAAGBVVe0/AAAA4N3d7T8AAAAAAADwPw==","i":"BQYHBwMHBAEHAwMABwUBBwcHBQI="}}}};})();

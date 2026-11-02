@@ -1,0 +1,1 @@
+window.RESULTS_V2_PV=window.RESULTS_V2_PV||{};(function(){var R=window.RESULTS_V2_PV;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["qlattice|1024|recall_score"]={"feynman-bonus":{"s":{"recall_score":{"u":"AAAAgBzH4T8AAACgJEniPwAAAKCqquI/AAAAQDMz4z8AAABAF13kPwAAAGBVVeU/AAAAgGIn5j8AAACA0UXnPwAAAAAAAOg/AAAAQI7j6D8AAACgmZnpPwAAAKCLLuo/","i":"AgMLBgkBBAgKAAUIBQICBQcKCAM="}}}};})();

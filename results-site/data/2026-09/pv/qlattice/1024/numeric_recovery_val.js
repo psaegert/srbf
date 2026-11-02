@@ -1,0 +1,1 @@
+window.RESULTS_V2_PV=window.RESULTS_V2_PV||{};(function(){var R=window.RESULTS_V2_PV;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["qlattice|1024|numeric_recovery_val"]={"feynman-bonus":{"s":{"numeric_recovery_val":{"u":"AAAAAAAAAAA="}},"r":{"numeric_recovery_val":{"u":"AAAAAAAAAAA="}}}};})();
