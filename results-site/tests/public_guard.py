@@ -14,11 +14,12 @@ Fatal checks, run before the Playwright suite in CI and locally:
   5. no published payload carries an as-run wall-clock metric. Seconds measured where a unit happened to run are
      not comparable between methods; the only timing this benchmark publishes is the reference-machine ladder in
      timing.json: only times measured on the reference machine are published;
-  6. a sealed payload, if one is present, is sealed: the envelope carries only its own fields, the KDF is strong
-     enough to be worth having, and the ciphertext reads as ciphertext (high entropy, no plaintext left in it).
-     The checker is run against a deliberately bad envelope on every invocation, so it cannot pass vacuously;
-     the same holds for every file under data/*/sealed/ (the files tools/seal.mjs seals one by one): one
-     envelope line, named by its own file name, an IV of 12 bytes, ciphertext that reads as ciphertext, nothing else;
+  6. a sealed file, if one is present, is sealed: one line, the fields tools/seal.mjs writes and no others, a KDF strong
+     enough to be worth having, keyrings all of one size, unit ids that name nothing, and every keyring's and unit's
+     ciphertext reads as ciphertext (no plaintext, no compressed stream left unencrypted, no text). The checker is run
+     against deliberately bad files on every invocation, so it cannot pass vacuously; the same holds for every file
+     under data/*/sealed/ (the files tools/seal.mjs seals one by one): one envelope line, named by its own file name,
+     an IV of 12 bytes, ciphertext that reads as ciphertext, nothing else;
   7. no text a reader can see in a release payload (the protocol texts, the timing note, the labels and
      descriptions of metrics, methods and catalogs) matches a banned pattern. The page lint reads index.html and the
      explorer's strings; a payload is written by the exporter from files outside this repository, so it is read here,
@@ -95,12 +96,14 @@ def cell_methods(text: str) -> set[str] | None:
     return {k for per in cells.values() for pair in per for k in pair.split("|")}
 
 
-SEALED_FIELDS = {"v", "kdf", "iter", "salt", "iv", "ct"}
+SEALED_FIELDS = {"v", "kdf", "iter", "salt", "keyrings", "units"}
 MIN_ITERATIONS = 200_000
 # A sealed blob must not carry recognisable plaintext. Every tell is long enough that random bytes do not
 # produce it: a 2-byte needle turns up ~7 times by chance in 400 kB, a 7-byte one once in 10^12 payloads.
 PLAINTEXT_TELLS = (b"window.", b"RESULTS_V2", b"function", b'"methods"', b'"cells"', b'"catalogs"')
 assert all(len(t) >= 7 for t in PLAINTEXT_TELLS), "a short tell fires on ciphertext by chance"
+SEALED_LINE = re.compile(r"window\.RESULTS_V2_SEALED=window\.RESULTS_V2_SEALED\|\|\{\};window\.RESULTS_V2_SEALED\[\"[^\"\\]+\"\]=(\{.*\});\n?")
+UNIT_ID = re.compile(r"[0-9a-f]{32}")
 
 
 def entropy(data: bytes) -> float:
@@ -115,53 +118,54 @@ def entropy(data: bytes) -> float:
 
 
 def check_sealed(text: str, name: str) -> list[str]:
-    """Everything that must hold for a sealed file, whatever it holds: one line with the envelope a page has always read
-    (RESULTS_V2_SEALED), at most one more with the envelopes sealed under further keys (RESULTS_V2_SEALED_MORE, written
-    first by tools/seal.mjs --source ...), nothing else; and every envelope passes the same checks."""
-    first, more, envs = None, None, []
-    for line in text.strip().split("\n"):
-        m = re.search(r"window\.RESULTS_V2_SEALED\[[^\]]*\]=(\{.*\});$", line)
-        n = re.fullmatch(r"window\.RESULTS_V2_SEALED_MORE=window\.RESULTS_V2_SEALED_MORE\|\|\{\};"
-                         r"window\.RESULTS_V2_SEALED_MORE\[[^\]]*\]=(\[.*\]);", line)
-        if m and first is None:
-            first = m.group(1)
-        elif n and more is None:
-            more = n.group(1)
-        else:
-            return [f"{name}: a line that is neither a sealed envelope nor the further ones, or one of them twice"]
-    if first is None:
-        return [f"{name}: not a sealed envelope"]
+    """data/<release>/sealed.js (tools/seal.mjs): exactly one line; the fields the tool writes and no others; a KDF worth
+    having; keyrings, all of one size, and units under ids of 32 hex digits, each an IV and ciphertext that reads as
+    ciphertext."""
+    m = SEALED_LINE.fullmatch(text)
+    if not m:
+        return [f"{name}: not one sealed-file line"]
     try:
-        envs = [json.loads(first)] + (json.loads(more) if more is not None else [])
+        env = json.loads(m.group(1))
     except ValueError:
-        return [f"{name}: envelope is not JSON"]
-    if not all(isinstance(e, dict) for e in envs):
-        return [f"{name}: the further envelopes are not a list of envelopes"]
-    bad: list[str] = []
-    for i, env in enumerate(envs):
-        bad.extend(check_envelope(env, name if i == 0 else f"{name} (envelope {i + 1})"))
-    return bad
-
-
-def check_envelope(env: dict[str, Any], name: str) -> list[str]:
-    """One envelope: its own fields only, a strong KDF, and ciphertext that does not read as plaintext."""
+        return [f"{name}: the sealed file is not JSON"]
+    if not isinstance(env, dict) or set(env) != SEALED_FIELDS:
+        return [f"{name}: fields {sorted(set(env) ^ SEALED_FIELDS) if isinstance(env, dict) else env!r} (only {sorted(SEALED_FIELDS)} belong here)"]
     bad = []
-    if set(env) != SEALED_FIELDS:
-        bad.append(f"{name}: envelope fields {sorted(set(env) ^ SEALED_FIELDS)} (only {sorted(SEALED_FIELDS)} belong here)")
-    if env.get("kdf") != "PBKDF2-SHA256" or int(env.get("iter", 0)) < MIN_ITERATIONS:
+    if env.get("v") != 2:
+        bad.append(f"{name}: format {env.get('v')!r}, not 2")
+    if env.get("kdf") != "PBKDF2-SHA256" or not isinstance(env.get("iter"), int) or env["iter"] < MIN_ITERATIONS:
         bad.append(f"{name}: kdf {env.get('kdf')!r} at {env.get('iter')} iterations is below the bar")
-    try:
-        ct = base64.b64decode(env.get("ct", ""), validate=True)
-    except Exception:
-        return bad + [f"{name}: ciphertext is not base64"]
-    if len(ct) < 1024:
-        bad.append(f"{name}: ciphertext is {len(ct)} bytes")
-    if entropy(ct) < 7.5:
-        bad.append(f"{name}: ciphertext entropy {entropy(ct):.2f} bits/byte reads as plaintext")
-    for tell in PLAINTEXT_TELLS:
-        if tell in ct:
-            bad.append(f"{name}: ciphertext contains {tell!r}")
+    rings, units = env.get("keyrings"), env.get("units")
+    if not isinstance(rings, list) or not rings or not isinstance(units, dict) or not units:
+        return bad + [f"{name}: no keyrings or no units"]
+    sizes = set()
+    for i, r in enumerate(rings):
+        found, ct = envelope_of(r, f"{name} keyring {i + 1}")
+        bad.extend(found)
+        if ct is not None:
+            sizes.add(len(ct))
+            bad.extend(check_ciphertext(ct, f"{name} keyring {i + 1}", whole=True))
+    if len(sizes) > 1:
+        bad.append(f"{name}: keyrings of {len(sizes)} sizes (they are padded to one, so their sizes say nothing)")
+    for uid, u in units.items():
+        if not UNIT_ID.fullmatch(uid):
+            bad.append(f"{name}: a unit under {uid!r}, not an id of 32 hex digits")
+        found, ct = envelope_of(u, f"{name} unit {uid}")
+        bad.extend(found)
+        if ct is not None:
+            bad.extend(check_ciphertext(ct, f"{name} unit {uid}"))
     return bad
+
+
+def envelope_of(e: Any, name: str) -> tuple[list[str], bytes | None]:
+    """An {iv, ct} envelope: its ciphertext, or what is wrong with it."""
+    if not isinstance(e, dict) or set(e) != {"iv", "ct"}:
+        return [f"{name}: not an envelope of iv and ct"], None
+    try:
+        iv, ct = base64.b64decode(e["iv"], validate=True), base64.b64decode(e["ct"], validate=True)
+    except Exception:
+        return [f"{name}: IV or ciphertext is not base64"], None
+    return ([] if len(iv) == 12 else [f"{name}: an IV of {len(iv)} bytes (AES-GCM's is 12)"]), ct
 
 
 # A file sealed on its own (tools/seal.mjs): exactly this line, named by its own file name. The line's text
@@ -189,8 +193,17 @@ def check_sealed_file(text: str, name: str, stem: str) -> list[str]:
         return bad + [f"{name}: IV or ciphertext is not base64"]
     if len(iv) != 12:
         bad.append(f"{name}: an IV of {len(iv)} bytes (AES-GCM's is 12)")
-    if len(ct) < GCM_TAG + MIN_GZIP:
-        return bad + [f"{name}: ciphertext is {len(ct)} bytes, shorter than any sealed file"]
+    return bad + check_ciphertext(ct, name)
+
+
+def check_ciphertext(ct: bytes, name: str, whole: bool = False) -> list[str]:
+    """Ciphertext that is neither plaintext nor a compressed stream left unencrypted. A sealed file or a unit can be a
+    few hundred bytes, too short for the entropy test of a whole payload; the share of text bytes tells text from
+    ciphertext at any length the format allows (a text file sits at 1, ciphertext at 98/256, and the bar is six
+    standard deviations above that). `whole`: a keyring, at least 1 kB and held to the entropy bar as well."""
+    if len(ct) < (1024 if whole else GCM_TAG + MIN_GZIP):
+        return [f"{name}: ciphertext is {len(ct)} bytes, shorter than any sealed one"]
+    bad = []
     for tell in PLAINTEXT_TELLS:
         if tell in ct:
             bad.append(f"{name}: ciphertext contains {tell!r}")
@@ -273,21 +286,30 @@ def banned_patterns() -> dict[str, str]:
 
 def selftest() -> list[str]:
     """The guard checks itself: a blob that is plainly not sealed must be rejected by check_sealed."""
+    def noise(n: int, seed: int) -> bytes:   # reads as ciphertext
+        return bytes((i * 167 + seed * 31 + (i >> 8) * 7) % 256 for i in range(n))
+
+    def b64(b: bytes) -> str:
+        return base64.b64encode(b).decode()
+
+    def line(env: dict[str, Any]) -> str:
+        return 'window.RESULTS_V2_SEALED=window.RESULTS_V2_SEALED||{};window.RESULTS_V2_SEALED["t"]=' + json.dumps(env) + ";\n"
+    ring = {"iv": b64(bytes(12)), "ct": b64(noise(4112, 1))}
+    unit = {"iv": b64(bytes(12)), "ct": b64(noise(600, 2))}
+    good = {"v": 2, "kdf": "PBKDF2-SHA256", "iter": 600000, "salt": b64(b"srbf-keyring/t"), "keyrings": [ring, ring], "units": {"0" * 32: unit}}
+    bad = [f"selftest: check_sealed refused a well-formed sealed file: {check_sealed(line(good), 'selftest')}"] if check_sealed(line(good), "selftest") else []
     plain = json.dumps({"methods": [{"key": "x", "label": "X"}], "cells": {}}).encode() * 64
-    envelope = {"v": 1, "kdf": "PBKDF2-SHA256", "iter": 600000, "salt": "AA==", "iv": "AA==",
-                "ct": base64.b64encode(plain).decode()}
-    text = "window.RESULTS_V2_SEALED[\"t\"]=" + json.dumps(envelope) + ";\n"
-    bad = [] if check_sealed(text, "selftest") else ["selftest: check_sealed accepted a plaintext payload"]
-    # a plaintext payload behind a sealed one is as plain: every envelope is checked
-    sealed_first = {"v": 1, "kdf": "PBKDF2-SHA256", "iter": 600000, "salt": "AA==", "iv": "AA==",
-                    "ct": base64.b64encode(bytes(range(256)) * 8).decode()}
-    two = ("window.RESULTS_V2_SEALED_MORE=window.RESULTS_V2_SEALED_MORE||{};window.RESULTS_V2_SEALED_MORE[\"t\"]="
-           + json.dumps([envelope]) + ";\nwindow.RESULTS_V2_SEALED=window.RESULTS_V2_SEALED||{};window.RESULTS_V2_SEALED[\"t\"]="
-           + json.dumps(sealed_first) + ";\n")
-    if check_sealed(two.replace(json.dumps([envelope]), json.dumps([sealed_first])), "selftest"):
-        bad.append("selftest: check_sealed refused two sealed envelopes")
-    if not check_sealed(two, "selftest"):
-        bad.append("selftest: check_sealed accepted a plaintext envelope behind a sealed one")
+    for what, env in [("a plaintext keyring", {**good, "keyrings": [{"iv": ring["iv"], "ct": b64(plain[:4112])}, ring]}),
+                      ("a plaintext unit", {**good, "units": {"0" * 32: {"iv": unit["iv"], "ct": b64(plain[:600])}}}),
+                      ("a compressed unit", {**good, "units": {"0" * 32: {"iv": unit["iv"], "ct": b64(gzip.compress(plain))}}}),
+                      ("keyrings of two sizes", {**good, "keyrings": [ring, {"iv": ring["iv"], "ct": b64(noise(2064, 3))}]}),
+                      ("a unit named for its method", {**good, "units": {"hidden-method": unit}}),
+                      ("a field the tool does not write", {**good, "methods": ["x"]}),
+                      ("a weak KDF", {**good, "iter": 1000})]:
+        if not check_sealed(line(env), "selftest"):
+            bad.append(f"selftest: check_sealed accepted {what}")
+    if not check_sealed(line(good) + "window.X=1;\n", "selftest"):
+        bad.append("selftest: check_sealed accepted a second line")
     bad.extend(selftest_sealed_files())
     probe = SITE / "data" / ".guard_selftest.js"
     try:

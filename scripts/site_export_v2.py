@@ -28,10 +28,17 @@ Reads the per-problem judged rows of a campaign root (rows_full_<name>.csv or <n
 
 LOCAL-ONLY METHODS. The methods named in --public go into the release files the site ships. A method named in
 --private is written to --private-dir only, a directory outside the deployed tree (results-site/README.md,
-"Local-only methods"), with the same schema; the page merges it when a local build loads it. Its per-problem files
-go there too (pp/<method>/, pred/<method>/; the ground truth's are the release's, public already), indexed in the overlay
-as "pp" and "pred" like the release's; results-site/tools/seal.mjs seals them one file at a time. Such a method is
+"Local-only methods"), with the same schema; the page merges it when a local build loads it. Such a method is
 described in --methods-file, a JSON list of entries shaped like METHODS below, kept outside the repository.
+The private methods are written as UNITS, so that results-site/tools/seal.mjs can lock each under a key of its own
+and a reader opens exactly the methods they were given:
+  <private dir>/m/<method>/   one method: unit.js (its overlay: entry, cells, timing, where it sits at every slot), its
+                              histograms, its cells against every public method (ranks/, paired/), its per-problem files
+                              (pp/, pred/, pv/; the ground truth's are the release's, public already)
+  <private dir>/p/<a>/<b>/    two private methods, a < b: unit.js (no methods of its own) and their cells against each
+                              other (ranks/, paired/), which only a reader of both may open
+A unit's slots are the release's budgets, the time limits and the budgets of its own methods, never another private
+method's. unit.js pushes the overlay onto window.RESULTS_V2_PRIVATE_UNITS, so any number of units load side by side.
 
 usage: site_export_v2.py <root> <release id> <out.js> [--title ...] [--notes ...] [--sizes catalog_mu.json]
        [--public e2e,nesymres-100M,...] [--private KEY[,KEY] --private-dir DIR --methods-file FILE]"""
@@ -1582,6 +1589,30 @@ def rel_base(out_dir: str, site_dir: str) -> str:
     return os.path.relpath(out_dir, site_dir).replace(os.sep, "/") + "/"
 
 
+UNITS_VAR = "RESULTS_V2_PRIVATE_UNITS"   # a private unit's unit.js pushes its overlay onto this list
+# what a private directory held before it held units: one overlay for all its methods
+LEGACY_OVERLAY = ("results_v2_private.js", "hist", "ranks", "paired", "pp", "pred", "pv")
+
+
+def prune_units(pdir: str, written: set[str]) -> None:
+    """Remove the units under pdir/m/ and pdir/p/ this export did not write (a method no longer private, or gone), and
+    the one-overlay layout the units replace. Nothing else under pdir is touched."""
+    for sub, depth in (("m", 1), ("p", 2)):
+        top = os.path.join(pdir, sub)
+        for d in sorted(glob.glob(os.path.join(top, *["*"] * depth))):
+            if os.path.isdir(d) and d not in written:
+                shutil.rmtree(d)
+        for d in sorted(glob.glob(os.path.join(top, "*"))) + [top]:
+            if os.path.isdir(d) and not os.listdir(d):
+                os.rmdir(d)
+    for name in LEGACY_OVERLAY:
+        path = os.path.join(pdir, name)
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+        elif os.path.exists(path):
+            os.remove(path)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("root")
@@ -1681,10 +1712,10 @@ def main() -> None:
         payload["summary"] = progress_summary(payload["methods"], status, timing)
         return payload, hists
 
-    def write_set(payload: dict[str, Any], hists: dict[str, Any], cells: tuple[dict[str, Any], dict[str, Any]], out_js: str, out_dir: str, var: str, note: str) -> None:
+    def write_set(payload: dict[str, Any], hists: dict[str, Any], cells: tuple[dict[str, Any], dict[str, Any]], out_js: str, out_dir: str, var: str, note: str | None) -> None:
         os.makedirs(os.path.join(out_dir, "hist"), exist_ok=True)
-        with open(out_js, "w") as fh:
-            fh.write(f"window.{var} = " + json.dumps(payload, separators=(",", ":")) + ";\n")
+        body = json.dumps(payload, separators=(",", ":"))
+        _write_if_changed(out_js, f"(window.{var}=window.{var}||[]).push({body});\n" if var == UNITS_VAR else f"window.{var} = {body};\n")
         rel = json.dumps(payload["release"]["id"])
         for hk, per in hists.items():
             lo, hi, _ = HIST_SPECS[hk.split(ANSWERED)[0]]   # an answered-only reading shares its metric's bins
@@ -1692,6 +1723,8 @@ def main() -> None:
                 fh.write("window.RESULTS_V2_HIST=window.RESULTS_V2_HIST||{};(function(){var R=window.RESULTS_V2_HIST;R[%s]=R[%s]||{};var H=R[%s];H[%s]=H[%s]||{lo:%s,hi:%s,nb:%d,cells:{}};Object.assign(H[%s].cells,%s);})();\n" % (
                     rel, rel, rel, json.dumps(hk), json.dumps(hk), lo, hi, NB, json.dumps(hk), json.dumps(per, separators=(",", ":"))))
         write_slot_cells(out_dir, payload["release"]["id"], *cells)
+        if note is None:
+            return
         with_data = [k for k in payload["cells"] if payload["cells"][k]]
         pairs = {pk for per in cells[0].values() for pk in per}
         print(f"{note}: {out_js} ({os.path.getsize(out_js) // 1024} kB), hist/ {len(hists)} files, ranks/ and paired/ {len(pairs)} pairs; methods with data: {with_data}; status {payload['status']}")
@@ -1723,25 +1756,53 @@ def main() -> None:
     if private:
         pdir = os.path.abspath(a.private_dir)
         os.makedirs(pdir, exist_ok=True)
-        ppayload, phists = build(private, rel_base(pdir, site_dir))
-        # the overlay's pairs: its methods with one another and with every public method (private-vs-public stays
-        # private), at every slot of the release and of its own budgets; the release's rank keys
-        pslots = [str(r) for r in sorted(set(payload["rungs"]) | set(ppayload["rungs"]))] + [budget_key(t) for t in TIME_SLOTS]
         priv = order(private)
+        units = {m: build([m], rel_base(os.path.join(pdir, "m", m), site_dir)) for m in priv}
+        own = {m: {str(r) for r in units[m][0]["rungs"]} for m in priv}
+        times = [budget_key(t) for t in TIME_SLOTS]
+        release_slots = {str(r) for r in payload["rungs"]}
+        # every private pair and every private-public pair, computed once over every slot any of them needs (each
+        # method bracketed over its complete budgets, as in one overlay), then cut into units: a unit keeps the release's
+        # slots, the time limits and its own methods' budgets, so it names no other private method's budget
+        pslots = [str(r) for r in sorted(set(payload["rungs"]).union(*(units[m][0]["rungs"] for m in priv)))] + times
         pat = brackets(data, priv + pub, sizes, timing_all, pslots)
-        pcells = slot_cells(data, [(ka, kb) for i, ka in enumerate(priv) for kb in priv[i + 1:]] + [(ka, kb) for ka in priv for kb in pub],
-                            pat, pslots, payload["rank_keys"])
-        # basis: the release's stamps of the public partners these cells were computed against (fresh while they match)
-        ppayload["slots"] = {"rungs": ppayload["rungs"], "budgets": [budget_key(t) for t in TIME_SLOTS], "seconds": TIME_SLOTS,
-                             "at": {m: pat[m] for m in priv}, "stamp": {}, "basis": {m: dict(payload["slots"]["stamp"]) for m in priv}}
-        ppayload["pv"] = write_pair_values(pdir, a.release, data, private, sizes, payload["rank_keys"])
-        # the Predictions and Correlations views' files of the private methods, next to the overlay (tools/seal.mjs seals
-        # them one file at a time); the ground truth's are the release's own, public already, so none are written here
-        ppred = {k: v for k, v in pred_all.items() if k[0] in private and usable(k[0], k[2])}
-        ppayload["pred"] = write_predictions(pdir, a.release, ppred, {}, sizes)
-        ppayload["pred_block"] = PRED_BLOCK
-        ppayload["pp"] = write_values(pdir, a.release, data, private, sizes, with_truth=False)
-        write_set(ppayload, phists, pcells, os.path.join(pdir, "results_v2_private.js"), pdir, "RESULTS_V2_PRIVATE", f"private overlay ({len(private)} method(s), never inside the deployed tree)")
+        pairs = [(ka, kb) for i, ka in enumerate(priv) for kb in priv[i + 1:]]
+        pcells = slot_cells(data, pairs + [(ka, kb) for ka in priv for kb in pub], pat, pslots, payload["rank_keys"])
+
+        def cut(take: Any, keep: set[str]) -> tuple[dict[str, Any], dict[str, Any]]:
+            """The cells of the pairs `take(pair key)` accepts, at the slots in `keep`."""
+            return tuple({name: {pk: {c: {s: v for s, v in by_slot.items() if s in keep} for c, by_slot in per_cat.items()}
+                                 for pk, per_cat in per.items() if take(pk)}
+                          for name, per in part.items()} for part in pcells)   # type: ignore[return-value]
+
+        written: set[str] = set()
+        for m in priv:
+            udir = os.path.join(pdir, "m", m)
+            up, uh = units[m]
+            keep = release_slots | own[m] | set(times)
+            # basis: the release's stamps of the public partners its cells were computed against (fresh while they match)
+            up["slots"] = {"rungs": sorted(int(s) for s in release_slots | own[m]), "budgets": times, "seconds": TIME_SLOTS,
+                           "at": {m: {s: v for s, v in pat[m].items() if s in keep}}, "stamp": {}, "basis": {m: dict(payload["slots"]["stamp"])}}
+            up["pv"] = write_pair_values(udir, a.release, data, [m], sizes, payload["rank_keys"])
+            # the Predictions and Correlations views' files (tools/seal.mjs seals them one file at a time); the ground
+            # truth's are the release's own, public already, so none are written here
+            up["pred"] = write_predictions(udir, a.release, {k: v for k, v in pred_all.items() if k[0] == m and usable(m, k[2])}, {}, sizes)
+            up["pred_block"] = PRED_BLOCK
+            up["pp"] = write_values(udir, a.release, data, [m], sizes, with_truth=False)
+            against_release = cut(lambda pk, m=m: m in pk.split("|") and not set(pk.split("|")) <= set(priv), keep)
+            write_set(up, uh, against_release, os.path.join(udir, "unit.js"), udir, UNITS_VAR, None)
+            written.add(udir)
+        for ka, kb in pairs:
+            lo, hi = sorted((ka, kb))
+            udir = os.path.join(pdir, "p", lo, hi)
+            up = {"schema": 2, "base": rel_base(udir, site_dir), "release": {"id": a.release}, "methods": [], "pair": [lo, hi]}
+            between = cut(lambda pk, both={ka, kb}: set(pk.split("|")) == both, release_slots | own[ka] | own[kb] | set(times))
+            write_set(up, {}, between, os.path.join(udir, "unit.js"), udir, UNITS_VAR, None)
+            written.add(udir)
+        prune_units(pdir, written)
+        with_data = [m for m in priv if units[m][0]["cells"][m]]
+        print(f"private units: {len(priv)} method(s) and {len(pairs)} pair(s) of them in {pdir} (never inside the deployed tree); "
+              f"methods with data: {with_data}; status {({m: units[m][0]['status'][m] for m in priv})}")
 
 
 if __name__ == "__main__":

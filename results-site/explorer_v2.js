@@ -6,8 +6,8 @@
  * Per-metric histograms (pooled medians, the Distribution view) are fetched on demand from <base>hist/<metric>.js;
  * the paired contrasts and pairwise rank outcomes along the budgets and times from <base>paired/<metric>.js and
  * <base>ranks/<metric>.js, and at any position they are computed here from <base>pv/ (pairstats.js).
- * window.RESULTS_V2_PRIVATE, if a LOCAL build provides it, is merged in (results-site/README.md, "Local-only
- * methods"); the public page never references such a file.
+ * The overlays in window.RESULTS_V2_PRIVATE_UNITS, if a LOCAL build provides them, are merged in (results-site/README.md,
+ * "Local-only methods"); the public page never references such a file.
  * Views: Curves (every plotted metric vs budget or time) | Table (rungs, or catalogs at one rung) | Catalogs (matrix
  * of one metric at one rung) | Distribution (per-method histograms, cumulative curves, a box per catalog, quartiles
  * along the ladder; per-catalog rates for rate metrics) | Ranks (average places from the pairwise chances to beat,
@@ -29,10 +29,11 @@
   // another release is on screen (the routing script decided before this file ran): leave the page and its URL alone
   D.status = D.status || {}; D.timing = D.timing || {};
   var SOURCES = [{ base: D.base, local: false }];
-  // An overlay adds methods to the release: the same schema, merged into the tables every view reads. A local build
-  // supplies one as a plain script and serves its lazy files from a base of its own (results-site/README.md,
-  // "Local-only methods"); an overlay that arrives with a key carries those files inside it, so it has no base and
-  // its methods are shown like any other.
+  // An overlay adds methods to the release: the same schema, merged into the tables every view reads. Private methods
+  // come as units, one overlay per method and one per pair of them (the pair's has no methods, only their cells against
+  // each other). A local build supplies them as plain scripts and serves each unit's lazy files from a base of its own
+  // (results-site/README.md, "Local-only methods"); a unit opened with a key has its files sealed one by one, so it has
+  // no base and its methods are shown like any other.
   function mergeOverlay(P, withBase) {
     if (!P) { return []; }
     var added = [];
@@ -52,11 +53,11 @@
       Object.assign(D.slots.at, P.slots.at || {}); Object.assign(D.slots.basis, P.slots.basis || {});
       (P.slots.rungs || []).forEach(function (r) { if (D.slots.rungs.indexOf(r) < 0) { D.slots.rungs.push(r); } }); D.slots.rungs.sort(function (a, b) { return a - b; });
     }
-    if (withBase && P.base) { SOURCES.push({ base: P.base, local: true }); }
+    if (withBase && P.base) { SOURCES.push({ base: P.base, local: true, pair: !!P.pair, methods: (P.methods || []).map(function (m) { return m.key; }) }); }
     return added;
   }
-  var SEALKEY = {}, OVERLAYKEYS = [];   // a method that arrived with a key -> the file keys its overlay carries; every such overlay's keys
-  mergeOverlay(window.RESULTS_V2_PRIVATE, true);
+  var SEALKEY = {}, OVERLAYKEYS = [];   // a method that arrived with a key -> its unit's file keys; every opened unit's file keys
+  (window.RESULTS_V2_PRIVATE_UNITS || []).forEach(function (P) { mergeOverlay(P, true); });
   var Z = 1.959964, LN2 = Math.log(2);
   var CATS = D.catalogs.map(function (c) { return c.key; });
   var CAT = {}; D.catalogs.forEach(function (c) { CAT[c.key] = c; });
@@ -281,12 +282,21 @@
   var loading = {}, failed = {};
   // a file of a method that arrived with a key: its values or formulas problem by problem, sealed on its own
   function sealedOwner(file) { var m = /^(pp|pred|pv)\/([^/]+)\//.exec(file); return m && SEALKEY[m[2]] ? SEALKEY[m[2]] : null; }
-  // a file of per-key cells or histograms: the release's, and each keyed overlay's own, sealed under that overlay's keys
+  // a file of per-key cells or histograms: the release's, and each unit's own (sealed under that unit's keys); a pair's
+  // unit holds cells only, no histograms
   function shared(file) { return /^(ranks|paired|hist)\//.test(file); }
+  function holds(unit, file) { return !(unit.pair && /^hist\//.test(file)); }
+  // where a file is served from: a method's own files from the one source that holds the method (the release for a
+  // published one), every other file from every source
+  function sourcesOf(file) {
+    var m = /^(pp|pred|pv)\/([^/]+)\//.exec(file); if (!m) { return SOURCES.filter(function (s) { return holds(s, file); }); }
+    var own = SOURCES.filter(function (s) { return s.methods && s.methods.indexOf(m[2]) >= 0; });
+    return own.length ? own : SOURCES.filter(function (s) { return !s.local; });
+  }
   function ensure(file, cb) {
     var sk = sealedOwner(file); if (sk) { sealedFile(file, sk, cb); return; }
-    if (shared(file)) { OVERLAYKEYS.forEach(function (k) { sealedFile(file, k, cb); }); }
-    SOURCES.forEach(function (s) {
+    if (shared(file)) { OVERLAYKEYS.forEach(function (k) { if (holds(k, file)) { sealedFile(file, k, cb); } }); }
+    sourcesOf(file).forEach(function (s) {
       var key = s.base + file; if (loading[key] || failed[key]) { return; }
       loading[key] = "pending";
       var sc = document.createElement("script"); sc.src = s.base + file; sc.async = true;
@@ -298,20 +308,23 @@
   function sealedDone(file, sk) { var key = "sealed:" + sk.name + ":" + file; return loading[key] === "done" || !!failed[key]; }
   function ready(file) {
     var sk = sealedOwner(file); if (sk) { return sealedDone(file, sk); }
-    return (!shared(file) || OVERLAYKEYS.every(function (k) { return sealedDone(file, k); })) &&
-      SOURCES.every(function (s) { return loading[s.base + file] === "done" || failed[s.base + file]; });
+    return (!shared(file) || OVERLAYKEYS.every(function (k) { return !holds(k, file) || sealedDone(file, k); })) &&
+      sourcesOf(file).every(function (s) { return loading[s.base + file] === "done" || failed[s.base + file]; });
   }
   function histOf(k) { var H = window.RESULTS_V2_HIST && window.RESULTS_V2_HIST[REL]; return H && H[k]; }
 
   // ---- adding a method from a key ---------------------------------------------------------------------------------
-  // A release may ship sealed payloads next to the public ones. Each holds the same kind of payload scripts as the
-  // rest of the release -- an overlay, its histograms and its paired contrasts -- gzipped and encrypted with
-  // AES-256-GCM under a key derived by PBKDF2-HMAC-SHA256, each under a key of its own (tools/seal.mjs). No key is in
-  // this repository and nothing here derives one; the payloads are fetched only when someone asks, a key is tried on
-  // every one, and a key that opens none leaves the page exactly as it was. What the page shows without them is
-  // complete on its own terms.
+  // A release may ship sealed units next to the public payloads (tools/seal.mjs): one per private method and one per
+  // pair of them, each locked under a secret of its own, and keyrings that hand a reader's key the secrets of the methods
+  // it was given. A key is derived once (PBKDF2-HMAC-SHA256) and tried on every keyring; the one it opens lists its
+  // methods and their secrets; the page opens those methods' units and the unit of every pair of methods it now holds
+  // (a pair's secret is made from both of theirs). No key is in this repository and nothing here derives one; the
+  // sealed file is fetched only when someone asks, and a key that opens no keyring leaves the page exactly as it was.
+  // What the page shows without them is complete on its own terms.
   var sealedLoaded = false, sealedWaiting = null;
+  var HELD = {}, OPENED = {};   // method -> its secret, from every keyring opened so far; unit id -> opened
   function bytesOf(b64) { var s = atob(b64), u = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) { u[i] = s.charCodeAt(i); } return u; }
+  function b64Of(bytes) { var s = ""; for (var i = 0; i < bytes.length; i++) { s += String.fromCharCode(bytes[i]); } return btoa(s); }
   function withSealed(cb) {   // cb once the sealed payloads are here (or known to be absent); callers queue meanwhile
     if (sealedLoaded || window.RESULTS_V2_SEALED) { cb(); return; }
     if (sealedWaiting) { sealedWaiting.push(cb); return; }
@@ -320,42 +333,72 @@
     var sc = document.createElement("script"); sc.src = D.base + "sealed.js"; sc.async = true;
     sc.onload = done; sc.onerror = done; document.head.appendChild(sc);
   }
-  function envelopes() {   // the first where a single one has always been, the others after it
-    var S = window.RESULTS_V2_SEALED, M = window.RESULTS_V2_SEALED_MORE;
-    return [S && S[REL]].concat((M && M[REL]) || []).filter(Boolean);
+  function hmacOf(key, text, subtle) {   // HMAC-SHA256(key bytes, text) -> its bytes
+    return subtle.importKey("raw", key, { name: "HMAC", hash: "SHA-256" }, false, ["sign"])
+      .then(function (k) { return subtle.sign("HMAC", k, new TextEncoder().encode(text)); }).then(function (mac) { return new Uint8Array(mac); });
   }
-  function openOne(env, key, subtle) {   // -> the payload's source, or null when the key does not open it
-    return subtle.importKey("raw", new TextEncoder().encode(key), "PBKDF2", false, ["deriveKey"])
-      .then(function (base) {
-        return subtle.deriveKey({ name: "PBKDF2", salt: bytesOf(env.salt), iterations: env.iter, hash: "SHA-256" },
-          base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+  function gunzipText(gz) { return new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream("gzip"))).text(); }
+  function keyringOf(V, key, subtle) {   // -> [[method, base64 secret]] of the keyring the key opens, or null
+    var te = new TextEncoder();
+    return subtle.importKey("raw", te.encode(key), "PBKDF2", false, ["deriveBits"])
+      .then(function (base) { return subtle.deriveBits({ name: "PBKDF2", salt: bytesOf(V.salt), iterations: V.iter, hash: "SHA-256" }, base, 512); })
+      .then(function (bits) { return subtle.importKey("raw", new Uint8Array(bits).slice(0, 32), "AES-GCM", false, ["decrypt"]); })
+      .then(function (k) {
+        return Promise.all((V.keyrings || []).map(function (r) {
+          return subtle.decrypt({ name: "AES-GCM", iv: bytesOf(r.iv), additionalData: te.encode(REL + "/keyring") }, k, bytesOf(r.ct))
+            .then(function (plain) { return JSON.parse(new TextDecoder().decode(plain)).methods; }, function () { return null; });
+        }));
       })
-      .then(function (k) { return subtle.decrypt({ name: "AES-GCM", iv: bytesOf(env.iv) }, k, bytesOf(env.ct)); })
-      .then(function (gz) { return new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream("gzip"))).text(); })
-      .catch(function () { return null; });   // a key that does not fit is not told apart from a release without one
+      .then(function (opened) { return opened.filter(Boolean)[0] || null; })
+      .catch(function () { return null; });   // a key that does not fit is not told apart from a release without a sealed file
   }
-  function openWithKey(key) {   // -> the keys of the methods it added, or [] when nothing opened
+  function openUnit(V, secret, subtle) {   // -> the overlays a unit's secret opens, each carrying its unit's file keys ([] if none)
+    return Promise.all(["srbf-unit-id", "srbf-unit-payload", "srbf-unit-file-enc", "srbf-unit-file-name"].map(function (label) { return hmacOf(secret, label, subtle); }))
+      .then(function (k) {
+        var id = Array.prototype.map.call(k[0].slice(0, 16), function (b) { return (b < 16 ? "0" : "") + b.toString(16); }).join(""), env = V.units && V.units[id];
+        if (!env || OPENED[id]) { return []; }
+        return subtle.importKey("raw", k[1], "AES-GCM", false, ["decrypt"])
+          .then(function (kp) { return subtle.decrypt({ name: "AES-GCM", iv: bytesOf(env.iv), additionalData: new TextEncoder().encode(REL + "/unit/" + id) }, kp, bytesOf(env.ct)); })
+          .then(gunzipText)
+          .then(function (src) {
+            var list = window.RESULTS_V2_PRIVATE_UNITS = window.RESULTS_V2_PRIVATE_UNITS || [], before = list.length;
+            (new Function(src))();   // the unit's script, run exactly as a <script> tag would run it
+            OPENED[id] = true;
+            return list.slice(before).map(function (P) { return Object.assign(P, { sealed_files: { enc: b64Of(k[2]), name: b64Of(k[3]), pair: !!P.pair } }); });
+          })
+          .catch(function () { return []; });   // a unit that does not open or run adds nothing
+      });
+  }
+  function pairSecret(a, b, subtle) {   // the secret of the pair a < b, made from both methods' secrets
+    var both = new Uint8Array(HELD[a].length + HELD[b].length); both.set(HELD[a], 0); both.set(HELD[b], HELD[a].length);
+    return hmacOf(both, "srbf-pair\u0000" + REL + "\u0000" + a + "\u0000" + b, subtle);
+  }
+  function openWithKey(key) {   // -> {opened: whether a keyring opened, added: the keys of the methods it added}
     return new Promise(function (res) { withSealed(res); }).then(function () {
-      var subtle = window.crypto && window.crypto.subtle, envs = envelopes();
-      if (!envs.length || !subtle || typeof DecompressionStream === "undefined") { return []; }
-      return Promise.all(envs.map(function (env) { return openOne(env, key, subtle); })).then(function (sources) {
-        var added = [];
-        sources.forEach(function (src) {   // one payload at a time: each sets RESULTS_V2_PRIVATE and is merged at once
-          if (src == null) { return; }
-          try {
-            (new Function(src))();   // the payload scripts, run exactly as a <script> tag would run them
-            added = added.concat(mergeOverlay(window.RESULTS_V2_PRIVATE, false));
-          } catch (e) { /* a payload that does not run adds nothing */ }
-        });
-        added.forEach(function (k2) { byKey[k2] = true; if (state.methods.indexOf(k2) < 0) { state.methods.push(k2); } });
-        return added;
+      var subtle = window.crypto && window.crypto.subtle, V = window.RESULTS_V2_SEALED && window.RESULTS_V2_SEALED[REL];
+      if (!V || V.v !== 2 || !subtle || typeof DecompressionStream === "undefined") { return { opened: false, added: [] }; }
+      return keyringOf(V, key, subtle).then(function (held) {
+        if (!held) { return { opened: false, added: [] }; }
+        held.forEach(function (e) { HELD[e[0]] = bytesOf(e[1]); });
+        var ms = Object.keys(HELD).sort(), pairs = [];
+        ms.forEach(function (a, i) { ms.slice(i + 1).forEach(function (b) { pairs.push([a, b]); }); });
+        // every method held and every pair of them: a unit opened before (with an earlier key) is not opened again
+        return Promise.all(ms.map(function (m) { return Promise.resolve(HELD[m]); })
+          .concat(pairs.map(function (p) { return pairSecret(p[0], p[1], subtle); })))
+          .then(function (secrets) { return Promise.all(secrets.map(function (s) { return openUnit(V, s, subtle); })); })
+          .then(function (overlays) {
+            var added = [];
+            overlays.forEach(function (ps) { ps.forEach(function (P) { added = added.concat(mergeOverlay(P, false)); }); });
+            added.forEach(function (k2) { byKey[k2] = true; if (state.methods.indexOf(k2) < 0) { state.methods.push(k2); } });
+            return { opened: true, added: added };
+          });
       });
     });
   }
-  // A sealed overlay's per-problem files are sealed one by one (tools/seal.mjs): each at sealed/<name>.js, where the name
-  // is an HMAC of the file's path under the overlay's name key, encrypted with AES-256-GCM under its file key, the
-  // path bound in as associated data. The overlay carries both keys, so a file costs no key derivation; a file is
-  // fetched only when a display asks for it, and one that does not open counts as missing.
+  // A sealed unit's files are sealed one by one (tools/seal.mjs): each at sealed/<name>.js, where the name is an HMAC of
+  // the file's path under the unit's name key, encrypted with AES-256-GCM under its file key, the path bound in as
+  // associated data. Both keys come from the unit's secret, so a file costs no key derivation; a file is fetched only
+  // when a display asks for it, and one that does not open counts as missing.
   var SEALKEYS = {};
   function sealedKeys(sk, subtle) {
     var id = sk.enc + "|" + sk.name;
@@ -402,15 +445,15 @@
   function tryKey(key, quiet) {
     var msg = root.querySelector(".v2addmmsg");
     if (msg && !quiet) { msg.textContent = "checking…"; }
-    openWithKey(key).then(function (added) {
-      if (added.length) {
-        saveKey(key);
+    openWithKey(key).then(function (r) {
+      if (r.opened) { saveKey(key); }
+      if (r.added.length) {
         shell(); render();
         var after = root.querySelector(".v2addmmsg");
-        if (after && !quiet) { after.textContent = "Added " + labelsOf(added) + "."; }
+        if (after && !quiet) { after.textContent = "Added " + labelsOf(r.added) + "."; }
         return;
       }
-      if (!quiet && msg) { msg.textContent = "No method found for that key."; }
+      if (!quiet && msg) { msg.textContent = r.opened ? "The methods of that key are open already." : "No method found for that key."; }
     });
   }
 
