@@ -35,6 +35,8 @@
 //     "kdf":"PBKDF2-SHA256","iter":600000,"salt":"<base64>","keyrings":[{"iv","ct"},...],"units":{"<id>":{"iv","ct"},...}};
 // with a unit's envelope gz = gzip(unit.js) (a fixed header), iv = HMAC(kName, "payload\0" || gz)[0:12],
 // ct = AES-256-GCM(kPay, iv, gz, additional data release + "/unit/" + id).
+// A unit whose envelope in the file already there opens to the same unit.js keeps it as it is, as a file does (below):
+// another machine's gzip may compress the same unit.js differently, and the file must not change for that.
 //
 // PER-PROBLEM FILES. A unit's files are sealed one by one into <out dir>/sealed/<name>.js (data/<release>/sealed/ for
 // the default out file) and fetched only when a reader opens a view that reads one. With path = the file's POSIX path
@@ -191,10 +193,17 @@ for (let i = grants.length; i < padTo; i++) {
 }
 keyrings.sort((x, y) => Buffer.compare(Buffer.from(x.ct), Buffer.from(y.ct)));
 
-// the units' payloads
+// the units' payloads: a unit whose envelope in the sealed file already there opens to the same unit.js keeps it as it
+// is, under its own IV, whatever this machine's gzip would write (as a file does, below)
+const before = (function () {
+  const m = existsSync(out) && /window\.RESULTS_V2_SEALED\[[^\]]*\]=(\{.*\});\s*$/.exec(readFileSync(out, "utf8"));
+  try { const S = m && JSON.parse(m[1]); return S && S.v === 2 && S.units ? S.units : {}; } catch (e) { return {}; }
+})();
 for (const u of units) {
-  const gz = gzipFixed(u.payload), iv = hmac(u.kName, utf8("payload\0"), gz).subarray(0, 12);
   u.aad = utf8(release + "/unit/" + u.id);
+  const there = before[u.id], old = there && await decrypt(u.kPay, u8(there.iv), u8(there.ct), u.aad);
+  if (old && gunzipSync(old).equals(u.payload)) { u.env = { iv: u8(there.iv), ct: u8(there.ct) }; continue; }
+  const gz = gzipFixed(u.payload), iv = hmac(u.kName, utf8("payload\0"), gz).subarray(0, 12);
   u.env = { iv, ct: await encrypt(u.kPay, iv, gz, u.aad) };
 }
 const envelopes = {};
