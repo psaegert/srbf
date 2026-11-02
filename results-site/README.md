@@ -21,7 +21,7 @@ explorer for the benchmark numbers, nothing more.
 | `data/<release>/pred/` | The Predictions view's files: every method's formula for every problem, as the judge read it (rounded to 4 significant digits), one file per method × problem set × budget × finished run × block of 500 problems (`pred/<method>/<set>/<budget>.<run>.<block>.js`), and the ground truth's (`pred/truth/<set>.<block>.js`). A file is written once its run is complete and never changes after. They come from the `predicted_expression` / `ground_truth_expression` columns of `srbf table`. |
 | `data/<release>/pv/` | What the paired contrasts and the pairwise rank outcomes read of every problem, exactly (float64): per method × budget, over the problem sets it has finished there, a frame (`pv/<method>/<budget>/frame.js`: the problems and their runs) and one file per metric (`pv/<method>/<budget>/<key>.js`: each run's comparison score, and each problem's value or share for a paired metric), as `paired_cell_at` / `rank_pair_cell_at` in `scripts/site_export_v2.py` read them (`write_pair_values` documents the format; `results.js` indexes the files as `pv`). |
 | `pairstats.js` | Computes the cells of `ranks/` and `paired/` in the browser from `pv/` at any position: at a budget a method ran, or between two of them (interpolated; the rule is in its header), bit for bit what the exporter computes at its slots. Also the one bracket rule (`bracketIn`, with a logarithm that gives the same double in Python and JavaScript). `tests/test_pairstats_parity.py` holds it to the exporter under node. |
-| `data/<release>/sealed.js`, `data/<release>/sealed/` | The sealed overlays and their sealed per-problem files (see "Sharing an overlay with the people it belongs to"). Written by `tools/seal.mjs`, never by hand. |
+| `data/<release>/sealed.js`, `data/<release>/sealed/` | The keyrings, the sealed units and their sealed files (see "Sharing private methods with the people they belong to"). Written by `tools/seal.mjs`, never by hand. |
 | `srbf-icon.svg`, `apple-touch-icon.png`, `srbf-social.png` | Brand assets (favicon, touch icon, `og:image` social card); canonical sources live in `../assets/brand/`. |
 
 ## Releases
@@ -66,14 +66,16 @@ Some methods are evaluated but **not published** (they are not ours to release).
 them out of every public channel by construction, not by convention:
 
 - `scripts/site_export_v2.py --private <keys> --private-dir results-site/private/<release>`
-  writes those methods to a separate directory (payload, histograms, paired contrasts, including contrasts
-  against public methods, and their per-problem files `pp/<method>/` and `pred/<method>/`, indexed in the payload as
-  `pp` and `pred` like the release's; the ground truth's files are the release's own and are not copied there). The
-  public payload, the pages, `explorer_v2.js` and the
-  repository carry no reference to them; the exporter refuses a key that is in both lists.
+  writes those methods to a separate directory as UNITS: `m/<method>/` per method (its overlay `unit.js`, histograms,
+  its contrasts against the public methods, and its per-problem files `pp/`, `pred/`, `pv/`, indexed in the overlay like
+  the release's; the ground truth's files are the release's own and are not copied there) and `p/<a>/<b>/` per pair
+  of private methods (their contrasts against each other, nothing else). A unit names no other private method, not
+  even through a budget. Each `unit.js` pushes its overlay onto `window.RESULTS_V2_PRIVATE_UNITS`. The public payload,
+  the pages, `explorer_v2.js` and the repository carry no reference to them; the exporter refuses a key that is in
+  both lists.
 - `results-site/private/` and `results-site/explorer.local.html` are git-ignored. `build_local.sh`
-  writes `explorer.local.html` (the public explorer page plus one script tag that loads the private file) and
-  refuses to run if either path is not ignored. Serve it locally:
+  writes `explorer.local.html` (the public explorer page plus one script tag that loads every unit of the private
+  directory) and refuses to run if either path is not ignored. Serve it locally:
   `cd results-site && python3 -m http.server 8765` then open `/explorer.local.html`. The explorer marks
   such methods "local only".
 - `tests/public_guard.py` fails the deploy if a page mentions `private/` or a local page, if
@@ -82,60 +84,71 @@ them out of every public channel by construction, not by convention:
   directory or the local page exists in the CI checkout. It runs before the Playwright suite.
 - Screenshots, artifacts, PR descriptions and issues are made from the public page only.
 
-## Sharing an overlay with the people it belongs to
+## Sharing private methods with the people they belong to
 
-An overlay can also travel with the site instead of staying on one machine, for the collaborators whose
-results they are. `tools/seal.mjs` concatenates the overlay's payload scripts, gzips them and encrypts the
-result with AES-256-GCM under a key derived by PBKDF2-HMAC-SHA256 (600k iterations, fresh salt and IV per
-run); the page fetches `data/<release>/sealed.js` only when someone enters a key under the method list, runs
-the payload exactly as a `<script>` would, and from then on treats its methods like any other. A key that
-does not fit is indistinguishable from a release that ships no such file.
+Private methods can also travel with the site instead of staying on one machine, each opened only by the readers it
+was given to. Who gets what is a table of grants: a reader holds one key, and the key opens a fixed set of methods
+(one key may open methods 1-4, another methods 2, 3 and 5). `tools/seal.mjs` locks every unit under a secret of its
+own and gives each key a keyring that holds the secrets of its methods; the page fetches `data/<release>/sealed.js`
+only when someone enters a key under the method list, opens the key's keyring, then the units of its methods and of
+every pair of them, runs each unit exactly as a `<script>` would, and from then on treats the methods like any other.
+A key that opens no keyring is indistinguishable from a release that ships no sealed file. Keys add up: a reader with
+two keys has both sets, and the pairs between them.
 
-    SRBF_SEAL_KEY="$(cat ~/.config/srbf/seal-<release>.key)" node tools/seal.mjs <release>
+    SRBF_SEAL_MASTER="$(cat ~/.config/srbf/master-<release>.key)" SRBF_KEY_A="$(cat <key file A>)" SRBF_KEY_B="$(cat <key file B>)" \
+      node tools/seal.mjs <release> --units private/<release> --master SRBF_SEAL_MASTER \
+        --grant 'SRBF_KEY_A=*' --grant 'SRBF_KEY_B=gamma-*'
 
-Several overlays, each under its own key (a key opens its own methods and no other):
+A grant lists method keys; one that ends in `*` takes every method whose key starts with what precedes it, and `*`
+alone takes all. A grant that matches no method fails the run, and so do two grants with one key.
 
-    node tools/seal.mjs <release> --source private/<release>=SRBF_SEAL_KEY --source private/<release>-b=SRBF_SEAL_KEY_B
+- **The locks.** A method's secret is the HMAC of `srbf-unit\0<release>\0<method>` under the master secret, which
+  never leaves the machine that seals; a pair's is the HMAC of `srbf-pair\0<release>\0<a>\0<b>` under the two
+  methods' secrets side by side (a < b), so only a reader of both makes it. From a unit's secret, HMACs give its id in
+  `sealed.js` and three keys: one encrypts its `unit.js`, two seal its files (below). Nothing is random: an unchanged
+  input reseals to the same bytes.
+- **The keyrings.** Per grant, PBKDF2-HMAC-SHA256 of the key (salt `srbf-keyring/<release>`, 600k iterations, 512
+  bits) gives an encryption key and an IV key; the keyring is the JSON list of its methods and their secrets, padded to
+  4 kB, encrypted with AES-256-GCM. The keyrings are padded with look-alikes to eight (`--keyrings`) and written in an
+  order that says nothing, so the file tells neither how many readers there are nor what each holds.
+- **The file.** One line, `window.RESULTS_V2_SEALED["<release>"] = {v: 2, kdf, iter, salt, keyrings, units}`, each
+  keyring and unit an `{iv, ct}` envelope.
 
-**Per-problem files are sealed one by one.** An overlay's `pp/`, `pred/` and `pv/` files (the Correlations and
-Predictions views read them, thousands per method) and its `ranks/`, `paired/` and `hist/` files (one per metric) do
-not go into `sealed.js`, which holds the overlay's own payload and nothing else: with them it would grow several times
-over and be re-encrypted whole on every change. `tools/seal.mjs` seals each of them into its own file,
-`data/<release>/sealed/<name>.js`, which the page fetches only when a key holder opens a view that needs it:
+**A unit's files are sealed one by one.** Its `pp/`, `pred/` and `pv/` files (the Correlations and Predictions views
+read them, thousands per method) and its `ranks/`, `paired/` and `hist/` files (one per metric) do not go into
+`sealed.js`: with them it would grow many times over and be re-encrypted whole on every change. Each goes into its own
+file, `data/<release>/sealed/<name>.js`, which the page fetches only when a reader opens a view that needs it:
 
-- From the overlay's key, PBKDF2-HMAC-SHA256 (salt `srbf-sealed-files/<release>`, 600k iterations, 512 bits) gives two
-  subkeys: the first 32 bytes encrypt (AES-256-GCM), the last 32 name (HMAC-SHA256).
-- A file's name is the first 32 hex digits of the HMAC of `name\0` and its path below the overlay
-  (e.g. `pp/<method>/feynman/16.1.js`): it gives away neither the method nor the path. The page computes the name
-  from the path it wants.
+- A file's name is the first 32 hex digits of the HMAC of `name\0` and its path below the unit
+  (e.g. `pp/<method>/feynman/16.1.js`) under the unit's name key: it gives away neither the unit nor the path. The page
+  computes the name from the path it wants.
 - The content is gzipped (with a fixed header). The IV is the first 12 bytes of the HMAC of `iv\0`, the path, `\0`
   and those gzipped bytes, so an IV repeats only for identical plaintext; the ciphertext is the gzipped bytes encrypted
-  with the path (`<release>/<path>`) as additional data, so a file only opens as itself.
-  Nothing is random: an unchanged file reseals to the same bytes and stays out of the next commit (a file that still
-  opens to the same content is kept as it is, under its own IV, whatever gzip would write now); a changed one gets a
-  new IV. A file no longer in any overlay is deleted from `sealed/`. Two overlays may hold the same path; their files
-  have different names, as their keys differ.
+  under the unit's file key with the path (`<release>/<path>`) as additional data, so a file only opens as itself.
+  An unchanged file reseals to the same bytes and stays out of the next commit (a file that still opens to the same
+  content is kept as it is, under its own IV, whatever gzip would write now); a changed one gets a new IV. A file no
+  longer in any unit is deleted from `sealed/`. Every unit has its own `ranks/<key>.js`; their names differ, as their
+  keys do.
 - Each file is one line, `(window.RESULTS_V2_SEALED_FILES=window.RESULTS_V2_SEALED_FILES||{})["<name>"]={"iv":"…","ct":"…"};`.
-- The overlay in `sealed.js` ends with one more line that hands the two subkeys to whoever opens it
-  (`RESULTS_V2_PRIVATE.sealed_files = {enc, name}`, base64), so the page derives nothing per file.
 
 Three things this rests on, none of them optional:
 
-- **The key is generated, never chosen.** The sealed file is public, so guessing is offline and unlimited;
-  the KDF is the only brake. Keep the key outside the repository, out of commit messages and issues, and
-  hand it over through a channel that is not this site.
+- **Keys and the master are generated, never chosen.** The sealed file is public, so guessing is offline and
+  unlimited; the KDF is the only brake. Keep them outside the repository, out of commit messages and issues, and hand
+  a key over through a channel that is not this site. The master never leaves the machine that seals.
 - **Publishing a sealed file cannot be undone.** It enters git history, forks and archives. If the key
-  leaks later, everything inside it is exposed retroactively. Seal only what may live in public in that
-  form, and only with the agreement of whoever owns the results.
-- **The guard checks it is sealed** (`tests/public_guard.py`): envelope shape, KDF strength, ciphertext
-  entropy and no plaintext left inside; and `data/<release>/sealed/` holds nothing but one-line envelopes named by
+  leaks later, everything it opened is exposed retroactively, and taking a method out of a grant hides only what is
+  sealed after. Seal only what may live in public in that form, and only with the agreement of whoever owns the
+  results.
+- **The guard checks it is sealed** (`tests/public_guard.py`): one line, the tool's fields and no others, KDF strength,
+  keyrings of one size, unit ids that name nothing, and ciphertext that reads as ciphertext; and `data/<release>/sealed/` holds nothing but one-line envelopes named by
   their own file names, whose ciphertext reads neither as text nor as an unencrypted gzip stream. The checker is run
   against deliberately unsealed blobs on every invocation, so it cannot pass vacuously.
 
-`tests/fixtures/` holds stand-in overlays and their sealed forms, so the Playwright suite exercises the whole
-path — wrong key, right key, method merged — without any real payload. `tests/fixtures/sealed_files/` is one with
-per-problem files (its README has the command that reseals it); `tests/seal_files.spec.mjs` seals stand-ins the
-same way and opens them as a page does.
+`tests/fixtures/` holds stand-in units and their sealed forms, so the Playwright suite exercises the whole path —
+wrong key, each key its own methods, a key of two methods and their pair — without any real payload
+(`tests/fixtures/README.md` has the commands that reseal them); `tests/seal_files.spec.mjs` seals stand-ins the same
+way and opens them as a page does.
 
 ## Testing
 

@@ -1,0 +1,1 @@
+window.RESULTS_V2_RANKCELLS=window.RESULTS_V2_RANKCELLS||{};(function(){var R=window.RESULTS_V2_RANKCELLS,rel="2026-09";var X=R[rel]=R[rel]||{};var P={"log10_fvu_val":{"fixture-method-two|e2e":{"constant":{"1":[10,0.0,0.0]}}}};Object.keys(P).forEach(function(k){var Y=X[k]=X[k]||{};Object.keys(P[k]).forEach(function(p){Y[p]=P[k][p];});});})();

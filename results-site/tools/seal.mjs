@@ -1,48 +1,57 @@
-// Seal a directory of payload scripts into one encrypted file the page can open with a key.
+// Seal a release's private units so that each reader opens exactly the methods they were given.
 //
-//   SRBF_SEAL_KEY='<key>' node tools/seal.mjs <release> [<source dir>] [<out file>]
-//   node tools/seal.mjs <release> --source <dir>=<ENV VAR> [--source <dir>=<ENV VAR> ...] [--out <out file>]
+//   SRBF_SEAL_MASTER='<master secret>' SRBF_KEY_A='<key>' SRBF_KEY_B='<key>' node tools/seal.mjs <release> \
+//     --units <private dir> --master SRBF_SEAL_MASTER --grant SRBF_KEY_A='*' --grant SRBF_KEY_B='gamma-*' \
+//     [--keyrings 8] [--out <file>]
 //
-// The second form seals several directories, each under the key in its own environment variable, into one file: a
-// key opens its own directory's methods and no other. The first source goes where a page reads a single sealed
-// payload (RESULTS_V2_SEALED[release]), the others into RESULTS_V2_SEALED_MORE[release]; the page tries a key on
-// every one of them. The further envelopes are written FIRST and the first one last, so that a page or a public guard
-// that knows only RESULTS_V2_SEALED reads the file exactly as before.
+// The private dir holds the units scripts/site_export_v2.py writes: <dir>/m/<method>/ for one method and
+// <dir>/p/<a>/<b>/ (a < b) for the cells of two private methods against each other. Each unit is a unit.js (an overlay
+// pushed onto window.RESULTS_V2_PRIVATE_UNITS, run by the page exactly as a <script> tag would run it; this tool never
+// parses it) and its files under hist/, ranks/, paired/, pp/, pred/ and pv/.
 //
-// The source files are ordinary payload scripts -- the same `window.NAME = ...` / IIFE files the public release is
-// made of. They are concatenated verbatim, never parsed: this tool does not read what is in them, and the page runs
-// the result exactly as a <script> tag would. The concatenation is gzipped, then encrypted with AES-256-GCM under a
-// key derived by PBKDF2-HMAC-SHA256; salt and IV are fresh per run, so two seals of the same input share no bytes,
-// and the GCM tag means a wrong key fails as an authentication error rather than as garbage.
+// THE LOCKS. Every unit is locked under a secret of its own, made from the master secret, which never leaves the
+// machine that seals:
+//   a method's unit   S_m  = HMAC-SHA256(master, "srbf-unit\0" + release + "\0" + method)
+//   a pair's unit     S_ab = HMAC-SHA256(S_a || S_b, "srbf-pair\0" + release + "\0" + a + "\0" + b), a < b
+// so a pair's secret is made only by a reader who holds both methods. From a unit's secret S:
+//   id    = hex(HMAC(S, "srbf-unit-id"))[0:32]                     the unit's name in the sealed file
+//   kPay  = HMAC(S, "srbf-unit-payload")                           the AES-256-GCM key of its unit.js
+//   kEnc  = HMAC(S, "srbf-unit-file-enc"), kName = HMAC(S, "srbf-unit-file-name")    its files, one by one (below)
+// The master makes every secret again on every run, so an unchanged input reseals to the same bytes (no git churn).
 //
-// PER-PROBLEM FILES. The scripts under a source's pp/, pred/ and pv/ (the files of the Correlations and Predictions
-// views, one per method x problem set x budget x run) and under ranks/, paired/ and hist/ (one per metric) do not go
-// into that payload: there are thousands of them, and the page needs a few at a time, so the payload is the overlay
-// itself and a reseal changes little in git. Each is sealed on its own into
-// <out dir>/sealed/<name>.js (data/<release>/sealed/ for the default out file) and fetched only when a key holder opens
-// a view that reads it. Two sources may hold the same path: their names differ, as their keys do. Per source key P:
-//   material = PBKDF2-HMAC-SHA256(P, salt "srbf-sealed-files/<release>", 600000 iterations, 512 bits)
-//   kEnc = material[0:32] (an AES-256-GCM key), kName = material[32:64] (an HMAC-SHA256 key)
-//   path = the file's POSIX path below the source, e.g. "pp/<method>/feynman/16.1.js"
-//   name = hex(HMAC(kName, "name\0" + path))[0:32]                  reveals neither the method nor the path
+// THE KEYS. A reader holds one key, a generated passphrase. Each --grant ENV=PATTERNS gives the key in that environment
+// variable the methods PATTERNS name (comma-separated method keys; a pattern ending in "*" takes every method whose key
+// starts with what precedes it, "*" alone every method; a pattern that matches no method fails the run). Per grant, one
+// keyring:
+//   bits  = PBKDF2-HMAC-SHA256(key, "srbf-keyring/" + release, 600000 iterations, 512 bits)
+//   plain = JSON {"v": 2, "methods": [[method, base64 S_m], ...]}, padded with spaces to KEYRING_BYTES
+//   iv    = HMAC(bits[32:64], plain)[0:12];  ct = AES-256-GCM(bits[0:32], iv, plain, additional data release + "/keyring")
+// The page derives once per key typed, tries every keyring, and opens the units of the methods it now holds and of every
+// pair of them. The keyrings are padded to --keyrings (default 8) with ones of the same size made from the master, and
+// written in an order that says nothing: the file shows neither how many readers there are nor what each holds.
+//
+// THE FILE. data/<release>/sealed.js is one line:
+//   window.RESULTS_V2_SEALED=window.RESULTS_V2_SEALED||{};window.RESULTS_V2_SEALED["<release>"]={"v":2,
+//     "kdf":"PBKDF2-SHA256","iter":600000,"salt":"<base64>","keyrings":[{"iv","ct"},...],"units":{"<id>":{"iv","ct"},...}};
+// with a unit's envelope gz = gzip(unit.js) (a fixed header), iv = HMAC(kName, "payload\0" || gz)[0:12],
+// ct = AES-256-GCM(kPay, iv, gz, additional data release + "/unit/" + id).
+//
+// PER-PROBLEM FILES. A unit's files are sealed one by one into <out dir>/sealed/<name>.js (data/<release>/sealed/ for
+// the default out file) and fetched only when a reader opens a view that reads one. With path = the file's POSIX path
+// below its unit, e.g. "pp/<method>/feynman/16.1.js" or "ranks/success.js":
+//   name = hex(HMAC(kName, "name\0" + path))[0:32]                  reveals neither the unit nor the path
 //   gz   = gzip -9 (content), with a fixed header (no time, OS "unknown")
 //   iv   = HMAC(kName, "iv\0" + path + "\0" || gz)[0:12]             an IV repeats only for identical plaintext
 //   ct   = AES-256-GCM(kEnc, iv, gz, additional data "<release>/<path>")                  bound to its path
 // and the file is one line:
 //   (window.RESULTS_V2_SEALED_FILES=window.RESULTS_V2_SEALED_FILES||{})["<name>"]={"iv":"<base64>","ct":"<base64>"};
-// Nothing here is random, so an unchanged file reseals to the same bytes (no git churn) and only a changed one is
-// rewritten. The IV is taken over the bytes that are encrypted, so even another machine's gzip, compressing the same
-// content differently, gets another IV: no IV ever carries two plaintexts. A file already there that opens to the same
-// content is kept as it is, under its own IV, whatever this machine's gzip would write. The source's payload gets one
-// more script at its end, which hands the two subkeys to whoever opens it, so the page never runs the KDF per file:
-//   ;if(window.RESULTS_V2_PRIVATE){window.RESULTS_V2_PRIVATE.sealed_files={"enc":"<base64 kEnc>","name":"<base64 kName>"};}
-// A file that is in no source any more is removed from sealed/ (only <32 hex digits>.js names are touched; the names
-// every source of this run writes are kept).
+// A file already there that opens to the same content is kept as it is, under its own IV, whatever this machine's gzip
+// would write. A file that is in no unit any more is removed (only <32 hex digits>.js names are touched).
 //
-// The key comes from the environment, never from argv: an argument is visible in `ps` and lands in shell history.
-// Nothing written reveals the key: the names and IVs of the per-problem files are HMAC outputs under a subkey. Losing
-// the key costs one reseal. Before anything is written, every envelope is opened again the way the page opens it, and
-// no other source's key may open it.
+// Every secret comes from the environment, never from argv: an argument is visible in `ps` and lands in shell history.
+// Nothing written reveals a key or the master. Before anything is written, every keyring is opened again with every
+// key (each opens its own, to exactly its methods, and no other), every unit with its own secret and no other unit's,
+// and every file the way the page opens it.
 import { webcrypto as crypto, createHmac } from "node:crypto";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync, mkdirSync, unlinkSync, rmdirSync } from "node:fs";
@@ -51,42 +60,85 @@ import { fileURLToPath } from "node:url";
 
 const SITE = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ITERATIONS = 600000;   // OWASP 2023 for PBKDF2-HMAC-SHA256: ~0.3 s in a browser, the only brake on an offline guess
-const FILE_DIRS = ["pp", "pred", "pv", "ranks", "paired", "hist"];   // a source's per-problem (and per-metric) files, sealed one by one
+const KEYRING_BYTES = 4096;  // every keyring's plaintext, padded: about fifty methods
+const FILE_DIRS = ["pp", "pred", "pv", "ranks", "paired", "hist"];   // a unit's files, sealed one by one
 const SEALED_NAME = /^[0-9a-f]{32}\.js$/;
 const FILE_LINE = /^\(window\.RESULTS_V2_SEALED_FILES=window\.RESULTS_V2_SEALED_FILES\|\|\{\}\)\["([0-9a-f]{32})"\]=\{"iv":"([A-Za-z0-9+/]+=*)","ct":"([A-Za-z0-9+/]+=*)"\};\n$/;
-const HANDOVER = "window.RESULTS_V2_PRIVATE.sealed_files=";
 const utf8 = (s) => Buffer.from(s, "utf8");
 const b64 = (bytes) => Buffer.from(bytes).toString("base64");
 const u8 = (s) => new Uint8Array(Buffer.from(s, "base64"));
+const hmac = (key, ...parts) => parts.reduce((h, p) => h.update(p), createHmac("sha256", key)).digest();
 
+const USAGE = "usage: node tools/seal.mjs <release> --units <private dir> --master <ENV VAR> --grant <ENV VAR>=<pattern>[,<pattern>...] " +
+  "[--grant ...] [--keyrings N] [--out <file>]";
+const fail = (msg) => { console.error(msg + "; nothing written"); process.exit(1); };
+const args = process.argv.slice(2);
+const release = args[0];
+if (!release || release.startsWith("--")) { console.error(USAGE); process.exit(2); }
+let unitsDir, masterVar, outArg, padTo = 8;
+const grants = [];   // [environment variable, [patterns]]
+for (let i = 1; i < args.length; i++) {
+  const v = args[i + 1];
+  if (args[i] === "--units" && v) { unitsDir = v; i++; }
+  else if (args[i] === "--master" && v) { masterVar = v; i++; }
+  else if (args[i] === "--grant" && v && v.includes("=")) { grants.push([v.slice(0, v.indexOf("=")), v.slice(v.indexOf("=") + 1).split(",").filter(Boolean)]); i++; }
+  else if (args[i] === "--keyrings" && v && /^\d+$/.test(v)) { padTo = +v; i++; }
+  else if (args[i] === "--out" && v) { outArg = v; i++; }
+  else { console.error(USAGE); process.exit(2); }
+}
+if (!unitsDir || !masterVar || !grants.length) { console.error(USAGE); process.exit(2); }
+const secret = (name) => {
+  const s = process.env[name];
+  if (!s || s.length < 16) {
+    console.error(name + " is missing or shorter than 16 characters.\n" +
+      "The sealed file is public, so the keys are the only thing protecting it: use generated ones, e.g.\n" +
+      "  node -e \"console.log(require('crypto').randomBytes(32).toString('base64url'))\"");
+    process.exit(2);
+  }
+  return s;
+};
+const master = utf8(secret(masterVar));
+const keys = grants.map(([name]) => secret(name));
+if (new Set(keys).size !== keys.length) { fail("two grants share a key: one key opens one keyring, so give that key the union of their methods"); }
+if (keys.some((k) => utf8(k).equals(master))) { fail("a reader's key is the master secret"); }
+const out = resolve(outArg || join(SITE, "data", release, "sealed.js"));
+const sealedDir = join(dirname(out), "sealed");
+
+// ---- the units -----------------------------------------------------------------------------------------------------
 function scripts(dir) {
   return readdirSync(dir).flatMap(function (name) {
     const p = join(dir, name);
     return statSync(p).isDirectory() ? scripts(p) : (name.endsWith(".js") ? [p] : []);
   }).sort();
 }
-
-async function seal(plain, passphrase) {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(passphrase), "PBKDF2", false, ["deriveKey"]);
-  const key = await crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations: ITERATIONS, hash: "SHA-256" },
-    base, { name: "AES-GCM", length: 256 }, false, ["encrypt"]);
-  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plain));
-  return { v: 1, kdf: "PBKDF2-SHA256", iter: ITERATIONS, salt: b64(salt), iv: b64(iv), ct: b64(ct) };
+const dirs = (p) => existsSync(p) ? readdirSync(p).filter((n) => statSync(join(p, n)).isDirectory()).sort() : [];
+const root = resolve(unitsDir);
+const methods = dirs(join(root, "m"));
+if (!methods.length) { fail("no method units under " + join(root, "m")); }
+const unitSecret = {};   // method -> S_m
+for (const m of methods) { unitSecret[m] = hmac(master, utf8("srbf-unit\0" + release + "\0" + m)); }
+const pairSecret = (a, b) => hmac(Buffer.concat([unitSecret[a], unitSecret[b]]), utf8("srbf-pair\0" + release + "\0" + a + "\0" + b));
+const units = methods.map((m) => ({ label: "m/" + m, dir: join(root, "m", m), secret: unitSecret[m] }));
+for (const a of dirs(join(root, "p"))) {
+  for (const b of dirs(join(root, "p", a))) {
+    if (!(a < b) || !unitSecret[a] || !unitSecret[b]) { fail("p/" + a + "/" + b + " is not a pair of two method units in order"); }
+    units.push({ label: "p/" + a + "/" + b, dir: join(root, "p", a, b), secret: pairSecret(a, b) });
+  }
 }
-
-// ---- the per-problem files -------------------------------------------------------------------------------------
-async function fileKeys(passphrase) {   // {enc, name}: the two 32-byte subkeys of one source key
-  const base = await crypto.subtle.importKey("raw", utf8(passphrase), "PBKDF2", false, ["deriveBits"]);
-  const bits = new Uint8Array(await crypto.subtle.deriveBits(
-    { name: "PBKDF2", salt: utf8("srbf-sealed-files/" + release), iterations: ITERATIONS, hash: "SHA-256" }, base, 512));
-  return { enc: bits.slice(0, 32), name: bits.slice(32, 64) };
+for (const u of units) {
+  u.id = hmac(u.secret, utf8("srbf-unit-id")).toString("hex").slice(0, 32);
+  u.kPay = hmac(u.secret, utf8("srbf-unit-payload"));
+  u.kEnc = hmac(u.secret, utf8("srbf-unit-file-enc"));
+  u.kName = hmac(u.secret, utf8("srbf-unit-file-name"));
+  const all = scripts(u.dir), perFile = (f) => FILE_DIRS.includes(relative(u.dir, f).split(sep)[0]);
+  const rest = all.filter((f) => !perFile(f));
+  if (rest.length !== 1 || relative(u.dir, rest[0]) !== "unit.js") { fail(u.label + " holds " + rest.map((f) => relative(u.dir, f)).join(", ") + " where only unit.js belongs"); }
+  u.payload = readFileSync(rest[0]);
+  u.files = all.filter(perFile);
 }
-const hmac = (key, ...parts) => parts.reduce((h, p) => h.update(p), createHmac("sha256", key)).digest();
-const fileName = (kName, path) => hmac(kName, utf8("name\0" + path)).toString("hex").slice(0, 32);
-const fileIv = (kName, path, gz) => hmac(kName, utf8("iv\0" + path + "\0"), gz).subarray(0, 12);   // over the bytes encrypted
+if (new Set(units.map((u) => u.id)).size !== units.length) { fail("two units share an id"); }
+
+// ---- sealing -------------------------------------------------------------------------------------------------------
 function gzipFixed(content) {   // a header without time or OS: equal content, equal bytes, on any machine
   const gz = gzipSync(content, { level: 9 });
   gz.writeUInt32LE(0, 4);   // MTIME: none
@@ -94,159 +146,132 @@ function gzipFixed(content) {   // a header without time or OS: equal content, e
   gz[9] = 255;              // OS: unknown
   return gz;
 }
+async function aesKey(raw, use) { return crypto.subtle.importKey("raw", raw, "AES-GCM", false, [use]); }
+async function encrypt(raw, iv, plain, aad) {
+  return new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: aad }, await aesKey(raw, "encrypt"), plain));
+}
+async function decrypt(raw, iv, ct, aad) {   // -> the plaintext, or null when the key, the IV or the data do not fit
+  try { return Buffer.from(await crypto.subtle.decrypt({ name: "AES-GCM", iv, additionalData: aad }, await aesKey(raw, "decrypt"), ct)); }
+  catch (e) { return null; }
+}
+async function keyringBits(key) {
+  const base = await crypto.subtle.importKey("raw", utf8(key), "PBKDF2", false, ["deriveBits"]);
+  const bits = Buffer.from(await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt: utf8("srbf-keyring/" + release), iterations: ITERATIONS, hash: "SHA-256" }, base, 512));
+  return { enc: bits.subarray(0, 32), mac: bits.subarray(32, 64) };
+}
+function stream(seed, n) {   // n bytes that look random, made from the master: the padding keyrings, the same every run
+  const parts = [];
+  for (let i = 0, have = 0; have < n; i++) { const h = hmac(master, utf8(seed + "\0" + i)); parts.push(h); have += h.length; }
+  return Buffer.concat(parts).subarray(0, n);
+}
+const RING_AAD = utf8(release + "/keyring");
+
+// the keyrings: what each grant holds, then the padding
+const granted = grants.map(function ([name, patterns]) {
+  const held = new Set();
+  for (const p of patterns) {
+    const hit = methods.filter((m) => p.endsWith("*") ? m.startsWith(p.slice(0, -1)) : m === p);
+    if (!hit.length) { fail("the grant " + name + " names " + JSON.stringify(p) + ", which matches no method unit"); }
+    hit.forEach((m) => held.add(m));
+  }
+  return methods.filter((m) => held.has(m));
+});
+const keyrings = [];
+for (let i = 0; i < grants.length; i++) {
+  const json = JSON.stringify({ v: 2, methods: granted[i].map((m) => [m, b64(unitSecret[m])]) });
+  if (json.length > KEYRING_BYTES) { fail("the grant " + grants[i][0] + " holds more methods than a keyring has room for"); }
+  const plain = utf8(json.padEnd(KEYRING_BYTES, " "));
+  const bits = await keyringBits(keys[i]);
+  const iv = hmac(bits.mac, plain).subarray(0, 12);
+  keyrings.push({ iv, ct: await encrypt(bits.enc, iv, plain, RING_AAD) });
+}
+for (let i = grants.length; i < padTo; i++) {
+  keyrings.push({ iv: stream("srbf-pad-iv\0" + release + "\0" + i, 12), ct: stream("srbf-pad-ct\0" + release + "\0" + i, KEYRING_BYTES + 16) });
+}
+keyrings.sort((x, y) => Buffer.compare(Buffer.from(x.ct), Buffer.from(y.ct)));
+
+// the units' payloads
+for (const u of units) {
+  const gz = gzipFixed(u.payload), iv = hmac(u.kName, utf8("payload\0"), gz).subarray(0, 12);
+  u.aad = utf8(release + "/unit/" + u.id);
+  u.env = { iv, ct: await encrypt(u.kPay, iv, gz, u.aad) };
+}
+const envelopes = {};
+for (const u of [...units].sort((x, y) => (x.id < y.id ? -1 : 1))) { envelopes[u.id] = { iv: b64(u.env.iv), ct: b64(u.env.ct) }; }
+
+// the files, one by one
+const fileName = (kName, path) => hmac(kName, utf8("name\0" + path)).toString("hex").slice(0, 32);
 const fileLine = (name, iv, ct) => "(window.RESULTS_V2_SEALED_FILES=window.RESULTS_V2_SEALED_FILES||{})[" + JSON.stringify(name) + "]=" +
   JSON.stringify({ iv: b64(iv), ct: b64(ct) }) + ";\n";
-async function encryptFile(kEnc, iv, gz, aad) {
-  const key = await crypto.subtle.importKey("raw", kEnc, "AES-GCM", false, ["encrypt"]);
-  return new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: aad }, key, gz));
-}
-// One file's line opened the way the page opens it: the line's own fields, AES-GCM with the path as additional data,
-// then the browser's gzip stream. -> the content, or null when the key or the path does not fit.
-async function openFile(line, kEnc, aad) {
+async function openLine(line, kEnc, aad) {   // one file's line opened the way the page opens it -> its content, or null
   const m = FILE_LINE.exec(line);
   if (!m) { return null; }
-  try {
-    const key = await crypto.subtle.importKey("raw", kEnc, "AES-GCM", false, ["decrypt"]);
-    const gz = await crypto.subtle.decrypt({ name: "AES-GCM", iv: u8(m[2]), additionalData: aad }, key, u8(m[3]));
-    if (typeof DecompressionStream === "undefined") { return gunzipSync(Buffer.from(gz)); }
-    return Buffer.from(await new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
-  } catch (e) {
-    return null;
-  }
+  const gz = await decrypt(kEnc, u8(m[2]), u8(m[3]), aad);
+  if (!gz) { return null; }
+  if (typeof DecompressionStream === "undefined") { return gunzipSync(gz); }
+  return Buffer.from(await new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
 }
-
-const USAGE = "usage: SRBF_SEAL_KEY='<key>' node tools/seal.mjs <release> [src] [out]\n" +
-  "       node tools/seal.mjs <release> --source <dir>=<ENV VAR> [--source <dir>=<ENV VAR> ...] [--out <file>]";
-const args = process.argv.slice(2);
-const release = args[0];
-if (!release || release.startsWith("--")) { console.error(USAGE); process.exit(2); }
-// [directory, the environment variable that holds its key]
-let sources, outArg;
-if (args.includes("--source")) {
-  sources = [];
-  for (let i = 1; i < args.length; i++) {
-    const v = args[i + 1];
-    if (args[i] === "--source" && v && v.includes("=")) { sources.push([v.slice(0, v.lastIndexOf("=")), v.slice(v.lastIndexOf("=") + 1)]); i++; }
-    else if (args[i] === "--out" && v) { outArg = v; i++; }
-    else { console.error(USAGE); process.exit(2); }
-  }
-} else {
-  sources = [[args[1] || join(SITE, "private", release), "SRBF_SEAL_KEY"]];
-  outArg = args[2];
-}
-const passphrases = sources.map(function ([, name]) {
-  const pass = process.env[name];
-  if (!pass || pass.length < 16) {
-    console.error(name + " is missing or shorter than 16 characters.\n" +
-      "The sealed file is public, so the key is the only thing protecting it: use a generated one, e.g.\n" +
-      "  node -e \"console.log(require('crypto').randomBytes(16).toString('base64url'))\"");
-    process.exit(2);
-  }
-  return pass;
-});
-if (new Set(passphrases).size !== passphrases.length) {
-  console.error("two sources share a key: one key would open both, so seal them as one source"); process.exit(2);
-}
-const out = resolve(outArg || join(SITE, "data", release, "sealed.js"));
-const sealedDir = join(dirname(out), "sealed");
-
-// The file is only worth writing if the page can open it: read the envelope back the way the page does.
-// -> the payload it opens to, or null.
-async function opens(env, pass) {
-  try {
-    const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pass), "PBKDF2", false, ["deriveKey"]);
-    const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: u8(env.salt), iterations: env.iter, hash: "SHA-256" },
-      base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
-    return gunzipSync(Buffer.from(await crypto.subtle.decrypt({ name: "AES-GCM", iv: u8(env.iv) }, key, u8(env.ct))));
-  } catch (e) {
-    return null;
-  }
-}
-const fail = (msg) => { console.error(msg + "; nothing written"); process.exit(1); };
-const perFile = (src, f) => FILE_DIRS.includes(relative(src, f).split(sep)[0]);
-const listed = sources.map(([dir]) => { const src = resolve(dir); return { src, all: scripts(src) }; });
-// every source's subkeys once any source has per-problem files: each source's are also tried on the others' files
-const keys = listed.some(({ src, all }) => all.some((f) => perFile(src, f))) ? await Promise.all(passphrases.map(fileKeys)) : null;
-const envelopes = [], plains = [], notes = [], files = [], names = new Set();
-for (let i = 0; i < sources.length; i++) {
-  const { src, all } = listed[i];
-  const payload = all.filter((f) => !perFile(src, f)), own = all.filter((f) => perFile(src, f));
-  if (!payload.length) { console.error("no payload scripts under " + src); process.exit(1); }
-  const parts = payload.map((f) => readFileSync(f, "utf8"));
-  if (own.length) {
-    parts.push(";if(window.RESULTS_V2_PRIVATE){" + HANDOVER + JSON.stringify({ enc: b64(keys[i].enc), name: b64(keys[i].name) }) + ";}");
-  }
-  const plain = Buffer.from(parts.join("\n;\n"), "utf8");
-  const gz = gzipSync(plain, { level: 9 });
-  envelopes.push(await seal(gz, passphrases[i]));
-  plains.push(plain);
-  for (const f of own) {
-    const path = relative(src, f).split(sep).join("/");
-    const content = readFileSync(f), name = fileName(keys[i].name, path), aad = utf8(release + "/" + path);
-    if (names.has(name)) { fail("two per-problem files share the name " + name); }
+const files = [], names = new Set();
+for (const u of units) {
+  for (const f of u.files) {
+    const path = relative(u.dir, f).split(sep).join("/"), content = readFileSync(f), name = fileName(u.kName, path);
+    const aad = utf8(release + "/" + path);
+    if (names.has(name)) { fail("two files share the name " + name); }
     names.add(name);
-    const at = join(sealedDir, name + ".js");
-    const there = existsSync(at) ? readFileSync(at, "utf8") : null;
-    const old = there ? await openFile(there, keys[i].enc, aad) : null;
+    const at = join(sealedDir, name + ".js"), there = existsSync(at) ? readFileSync(at, "utf8") : null;
+    const old = there ? await openLine(there, u.kEnc, aad) : null;
     let line = there;   // this content is published already: its bytes stay, under their own IV
     if (!old || !old.equals(content)) {
-      const gz = gzipFixed(content), iv = fileIv(keys[i].name, path, gz);
-      line = fileLine(name, iv, await encryptFile(keys[i].enc, iv, gz, aad));
+      const gz = gzipFixed(content), iv = hmac(u.kName, utf8("iv\0" + path + "\0"), gz).subarray(0, 12);
+      line = fileLine(name, iv, await encrypt(u.kEnc, iv, gz, aad));
     }
-    files.push({ source: i, path, name, aad, content, line, at, changed: line !== there });
+    files.push({ unit: u, path, name, aad, content, line, at, changed: line !== there });
   }
-  notes.push(payload.length + " file(s) from " + relative(SITE, src) + " (" + sources[i][1] + "): " +
-    (plain.length / 1048576).toFixed(2) + " MB -> " + (gz.length / 1048576).toFixed(2) + " MB gzip" +
-    (own.length ? ", and " + own.length + " per-problem file(s) one by one" : ""));
 }
 
-// ---- before anything is written: open everything again as the page will --------------------------------------
-for (let i = 0; i < sources.length; i++) {
-  const back = await opens(envelopes[i], passphrases[i]);
-  if (!back || !back.equals(plains[i])) { fail("the sealed payload of " + listed[i].src + " does not open to what was sealed"); }
-  for (let j = 0; j < i; j++) {   // and no other source's key opens it
-    if (await opens(envelopes[i], passphrases[j])) { fail("another key opens " + listed[i].src); }
+// ---- before anything is written: open everything again as the page will ------------------------------------------
+for (let i = 0; i < grants.length; i++) {
+  const bits = await keyringBits(keys[i]);
+  const opened = [];
+  for (const r of keyrings) { const plain = await decrypt(bits.enc, r.iv, r.ct, RING_AAD); if (plain) { opened.push(plain); } }
+  if (opened.length !== 1) { fail("the key of " + grants[i][0] + " opens " + opened.length + " keyrings, not one"); }
+  const held = JSON.parse(opened[0].toString("utf8")).methods;
+  if (JSON.stringify(held.map(([m]) => m)) !== JSON.stringify(granted[i]) || held.some(([m, s]) => !Buffer.from(u8(s)).equals(unitSecret[m]))) {
+    fail("the keyring of " + grants[i][0] + " does not hold exactly its methods");
   }
 }
-// a key holder gets the subkeys from the payload that key opens, so the files are opened with the ones handed over there
-const handed = plains.map(function (plain) {
-  const text = plain.toString("utf8"), at = text.lastIndexOf(HANDOVER);
-  if (at < 0) { return null; }
-  const k = JSON.parse(text.slice(at + HANDOVER.length, text.lastIndexOf(";}")));
-  return { enc: u8(k.enc), name: u8(k.name) };
-});
+for (const u of units) {
+  const back = await decrypt(u.kPay, u.env.iv, u.env.ct, u.aad);
+  if (!back || !gunzipSync(back).equals(u.payload)) { fail(u.label + " does not open to its unit.js"); }
+  for (const w of units) {
+    if (w !== u && await decrypt(w.kPay, u.env.iv, u.env.ct, u.aad)) { fail("the secret of " + w.label + " opens " + u.label); }
+  }
+}
 for (const f of files) {
-  const k = handed[f.source], m = FILE_LINE.exec(f.line);
-  if (!k) { fail("the payload of " + listed[f.source].src + " does not hand over its file keys"); }
-  if (!m || m[1] !== f.name || fileName(k.name, f.path) !== f.name) { fail("the sealed " + f.path + " is not named as the page will look for it"); }
-  const back = await openFile(f.line, k.enc, f.aad);
-  if (!back || !back.equals(f.content)) { fail("the sealed " + f.path + " of " + listed[f.source].src + " does not open to what was sealed"); }
-  for (let j = 0; j < sources.length; j++) {
-    if (j !== f.source && await openFile(f.line, keys[j].enc, f.aad)) { fail("another key opens " + f.path + " of " + listed[f.source].src); }
-  }
+  const m = FILE_LINE.exec(f.line);
+  if (!m || m[1] !== f.name) { fail("the sealed " + f.path + " of " + f.unit.label + " is not named as the page will look for it"); }
+  const back = await openLine(f.line, f.unit.kEnc, f.aad);
+  if (!back || !back.equals(f.content)) { fail("the sealed " + f.path + " of " + f.unit.label + " does not open to what was sealed"); }
 }
 
-// ---- write: the per-problem files (an unchanged one is not touched), the payloads, then remove the withdrawn ----
+// ---- write: the files (an unchanged one is not touched), the envelope file, then remove the withdrawn --------------
 let written = 0, removed = 0;
 if (files.length) { mkdirSync(sealedDir, { recursive: true }); }
-for (const f of files) {
-  if (f.changed) { writeFileSync(f.at, f.line); written++; }
-}
+for (const f of files) { if (f.changed) { writeFileSync(f.at, f.line); written++; } }
+const sealed = { v: 2, kdf: "PBKDF2-SHA256", iter: ITERATIONS, salt: b64(utf8("srbf-keyring/" + release)),
+  keyrings: keyrings.map((r) => ({ iv: b64(r.iv), ct: b64(r.ct) })), units: envelopes };
 const rel = JSON.stringify(release);
-let text = "";
-if (envelopes.length > 1) {
-  text += "window.RESULTS_V2_SEALED_MORE=window.RESULTS_V2_SEALED_MORE||{};window.RESULTS_V2_SEALED_MORE[" + rel + "]=" +
-    JSON.stringify(envelopes.slice(1)) + ";\n";
-}
-text += "window.RESULTS_V2_SEALED=window.RESULTS_V2_SEALED||{};window.RESULTS_V2_SEALED[" + rel + "]=" + JSON.stringify(envelopes[0]) + ";\n";
-writeFileSync(out, text);
+mkdirSync(dirname(out), { recursive: true });
+writeFileSync(out, "window.RESULTS_V2_SEALED=window.RESULTS_V2_SEALED||{};window.RESULTS_V2_SEALED[" + rel + "]=" + JSON.stringify(sealed) + ";\n");
 if (existsSync(sealedDir)) {
   for (const n of readdirSync(sealedDir)) {
     if (SEALED_NAME.test(n) && !names.has(n.slice(0, 32))) { unlinkSync(join(sealedDir, n)); removed++; }
   }
   if (!readdirSync(sealedDir).length) { rmdirSync(sealedDir); }
 }
-console.log(notes.join("; ") + " -> " + (statSync(out).size / 1048576).toFixed(2) + " MB at " + relative(SITE, out) +
-  (files.length || removed ? "; " + relative(SITE, sealedDir) + "/: " + files.length + " file(s), " + written + " written, " +
-    (files.length - written) + " unchanged, " + removed + " removed" : "") +
-  "; each opened again with its own key: identical");
+console.log(methods.length + " method unit(s) and " + (units.length - methods.length) + " pair unit(s) from " + relative(process.cwd(), root) + "; " +
+  grants.map(([name], i) => name + ": " + granted[i].length + " method(s)").join(", ") + "; " + keyrings.length + " keyrings -> " +
+  (statSync(out).size / 1048576).toFixed(2) + " MB at " + relative(process.cwd(), out) +
+  (files.length || removed ? "; " + relative(process.cwd(), sealedDir) + "/: " + files.length + " file(s), " + written + " written, " +
+    (files.length - written) + " unchanged, " + removed + " removed" : "") + "; everything opened again as the page will: identical");

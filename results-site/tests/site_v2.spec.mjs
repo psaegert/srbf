@@ -3,6 +3,7 @@
 // the lazily loaded histograms and paired contrasts, deep links, popovers, colours.
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { createHmac } from 'node:crypto';
 
 function collectErrors(page) {
   const errors = [];
@@ -263,7 +264,7 @@ test('a link to a view of the explorer on the home page opens the explorer\'s pa
 test('the public pages carry no private overlay', async ({ page }) => {
   for (const url of ['/', '/explorer.html']) {
     await page.goto(url);
-    expect(await page.evaluate(() => typeof window.RESULTS_V2_PRIVATE), url).toBe('undefined');
+    expect(await page.evaluate(() => typeof window.RESULTS_V2_PRIVATE_UNITS), url).toBe('undefined');
     expect(await page.content(), url).not.toContain('private/');
   }
 });
@@ -447,9 +448,10 @@ test('a long plot title wraps onto more lines; no title is cut to an ellipsis', 
   expect(errors).toEqual([]);
 });
 
-// the fixture overlay and the key it was sealed with (results-site/tools/seal.mjs, tests/fixtures/overlay)
+// the sealed fixture and its keys (results-site/tools/seal.mjs, tests/fixtures/README.md): the first opens Fixture
+// Method, the second Fixture Method Two, the third both and their pair
 const FIXTURE_KEY = 'fixture-key-for-the-tests';
-const FIXTURE = readFileSync(new URL('./fixtures/sealed_fixture.js', import.meta.url), 'utf8');
+const FIXTURE = readFileSync(new URL('./fixtures/keyrings/sealed.js', import.meta.url), 'utf8');
 
 test('a method is added with its key, and a key that does not fit adds nothing', async ({ page }) => {
   const errors = collectErrors(page);
@@ -510,13 +512,28 @@ test('a method added with a key brings its values and formulas problem by proble
   expect(errors).toEqual([]);
 });
 
-// two overlays sealed under two keys into one file (tools/seal.mjs --source ... --source ...)
-const FIXTURE_TWO_KEY = 'a-second-fixture-key-for-the-tests';
-const FIXTURE_TWO = readFileSync(new URL('./fixtures/sealed_two_fixture.js', import.meta.url), 'utf8');
+// one sealed file, three keys: each opens its own methods and no other, and a key that holds both opens their pair
+const FIXTURE_TWO_KEY = 'a-second-fixture-key-for-the-tests', FIXTURE_BOTH_KEY = 'a-third-fixture-key-for-the-tests';
+const KEYRINGS = new URL('./fixtures/keyrings/', import.meta.url);
+async function routeKeyrings(page) {
+  await page.route('**/data/2026-09/sealed.js', (route) => route.fulfill({ contentType: 'text/javascript', body: readFileSync(new URL('sealed.js', KEYRINGS), 'utf8') }));
+  await page.route(/\/data\/2026-09\/sealed\/[0-9a-f]{32}\.js$/, (route) => {
+    const name = route.request().url().split('/').pop();
+    let body = null; try { body = readFileSync(new URL('sealed/' + name, KEYRINGS), 'utf8'); } catch (e) { body = null; }
+    return body === null ? route.fulfill({ status: 404, body: '' }) : route.fulfill({ contentType: 'text/javascript', body });
+  });
+}
+// the name the pair's ranks file is sealed under (tools/seal.mjs): from the two methods' secrets, as the page makes it
+function pairFileName(path) {
+  const h = (key, text) => createHmac('sha256', key).update(text).digest();
+  const S = (m) => h('fixture-master-secret-for-the-tests', 'srbf-unit\0' + '2026-09' + '\0' + m);
+  const pair = h(Buffer.concat([S('fixture-method'), S('fixture-method-two')]), 'srbf-pair\0' + '2026-09' + '\0fixture-method\0fixture-method-two');
+  return h(h(pair, 'srbf-unit-file-name'), 'name\0' + path).toString('hex').slice(0, 32);
+}
 
-test('each key opens its own sealed overlay and no other, and the page remembers both', async ({ page }) => {
+test('each key opens its own methods and no other, and the page remembers them', async ({ page }) => {
   const errors = collectErrors(page);
-  await page.addInitScript({ content: FIXTURE_TWO });
+  await page.addInitScript({ content: FIXTURE });
   await page.goto('/explorer.html?release=2026-09&v=curves');
   const methods = page.locator(V2 + ' .v2methods .v2meth');
   await expect(methods.first()).toBeVisible();
@@ -524,22 +541,43 @@ test('each key opens its own sealed overlay and no other, and the page remembers
   const one = page.locator(V2 + ' .v2methods input[type=checkbox][data-m="fixture-method"]');
   const two = page.locator(V2 + ' .v2methods input[type=checkbox][data-m="fixture-method-two"]');
   await page.locator(V2 + ' .v2addmopen').click();
-  // the second key opens the second overlay only
+  // the second key opens the second method only
   await page.locator(V2 + ' .v2addmkey').fill(FIXTURE_TWO_KEY);
   await page.locator(V2 + ' [data-act="add-method-go"]').click();
   await expect(two).toBeChecked({ timeout: 20000 });
-  expect(await one.count(), 'a key opens only its own overlay').toBe(0);
+  expect(await one.count(), 'a key opens only its own methods').toBe(0);
   expect(await methods.count()).toBe(before + 1);
-  // the first key, which a page with one sealed payload has always read, opens the first only
+  // the first key opens the first only
   await page.locator(V2 + ' .v2addmopen').click();
   await page.locator(V2 + ' .v2addmkey').fill(FIXTURE_KEY);
   await page.locator(V2 + ' [data-act="add-method-go"]').click();
   await expect(one).toBeChecked({ timeout: 20000 });
   expect(await methods.count()).toBe(before + 2);
-  // both keys are remembered for the session, and both overlays come back on a reload
+  // the key of both adds nothing new now, and says so
+  await page.locator(V2 + ' .v2addmopen').click();
+  await page.locator(V2 + ' .v2addmkey').fill(FIXTURE_BOTH_KEY);
+  await page.locator(V2 + ' [data-act="add-method-go"]').click();
+  await expect(page.locator(V2 + ' .v2addmmsg')).toHaveText(/open already/, { timeout: 20000 });
+  expect(await methods.count()).toBe(before + 2);
+  // the keys are remembered for the session, and both methods come back on a reload
   await page.reload();
   await expect(one).toBeAttached({ timeout: 20000 });
   await expect(two).toBeAttached({ timeout: 20000 });
+  expect(errors).toEqual([]);
+});
+
+test('a key that holds two methods opens their pair too, and the Ranks view reads it', async ({ page }) => {
+  const errors = collectErrors(page);
+  await routeKeyrings(page);
+  const fetched = new Set(); page.on('request', (r) => { const m = /\/sealed\/([0-9a-f]{32})\.js$/.exec(r.url()); if (m) { fetched.add(m[1]); } });
+  await page.goto('/explorer.html?release=2026-09&v=ranks&rm=log10_fvu_val');
+  await page.locator(V2 + ' .v2addmopen').click();
+  await page.locator(V2 + ' .v2addmkey').fill(FIXTURE_BOTH_KEY);
+  await page.locator(V2 + ' [data-act="add-method-go"]').click();
+  await expect(page.locator(V2 + ' .v2methods')).toContainText('Fixture Method Two', { timeout: 20000 });
+  await expect(page.locator(V2 + ' .v2methods')).toContainText('Fixture Method', { timeout: 20000 });
+  // the pair's cells against each other are fetched under the pair's own keys, which only both methods' secrets make
+  await expect.poll(() => fetched.has(pairFileName('ranks/log10_fvu_val.js')), { timeout: 15000 }).toBe(true);
   expect(errors).toEqual([]);
 });
 
