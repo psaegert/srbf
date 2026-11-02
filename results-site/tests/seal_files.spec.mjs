@@ -257,6 +257,27 @@ test('a sealed file that holds the same content is kept under its own IV, whatev
   expect(readFileSync(at, 'utf8')).toBe(other);
 });
 
+test('a unit sealed to the same content is kept under its own IV, whatever gzip wrote', async () => {
+  const dir = scratch(), out = join(dir, 'out', 'sealed.js');
+  standIns(join(dir, 'units'));
+  seal(join(dir, 'units'), out, GRANTS);
+  // another machine's gzip compressing the same unit.js differently: an envelope made with a gzip level of its own
+  const S = methodSecret('alpha'), k = unitKeys(S), aad = utf8(REL + '/unit/' + k.id);
+  const gz = gzipSync(readFileSync(join(dir, 'units', 'm', 'alpha', 'unit.js')), { level: 1 }), iv = Buffer.alloc(12, 7);
+  const key = await subtle.importKey('raw', k.pay, 'AES-GCM', false, ['encrypt']);
+  const ct = Buffer.from(await subtle.encrypt({ name: 'AES-GCM', iv, additionalData: aad }, key, gz));
+  const W = sealedOf(out); W.units[k.id] = { iv: iv.toString('base64'), ct: ct.toString('base64') };
+  const other = 'window.RESULTS_V2_SEALED=window.RESULTS_V2_SEALED||{};window.RESULTS_V2_SEALED[' + JSON.stringify(REL) + ']=' + JSON.stringify(W) + ';\n';
+  writeFileSync(out, other);
+  seal(join(dir, 'units'), out, GRANTS);
+  expect(readFileSync(out, 'utf8')).toBe(other);
+  // and a unit.js that changed gets a new envelope
+  writeFileSync(join(dir, 'units', 'm', 'alpha', 'unit.js'), '(window.RESULTS_V2_PRIVATE_UNITS=window.RESULTS_V2_PRIVATE_UNITS||[]).push({"methods":[]});\n');
+  seal(join(dir, 'units'), out, GRANTS);
+  expect(sealedOf(out).units[k.id].iv).not.toBe(iv.toString('base64'));
+  expect(await openUnit(sealedOf(out), S)).toContain('"methods":[]');
+});
+
 test('a run fails, writing nothing, on a grant that names no method, a key two grants share, or a key that is the master', async () => {
   const dir = scratch(), out = join(dir, 'out', 'sealed.js');
   standIns(join(dir, 'units'));
@@ -288,6 +309,7 @@ test('the committed page fixtures open with their keys and are what a reseal of 
     for (const [key, labels] of Object.entries(expected)) { expect(Object.keys(await opens(out, key)).sort(), name).toEqual(labels); }
     const dir = scratch(), copy = join(dir, 'sealed.js');
     if (existsSync(join(dirname(out), 'sealed'))) { cpSync(join(dirname(out), 'sealed'), join(dir, 'sealed'), { recursive: true }); }
+    cpSync(out, copy);
     expect(seal(units, copy, grants)).toContain('0 written');
     expect(readFileSync(copy)).toEqual(readFileSync(out));
     expect(sealedFiles(copy)).toEqual(sealedFiles(out));
