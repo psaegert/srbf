@@ -54,7 +54,24 @@ import sys
 from array import array
 from collections import defaultdict
 from typing import Any, Mapping, NamedTuple
+import importlib.util
 import numpy as np
+
+
+def _srbf_module(name: str) -> Any:
+    """A module of this repository's srbf package, loaded from its file: importing the package itself pulls in torch
+    (srbf/__init__.py), and the export has to stay within the board's memory guard."""
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src", "srbf", *name.split(".")) + ".py"
+    spec = importlib.util.spec_from_file_location(f"_srbf_{name.replace('.', '_')}", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_improvability = _srbf_module("metrics.improvability")
+improvability, validation_error = _improvability.improvability, _improvability.validation_error
 
 # ---- registries -------------------------------------------------------------------------------------------------
 # key, label, param, color, group, provenance, unit-file key, selection rule (how the method picks the
@@ -200,6 +217,7 @@ CATALOG_GROUPS = {
     "classical": ["nguyen", "keijzer", "korns", "koza", "livermore", "livermore2", "vladislavleva", "jin", "neat", "pagie", "poly", "nonic", "sine", "meier", "r-rationals", "constant", "grammarvae"],
     "synthetic": ["erbench-syneq", "soose-fc", "soose-nc", "soose-wc"]}
 NB = 128
+IMPROVABILITY = "improvability_val"   # derived here, not by srbf table: it needs the release's pool (derive_improvability)
 
 # key, label, short, group, kind, higher_is_better (None = 1 is ideal / descriptive), tier, format, histogram (lo, hi, transform), description
 # Rate metrics are defined for EVERY problem (a failed prediction is a miss). So are the continuous metrics whose range
@@ -239,6 +257,14 @@ METRICS = [
      "1 - FVU on the held-out points: 1 is a perfect fit, 0 is no better than always predicting the average, and there is no lower limit. A single formula that blows up could decide an average, so the median is shown whichever statistic you choose."),
     ("r2_fit", "R², Support", "R² Fit", "Fit Error", "cont", True, "more", "num3", (-1.0, 1.0, None),
      "The same on the 512 given points. The median is shown whichever statistic you choose."),
+    (IMPROVABILITY, "Improvability, Validation", "Improvability", "Fit Error", "cont", False, "main", "pct", (-1.0, 1.0, None),
+     "How far the formula's error on the held-out points is from the best error any method of this release reaches on the "
+     "same points, at any budget: (e - e_best) / e, where e is the root mean squared error (Erickson et al. 2025; the mean "
+     "over problems is the Mean Improvability). 0 % is the best of the release, 100 % a formula that fails "
+     "or blows up. Two formulas that both reproduce the points within float32 precision (FVU at most 2^-23) tie. The best "
+     "is taken over the release's public methods, without the Oracle; a method outside them (the Oracle, a private "
+     "method) that beats the best scores below 0 %, down to -100 %: the share of the best error it saves. Problems "
+     "without held-out points have no value."),
     # ---- comparisons of the prediction with the ground truth ----
     ("mdl_ratio", "MDL Ratio", "MDL Ratio", "Size Compared to the Ground Truth", "cont", None, "main", "ratio", (-4.0, 4.0, "log2"),
      "The length of the predicted formula in bits divided by the length of the true formula. Length in bits (MDL, minimum description length) is how many bits it takes to write the formula down, including the digits of its numbers, measured by SimpliPy after simplification. 1 means as long as the true formula, 2 twice as long. Means are taken on a log scale, so ×2 and ×0.5 cancel. Flash-ANSR picks its prediction with this same length measure."),
@@ -460,6 +486,15 @@ class Row(Mapping[str, Any]):
     def __contains__(self, key: object) -> bool:
         return key in _ROW_INDEX
 
+    def derive(self, key: str, value: float | None) -> None:
+        """Set a value the export derives from other rows (derive_improvability); the judged values stay as read."""
+        i = _ROW_INDEX[key]
+        if value is None:
+            self._missing |= 1 << i
+        else:
+            self._values[i] = value
+            self._missing &= ~(1 << i)
+
     def __iter__(self) -> Any:
         return iter(ROW_KEYS)
 
@@ -490,6 +525,34 @@ def load_rows(root: str) -> dict[str, dict[tuple[str, int], Rows]]:
                     vals[k] = None if v is not None and NOT_COMPUTED.get(k) == v else v
                 data[r["model"]][(r["catalog"], int(r["rung"]))][(int(r.get("draw") or 1), int(r["row"]))] = Row(vals)
     return data
+
+
+def improvability_pool(public: list[str]) -> list[str]:
+    """The methods whose best error improvability is measured against: the release's public methods, without the
+    references (group "reference": the Oracle is given the true formula)."""
+    group = {m[0]: m[4] for m in METHODS}
+    return [k for k in public if group.get(k) != "reference"]
+
+
+def derive_improvability(data: dict[str, dict[tuple[str, int], Rows]], pool: list[str], usable_cell: Any) -> None:
+    """Every run's improvability (srbf.metrics.improvability): its validation error against the best error the POOL
+    reaches on the same problem and draw (the same held-out points), at any published budget. The pool is the
+    release's public methods (improvability_pool), so a private method never moves a public number; a failed run is 1 (its error is
+    unbounded); a run on a problem without held-out points, or one no pool method answered, has no value."""
+    best: dict[tuple[str, tuple[int, int]], float] = {}
+    for key in pool:
+        for (c, r), rows in data.get(key, {}).items():
+            if not usable_cell(key, r):
+                continue
+            for k, row in rows.items():
+                e = validation_error(row["log10_fvu_val"], bool(row["success"]))
+                if e is not None and math.isfinite(e) and e < best.get((c, k), math.inf):
+                    best[(c, k)] = e
+    for cells in data.values():
+        for (c, _r), rows in cells.items():
+            for k, row in rows.items():
+                row.derive(IMPROVABILITY, improvability(validation_error(row["log10_fvu_val"], bool(row["success"])),
+                                                        best.get((c, k))))
 
 
 # ---- the formulas themselves: the Predictions view ----------------------------------------------------------------
@@ -1648,6 +1711,7 @@ def main() -> None:
     if os.path.exists(dpath):
         DNF.update({k: int(v["rung"]) for k, v in json.load(open(dpath)).items() if isinstance(v, dict) and "rung" in v})
     data = load_rows(a.root)
+    derive_improvability(data, improvability_pool(public), usable)
     present: dict[str, int] = defaultdict(int)
     for mk in data:
         for (c, r), rows in data[mk].items():

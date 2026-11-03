@@ -125,6 +125,23 @@ data set unexplained, a prediction with FVU \(8 \times 10^{-4}\) counts as recov
 is 0 and the criterion is numeric recovery exactly. That is the case for all 29 catalogs of the
 srbf suite, so there the two columns agree on every problem.
 
+### Improvability (results explorer)
+
+How far a prediction's validation error is from the best error a fixed pool of methods reaches on the same problem
+and the same validation points (Erickson et al. 2025; its mean over problems is the Mean Improvability):
+
+$$
+\frac{e - e^\ast}{\max(e, e^\ast)}, \qquad e = \max\Big(\sqrt{\operatorname{FVU}(y_{\mathrm{val}}, \hat y_{\mathrm{val}})},\; \sqrt{\varepsilon_{32}}\Big) .
+$$
+
+\(e\) is the validation RMSE in units of the targets' standard deviation, so on one problem's points the ratio is the
+ratio of the RMSEs. \(e^\ast\) is the lowest \(e\) of the pool at any budget, so for the pool's methods the denominator
+is \(e\) and this is \(1 - e^\ast/e\). 0 is the pool's best and a failed prediction is 1. A method outside the pool that
+beats it scores \((e - e^\ast)/e^\ast\), down to \(-1\): the share of the best error it saves. The floor at \(\sqrt{\varepsilon_{32}}\) makes two
+numerically recovered predictions tie, so round-off below the recovery bar cannot separate them. A problem without
+validation points has no value. It is not a column of `derive_metrics`: it needs the pool, so the site export derives it
+(`srbf.metrics.improvability`), with the release's public methods without the Oracle as the pool.
+
 ## Symbolic agreement
 
 All columns of this group compare the **judged skeleton** of the prediction with \(\bar\tau\),
@@ -246,6 +263,7 @@ under reader names, which say *Prediction* and *Ground Truth* for the two expres
 |---|---|
 | Numeric Recovery, Validation / Support; short vNRR / fNRR | `numeric_recovery_val`, `numeric_recovery_fit` |
 | Fits as Well as the Ground Truth | `numeric_recovery_relative_*` |
+| Improvability, Validation | derived by the site export, see [Improvability](#improvability-results-explorer) |
 | Successful Prediction Rate | the mean of `prediction_success` |
 | Symbolic Recovery: Structure, + Exponents, + All Numbers; short SRRs / SRRe / SRRa | `symbolic_recovery`, `symbolic_recovery_mask_fittable`, `symbolic_recovery_mask_none` |
 | Raw Symbolic Recovery; short SRRr | the equality of the two skeletons as written, every number masked, without simplification |
