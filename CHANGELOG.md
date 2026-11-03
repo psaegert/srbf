@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Improvability, Validation (Mean Improvability).** `srbf.metrics.improvability`: a prediction's validation error
+  against the best error a fixed pool reaches on the same problem and points, \((e - e^\ast)/e\) with \(e\) the RMSE
+  in units of the targets' standard deviation (Erickson et al. 2025). Numerically recovered predictions tie (the error
+  is floored at \(\sqrt{2^{-23}}\)), a failed prediction is 1. The site export derives it for every run, with the
+  release's public methods (without the Oracle) at every budget as the pool, and the explorer lists it under Fit Error;
+  its mean over problems is the Mean Improvability.
+
 ### Changed
 - **Results site: the Flash-ANSR prior starts unchecked in the explorer.** A method can be marked `off` in the exporter's
   `METHOD_STYLE`; the explorer leaves it out of its default selection, and a link naming it or its checkbox shows it.
