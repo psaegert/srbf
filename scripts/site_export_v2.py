@@ -58,11 +58,12 @@ import importlib.util
 import numpy as np
 
 
-def _srbf_module(name: str) -> Any:
-    """A module of this repository's srbf package, loaded from its file: importing the package itself pulls in torch
-    (srbf/__init__.py), and the export has to stay within the board's memory guard."""
-    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src", "srbf", *name.split(".")) + ".py"
-    spec = importlib.util.spec_from_file_location(f"_srbf_{name.replace('.', '_')}", path)
+def _sibling_module(name: str) -> Any:
+    """A module next to this script, loaded from its file. scripts/improvability.py stays OUTSIDE the srbf package:
+    srbf table's judge fingerprint hashes every package source, so a site metric in the package would re-judge every
+    result file; and importing the package pulls in torch, while the export has to stay within the memory guard."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"{name}.py")
+    spec = importlib.util.spec_from_file_location(f"_site_{name}", path)
     if spec is None or spec.loader is None:
         raise ImportError(f"cannot load {path}")
     module = importlib.util.module_from_spec(spec)
@@ -70,7 +71,7 @@ def _srbf_module(name: str) -> Any:
     return module
 
 
-_improvability = _srbf_module("metrics.improvability")
+_improvability = _sibling_module("improvability")
 improvability, validation_error = _improvability.improvability, _improvability.validation_error
 
 # ---- registries -------------------------------------------------------------------------------------------------
@@ -535,7 +536,7 @@ def improvability_pool(public: list[str]) -> list[str]:
 
 
 def derive_improvability(data: dict[str, dict[tuple[str, int], Rows]], pool: list[str], usable_cell: Any) -> None:
-    """Every run's improvability (srbf.metrics.improvability): its validation error against the best error the POOL
+    """Every run's improvability (scripts/improvability.py): its validation error against the best error the POOL
     reaches on the same problem and draw (the same held-out points), at any published budget. The pool is the
     release's public methods (improvability_pool), so a private method never moves a public number; a failed run is 1 (its error is
     unbounded); a run on a problem without held-out points, or one no pool method answered, has no value."""

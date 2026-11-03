@@ -5,12 +5,19 @@ import os
 
 import pytest
 
-from srbf.metrics import ERROR_FLOOR, improvability, pool_best, validation_error
+_SCRIPTS = os.path.join(os.path.dirname(__file__), "..", "scripts")
 
-_SPEC = importlib.util.spec_from_file_location(
-    "site_export_v2", os.path.join(os.path.dirname(__file__), "..", "scripts", "site_export_v2.py"))
-export = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(export)
+
+def _load(name):
+    spec = importlib.util.spec_from_file_location(name, os.path.join(_SCRIPTS, f"{name}.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+export = _load("site_export_v2")
+_imp = _load("improvability")
+ERROR_FLOOR, improvability, pool_best, validation_error = _imp.ERROR_FLOOR, _imp.improvability, _imp.pool_best, _imp.validation_error
 
 
 def test_the_error_is_the_rmse_in_units_of_the_targets_spread_and_recovered_predictions_tie():
@@ -84,3 +91,12 @@ def test_the_cell_averages_improvability_over_problems_and_the_metric_is_listed_
 def test_the_pool_is_the_public_methods_without_the_references():
     pool = export.improvability_pool(["e2e", "PySR", "oracle", "T8-3M"])
     assert pool == ["e2e", "PySR", "T8-3M"]
+
+
+def test_the_site_metric_stays_out_of_the_judge_fingerprint():
+    # srbf table's judge fingerprint hashes every source of the srbf package: a site-only metric there re-judges
+    # every result file (2026-11-03: 33,664 files). The metric lives next to the exporter instead.
+    import srbf
+    root = os.path.dirname(srbf.__file__)
+    assert not os.path.exists(os.path.join(root, "metrics", "improvability.py"))
+    assert "improvability" not in open(os.path.join(root, "metrics", "__init__.py")).read()

@@ -140,7 +140,7 @@ is \(e\) and this is \(1 - e^\ast/e\). 0 is the pool's best and a failed predict
 beats it scores \((e - e^\ast)/e^\ast\), down to \(-1\): the share of the best error it saves. The floor at \(\sqrt{\varepsilon_{32}}\) makes two
 numerically recovered predictions tie, so round-off below the recovery bar cannot separate them. A problem without
 validation points has no value. It is not a column of `derive_metrics`: it needs the pool, so the site export derives it
-(`srbf.metrics.improvability`), with the release's public methods without the Oracle as the pool.
+(`scripts/improvability.py`, outside the srbf package so that a site metric does not change the judge), with the release's public methods without the Oracle as the pool.
 
 ## Symbolic agreement
 
