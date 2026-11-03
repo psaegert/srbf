@@ -133,6 +133,16 @@ the validation rates `numeric_recovery_val`, `numeric_recovery_relative_val` and
 empty too, neither a miss nor a hit. Every summary leaves the problem out of them; its support-split metrics are
 judged as usual.
 
+### `fit_quality_undefined_fit`, `fit_quality_undefined_val`: a target without variance
+
+A split whose target is the same value on every point has no FVU: its denominator is 0, so the FVU would be 0/0 or
+x/0 whatever the prediction. This happens on ERBench windows where a formula saturates in float64, and in point
+sets where ERBench's integer sampler puts every value on one integer. srbf keeps those problems as the benchmark
+generates them. `fit_quality_undefined_fit` and `fit_quality_undefined_val` are true for a split without points or
+without variance. For that split, `fvu`, `log10_fvu`, `r2` and the numeric recoveries are empty, as without a test
+split, and the table marks the row in `constant_target_fit` and `constant_target_val`. The symbolic metrics and the
+other split are judged as usual.
+
 ## Symbolic agreement
 
 All columns of this group compare the **judged skeleton** of the prediction with \(\bar\tau\),

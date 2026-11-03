@@ -351,9 +351,11 @@ def listed_metrics(cells: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 RATE_KEYS = [m[0] for m in METRICS if m[4] == "rate"]
-#: Rates read on the validation points. A problem without them (a data catalog whose authors give no test split, owner
-#: 2026-10-17) has none of these: srbf's table leaves them empty, and every summary leaves the problem out of them.
+#: Rates that are not defined for a run: the validation rates of a problem without validation points (a data catalog
+#: whose authors give no test split, owner 2026-10-17), and the numeric rates of a split whose target is the same value
+#: on every point (owner 2026-11-03). srbf's table leaves them empty, and every summary leaves the problem out of them.
 VALIDATION_RATES = {"numeric_recovery_val", "numeric_recovery_relative_val", "symbolic_recovery_mask_none"}
+FIT_RATES = {"numeric_recovery_fit", "numeric_recovery_relative_fit"}
 
 
 def problem_share(runs: list[Mapping[str, Any]], key: str) -> float | None:
@@ -486,11 +488,12 @@ def load_rows(root: str) -> dict[str, dict[tuple[str, int], Rows]]:
         with open(path) as fh:
             for r in csv.DictReader(fh):
                 vals: dict[str, float | None] = {}
-                no_test = fnum(r.get("n_validation")) == 0
+                no_val = fnum(r.get("n_validation")) == 0 or fnum(r.get("constant_target_val")) == 1
+                no_fit = fnum(r.get("constant_target_fit")) == 1
                 for k in RATE_KEYS:
                     v = fnum(r.get(k))
-                    if v is None and no_test and k in VALIDATION_RATES:
-                        vals[k] = None   # no validation points (a data catalog without a test split): not defined, not a miss
+                    if v is None and ((no_val and k in VALIDATION_RATES) or (no_fit and k in FIT_RATES)):
+                        vals[k] = None   # not defined for this run (no test split, or a target without variance): not a miss
                         continue
                     vals[k] = (0.0 if v is None else v) if k in r else None   # a column these rows do not have is no rate of 0
                 for k in CONT_KEYS:

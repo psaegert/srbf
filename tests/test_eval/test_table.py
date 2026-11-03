@@ -257,3 +257,23 @@ def test_a_problem_without_validation_points_has_no_validation_metrics(tmp_path,
     lf = _col(rows, "log10_fvu_val")
     assert np.isfinite(lf[0]) and all(isinstance(v, float) and np.isnan(v) for v in lf[1:])
     assert np.isfinite(_col(rows, "log10_fvu_fit")[1])
+
+
+def test_a_target_without_variance_has_no_fit_quality(tmp_path, engine):
+    """A target that is the same number on every point (an ERBench window on which the formula saturates in float64)
+    has an FVU of 0/0 or x/0 whatever the prediction (owner 2026-11-03: "The FVU can be undefined then"): that split's
+    fit-quality metrics are empty, as without a test split, and the other split is judged as before."""
+    snap = _snapshot([["+", "x1", "x2"], ["+", "x1", "x2"], ["*", "x1", "x2"]])
+    snap["y_val"][1] = np.full(16, 7.0)                    # row 1: a constant test target, predicted exactly
+    snap["y_pred_val"][1] = np.full(16, 7.0)
+    snap["y_val"][2] = np.full(16, 7.0)                    # row 2: a constant test target, predicted wrongly
+    snap["y_pred_val"][2] = np.full(16, 3.0)
+    snap["y"][2] = np.full(16, 7.0)                        # ... and a constant fitting target
+    snap["y_pred"][2] = np.full(16, 3.0)
+    rows = judge_result_file(_write(tmp_path, "toy", "choices_000008.pkl", snap), method="m", engine=engine)
+    assert _col(rows, "numeric_recovery_val") == [1, "", ""]          # empty, not a perfect fit and not a miss
+    assert _col(rows, "numeric_recovery_fit") == [1, 1, ""]
+    lf = _col(rows, "log10_fvu_val")
+    assert np.isfinite(lf[0]) and all(isinstance(v, float) and np.isnan(v) for v in lf[1:])
+    assert np.isfinite(_col(rows, "log10_fvu_fit")[1]) and np.isnan(_col(rows, "log10_fvu_fit")[2])
+    assert _col(rows, "constant_target_val") == [0, 1, 1] and _col(rows, "constant_target_fit") == [0, 0, 1]
