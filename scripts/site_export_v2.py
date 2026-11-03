@@ -263,7 +263,8 @@ METRICS = [
      "over problems is the Mean Improvability). 0 % is the best of the release, 100 % a formula that fails "
      "or blows up. Two formulas that both reproduce the points within float32 precision (FVU at most 2^-23) tie. The best "
      "is taken over the release's public methods, without the Oracle; a method outside them (the Oracle, a private "
-     "method) can score below 0 %. Problems without held-out points have no value."),
+     "method) that beats the best scores below 0 %, down to -100 %: the share of the best error it saves. Problems "
+     "without held-out points have no value."),
     # ---- comparisons of the prediction with the ground truth ----
     ("mdl_ratio", "MDL Ratio", "MDL Ratio", "Size Compared to the Ground Truth", "cont", None, "main", "ratio", (-4.0, 4.0, "log2"),
      "The length of the predicted formula in bits divided by the length of the true formula. Length in bits (MDL, minimum description length) is how many bits it takes to write the formula down, including the digits of its numbers, measured by SimpliPy after simplification. 1 means as long as the true formula, 2 twice as long. Means are taken on a log scale, so ×2 and ×0.5 cancel. Flash-ANSR picks its prediction with this same length measure."),

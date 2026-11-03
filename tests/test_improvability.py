@@ -23,13 +23,13 @@ def test_the_error_is_the_rmse_in_units_of_the_targets_spread_and_recovered_pred
     assert validation_error(float("nan"), True) is None
 
 
-def test_improvability_is_zero_at_the_pools_best_one_for_a_failure_and_negative_below_the_best():
+def test_improvability_is_zero_at_the_pools_best_one_for_a_failure_and_down_to_minus_one_below_the_best():
     best = pool_best([1e-2, None, math.inf, 1e-3])
     assert best == 1e-3
     assert improvability(1e-3, best) == 0.0
     assert improvability(1e-2, best) == pytest.approx(0.9)
     assert improvability(math.inf, best) == 1.0
-    assert improvability(1e-4, best) == pytest.approx(-9.0)               # a method outside the pool, better than it
+    assert improvability(1e-4, best) == pytest.approx(-0.9)               # outside the pool and better: the share it saves
     assert improvability(None, best) is None and improvability(1e-2, None) is None
     assert pool_best([None, math.inf]) is None
     # two recovered predictions tie, whatever digits lie below the bar
@@ -60,10 +60,11 @@ def test_the_export_measures_every_run_against_the_public_pools_best_on_the_same
     # draw 2 of the same problem has its own points and its own best (b at budget 1)
     assert imp("b", 1, (2, 0)) == 0.0 and imp("a", 1, (2, 0)) == pytest.approx(0.9)
     # the unpublished budget does not set the best, but is measured against it
-    assert imp("b", 64, (1, 0)) == pytest.approx(1.0 - 1e-3 / export.validation_error(-16.0, True))
+    assert imp("b", 64, (1, 0)) == pytest.approx((ERROR_FLOOR - 1e-3) / 1e-3)   # better than the best: below 0
     # a failed run is 1; a private method is measured against the public pool, and can beat it
     assert imp("a", 1, (1, 1)) == 1.0
-    assert imp("private", 1, (1, 0)) < 0.0 and imp("private", 1, (2, 0)) == pytest.approx(1.0 - 1e-2 / 10 ** -0.5)
+    assert imp("private", 1, (1, 0)) == pytest.approx((ERROR_FLOOR - 1e-3) / 1e-3)
+    assert imp("private", 1, (2, 0)) == pytest.approx(1.0 - 1e-2 / 10 ** -0.5)
     # no held-out points: no value (b answered problem 1 without a validation FVU)
     assert imp("b", 1, (1, 1)) is None
 

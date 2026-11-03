@@ -8,9 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Improvability, Validation (Mean Improvability).** `srbf.metrics.improvability`: a prediction's validation error
-  against the best error a fixed pool reaches on the same problem and points, \((e - e^\ast)/e\) with \(e\) the RMSE
+  against the best error a fixed pool reaches on the same problem and points, \((e - e^\ast)/\max(e, e^\ast)\) with \(e\) the RMSE
   in units of the targets' standard deviation (Erickson et al. 2025). Numerically recovered predictions tie (the error
-  is floored at \(\sqrt{2^{-23}}\)), a failed prediction is 1. The site export derives it for every run, with the
+  is floored at \(\sqrt{2^{-23}}\)), a failed prediction is 1, and a method outside the pool that beats it scores
+  down to -1. The site export derives it for every run, with the
   release's public methods (without the Oracle) at every budget as the pool, and the explorer lists it under Fit Error;
   its mean over problems is the Mean Improvability.
 

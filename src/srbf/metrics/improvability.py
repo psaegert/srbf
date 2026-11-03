@@ -4,16 +4,17 @@ For a problem with the pool's best error ``e*``, a prediction with error ``e`` h
 
     (e - e*) / e  =  1 - e* / e
 
-(Erickson et al. 2025, TabArena; its mean over problems is the Mean Improvability).
-0 is the pool's best, 1 is a prediction with an unbounded error or none at all. The error is the test RMSE in units
-of the test targets' standard deviation, sqrt(FVU): on one problem's test points every method's RMSE is that same
-multiple of it, so the ratio is the ratio of the RMSEs, and the problems share one scale.
+(Erickson et al. 2025, TabArena; its mean over problems is the Mean Improvability). 0 is the pool's best, 1 is a
+prediction with an unbounded error or none at all. The error is the test RMSE in units of the test targets' standard
+deviation, sqrt(FVU): on one problem's test points every method's RMSE is that same multiple of it, so the ratio is
+the ratio of the RMSEs, and the problems share one scale.
 
 Two predictions that both reproduce the test points within float32 precision (FVU <= 2^-23, Numeric Recovery) tie:
 the error is read no lower than sqrt(2^-23), so the digits a recovered prediction holds below it, which are round-off,
 cannot make it worse than another recovered one.
 
-A method outside the pool can beat the pool's best: its improvability is then negative.
+A method outside the pool can beat the pool's best. Its improvability is then (e - e*) / e*, the share of the best
+error it saves, so the scale runs from -1 to 1 and is the formula above wherever e >= e*: (e - e*) / max(e, e*).
 """
 from __future__ import annotations
 
@@ -45,10 +46,10 @@ def pool_best(errors: Iterable[float | None]) -> float | None:
 
 
 def improvability(error: float | None, best: float | None) -> float | None:
-    """``1 - best / error``: 0 at the pool's best, 1 for an unbounded error, negative below the pool's best.
-    None where either error is undefined."""
+    """``(error - best) / max(error, best)``: 0 at the pool's best, 1 for an unbounded error, down to -1 below the
+    pool's best. None where either error is undefined."""
     if error is None or best is None:
         return None
     if math.isinf(error):
         return 1.0
-    return 1.0 - best / error
+    return (error - best) / max(error, best)

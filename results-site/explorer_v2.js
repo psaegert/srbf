@@ -743,7 +743,7 @@
     var step = Math.max(1, Math.ceil(span / (target || 6)));
     for (k = Math.ceil(lo / step - 1e-9) * step; k <= hi + 1e-9; k += step) { out.push(k); } return out;
   }
-  function tickLabel(metric, x) { var tf = tfOf(metric); if (metric.kind === "rate") { return roundNum(100 * x) + "%"; } if (tf === "log2") { return roundNum(Math.pow(2, x)); } if (tf === "log10") { return roundNum(Math.pow(10, x)) + " s"; } return roundNum(x); }
+  function tickLabel(metric, x) { var tf = tfOf(metric); if (metric.kind === "rate" || metric.fmt === "pct") { return roundNum(100 * x) + "%"; } if (tf === "log2") { return roundNum(Math.pow(2, x)); } if (tf === "log10") { return roundNum(Math.pow(10, x)) + " s"; } return roundNum(x); }
   function ticksFor(metric, ymin, ymax, target) { var tf = tfOf(metric); return tf === "log2" ? logTicks(ymin, ymax, 2, target) : tf === "log10" ? logTicks(ymin, ymax, 10, target) : linearTicks(ymin, ymax, target); }
   // labels that would sit closer than `gap` pixels are dropped, the rounder value kept (an integer before a fraction)
   function thinTicks(ticks, pos, gap, weight) {
@@ -1514,7 +1514,7 @@
     var ft = rate ? fd : reCombine(ssets, "normal");
     return { v: fd.mu, lo: fd.lo, hi: fd.hi, piLo: fd.piLo, piHi: fd.piHi, n: ft ? ft.n : fd.n, S: fd.S, p: ft ? ft.p : null, wins: wins, losses: losses };
   }
-  function fmtDelta(metric, d) { if (!isFinite(d)) { return "–"; } var tf = tfOf(metric); if (metric.kind === "rate") { return (d >= 0 ? "+" : "") + (100 * d).toFixed(1) + " pp"; } if (tf === "log2") { return "× " + Math.pow(2, d).toFixed(2); } if (tf === "log10") { return "× " + Math.pow(10, d).toFixed(2); } return (d >= 0 ? "+" : "") + d.toFixed(metric.fmt === "num3" ? 3 : 2); }
+  function fmtDelta(metric, d) { if (!isFinite(d)) { return "–"; } var tf = tfOf(metric); if (metric.kind === "rate" || metric.fmt === "pct") { return (d >= 0 ? "+" : "") + (100 * d).toFixed(1) + " pp"; } if (tf === "log2") { return "× " + Math.pow(2, d).toFixed(2); } if (tf === "log10") { return "× " + Math.pow(10, d).toFixed(2); } return (d >= 0 ? "+" : "") + d.toFixed(metric.fmt === "num3" ? 3 : 2); }
   function renderPaired(shown) {
     if (shown.length < 2) { return '<p class="v2hint">Select at least two methods; one of them is the baseline.</p>'; }
     if (!state.base || !shown.some(function (m) { return m.key === state.base; })) { state.base = shown[0].key; }

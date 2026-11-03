@@ -131,12 +131,13 @@ How far a prediction's validation error is from the best error a fixed pool of m
 and the same validation points (Erickson et al. 2025; its mean over problems is the Mean Improvability):
 
 $$
-\frac{e - e^\ast}{e} = 1 - \frac{e^\ast}{e}, \qquad e = \max\Big(\sqrt{\operatorname{FVU}(y_{\mathrm{val}}, \hat y_{\mathrm{val}})},\; \sqrt{\varepsilon_{32}}\Big) .
+\frac{e - e^\ast}{\max(e, e^\ast)}, \qquad e = \max\Big(\sqrt{\operatorname{FVU}(y_{\mathrm{val}}, \hat y_{\mathrm{val}})},\; \sqrt{\varepsilon_{32}}\Big) .
 $$
 
 \(e\) is the validation RMSE in units of the targets' standard deviation, so on one problem's points the ratio is the
-ratio of the RMSEs. \(e^\ast\) is the lowest \(e\) of the pool at any budget. 0 is the pool's best, a failed prediction
-is 1, and a method outside the pool that beats it is negative. The floor at \(\sqrt{\varepsilon_{32}}\) makes two
+ratio of the RMSEs. \(e^\ast\) is the lowest \(e\) of the pool at any budget, so for the pool's methods the denominator
+is \(e\) and this is \(1 - e^\ast/e\). 0 is the pool's best and a failed prediction is 1. A method outside the pool that
+beats it scores \((e - e^\ast)/e^\ast\), down to \(-1\): the share of the best error it saves. The floor at \(\sqrt{\varepsilon_{32}}\) makes two
 numerically recovered predictions tie, so round-off below the recovery bar cannot separate them. A problem without
 validation points has no value. It is not a column of `derive_metrics`: it needs the pool, so the site export derives it
 (`srbf.metrics.improvability`), with the release's public methods without the Oracle as the pool.
