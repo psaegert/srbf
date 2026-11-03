@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["nesymres-100M|koza|8|1|0"]={"0":["* x1 exp * -1.93 pow tan x1 2",0],"1":["* * 0.1629 pow sin * 2.596 x1 2 pow cos pow x1 2 2",0]};})();

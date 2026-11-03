@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["udsr|nonic|208000|2|0"]={"0":["* * abs + 1 pow x1 4 - log rootn + x1 + 1 pow pow 1 2 4 2 + neg + - exp pow * x1 1 3 tan x1 x1 + + + 0.3455 * -0.7462 x1 * -1.042 pow x1 2 * -0.3794 pow x1 3 x1",0]};})();

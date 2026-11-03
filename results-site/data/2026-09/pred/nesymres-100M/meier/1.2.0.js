@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["nesymres-100M|meier|1|2|0"]={"0":["* x1 * x2 pow + x1 pow x2 3 -1",0],"1":["* pow x1 5 pow + x2 pow x1 3 -3",0]};})();

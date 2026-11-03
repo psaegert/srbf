@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["gpgomea|nonic|110218|2|0"]={"0":["+ 0.01374 * 0.2277 * + pow pow x1 2 2 exp exp -0.719 * x1 exp exp x1",0]};})();

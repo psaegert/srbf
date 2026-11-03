@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["dsr|pagie|16000|1|0"]={"0":["inv - 1.561 pow cos inv / neg * / pow x1 3 - + x2 1.006 x2 x2 1.006 3",0]};})();

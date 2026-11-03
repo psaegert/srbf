@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["gpgomea|pagie|131072|2|0"]={"0":["+ 0.5006 * 0.5465 + cos exp cos x1 exp / log abs x2 + rootn abs x2 2 1e-06",0]};})();

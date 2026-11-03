@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-120M-pysr|nonic|4096|1|0"]={"0":["+ x1 * rootn + pow sinh * 6.257 pow pow pow x1 2 pow 0.974 pow x1 4 0.9962 0.9962 0.816 4 + pow x1 2 pow x1 3",1]};})();

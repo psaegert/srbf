@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["udsr|grammarvae|52000|1|0"]={"0":["+ - x1 -0.3333 cos + + inv + pow / 1 1 2 pow / rootn 1 2 2 4 -2.071 pow x1 2",0]};})();

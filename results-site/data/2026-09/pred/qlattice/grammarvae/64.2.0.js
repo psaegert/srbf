@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["qlattice|grammarvae|64|2|0"]={"0":["+ * -6.209 * - * -0.1613 x1 0.01719 tanh pow + 20 / - - * + * 0.356 x1 0.3665 - * 0.3763 x1 4.068 20 abs - * + * 0.356 x1 0.3665 - * 0.3763 x1 4.068 20 2 2 0.2517",0]};})();

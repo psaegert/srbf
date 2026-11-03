@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["gpgomea|physo-astro|16384|2|0"]={"0":["+ -0.04578 * -0.1303 / + sin - x1 -7.8 - / -10.03 + x1 1e-06 pow x1 2 + * exp x1 rootn abs / x1 + x1 1e-06 2 1e-06",0],"1":["+ 516.4 * 516.2 cos + - rootn abs -6.068 2 exp 11.14 log abs - 6.926 x1",0]};})();

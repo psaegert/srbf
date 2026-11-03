@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-120M-pysr|koza|512|1|0"]={"0":["* 1.015 sinh atanh + x1 * rootn * pow / 8 7 0.4447 pow x1 3 5 sin * -1.421 pow x1 2",0],"1":["* 1.85 * - cosh x1 1.532 - pow x1 4 pow x1 2",0]};})();

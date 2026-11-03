@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["qlattice|grammarvae|512|2|0"]={"0":["- * 4.11 + * + * 0.03604 x1 0.152 / abs + * 0.2325 x1 0.9264 * + * 0.2325 x1 0.9264 + 0.05 / + - abs + * 0.2325 x1 0.9264 0.05 abs - abs + * 0.2325 x1 0.9264 0.05 2 + * 0.2434 x1 0.4332 1.987",0]};})();

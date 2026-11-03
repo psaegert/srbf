@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-120M-pysr|pagie|4096|1|0"]={"0":["+ / x1 + x1 inv pow x1 3 / x2 + x2 inv pow x2 3",1]};})();

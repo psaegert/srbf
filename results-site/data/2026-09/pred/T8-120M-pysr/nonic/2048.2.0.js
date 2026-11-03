@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["T8-120M-pysr|nonic|2048|2|0"]={"0":["* x1 - - + sinh sinh + * 1.167 x1 0.6993 0.18 x1 * x1 * sinh sinh - / * 5 x1 7 0.076 + asin x1 1.1",0]};})();

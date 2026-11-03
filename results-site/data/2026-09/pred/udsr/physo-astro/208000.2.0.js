@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["udsr|physo-astro|208000|2|0"]={"0":["/ 1 / * - x1 + + -0.5564 * 0.2 x1 * -0.2876 pow x1 2 x1 tanh pow -1 4",1],"1":["* - x1 + + + -2.004 * -6.906 x1 * -7.906 pow x1 2 * -2.635 pow x1 3 inv rootn / exp 1 sin exp - + 1 + 1 1 1 2",1]};})();

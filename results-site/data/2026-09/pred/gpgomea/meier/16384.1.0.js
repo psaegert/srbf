@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["gpgomea|meier|16384|1|0"]={"0":["+ -4.4 * 1 - * pow x2 2 / pow x1 2 * + x2 x1 + 1 / 1e-06 abs + x2 x1 -4.399",1],"1":["+ 10.23 * 1.01 * pow pow / x1 * x2 + 1 / 1e-06 abs x2 2 2 * x2 x1",0]};})();

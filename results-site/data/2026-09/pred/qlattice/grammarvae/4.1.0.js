@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["qlattice|grammarvae|4|1|0"]={"0":["- * 11.57 + * 0.08737 x1 0.116 0.9596",0]};})();

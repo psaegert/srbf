@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["rilsrols|sine|512|2|0"]={"0":["- + - + - * -0.07937 pow x1 2 * * 0.8917 x1 sin x1 * 0.306 x1 * 1.46 pow sin x1 2 * 3.444 sin x1 0.05599",0]};})();

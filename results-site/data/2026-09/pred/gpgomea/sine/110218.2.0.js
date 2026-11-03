@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["gpgomea|sine|110218|2|0"]={"0":["+ 1.854 * -12.6 / rootn abs + sin x1 sin -25.98 2 + - + log abs -4.996 rootn abs 18.75 2 cos * x1 -11.53 1e-06",0]};})();

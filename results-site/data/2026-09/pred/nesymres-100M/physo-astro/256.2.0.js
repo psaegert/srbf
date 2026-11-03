@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["nesymres-100M|physo-astro|256|2|0"]={"0":["/ * 10.59 x1 pow + * 2 pow x1 2 * 2.782 x1 2",1],"1":["+ + * * -8.447 x1 - neg x1 * 0.2999 pow - 1 * 0.7723 x1 2 * 2 x1 1.149",1]};})();

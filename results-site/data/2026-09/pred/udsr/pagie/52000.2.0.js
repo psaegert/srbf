@@ -1,0 +1,1 @@
+window.RESULTS_V2_PRED=window.RESULTS_V2_PRED||{};(function(){var R=window.RESULTS_V2_PRED;R["2026-09"]=R["2026-09"]||{};R["2026-09"]["udsr|pagie|52000|2|0"]={"0":["abs + tanh abs abs * * x1 * 1 / tanh * * x1 tanh / x1 inv x1 1 1 + -0.1624 1 tanh pow + 0.006761 * tanh / cos 1 0.5836 x2 2",0]};})();
