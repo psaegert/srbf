@@ -289,6 +289,33 @@ html[data-theme="dark"] #va {
 .repro-reading-text { margin: 0; max-width: 46rem; color: var(--ink-soft); font-size: .93rem; line-height: 1.65; }
 .repro-code { margin: 0; padding: .75rem .95rem; overflow-x: auto; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-ctl); font-size: 12px; line-height: 1.6; }
 .repro-code code { font-family: "JetBrains Mono", ui-monospace, monospace; white-space: pre; background: none; padding: 0; }
+/* the Benchmarks page: a filter (one origin, any tags) over one table of the problem sets, their tags as small
+   chips; the tags' meanings below as a definition list with the same chips */
+.bm-filter { display: grid; gap: .55rem; margin: 0 0 1rem; }
+.bm-filter[hidden] { display: none; }
+.bm-filter-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: .35rem .8rem; }
+.bm-label { min-width: 3.6rem; color: var(--ink-faint); font-size: .78rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+.bm-seg, .bm-chips { display: flex; flex-wrap: wrap; gap: .35rem; min-width: 0; }
+.bm-seg button, .bm-chips button { font: inherit; font-size: 13px; color: var(--ink-soft); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-ctl); padding: 3px 10px; cursor: pointer; white-space: nowrap; }
+.bm-seg button:hover, .bm-chips button:hover, .bm-seg button:focus-visible, .bm-chips button:focus-visible { color: var(--ink); background: var(--accent-soft); outline: none; }
+.bm-seg button[aria-pressed="true"], .bm-chips button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.bm-count { margin: .2rem 0 0; color: var(--ink-soft); font-size: .93rem; font-variant-numeric: tabular-nums; }
+.bm-scroll { overflow-x: auto; margin: 0 0 .9rem; }
+.bm-table { border-collapse: collapse; width: 100%; font-size: .93rem; font-variant-numeric: tabular-nums; }
+.bm-table th, .bm-table td { padding: .5rem 1.1rem .5rem 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.bm-table thead th { color: var(--ink-faint); font-size: .78rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; }
+.bm-table tbody th { font-weight: 600; color: var(--ink); min-width: 12rem; }
+.bm-table td { color: var(--ink-soft); }
+.bm-table .num { text-align: right; white-space: nowrap; }
+.bm-table td:first-of-type { white-space: nowrap; }
+.bm-tags { min-width: 9rem; }
+.bm-tag { display: inline-block; margin: 0 .3rem .25rem 0; padding: .05rem .45rem; border: 1px solid var(--line); border-radius: var(--r-ctl); color: var(--ink-soft); font-size: .8rem; white-space: nowrap; }
+.bm-src { overflow-wrap: anywhere; min-width: 8rem; }
+.bm-cite { color: var(--ink-soft); }
+.bm-defs { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .45rem 1rem; margin: 0 0 .85rem; }
+.bm-defs dt { margin: 0; }
+.bm-defs dd { margin: 0; color: var(--ink-soft); font-size: .96rem; }
+@media (max-width: 560px) { .bm-defs { grid-template-columns: minmax(0, 1fr); } .bm-defs dd { margin-bottom: .4rem; } }
 .metric h4 { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin: 0 0 .4rem; font-size: .96rem; font-weight: 650; color: var(--ink); }
 /* prose written for one benchmark release is shown with that release only */
 html[data-release="2026-09"] [data-for="2026-07"], html[data-release="2026-07"] [data-for="2026-09"] { display: none; }

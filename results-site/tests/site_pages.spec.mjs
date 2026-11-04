@@ -15,10 +15,11 @@ function collectErrors(page) {
 // pages explain two of the explorer's displays and are reached from those displays (owner 2026-09-26), not the header.
 // The home page is the brand's link; Explorer is the explorer's page.
 const NAV = [['explorer.html', 'Explorer'], ['progress.html', 'Progress'], ['guide.html', 'How to read'], ['metrics.html', 'Metrics'],
-  ['reproductions.html', 'Reproductions']];
+  ['benchmarks.html', 'Benchmarks'], ['reproductions.html', 'Reproductions']];
 const FOOTER = ['https://srbf.readthedocs.io/', 'https://github.com/psaegert/srbf', 'https://pypi.org/project/srbf/', 'privacy.html'];
 const PAGES = [['/', null], ['/explorer.html', 'Explorer'], ['/progress.html', 'Progress'], ['/guide.html', 'How to read'], ['/metrics.html', 'Metrics'],
-  ['/reproductions.html', 'Reproductions'], ['/ranks.html', null], ['/paired.html', null], ['/privacy.html', null]];
+  ['/benchmarks.html', 'Benchmarks'], ['/reproductions.html', 'Reproductions'], ['/ranks.html', null], ['/paired.html', null],
+  ['/privacy.html', null]];
 
 // What these checks read is there once the page has loaded: KaTeX typesets from its script's onload, which runs before the
 // page's load event. The fonts are given time to settle before anything is measured. "networkidle" also waited on every
@@ -163,6 +164,43 @@ test('the guide opens with the protocol, in the release\'s own words, and its li
   for (const href of await page.locator('#protocol a[href^="#"]').evaluateAll((as) => as.map((a) => a.getAttribute('href')))) {
     await expect(page.locator(href + ' > h3'), href).toHaveCount(1);
   }
+  expect(errors).toEqual([]);
+});
+
+// The Benchmarks page: every problem set srbf runs in one table, with a filter by origin and tags; the tags, the rules
+// and srbf's decisions explained below it. scripts/site_benchmarks.py writes the page from data/benchmarks.yaml and
+// data/benchmarks/problem_sets.json.
+test('the Benchmarks page: one row per problem set, a filter that keeps the rows with the origin and every chosen tag', async ({ page, request }) => {
+  const errors = collectErrors(page);
+  const sets = await (await request.get('/data/benchmarks/problem_sets.json')).json();
+  await page.goto('/benchmarks.html');
+  const rows = page.locator('.bm-table tbody tr');
+  await expect(rows).toHaveCount(sets.length);
+  const visible = () => page.locator('.bm-table tbody tr:not([hidden])').count();
+  const total = (list) => list.reduce((n, s) => n + s.problems, 0).toLocaleString('en-US');
+  await expect(page.locator('.bm-filter')).toBeVisible();
+  await expect(page.locator('.bm-count')).toHaveText(`All ${sets.length} problem sets, ${total(sets)} problems.`);
+  // one origin
+  await page.locator('.bm-seg button', { hasText: 'measured data' }).click();
+  const measured = sets.filter((s) => s.origin === 'measured data');
+  expect(await visible()).toBe(measured.length);
+  await expect(page.locator('.bm-count')).toHaveText(`${measured.length} problem sets, ${total(measured)} problems.`);
+  // and a tag: only the rows with both
+  await page.locator('.bm-chips button', { hasText: 'no test split' }).click();
+  const both = measured.filter((s) => s.tags.includes('no test split'));
+  expect(await visible()).toBe(both.length);
+  await expect(page.locator('.bm-chips button', { hasText: 'no test split' })).toHaveAttribute('aria-pressed', 'true');
+  // all origins again, the tag still chosen
+  await page.locator('.bm-seg button', { hasText: 'all' }).click();
+  expect(await visible()).toBe(sets.filter((s) => s.tags.includes('no test split')).length);
+  await page.locator('.bm-chips button', { hasText: 'no test split' }).click();
+  expect(await visible()).toBe(sets.length);
+  // every tag a row shows is explained, and the explanations follow the list
+  for (const tag of new Set(sets.flatMap((s) => s.tags))) {
+    await expect(page.locator('#tags dt .bm-tag', { hasText: new RegExp(`^${tag}$`) })).toHaveCount(1);
+  }
+  expect(await page.locator('main h2').allTextContents()).toEqual(['The problem sets', 'What the tags mean',
+    'How srbf runs a benchmark', 'What srbf decided', 'What srbf could not include']);
   expect(errors).toEqual([]);
 });
 

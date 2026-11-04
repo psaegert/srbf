@@ -1,0 +1,253 @@
+# The Benchmarks page: every problem set srbf runs, what kind of test it is, what srbf decided to run it, and what
+# srbf could not include. scripts/site_benchmarks.py writes the page (benchmarks.html) from this file and from
+# benchmarks/problem_sets.json, the list made from symbolic-data's release count (its
+# tools/catalog_build/count_release.py). Texts are for a first-time reader.
+
+# names for problem sets whose own description does not read as a name
+names:
+  constant: Constant
+  ai-feynman-database-100-main-equations: AI Feynman laws, dimensionless
+  autora-synthetic-behavioural-science-models-points: AutoRA behavioural-science models (fixed points)
+  fastsrb: FastSRB (Feynman laws, SRSD ranges)
+  esr-cosmology: ESR cosmology data
+  esr-cosmology-datasets: ESR cosmology formulas
+  pysr-empiricalbench: PySR EmpiricalBench data
+  pysr-empiricalbench-formulas: PySR EmpiricalBench formulas
+  feynman: AI Feynman laws
+  feynman-bonus: AI Feynman bonus laws
+  grammarvae: GrammarVAE
+  jin: Jin et al.
+  keijzer: Keijzer
+  keijzer-points: Keijzer (fixed points)
+  korns: Korns
+  koza: Koza
+  livermore: Livermore
+  livermore2: Livermore2
+  meier: Meier
+  neat: Neat
+  neat-points: Neat (fixed points)
+  nguyen: Nguyen
+  nonic-points: Nonic (fixed points)
+  pagie: Pagie
+  physo-astro: PhySO astrophysics
+  physo-class: PhySO Class SR
+  poly: Poly
+  r-rationals-points: R rationals (fixed points)
+  sine-points: Sine (fixed points)
+  soose-fc: SOOSE-FC
+  soose-nc: SOOSE-NC
+  scrbenchmark: SCRBenchmark (shape constraints on SRSD-Feynman)
+  soose-wc: SOOSE-WC
+  srsd-dummy: SRSD-Feynman with dummy inputs
+  vladislavleva: Vladislavleva
+  vladislavleva-points: Vladislavleva (fixed points)
+  erbench-densities: ERBench Densities
+  erbench-eponymous: ERBench Eponymous
+  erbench-oeis: ERBench OEIS
+  erbench-phybench: ERBench PHYBench
+  erbench-syneq: ERBench SynEq
+
+# sources where a problem set's records name none, or name its paper only in words
+sources:
+  feynman: ["https://doi.org/10.1126/sciadv.aay2631"]
+  feynman-bonus: ["https://doi.org/10.1126/sciadv.aay2631"]
+  fastsrb: ["https://arxiv.org/abs/2508.14481"]
+  srsd-dummy: ["https://arxiv.org/abs/2206.10540"]
+  erbench-densities: ["https://arxiv.org/abs/2606.09276"]
+  erbench-eponymous: ["https://arxiv.org/abs/2606.09276"]
+  erbench-oeis: ["https://arxiv.org/abs/2606.09276"]
+  erbench-phybench: ["https://arxiv.org/abs/2606.09276"]
+  erbench-syneq: ["https://arxiv.org/abs/2606.09276"]
+  jin: ["https://arxiv.org/abs/1910.08892"]
+  constant: ["https://arxiv.org/abs/1912.04871"]
+  livermore: ["https://arxiv.org/abs/1912.04871"]
+  livermore2: ["https://arxiv.org/abs/2111.00053"]
+  physo-astro: ["https://arxiv.org/abs/2303.03192"]
+  physo-class: ["https://arxiv.org/abs/2312.01816"]
+  soose-fc: ["https://arxiv.org/abs/2106.06427"]
+  soose-nc: ["https://arxiv.org/abs/2106.06427"]
+  soose-wc: ["https://arxiv.org/abs/2106.06427"]
+  meier: ["Meier, Gonter and Kruse 2013"]
+  koza: ["Koza 1994 (MIT Press)"]
+  poly: ["Poli 2003 and DSO (Petersen et al. 2021)"]
+  srbench-2021-strogatz: ["https://arxiv.org/abs/2107.14351", "https://github.com/EpistasisLab/pmlb"]
+  nonic-points: ["Krawiec and Pawlak 2013 (GECCO), semantic backpropagation"]
+  r-rationals-points: ["Krawiec and Pawlak 2013 (GECCO), semantic backpropagation", "Mundhenk et al. 2021 (NeurIPS)"]
+
+intro: >-
+  srbf does not make up its own problems. It collects the benchmarks that papers on symbolic regression use and runs
+  every method on all of them, the same way. This page lists them, says what kind of test each one is, and explains
+  what srbf decided where a benchmark left something open, and which benchmarks it could not include.
+
+# how a benchmark becomes a problem set: one topic each
+rules:
+  - title: Formulas
+    text: >-
+      Most problem sets are formulas. srbf takes each formula, its constants, the ranges and distributions of its
+      inputs and any inputs the formula does not use from the benchmark's authors. srbf itself chooses how many points
+      a method sees (512 to fit, 512 to test) and the noise, the same for every formula problem; constants that the
+      authors draw at random are drawn once per problem. Where the authors fix the exact points (for example x = 1, 2,
+      ..., 50), srbf uses those points.
+  - title: Data
+    text: >-
+      Some problem sets are data: measurements, simulations or files the authors published, with or without a known
+      formula. srbf uses the data as published. Each run fits at most 512 rows and tests on at most 512 rows, drawn
+      afresh. srbf tests only where the authors name test data or a way to choose it; where they do not, a method is
+      scored only on the data it fitted, and the problem set carries the tag "no test split".
+  - title: Tests
+    text: >-
+      Where the authors give test points, srbf tests on them. Where they give several (for example inside and beyond
+      the training range), each is a group of its own. Where a formula benchmark gives none, srbf tests on fresh points
+      from the training distribution.
+  - title: Groups
+    text: >-
+      A benchmark keeps the groups its authors divide it into (for example easy, medium and hard), however few problems
+      a group holds. srbf sets a division aside only when it does not describe the problems themselves (a setting of
+      the authors' generator, a variant of their protocol) or when two divisions overlap. A group with more than 1,024
+      problems is run on one fixed sample of 1,024, chosen by a hash of each problem's name, so it is the same on every
+      machine.
+
+# the origin of a problem set (one per set) and the tags (what it tests); a tag holds for at least half of the problems
+origins:
+  - name: science formula
+    text: Laws and models from physics and the other sciences.
+  - name: classic benchmark
+    text: The test functions that papers on genetic programming and symbolic regression have used for decades.
+  - name: generated formulas
+    text: Formulas drawn at random by a program, often by the generator a method was trained with.
+  - name: measured data
+    text: Data from experiments or observations.
+  - name: synthetic data
+    text: >-
+      Data a program made: simulations, the outputs of other models, or data files the authors generated.
+tags:
+  - name: extrapolation
+    text: The test points lie outside the region the fitting points come from.
+  - name: several tests
+    text: The authors test on more than one set of points; each test is a group of its own.
+  - name: no test split
+    text: >-
+      The authors name no test data, so a method is scored only on how well its formula fits the data it was given.
+  - name: dummy inputs
+    text: Some inputs do not appear in the formula; a method has to find out which ones matter.
+  - name: integer inputs
+    text: Some inputs take whole numbers only.
+  - name: fixed points
+    text: The authors give the exact points to fit, and srbf uses them.
+  - name: noisy data
+    text: The data carries noise, as published. (srbf sets the noise of formula problems itself.)
+  - name: outliers
+    text: The data contains outlying points on purpose.
+  - name: srbf-modified
+    text: >-
+      The authors left part of the setup open, and srbf completed it. These problem sets carry a star (*) in their
+      name.
+tag_rule: >-
+  A problem set carries a tag when it holds for at least half of its problems. The tags describe the problems as srbf
+  runs them.
+
+# the license line where a problem set's own one is a note rather than a license
+licenses_as:
+  feynman-bonus: "facts only: formulas and ranges from the AI Feynman bonus laws (Udrescu & Tegmark 2020)"
+  physo-astro: "facts only: formulas and ranges from Tenachi et al. 2023, Appendix A"
+
+licenses: >-
+  The license column names the license of what srbf took from a benchmark: its data, or the code or files that define
+  its formulas. "formulas only" means srbf took only formulas, constants and input ranges, which are facts, from a
+  paper or page without a license of its own.
+
+# what srbf decided or changed, compared with the papers (public text; the record of each decision is kept elsewhere)
+changes:
+  - title: The first publication
+    text: >-
+      Several classic problems circulate in later copies that differ from the paper that introduced them. srbf follows
+      the first publication. Keijzer-6 is the harmonic number 1 + 1/2 + ... + 1/x (Keijzer 2003), the amplitude of
+      Korns-7 is 213.80940889 (Korns 2011), Vladislavleva-7 is (x1 - 3)(x2 - 3) + 2 sin((x1 - 4)(x2 - 4))
+      (Vladislavleva et al. 2009), and
+      Sine is sin(x) on x = 0, 0.1, ..., 6.2 (Poli et al., A Field Guide to Genetic Programming, 2008). Keijzer-5,
+      Poly-10, and Nguyen-9 and -10 use the input ranges of their papers.
+  - title: Fixed points
+    text: >-
+      Some authors train on fixed points (a grid such as x = 1, 2, ..., 50) rather than on a distribution. srbf keeps
+      these points and holds such problems as data, in a problem set named "... (fixed points)": Keijzer-1 to -4 and
+      -6 to -9, Neat-6, Sine, Vladislavleva-2 and -3, Nonic, R1 to R3 and R1a to R3a, and the fixed-point problems of
+      the newer benchmarks. They are tested on the authors' test points where the authors give them.
+  - title: ERBench
+    text: >-
+      ERBench builds three problems from every formula: the fitting points come from a window half as wide as the
+      input range, placed at its start, middle or end, and the test points from the rest of the range. Each input is
+      drawn from its own mixture of one to three parts, and a problem may get one input the formula does not use.
+      srbf runs ERBench the same way, with its own point counts and noise. SynEq and OEIS are run on a fixed sample of
+      1,024 problems each.
+  - title: FastSRB and SRSD
+    text: >-
+      FastSRB's Feynman laws use the ranges of SRSD (Matsubara et al.). Where SRSD's own files disagree, srbf follows
+      SRSD's code and published data: I.44.4's n lies in [1e24, 1e26], and whole-number inputs (quantum numbers,
+      charges) are drawn as SRSD draws them. SRSD-Feynman with dummy inputs takes SRSD's own dummy inputs: the same
+      number per problem, the same positions and the same distribution, read from SRSD's published data.
+  - title: EQL robot arm*
+    text: >-
+      EQL's authors state only that the joint angles of their robot arm follow sinusoids with an amplitude of up to
+      pi/2 (pi for the extrapolation test). srbf draws each angle as (pi/2) sin(u), with u uniform on [0, 2 pi): the
+      values such a sinusoid takes at random times. The extrapolation test uses the amplitude pi.
+  - title: BMS Bessel functions*
+    text: >-
+      The Bayesian machine scientist (BMS) fits Bessel functions of orders 0 to 4 in two studies and does not state all
+      of their points. Without noise, it fits 10 points per order in [0, 2] and measures the error on [0, 4]; srbf
+      tests on 100 points per order drawn uniformly on [0, 4], once and fixed. With noise, it uses 100 points per order
+      in [0, 4]; srbf draws them uniformly.
+  - title: RSRM's Gaussian curves
+    text: >-
+      For RSRM's Gaussian distribution functions, srbf fits on the range RSRM fits on (x = 0 to 100) and tests on its
+      extrapolation range (x = -100 to -1).
+  - title: EvoMO-SR's second test
+    text: >-
+      EvoMO-SR tests its four formulas twice: on the training distribution, and on points where exactly one input lies
+      outside the training box (between 1.2 and 2 times its half-width, on either side) while the others stay inside.
+      srbf keeps both tests, as groups "id" and "ood", and picks the moved input at random for each point.
+  - title: Constant targets
+    text: >-
+      On some ERBench problems every point of a run has the same target value (for example when an integer sequence is
+      constant on a short window). srbf keeps these problems. On such a run the measures of fit quality are undefined
+      and left out; the comparison of formulas works as usual.
+  - title: Two checks dropped
+    text: >-
+      Const-Test-1 and -2 are dropped from the Constant problem set: they are checks of a software package, not
+      benchmark problems.
+
+# what srbf could not include, and why
+left_out:
+  - title: No input ranges
+    text: >-
+      A formula is a problem only together with the inputs it is evaluated on. For 202 problems in 13 benchmarks the
+      authors give no input ranges, and none could be found in their papers, supplements or code: PhysGym (77
+      problems; an agent chooses the inputs), ChatSR's knowledge set (50), the KAN paper's Feynman laws without units
+      (20), Phy-SRBench (18), ERBench's older formula list (13) and AI Feynman 2.0's modular equations (11), both from
+      the same table, EGRL-SR (3), symbolicregression.com's first test suite (3), FlowSR's synthetic laws (3),
+      SurfaceBench's NCS10, DRSR's D_mixed, and Case 14 of Chen, Luo and Jiang in two copies.
+  - title: Already included
+    text: >-
+      Some collections repeat problems srbf already runs. The PMLB compilations of Friedman's functions (62), the
+      Orzechowski et al. study (94) and the GECCO 2022 qualification track (20) are part of SRBench 2021's black-box
+      problems, and nearly all of the PMLB regression collection (152) is in SRBench 2021 or in other problem sets srbf
+      runs; E2E's 57 black-box problems are a selection of SRBench 2021's. SRBench 2021's Feynman data files and AI Descartes' noisy Feynman data sample the AI Feynman
+      laws srbf already holds. SymbolicArena gathers problems from other benchmarks, which srbf runs from their own
+      sources (apart from LLM-SRBench, below). 26 laws of the dimensionless AI Feynman version reduce to constants;
+      srbf holds them with their units.
+  - title: No license, or incomplete
+    text: >-
+      LLM-SRBench (LSR-Transform and LSR-Synth) is published without a license, and some of its problems lack their
+      constants. KAN's special functions give no input ranges and leave two of their outputs unspecified.
+  - title: Too large, or not published
+    text: >-
+      CAMELS (a 15.8 GB download), PhyE2E's lunar tide (13.3 million rows) and the Million Song Dataset (375 MB) are
+      too large to run as a problem set. syren's data would have to be regenerated with a cosmology code, and a few
+      benchmarks never published their data.
+  - title: One very long formula
+    text: >-
+      OccamNet's P7 is a piecewise function. Written with the operators srbf supports, it is 6,762 symbols long, more
+      than the formula reader accepts (4,096).
+  - title: One kind of test
+    text: >-
+      SciLaws-Real defines two kinds of problems. srbf runs Type I; Type II tests a formula on held-out groups of
+      data, which needs a protocol srbf does not have yet.
