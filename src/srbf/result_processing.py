@@ -383,6 +383,14 @@ def _nestedness(prefix: Any, operator_arity: Mapping[str, int]) -> int | None:
         return None
 
 
+def _no_variance(y: Any) -> bool:
+    """Whether a split's target cannot define a fit quality: no points, or the same value on every point."""
+    if y is None:
+        return True
+    a = np.asarray(y, dtype=float).ravel()
+    return a.size == 0 or bool(np.all(a == a[0]))
+
+
 def compute_derived_metrics(
     results: dict[str, Any],
     test_sets: Sequence[str],
@@ -546,6 +554,32 @@ def compute_derived_metrics(
                         if column in r:
                             r[column] = np.asarray(r[column], dtype=bool) & answered
 
+                # ── Undefined fit quality: no test split, or a target without variance ──
+                # A data catalog whose authors give no test split has no validation points (owner 2026-10-17: "if
+                # people fail to tell us what to test on, we don't"). A target that is the same number on every point
+                # (ERBench windows on which a formula saturates in float64) has an FVU of 0/0 or x/0 whatever the
+                # prediction (owner 2026-11-03: "The FVU can be undefined then"). Either way the split's fit-quality
+                # metrics are not a miss and not a perfect fit; they do not exist: NaN for the analysis metrics, None
+                # for the recovery rates.
+                if 'y_val' in r:
+                    r['n_validation'] = np.array([0 if yv is None else int(np.asarray(yv).shape[0]) for yv in r['y_val']])
+                for split, saved_split_name in [('fit', ''), ('val', '_val')]:
+                    y_key = f'y{saved_split_name}'
+                    if y_key not in r:
+                        continue
+                    undefined = np.array([_no_variance(yt) for yt in r[y_key]], dtype=bool)
+                    r[f'fit_quality_undefined_{split}'] = undefined
+                    if not undefined.any():
+                        continue
+                    for column in (f'fvu_{split}', f'log10_fvu_{split}', f'r2_{split}', f'only_approx_fvu_{split}',
+                                   f'only_approx_log10_fvu_{split}', f'reference_fvu_{split}'):
+                        if column in r:
+                            r[column] = np.where(undefined, np.nan, np.asarray(r[column], dtype=float))
+                    for column in (f'numeric_recovery_{split}', f'numeric_recovery_relative_{split}'):
+                        if column in r:
+                            r[column] = np.array([None if u else (None if v is None else bool(v))
+                                                  for v, u in zip(r[column], undefined)], dtype=object)
+
                 if 'skeleton_simplified' not in r:
                     r['skeleton_simplified'] = list(r['skeleton'])
 
@@ -616,10 +650,11 @@ def compute_derived_metrics(
                         for agrees, miss, fp in zip(r['symbolic_recovery'], failed, fittable_pairs)
                     ])
                     if 'numeric_recovery_val' in r:
+                        # "all numbers right" is read on the validation points: without them it is not defined
                         r['symbolic_recovery_mask_none'] = np.array([
-                            bool(typed) and bool(numeric)
+                            None if numeric is None else bool(typed) and bool(numeric)
                             for typed, numeric in zip(r['symbolic_recovery_mask_fittable'], r['numeric_recovery_val'])
-                        ])
+                        ], dtype=object)
 
                 # ── Length ratio ──────────────────────────────────
                 r['skeleton_length_ratio'] = np.array([
