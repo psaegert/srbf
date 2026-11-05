@@ -15,7 +15,7 @@ names:
   pysr-empiricalbench-formulas: PySR EmpiricalBench formulas
   feynman: AI Feynman laws
   feynman-bonus: AI Feynman bonus laws
-  grammarvae: GrammarVAE
+  grammarvae-points: GrammarVAE (fixed points)
   jin: Jin et al.
   keijzer: Keijzer
   keijzer-points: Keijzer (fixed points)
@@ -28,7 +28,7 @@ names:
   neat-points: Neat (fixed points)
   nguyen: Nguyen
   nonic-points: Nonic (fixed points)
-  pagie: Pagie
+  pagie-points: Pagie (fixed points)
   physo-astro: PhySO astrophysics
   physo-class: PhySO Class SR
   poly: Poly
@@ -139,9 +139,14 @@ tags:
   - name: outliers
     text: The data contains outlying points on purpose.
   - name: srbf-modified
-    text: >-
-      The authors left part of the setup open, and srbf completed it. These problem sets carry a star (*) in their
-      name.
+    text: The authors left part of the setup open, and srbf completed it.
+star: >-
+  A star (*) after a name marks a problem set that differs from its authors' benchmark; it leads to how.
+changed_lede: >-
+  Where srbf's version of a benchmark differs from what its name leads a reader to expect, the problem set carries a
+  star and is listed here, with each difference: srbf runs only part of the benchmark, filled in something the
+  authors left open, or changed something they defined. The number of points and the noise, which srbf sets the same
+  way for every benchmark, are explained under "How srbf runs a benchmark" and do not earn a star.
 tag_rule: >-
   A problem set carries a tag when it holds for at least half of its problems. The tags describe the problems as srbf
   runs them.

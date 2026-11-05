@@ -37,6 +37,7 @@
     "url": "https://github.com/IBM/AI-Descartes/tree/88bda466c605aaff235c160b5bcb7fc61efd1cf0/data"
    }
   },
+  "changes": [],
   "license": "MIT (IBM/AI-Descartes) + CC BY 4.0 (Cornelio et al. 2023, Nat. Commun. 14:1777, SI Table 2 exoplanet columns)"
  },
  {
@@ -70,6 +71,18 @@
     "url": "https://arxiv.org/abs/2006.10782"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 11,
+    "text": "srbf runs 1 of the 12 modular equations: the authors give an input range only for equation 12."
+   },
+   {
+    "kind": "filled",
+    "problems": 1,
+    "text": "For equation 12 the authors state the range [-1, 1] but not how inputs are spread over it; srbf samples them uniformly."
+   }
+  ],
   "license": "facts only: formulas cited from Udrescu et al. 2020 (AI Feynman 2.0, NeurIPS 33, arXiv:2006.10782), Table 4; no upstream license"
  },
  {
@@ -98,6 +111,7 @@
     "url": "https://github.com/WassimTenachi/PhySO/blob/bfbfa88d5def09d3d0cd47f3e2252b5a25836721/physo/benchmark/FeynmanDataset/BonusEquations.csv"
    }
   },
+  "changes": [],
   "license": "facts only: formulas and ranges from the AI Feynman bonus laws (Udrescu & Tegmark 2020)"
  },
  {
@@ -126,6 +140,7 @@
     "url": "https://web.archive.org/web/20250630050842/https://space.mit.edu/home/tegmark/aifeynman/FeynmanEquations.csv"
    }
   },
+  "changes": [],
   "license": "facts only: formulas and ranges from the Feynman Symbolic Regression Database (Udrescu & Tegmark 2020); its data files are not redistributed"
  },
  {
@@ -163,6 +178,13 @@
     "url": "https://web.archive.org/web/20211019022249/https://space.mit.edu/home/tegmark/main_aifeynman.html"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 26,
+    "text": "srbf runs 74 of the 100 equations: in the other 26 no input is left once the units are removed, so the target is a constant."
+   }
+  ],
   "license": "facts only: formulas, ranges and units cited from the Feynman Symbolic Regression Database (Udrescu & Tegmark 2020, Sci. Adv. 6:eaay2631); no upstream license"
  },
  {
@@ -200,6 +222,13 @@
     "url": "https://doi.org/10.5281/zenodo.11453179"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 8,
+    "text": "srbf runs 9 problems here (8 of the paper's 17 plus a second, synthetic version of the Kepler problem): the real-data Kepler and time-dilation problems are in 'AI Hilbert real data', the 6 problems taken from the Feynman database are run once in srbf's Feynman set, and the Bell-inequality problem, which has no data, is not run."
+   }
+  ],
   "license": "MIT (IBM/AI-Hilbert)"
  },
  {
@@ -239,6 +268,13 @@
     "url": "https://doi.org/10.5281/zenodo.11453179"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 15,
+    "text": "srbf runs 2 of the 17 problems here (the real-data Kepler and time-dilation problems); the formula problems are in 'AI Hilbert problem set', 6 Feynman-database problems are run in srbf's Feynman set, and the Bell-inequality problem is not run."
+   }
+  ],
   "license": "MIT (IBM/AI-Hilbert)"
  },
  {
@@ -287,6 +323,13 @@
     "url": "https://github.com/AutoResearch/autora-synthetic/tree/d04b4391444f000d9f3fb6038d8d2b9c7953a270/src/autora/experiment_runner/synthetic"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 3,
+    "text": "srbf runs 7 of the package's 10 models: the Q-learning agent is not a fixed function of its inputs, and the linear-mixed-model and template models have no fixed formula."
+   }
+  ],
   "license": "MIT (AutoResearch/autora-synthetic)"
  },
  {
@@ -327,11 +370,12 @@
     "url": "https://iopscience.iop.org/2041-8205/956/1/L22/suppdata/apjlacfa98t1_ascii.txt?doi=10.3847/2041-8213/acfa98"
    }
   },
+  "changes": [],
   "license": "CC BY 4.0 (Davis & Jin 2023, ApJL 956 L22, Table 1; doi:10.3847/2041-8213/acfa98)"
  },
  {
   "name": "bms-synthetic-prior-expression-and-bessel-functions",
-  "display": "BMS synthetic prior expression and Bessel functions*",
+  "display": "BMS synthetic prior expression and Bessel functions",
   "kind": "formula",
   "origin": "generated formulas",
   "tags": [
@@ -358,11 +402,23 @@
     "url": "https://doi.org/10.1126/sciadv.aav6971"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 1,
+    "text": "srbf runs 2 of the 3 problems here; the noise-free Bessel study is in 'BMS synthetic prior expression and Bessel functions* (fixed points)'."
+   },
+   {
+    "kind": "filled",
+    "problems": 1,
+    "text": "For the noisy Bessel study the authors give only the range x in [0, 4], not how the points are placed; srbf samples x uniformly on [0, 4] and the order nu uniformly from 0 to 4."
+   }
+  ],
   "license": "facts only: formulas cited from Guimera et al. 2020 (Bayesian machine scientist, Sci. Adv. 6:eaav6971, CC BY-NC 4.0); no text or tables reproduced"
  },
  {
   "name": "bms-synthetic-prior-expression-and-bessel-functions-points",
-  "display": "BMS synthetic prior expression and Bessel functions* (fixed points)",
+  "display": "BMS synthetic prior expression and Bessel functions (fixed points)",
   "kind": "data",
   "origin": "classic benchmark",
   "tags": [
@@ -390,6 +446,18 @@
     "url": "https://doi.org/10.1126/sciadv.aav6971"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 2,
+    "text": "srbf runs 1 of the 3 problems here (the noise-free Bessel study); the other two are in 'BMS synthetic prior expression and Bessel functions*'."
+   },
+   {
+    "kind": "filled",
+    "problems": 1,
+    "text": "The authors measure the error 'in the range [0, 4]' without giving the points; srbf tests on 100 points per order placed uniformly at random on [0, 4], chosen once and then fixed."
+   }
+  ],
   "license": "facts only: Bessel-function test points generated by srbf (Guimera et al. 2020, Sci. Adv. 6:eaav6971, CC BY-NC 4.0); no upstream data"
  },
  {
@@ -425,6 +493,7 @@
     "url": "https://doi.org/10.1201/9781315139470"
    }
   },
+  "changes": [],
   "license": "facts only: formula and input distribution cited from Breiman et al. 1984 (CART, Ch. 8); no upstream license"
  },
  {
@@ -458,6 +527,18 @@
     "url": "https://doi.org/10.1016/j.eswa.2018.05.021"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 1,
+    "text": "srbf runs 13 of the 14 cases: Case 14 has two inputs without a meaning or a range."
+   },
+   {
+    "kind": "filled",
+    "problems": 10,
+    "text": "For the 10 toy cases the authors fix only the input box and recommend Latin-hypercube or orthogonal designs; srbf samples the inputs uniformly at random in the box."
+   }
+  ],
   "license": "facts only: formulas and ranges cited from Chen, Luo & Jiang 2018 (Expert Syst. Appl., arXiv:1706.02281); no upstream license"
  },
  {
@@ -466,8 +547,8 @@
   "kind": "data",
   "origin": "classic benchmark",
   "tags": [
-   "no test split",
-   "fixed points"
+   "fixed points",
+   "srbf-modified"
   ],
   "problems": 8,
   "groups": {
@@ -493,6 +574,23 @@
     "url": "https://doi.org/10.1109/TEVC.2008.919006"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 4995,
+    "text": "srbf runs 8 problems: the 3 target functions and the 5 random functions the authors print; the other 4,995 random functions of the study were never published."
+   },
+   {
+    "kind": "filled",
+    "problems": 3,
+    "text": "The authors test F1 to F3 on 200 random points without saying how they are drawn; srbf draws them uniformly on the training range, once."
+   },
+   {
+    "kind": "changed",
+    "problems": 1,
+    "text": "Random-5 is undefined on 82 of its 100 grid points; srbf keeps only the 18 points where it is defined."
+   }
+  ],
   "license": "facts only: functions and grids cited from Schmidt & Lipson 2006 (GPTP IV) and 2008 (IEEE TEVC 12:736); no upstream license"
  },
  {
@@ -521,6 +619,13 @@
     "url": "https://github.com/dso-org/deep-symbolic-optimization/blob/2069d4eda47b0fd6d3e66e0ade9605cd9574b87c/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 2,
+    "text": "srbf runs 8 of the 10 'Constant' problems listed in the DSO repository: Const-Test-1 and -2 are software sanity tests, not benchmark problems."
+   }
+  ],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization benchmarks.csv); formulas and ranges as in each benchmark's first publication (facts)"
  },
  {
@@ -553,6 +658,13 @@
     "url": "https://github.com/CP3-Origins/Things-to-bench/tree/69a45dda1d0b95f151cdd669b308fa9fefd6d77d/cosmo_data"
    }
   },
+  "changes": [
+   {
+    "kind": "changed",
+    "problems": 11,
+    "text": "For C3a-C3f and C4a-C4e the paper also tests on extrapolation sets that were never published; srbf tests only on the published 80/20 split."
+   }
+  ],
   "license": "MIT (CP3-Origins/Things-to-bench)"
  },
  {
@@ -591,6 +703,13 @@
     "url": "https://github.com/CP3-Origins/Things-to-bench/tree/69a45dda1d0b95f151cdd669b308fa9fefd6d77d/datasets"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 4,
+    "text": "srbf runs 4 of the 8 tuning problems: F3 to F6 are treated as Keijzer-4, Jin-1, Jin-4 and Vladislavleva-1 and run in those benchmarks' sets, with those benchmarks' points rather than CP3-bench's grids."
+   }
+  ],
   "license": "MIT (CP3-Origins/Things-to-bench; Thing & Koksbang 2025, arXiv:2406.15531)"
  },
  {
@@ -632,6 +751,13 @@
     "url": "https://github.com/jiangnanhugo/cvgp/tree/e79202e2e3b859a97fe139453b3871b5793e33b9/data"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 22976,
+    "text": "srbf runs a fixed sample of 1,024 of the 24,000 expressions, chosen by a hash of each name and spread over the authors' configurations in proportion to their sizes."
+   }
+  ],
   "license": "MIT (jiangnanhugo/egg-sr scibench copy of the CVGP expressions; Jiang & Xue 2023, arXiv:2306.08057)"
  },
  {
@@ -660,6 +786,13 @@
     "url": "https://arxiv.org/abs/2608.02628"
    }
   },
+  "changes": [
+   {
+    "kind": "filled",
+    "problems": 20,
+    "text": "The authors give only the range (0, 1) for every input, not how points are spread over it; srbf samples uniformly."
+   }
+  ],
   "license": "facts only: formulas and ranges cited from Deng et al. 2026 (DDRSR, arXiv:2608.02628), Table 5; no upstream license"
  },
  {
@@ -699,6 +832,13 @@
     "url": "https://github.com/NISL-MSU/MultiSetSR/blob/d5ba2ecb6f5a82054d957e9b8c6842e3d6d92831/src/EquationLearning/Data/GenerateDatasets.py"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 2,
+    "text": "srbf runs 12 of the 13 functions, each with its interpolation and extrapolation test; E8 is the Pagie function and is run in srbf's Pagie and Neat sets, where its extrapolation test is not used."
+   }
+  ],
   "license": "MIT (NISL-MSU/MultiSetSR; Morales & Sheppard 2026, arXiv:2511.04124)"
  },
  {
@@ -739,6 +879,13 @@
     "url": "https://github.com/samholt/DeepGenerativeSymbolicRegression/blob/5dbf04d413b2e67f7431407dfbd2597215723ca8/libs/sd3/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 24,
+    "text": "srbf runs 8 of the 32 problems: the other 24 are identical to problems srbf already runs in its Feynman sets."
+   }
+  ],
   "license": "CC BY 4.0 (Holt et al. 2023, DGSR, arXiv:2401.00282, Table 35) + BSD-3-Clause (benchmarks.csv, DSO fork in samholt/DeepGenerativeSymbolicRegression)"
  },
  {
@@ -775,6 +922,13 @@
     "url": "https://github.com/samholt/DeepGenerativeSymbolicRegression/blob/5dbf04d413b2e67f7431407dfbd2597215723ca8/libs/sd3/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 13,
+    "text": "srbf runs 2 of the 15 problems: the other 13 are identical to problems srbf already runs in its Feynman set."
+   }
+  ],
   "license": "CC BY 4.0 (Holt et al. 2023, DGSR, arXiv:2401.00282) + BSD-3-Clause (benchmarks.csv, DSO fork in samholt/DeepGenerativeSymbolicRegression)"
  },
  {
@@ -813,6 +967,7 @@
     "url": "https://github.com/samholt/DeepGenerativeSymbolicRegression/blob/5dbf04d413b2e67f7431407dfbd2597215723ca8/libs/sd3/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [],
   "license": "BSD-3-Clause (benchmarks.csv, DSO fork in samholt/DeepGenerativeSymbolicRegression; Holt et al. 2023, arXiv:2401.00282)"
  },
  {
@@ -855,6 +1010,13 @@
     "url": "https://github.com/dso-org/deep-symbolic-optimization/blob/2069d4eda47b0fd6d3e66e0ade9605cd9574b87c/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 264,
+    "text": "srbf runs here only the registry problems that no other srbf set covers (Nguyen-12a and Korns-13 to -15; Neat-6 is in the pinned-points set); the registry's other rows are run in the sets of their own benchmarks, apart from its two software sanity tests."
+   }
+  ],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization)"
  },
  {
@@ -898,6 +1060,13 @@
     "url": "https://github.com/dso-org/deep-symbolic-optimization/blob/2069d4eda47b0fd6d3e66e0ade9605cd9574b87c/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 267,
+    "text": "srbf runs here only Neat-6 (Keijzer's harmonic-number problem on fixed points); the registry's other rows are in 'DSO benchmark registry (benchmarks.csv)' or in their own benchmarks' sets."
+   }
+  ],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization)"
  },
  {
@@ -936,6 +1105,13 @@
     "url": "https://github.com/facebookresearch/symbolicregression/tree/c4144c99d078dd611795338e24fb3da49a32b9d8"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 8976,
+    "text": "srbf runs a fixed sample of 1,024 of the 10,000 validation functions, which it regenerated with the authors' own code and seed (the authors publish no list)."
+   }
+  ],
   "license": "Apache-2.0 (facebookresearch/symbolicregression; Kamienny et al. 2022, arXiv:2204.10532)"
  },
  {
@@ -976,6 +1152,7 @@
     "url": "https://github.com/martius-lab/EQL/tree/28521aed7a213299a52982430b2b83917fadae20/EQL-DIV-ICML"
    }
   },
+  "changes": [],
   "license": "facts only: equations and input ranges cited from Sahoo, Lampert & Martius 2018 (ICML, arXiv:1806.07259) and their EQL generator; no upstream license"
  },
  {
@@ -1016,6 +1193,7 @@
     "url": "https://arxiv.org/abs/1610.02995"
    }
   },
+  "changes": [],
   "license": "facts only: formulas and ranges cited from Martius & Lampert 2016 (arXiv:1610.02995) and Sahoo et al. 2018 (arXiv:1806.07259); no upstream license"
  },
  {
@@ -1052,11 +1230,12 @@
     "url": "https://arxiv.org/abs/1610.02995"
    }
   },
+  "changes": [],
   "license": "facts only: formulas and ranges cited from Martius & Lampert 2016 (arXiv:1610.02995); no upstream license"
  },
  {
   "name": "eql-robotic-arm-forward-kinematics",
-  "display": "EQL robotic-arm forward kinematics*",
+  "display": "EQL robotic-arm forward kinematics",
   "kind": "formula",
   "origin": "science formula",
   "tags": [
@@ -1090,6 +1269,18 @@
     "url": "https://arxiv.org/abs/1610.02995"
    }
   },
+  "changes": [
+   {
+    "kind": "filled",
+    "problems": 28,
+    "text": "The authors never published how the joint angles were generated, only that they follow sinusoids of amplitude up to pi/2 (pi for the extrapolation test); srbf samples each angle as (pi/2) sin(u) with u uniform on [0, 2 pi), and with amplitude pi for the extrapolation test."
+   },
+   {
+    "kind": "filled",
+    "problems": 28,
+    "text": "The authors never print the arm's formulas; srbf derives them from the stated geometry (a planar arm with segments of length 0.5)."
+   }
+  ],
   "license": "facts only: task geometry and ranges cited from Martius & Lampert 2016 (arXiv:1610.02995); formulas derived by srbf; no upstream license"
  },
  {
@@ -1121,6 +1312,7 @@
     "url": "https://huggingface.co/datasets/EquationDiscovery/Equation_Recovery_Benchmark/tree/95bf15c27de68c3f170ca6140d2e4a811c60344f"
    }
   },
+  "changes": [],
   "license": "BSD-3-Clause (SciPy-derived, per ERBench README)"
  },
  {
@@ -1152,6 +1344,13 @@
     "url": "https://huggingface.co/datasets/EquationDiscovery/Equation_Recovery_Benchmark/tree/95bf15c27de68c3f170ca6140d2e4a811c60344f"
    }
   },
+  "changes": [
+   {
+    "kind": "changed",
+    "problems": 48,
+    "text": "16 of ERBench's 211 Eponymous formulas are exact copies of another formula in the set (same expression, input box and type); srbf keeps each once, so it runs 585 of the 633 problems."
+   }
+  ],
   "license": "CC-BY-SA-4.0 (Wikipedia-derived; see assets_sa LICENSE)"
  },
  {
@@ -1184,6 +1383,18 @@
     "url": "https://huggingface.co/datasets/EquationDiscovery/Equation_Recovery_Benchmark/tree/95bf15c27de68c3f170ca6140d2e4a811c60344f"
    }
   },
+  "changes": [
+   {
+    "kind": "changed",
+    "problems": 774,
+    "text": "258 of ERBench's 3,757 OEIS formulas are exact copies of another formula in the set; srbf keeps each once (3,499 formulas, 10,497 problems)."
+   },
+   {
+    "kind": "part",
+    "problems": 9473,
+    "text": "srbf runs a fixed sample of 1,024 of these 10,497 problems, chosen by a hash of each name."
+   }
+  ],
   "license": "CC-BY-SA-4.0 (OEIS-derived; see assets_sa LICENSE + per-entry attribution)"
  },
  {
@@ -1215,6 +1426,7 @@
     "url": "https://huggingface.co/datasets/EquationDiscovery/Equation_Recovery_Benchmark/tree/95bf15c27de68c3f170ca6140d2e4a811c60344f"
    }
   },
+  "changes": [],
   "license": "MIT (ERBench paper table + upstream Eureka-Lab/PHYBench)"
  },
  {
@@ -1258,6 +1470,23 @@
     "url": "https://huggingface.co/datasets/EquationDiscovery/Equation_Recovery_Benchmark/tree/95bf15c27de68c3f170ca6140d2e4a811c60344f"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 601,
+    "text": "srbf runs 5 of ERBench's 606 legacy rows here: most rows are run in the sets of the benchmarks they come from (Feynman, Korns, Nguyen, ...), 13 AI Feynman 2.0 rows have no input range from their authors, and the 14 Strogatz rows are differential-equation tasks."
+   },
+   {
+    "kind": "changed",
+    "problems": 5,
+    "text": "srbf samples these problems uniformly over the original authors' input ranges, not with ERBench's own generator (fitting window, extrapolation test, random extra input) that it uses for the other ERBench sets."
+   },
+   {
+    "kind": "filled",
+    "problems": 1,
+    "text": "For AI Feynman 2.0 equation 12 the authors state the range [-1, 1] but not how inputs are spread over it; srbf samples them uniformly."
+   }
+  ],
   "license": "facts only: formulas and ranges cited from the original family authors (Korns 2011; Uy et al. 2011; Udrescu et al. 2020; DSO benchmarks.csv, BSD-3-Clause); ERBench ids for mapping only"
  },
  {
@@ -1289,6 +1518,18 @@
     "url": "https://huggingface.co/datasets/EquationDiscovery/Equation_Recovery_Benchmark/tree/95bf15c27de68c3f170ca6140d2e4a811c60344f"
    }
   },
+  "changes": [
+   {
+    "kind": "changed",
+    "problems": 6,
+    "text": "2 of ERBench's 5,303 SynEq formulas are exact copies of others and are kept once (5,301 formulas, 15,903 problems)."
+   },
+   {
+    "kind": "part",
+    "problems": 14879,
+    "text": "srbf runs a fixed sample of 1,024 of these 15,903 problems, chosen by a hash of each name."
+   }
+  ],
   "license": "MIT (ERBench author-generated)"
  },
  {
@@ -1322,6 +1563,7 @@
     "url": "https://arxiv.org/abs/2608.09617"
    }
   },
+  "changes": [],
   "license": "CC BY 4.0 (ERRLESS, arXiv:2608.09617, Table 4)"
  },
  {
@@ -1362,6 +1604,13 @@
     "url": "https://github.com/DeaglanBartlett/ESR/blob/23c3907a0fb08301d5e89fb666ae01bec0398faa/esr/data/CC_Hubble.dat"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 2,
+    "text": "srbf runs 1 of the 3 ESR problems here (the cosmic-chronometer data): the Pantheon+ supernova task fits a function through an integral, not y = f(x), and the mock problem is in 'ESR cosmology formulas'."
+   }
+  ],
   "license": "CC BY 4.0 (Moresco et al. 2022, Living Rev. Relativ. 25:6, Table 1; arXiv:2201.07241) via DeaglanBartlett/ESR (MIT)"
  },
  {
@@ -1400,6 +1649,18 @@
     "url": "https://github.com/DeaglanBartlett/ESR/blob/23c3907a0fb08301d5e89fb666ae01bec0398faa/examples/mock_cc.py"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 2,
+    "text": "srbf runs 1 of the 3 ESR problems here (the mock problem); the cosmic-chronometer data are in 'ESR cosmology data', and the Pantheon+ task is not y = f(x)."
+   },
+   {
+    "kind": "changed",
+    "problems": 1,
+    "text": "ESR searches for H^2 as a function of x = 1 + z; srbf asks for H itself."
+   }
+  ],
   "license": "MIT (DeaglanBartlett/ESR; Bartlett, Desmond & Ferreira 2024, IEEE TEVC 28:950, arXiv:2211.11461)"
  },
  {
@@ -1448,6 +1709,13 @@
     "url": "https://doi.org/10.1109/tevc.2026.3663396"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 1,
+    "text": "srbf runs 3 of EvoGP's 4 tasks: the fourth, Feynman I.9.18, is run in srbf's Feynman set."
+   }
+  ],
   "license": "CC BY 4.0 (UCI ML Repository: Daily Demand Forecasting Orders, doi:10.24432/C5BC8T; Auto MPG, doi:10.24432/C5859H) + CC BY 4.0 (figshare 3829992, California housing, Pace & Barry 1997)"
  },
  {
@@ -1494,6 +1762,13 @@
     "url": "https://anonymous.4open.science/api/repo/EvoMO-SR-47B6/file/random_data/random_functions/manifest.csv"
    }
   },
+  "changes": [
+   {
+    "kind": "changed",
+    "problems": 4,
+    "text": "In the out-of-range test the authors move each input out of the box equally often; srbf picks the moved input at random for each point, which matches only on average."
+   }
+  ],
   "license": "CC BY 4.0 (Rossetti et al. 2026, EvoMO-SR, arXiv:2609.36187, Table 3)"
  },
  {
@@ -1524,6 +1799,7 @@
     "url": "https://github.com/viktmar/FastSRB/blob/bcd094b2a79e7d0b9ddb6436416b8024a69ddf32/src/expressions.yaml"
    }
   },
+  "changes": [],
   "license": "MIT (viktmar/FastSRB; see THIRD_PARTY_LICENSES + upstream PR viktmar/FastSRB#1)"
  },
  {
@@ -1564,6 +1840,7 @@
     "url": "https://github.com/isds-neu/SymbolicPhysicsLearner/tree/c0c18c90d61510a78ff2d24ac5299ad92c8acc59/physics_task/data"
    }
   },
+  "changes": [],
   "license": "MIT (isds-neu/SymbolicPhysicsLearner; raw drops: briandesilva/discovery-of-physics-from-data, MIT)"
  },
  {
@@ -1574,9 +1851,9 @@
   "tags": [
    "dummy inputs"
   ],
-  "problems": 2,
+  "problems": 4,
   "groups": {
-   "all": 2
+   "all": 4
   },
   "sources": [
    "http://web.archive.org/web/20170304074826/http://www.dtic.mil/dtic/tr/fulltext/u2/a578458.pdf",
@@ -1596,6 +1873,7 @@
     "url": "https://doi.org/10.1214/aos/1176347963"
    }
   },
+  "changes": [],
   "license": "facts only: test functions and input distributions cited from Friedman 1991 (Ann. Stat. 19:1-67); no upstream license"
  },
  {
@@ -1636,6 +1914,7 @@
     "url": "https://github.com/heal-research/HeuristicLab/tree/ecf4b5c9ed412464fa967d981db3f9b0cfb8b378/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/Friedman"
    }
   },
+  "changes": [],
   "license": "facts only: 12 random-function instances generated with HeuristicLab's FriedmanRandomFunction provider (GPL-3.0 code, not copied; Friedman 2001, Ann. Stat. 29:1189)"
  },
  {
@@ -1683,6 +1962,18 @@
     "url": "https://github.com/laic-ufmg/gp-benchmarks/tree/53b10dff51b9d773e1b91868208cf2e6cccf5ad6"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 7,
+    "text": "srbf runs 14 of the 21 real-world datasets: 4 have data that may not be shared (Boston housing, Ozone, Dow Chemical, Tower), the Million Song Dataset is left out for its size (375 MB), and NOX and WND were never published."
+   },
+   {
+    "kind": "changed",
+    "problems": 11,
+    "text": "The compilers test on one fixed shuffled 5-fold partition (reused across runs); srbf takes a fresh random 20% test part in every run instead."
+   }
+  ],
   "license": "CC BY 4.0 (UCI Machine Learning Repository members) and MIT (the QSAR members, DALabNOVA/slim)"
  },
  {
@@ -1728,6 +2019,7 @@
     "url": "https://doi.org/10.5281/zenodo.6842176"
    }
   },
+  "changes": [],
   "license": "CC BY 4.0 (Zenodo 10.5281/zenodo.6842176, SRBench 2022 competition, La Cava et al.)"
  },
  {
@@ -1765,6 +2057,7 @@
     "url": "https://doi.org/10.5281/zenodo.6842176"
    }
   },
+  "changes": [],
   "license": "CC BY 4.0 (Zenodo 10.5281/zenodo.6842176, SRBench 2022 competition, La Cava et al.)"
  },
  {
@@ -1815,6 +2108,7 @@
     "url": "https://doi.org/10.5281/zenodo.6842176"
    }
   },
+  "changes": [],
   "license": "CC BY 4.0 (Zenodo 10.5281/zenodo.6842176, SRBench 2022 competition, La Cava et al.)"
  },
  {
@@ -1856,6 +2150,7 @@
     "url": "https://doi.org/10.5281/zenodo.6842176"
    }
   },
+  "changes": [],
   "license": "CC BY 4.0 (Zenodo 10.5281/zenodo.6842176, SRBench 2022 competition, La Cava et al.)"
  },
  {
@@ -1907,6 +2202,7 @@
     "url": "https://doi.org/10.5281/zenodo.6842176"
    }
   },
+  "changes": [],
   "license": "CC BY 4.0 (Zenodo 10.5281/zenodo.6842176, SRBench 2022 competition, La Cava et al.)"
  },
  {
@@ -1945,6 +2241,7 @@
     "url": "https://doi.org/10.5281/zenodo.6842176"
    }
   },
+  "changes": [],
   "license": "CC BY 4.0 (Zenodo 10.5281/zenodo.6842176, SRBench 2022 competition, La Cava et al.)"
  },
  {
@@ -1973,6 +2270,7 @@
     "url": "https://doi.org/10.5281/zenodo.8283005"
    }
   },
+  "changes": [],
   "license": "CC BY 4.0 (Zenodo 10.5281/zenodo.8283005, SRBench 2023 competition, de Franca et al.)"
  },
  {
@@ -2000,6 +2298,7 @@
     "url": "https://web.archive.org/web/20260118085022/https://openreview.net/pdf?id=TqzNI4v9DT"
    }
   },
+  "changes": [],
   "license": "facts only: geometric formulas and ranges cited from Xu et al. 2024 (GeoBench, OpenReview TqzNI4v9DT); no upstream license"
  },
  {
@@ -2029,6 +2328,7 @@
     "url": "https://arxiv.org/abs/2312.00396"
    }
   },
+  "changes": [],
   "license": "CC BY 4.0 (Li, Marinescu & Musslick 2023, GFN-SR, arXiv:2312.00396)"
  },
  {
@@ -2065,6 +2365,13 @@
     "url": "https://doi.org/10.1145/2330163.2330273"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 40,
+    "text": "srbf runs 11 of the 51 problems of McDermott et al.'s table here and 2 more in its pinned-points set; the other 38 are run in the sets of the benchmarks they come from (Koza, Nguyen, Pagie, Korns, Keijzer, Vladislavleva)."
+   }
+  ],
   "license": "facts only: formulas and ranges cited from McDermott et al. 2012 (GECCO, Table 3) and the original family papers; no upstream license"
  },
  {
@@ -2100,6 +2407,13 @@
     "url": "https://doi.org/10.1145/2330163.2330273"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 49,
+    "text": "srbf runs here the 2 problems of the table that train on fixed points (Keijzer-6, Vladislavleva-3) and Pagie-2 from the authors' reference code; the rest are in 'GP benchmarks SR table (McDermott et al. 2012)' or in their own benchmarks' sets."
+   }
+  ],
   "license": "facts only: grids cited from McDermott et al. 2012 (GECCO, Table 3) and the original family papers; no upstream license"
  },
  {
@@ -2155,6 +2469,13 @@
     "url": "https://drive.google.com/drive/folders/1w-uTuSA-3d07LKyWIcVk3FdnysDz-QaV"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 3,
+    "text": "srbf runs 7 of the 10 datasets: Boston housing, Dow Chemical and Tower have data that may not be shared."
+   }
+  ],
   "license": "CC BY 4.0 (UCI Machine Learning Repository)"
  },
  {
@@ -2198,6 +2519,13 @@
     "url": "https://github.com/scikit-learn/scikit-learn/blob/866c0f51e7560ef0303cbcc5f159df5382ea9e3f/sklearn/datasets/data/diabetes_data_raw.csv.gz"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 1,
+    "text": "srbf runs 1 of the 2 gplearn examples here (diabetes data); the formula example is in 'gplearn documentation examples'."
+   }
+  ],
   "license": "BSD-3-Clause (scikit-learn, sklearn/datasets/data/diabetes_data_raw.csv.gz; data: Efron et al. 2004, Ann. Stat. 32:407-499)"
  },
  {
@@ -2235,6 +2563,13 @@
     "url": "https://github.com/trevorstephens/gplearn/blob/64517a85fd6d6c50f9ee9e5599f97458da278951/doc/examples.rst"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 1,
+    "text": "srbf runs 1 of the 2 gplearn examples here (the toy formula); the diabetes data example is in 'gplearn documentation example (diabetes)'."
+   }
+  ],
   "license": "BSD-3-Clause (trevorstephens/gplearn documentation example)"
  },
  {
@@ -2274,22 +2609,23 @@
     "url": "https://github.com/TensorConv/CuSR/blob/414b9057ca0289befcc5e0bb270f87c0f430bb58/experiments/e3_admit_criterion/out/corpus_manifest.json"
    }
   },
+  "changes": [],
   "license": "facts only: formulas and ranges cited from the CuSR e3 corpus manifest (TensorConv/CuSR; arXiv:2609.03352); no upstream license"
  },
  {
-  "name": "grammarvae",
-  "display": "GrammarVAE",
-  "kind": "formula",
+  "name": "grammarvae-points",
+  "display": "GrammarVAE (fixed points)",
+  "kind": "data",
   "origin": "classic benchmark",
-  "tags": [],
+  "tags": [
+   "no test split",
+   "fixed points"
+  ],
   "problems": 1,
   "groups": {
    "all": 1
   },
-  "sources": [
-   "Kusner et al. 2017 (ICML), Grammar Variational Autoencoder",
-   "formulas + ranges from dso-org/deep-symbolic-optimization benchmarks.csv (BSD-3; Petersen et al. 2021, Mundhenk et al. 2021)"
-  ],
+  "sources": [],
   "citation": {
    "paper": {
     "short": "Kusner et al. 2017",
@@ -2303,6 +2639,7 @@
     "url": "https://github.com/dso-org/deep-symbolic-optimization/blob/2069d4eda47b0fd6d3e66e0ade9605cd9574b87c/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization benchmarks.csv); formulas and ranges as in each benchmark's first publication (facts)"
  },
  {
@@ -2347,6 +2684,7 @@
     "url": "https://arxiv.org/abs/2305.16956"
    }
   },
+  "changes": [],
   "license": "CC BY 4.0 (UCI ML Repository: Airfoil Self-Noise, Concrete Compressive Strength, Parkinsons Telemonitoring, Concrete Slump Test; per-dataset DOIs) + MIT (DALabNOVA/slim QSAR tables; Archetti et al. 2007)"
  },
  {
@@ -2376,6 +2714,7 @@
     "url": "https://arxiv.org/abs/2205.15569"
    }
   },
+  "changes": [],
   "license": "facts only: formulas and ranges cited from Tohme et al. 2023 (GSR, TMLR, arXiv:2205.15569), Table 20; no upstream license"
  },
  {
@@ -2408,6 +2747,18 @@
     "url": "https://arxiv.org/abs/2510.03397"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 3,
+    "text": "srbf runs the 2 formula problems of the paper; its 3 data tasks were never published."
+   },
+   {
+    "kind": "changed",
+    "problems": 2,
+    "text": "The authors work with binned data (30 bins in cos theta); srbf samples cos theta uniformly at random, and tests the out-of-domain problem on the 30 bin centres."
+   }
+  ],
   "license": "CC BY 4.0 (Morales-Alvarado 2025, arXiv:2510.03397)"
  },
  {
@@ -2416,9 +2767,9 @@
   "kind": "formula",
   "origin": "science formula",
   "tags": [],
-  "problems": 4,
+  "problems": 5,
   "groups": {
-   "all": 4
+   "all": 5
   },
   "sources": [
    "https://github.com/heal-research/HeuristicLab/tree/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/Physics",
@@ -2449,6 +2800,7 @@
     "url": "https://github.com/heal-research/HeuristicLab/tree/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/Physics"
    }
   },
+  "changes": [],
   "license": "facts only: formulas and ranges cited from the HeuristicLab Physics instance provider (heal-research/HeuristicLab, GPL-3.0 code, not copied) and Chen et al. 2018 (arXiv:1706.02281)"
  },
  {
@@ -2491,6 +2843,13 @@
     "url": "https://github.com/heal-research/HeuristicLab/tree/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 362,
+    "text": "srbf runs 14 of HeuristicLab's 376 problems here and 1 in its pinned-points set: 164 are run in other srbf sets (Keijzer, Korns, Nguyen, Vladislavleva, Feynman, ...), the 88 generated instances have no published formula, the 94 PennML datasets are run in SRBench, the 14 real-world and Miba datasets have no clear license, and AircraftMaximumLift has inputs without a range."
+   }
+  ],
   "license": "facts only: formulas cited from the defining authors and instances generated with HeuristicLab's providers (heal-research/HeuristicLab, GPL-3.0 code, not copied)"
  },
  {
@@ -2540,6 +2899,13 @@
     "url": "https://github.com/heal-research/HeuristicLab/blob/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/Keijzer/KeijzerFunctionSix.cs"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 375,
+    "text": "srbf runs here only Keijzer-6 on its fixed points; HeuristicLab's other problems are in 'HeuristicLab regression instance providers', in other srbf sets, or not run."
+   }
+  ],
   "license": "facts only: Keijzer-6 grid cited from Keijzer 2003 (EuroGP) as provided by HeuristicLab; no upstream license"
  },
  {
@@ -2577,6 +2943,13 @@
     "url": "https://github.com/tsenftle/Metal-Oxide-LASSO-lo/blob/8501e2941839902bc1544d3500da5aff2851ec1b/Step_1/Binding_energyV4.xlsx"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 1,
+    "text": "srbf runs 1 of the 2 HierBOSSS problems here (the single-atom catalysis data); the synthetic polynomial is in 'HierBOSSS single-atom catalysis and synthetic polynomial'."
+   }
+  ],
   "license": "MIT (tsenftle/Metal-Oxide-LASSO-lo; O'Connor, Jonayat, Janik & Senftle 2018, Nat. Catal. 1:531)"
  },
  {
@@ -2614,6 +2987,13 @@
     "url": "https://web.archive.org/web/20260609230815/https://github.com/Roy-SR-007/HierBOSSS/blob/c9c72931e18ce0cb791c42ff6a6b214dcab28d75/HierBOSSS_simulated_example.R"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 1,
+    "text": "srbf runs 1 of the 2 HierBOSSS problems here (the synthetic polynomial); the catalysis data are in 'HierBOSSS single-atom catalysis'."
+   }
+  ],
   "license": "CC BY 4.0 (Roy et al. 2025, HierBOSSS, arXiv:2509.19710v1) + MIT (Roy-SR-007/HierBOSSS)"
  },
  {
@@ -2647,6 +3027,7 @@
     "url": "https://github.com/dso-org/deep-symbolic-optimization/blob/2069d4eda47b0fd6d3e66e0ade9605cd9574b87c/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization benchmarks.csv); formulas and ranges as in each benchmark's first publication (facts)"
  },
  {
@@ -2678,6 +3059,13 @@
     "url": "https://arxiv.org/abs/2404.19756"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 26,
+    "text": "srbf runs 1 of the 27 formulas: 20 have no input range from the authors, and 6 are identical to problems srbf runs in its Feynman set."
+   }
+  ],
   "license": "CC BY 4.0 (Liu et al. 2024, KAN, arXiv:2404.19756, Table 2)"
  },
  {
@@ -2711,6 +3099,7 @@
     "url": "https://arxiv.org/abs/2404.19756"
    }
   },
+  "changes": [],
   "license": "CC BY 4.0 (Liu et al. 2024, KAN, arXiv:2404.19756) + MIT (KindXiaoming/pykan)"
  },
  {
@@ -2740,6 +3129,13 @@
     "url": "https://github.com/dso-org/deep-symbolic-optimization/blob/2069d4eda47b0fd6d3e66e0ade9605cd9574b87c/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 8,
+    "text": "srbf runs 7 of Keijzer's 15 problems here; the 8 that train on fixed points are in 'Keijzer (fixed points)'."
+   }
+  ],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization benchmarks.csv); formulas and ranges as in each benchmark's first publication (facts)"
  },
  {
@@ -2775,6 +3171,13 @@
     "url": "https://github.com/dso-org/deep-symbolic-optimization/blob/2069d4eda47b0fd6d3e66e0ade9605cd9574b87c/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 7,
+    "text": "srbf runs here the 8 Keijzer problems that train on fixed points; the other 7 are in 'Keijzer'."
+   }
+  ],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization)"
  },
  {
@@ -2811,6 +3214,13 @@
     "url": "https://github.com/samuelkim314/DeepSymReg/blob/57bbe2e2c7f0cd07dc34ed99c7dc75bdd1445d87/benchmark.py"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 1,
+    "text": "srbf runs 12 of the 13 functions: Kim-8 (exp(-x^2) on [-1, 1]) is run as Livermore-21, without Kim et al.'s extrapolation test."
+   }
+  ],
   "license": "MIT (samuelkim314/DeepSymReg) + CC BY 4.0 (Kim et al. 2020, IEEE TNNLS)"
  },
  {
@@ -2846,6 +3256,7 @@
     "url": "https://github.com/bilgesi/SR-LLM-Integration/blob/1508a3701c2d30c6c776b33762656639d999bc42/src/run_main_claim.py"
    }
   },
+  "changes": [],
   "license": "Apache-2.0 (bilgesi/SR-LLM-Integration) + CC BY 4.0 (Taskin et al. 2026, Sci. Rep. 16:1614)"
  },
  {
@@ -2877,6 +3288,7 @@
     "url": "https://github.com/dso-org/deep-symbolic-optimization/blob/2069d4eda47b0fd6d3e66e0ade9605cd9574b87c/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization benchmarks.csv); formulas and ranges as in each benchmark's first publication (facts)"
  },
  {
@@ -2905,6 +3317,7 @@
     "url": "https://github.com/dso-org/deep-symbolic-optimization/blob/2069d4eda47b0fd6d3e66e0ade9605cd9574b87c/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization benchmarks.csv); formulas and ranges as in each benchmark's first publication (facts)"
  },
  {
@@ -2946,6 +3359,18 @@
     "url": "https://github.com/NAKONAKO4/langlaw/tree/a69229ce0c8f4549f5ba87514713c19e0e7974c2/data"
    }
   },
+  "changes": [
+   {
+    "kind": "changed",
+    "problems": 3,
+    "text": "The authors evaluate with a fixed 5-fold split (random_state 42); srbf takes a fresh random 20% test part in every run instead."
+   },
+   {
+    "kind": "changed",
+    "problems": 2,
+    "text": "The out-of-distribution tests for bulk modulus (10 perovskites) and OER activity (5 perovskites) are not published in the authors' input form and are not used."
+   }
+  ],
   "license": "MIT (NAKONAKO4/langlaw, README licence statement; Roy-SR-007/HierBOSSS) ; underlying data CC BY 4.0 (Weng et al. 2020, Nat. Commun. 11:3513; NOMAD)"
  },
  {
@@ -2983,6 +3408,7 @@
     "url": "https://github.com/trishullab/LibraryAugmentedSymbolicRegression.jl/tree/de6b22d5282e7de3432b0d52758a6ec3f583527d/bigbench"
    }
   },
+  "changes": [],
   "license": "Apache-2.0 (trishullab/LibraryAugmentedSymbolicRegression.jl; derived from google/BIG-bench, Apache-2.0)"
  },
  {
@@ -3025,6 +3451,13 @@
     "url": "https://github.com/trishullab/LibraryAugmentedSymbolicRegression.jl/blob/de6b22d5282e7de3432b0d52758a6ec3f583527d/data/FeynmanEquations.csv"
    }
   },
+  "changes": [
+   {
+    "kind": "filled",
+    "problems": 100,
+    "text": "The paper adds 'random noise variables' without saying how many or how they are distributed, and the authors' released code switches them off for Feynman; srbf adds them with the authors' recipe from their other sets (pad to 11 inputs, extra inputs uniform on [1, 20]) and keeps the formula's own inputs in the first columns where that recipe shuffles the column order."
+   }
+  ],
   "license": "Apache-2.0 (trishullab/LibraryAugmentedSymbolicRegression.jl; Grayeli et al. 2024, arXiv:2409.09359)"
  },
  {
@@ -3065,6 +3498,7 @@
     "url": "https://github.com/trishullab/LibraryAugmentedSymbolicRegression.jl/blob/de6b22d5282e7de3432b0d52758a6ec3f583527d/experiments/dataset.py"
    }
   },
+  "changes": [],
   "license": "Apache-2.0 (trishullab/LibraryAugmentedSymbolicRegression.jl; Grayeli et al. 2024, arXiv:2409.09359)"
  },
  {
@@ -3093,6 +3527,13 @@
     "url": "https://github.com/dso-org/deep-symbolic-optimization/blob/2069d4eda47b0fd6d3e66e0ade9605cd9574b87c/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [
+   {
+    "kind": "changed",
+    "problems": 3,
+    "text": "srbf also runs 3 problems that are not in the published Livermore set, taken from a later DSO code release: a new Livermore-19 and exact copies of Livermore-7 and -8 (7a, 8a); as a result the paper's Livermore-19 to -22 appear as Livermore-20 to -23."
+   }
+  ],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization benchmarks.csv); formulas and ranges as in each benchmark's first publication (facts)"
  },
  {
@@ -3115,6 +3556,7 @@
     "url": "https://github.com/dso-org/deep-symbolic-optimization/blob/2069d4eda47b0fd6d3e66e0ade9605cd9574b87c/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization benchmarks.csv); formulas and ranges as in each benchmark's first publication (facts)"
  },
  {
@@ -3148,6 +3590,13 @@
     "url": "https://doi.org/10.1088/2632-2153/ae8b73"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 20,
+    "text": "srbf runs 3 of the 23 functions here (the multivariate examples); the 20 univariate functions, which use a fixed grid, are in its pinned-points set."
+   }
+  ],
   "license": "CC BY 4.0 (Harvey et al. 2025, arXiv:2505.07956; Mach. Learn.: Sci. Technol. 7:045040)"
  },
  {
@@ -3184,6 +3633,13 @@
     "url": "https://doi.org/10.1088/2632-2153/ae8b73"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 3,
+    "text": "srbf runs here the 20 univariate functions on the authors' 100-point grid; the 3 multivariate examples are in 'LLM-LEx random Mathematica functions'."
+   }
+  ],
   "license": "CC BY 4.0 (Harvey et al. 2025, arXiv:2505.07956)"
  },
  {
@@ -3223,6 +3679,7 @@
     "url": "https://github.com/XieZikai/LLM-PySR/tree/dce2fae1f51785634435861d9c6af30f27ea6513/data/battery_cycle_life_log_zscore"
    }
   },
+  "changes": [],
   "license": "MIT (XieZikai/LLM-PySR; features from Severson et al. 2019, Nat. Energy 4:383, data.matr.io)"
  },
  {
@@ -3265,6 +3722,7 @@
     "url": "https://github.com/deep-symbolic-mathematics/LLM-SR/tree/41c212312df6c16d936c9cb395356a62774c47e3/data/bactgrow"
    }
   },
+  "changes": [],
   "license": "MIT (deep-symbolic-mathematics/LLM-SR; Shojaee et al. 2025, ICLR)"
  },
  {
@@ -3304,6 +3762,7 @@
     "url": "https://doi.org/10.17632/rd6jm9tyb6.1"
    }
   },
+  "changes": [],
   "license": "CC BY 4.0 (Mendeley Data 10.17632/rd6jm9tyb6.1, Aakash et al. 2019) via deep-symbolic-mathematics/LLM-SR (MIT)"
  },
  {
@@ -3362,6 +3821,13 @@
     "url": "https://github.com/DALabNOVA/slim/tree/aca73575c46a1a2d90dd55680e09f8b1c4d3a8cf/slim_gsgp/datasets/data"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 9,
+    "text": "srbf runs 3 of the 12 problems of McDermott et al.'s list here: Mackey-Glass and the two sunspot problems have data that may not be shared, the two trading, the prime-number and the DyFor GDP and CPI problems have no published data, and the simulated DyFor series is in the pinned-points set."
+   }
+  ],
   "license": "MIT (DALabNOVA/slim QSAR tables)"
  },
  {
@@ -3370,7 +3836,6 @@
   "kind": "data",
   "origin": "classic benchmark",
   "tags": [
-   "no test split",
    "fixed points"
   ],
   "problems": 1,
@@ -3418,6 +3883,13 @@
     "url": "https://doi.org/10.1145/2330163.2330273"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 11,
+    "text": "srbf runs here only the simulated DyFor series; the other problems are in 'McDermott et al. predictive-modelling sets' or not run."
+   }
+  ],
   "license": "facts only: piecewise law and integer grid cited from the DyFor benchmark (Wagner, Michalewicz, Khouja & McGregor 2007, IEEE TEVC 11:433); no upstream license"
  },
  {
@@ -3446,6 +3918,13 @@
     "url": "https://github.com/dso-org/deep-symbolic-optimization/blob/2069d4eda47b0fd6d3e66e0ade9605cd9574b87c/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 2,
+    "text": "srbf runs 2 of the 4 functions of Meier et al. (2013): the other two are Koza's quintic and sextic, run in srbf's Koza set."
+   }
+  ],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization benchmarks.csv); formulas and ranges as in each benchmark's first publication (facts)"
  },
  {
@@ -3487,6 +3966,18 @@
     "url": "https://github.com/erusseil/MvSR-analysis/blob/ec5abd674c466d4d22957122db7b26680c457e59/generate_toy.py"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 8,
+    "text": "srbf runs 8 of the 16 views here; the 8 views of the first family, which use fixed grids, are in its pinned-points set."
+   },
+   {
+    "kind": "changed",
+    "problems": 8,
+    "text": "The authors pose one task per family: one formula, with constants refitted per view, fitted to all 4 views at once, on targets rescaled to 10 y / max|y|; srbf runs each view as a separate problem on the unscaled target."
+   }
+  ],
   "license": "CC BY 4.0 (Russeil et al. 2024, arXiv:2402.04298)"
  },
  {
@@ -3529,6 +4020,18 @@
     "url": "https://github.com/erusseil/MvSR-analysis/blob/ec5abd674c466d4d22957122db7b26680c457e59/generate_toy.py"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 8,
+    "text": "srbf runs here the 8 views of the first family on the authors' grids; the other 8 views are in 'Multi-view SR synthetic benchmarks'."
+   },
+   {
+    "kind": "changed",
+    "problems": 8,
+    "text": "The authors pose one task per family: one formula, with constants refitted per view, fitted to all 4 views at once, on targets rescaled to 10 y / max|y|; srbf runs each view as a separate problem on the unscaled target."
+   }
+  ],
   "license": "CC BY 4.0 (Russeil et al. 2024, arXiv:2402.04298)"
  },
  {
@@ -3558,6 +4061,13 @@
     "url": "https://github.com/dso-org/deep-symbolic-optimization/blob/2069d4eda47b0fd6d3e66e0ade9605cd9574b87c/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 1,
+    "text": "srbf runs 8 of the 9 Neat problems here; Neat-6 trains on fixed points and is in 'Neat (fixed points)'."
+   }
+  ],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization benchmarks.csv); formulas and ranges as in each benchmark's first publication (facts)"
  },
  {
@@ -3594,6 +4104,13 @@
     "url": "https://github.com/dso-org/deep-symbolic-optimization/blob/2069d4eda47b0fd6d3e66e0ade9605cd9574b87c/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 8,
+    "text": "srbf runs here only Neat-6 on its fixed points; the other 8 Neat problems are in 'Neat'."
+   }
+  ],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization)"
  },
  {
@@ -3629,6 +4146,13 @@
     "url": "https://github.com/HKUST-KnowComp/NewtonBench/tree/912a4ba5f4356ddd06acc16e44460ca30be4abc2/modules"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 216,
+    "text": "srbf runs the 108 laws of NewtonBench's 'vanilla equation' setting; the other 216 tasks embed the same laws in simulators that an agent explores step by step, which srbf's protocol cannot run."
+   }
+  ],
   "license": "MIT (HKUST-KnowComp/NewtonBench)"
  },
  {
@@ -3658,6 +4182,13 @@
     "url": "https://github.com/dso-org/deep-symbolic-optimization/blob/2069d4eda47b0fd6d3e66e0ade9605cd9574b87c/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [
+   {
+    "kind": "changed",
+    "problems": 2,
+    "text": "Nguyen-11 and Nguyen-12 are not in Uy et al. (2011), which defines Nguyen-1 to -10; srbf keeps them as later benchmark lists define them, and tests Nguyen-11 on the grid Keijzer (2003) uses for the same formula."
+   }
+  ],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization benchmarks.csv); formulas and ranges as in each benchmark's first publication (facts)"
  },
  {
@@ -3669,9 +4200,9 @@
    "extrapolation",
    "fixed points"
   ],
-  "problems": 1,
+  "problems": 2,
   "groups": {
-   "all": 1
+   "all": 2
   },
   "sources": [
    "https://arxiv.org/abs/2205.13134v2",
@@ -3694,6 +4225,13 @@
     "url": "https://github.com/isds-neu/SymbolicPhysicsLearner/blob/c0c18c90d61510a78ff2d24ac5299ad92c8acc59/regression_task/task_info.py"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 3,
+    "text": "srbf runs 2 of the 5 Nguyen-c problems here; Nguyen-1c, -5c and -8c are run as Constant-1, -2 and -5 (on DSR's input ranges, not SPL's)."
+   }
+  ],
   "license": "MIT (isds-neu/SymbolicPhysicsLearner)"
  },
  {
@@ -3740,6 +4278,7 @@
     "url": "https://github.com/EpistasisLab/pmlb/tree/7c1f4bdc00136dc2e55c87fa6b8ba6e8af6d1a68/datasets/nikuradse_1"
    }
   },
+  "changes": [],
   "license": "MIT (PMLB)"
  },
  {
@@ -3770,6 +4309,7 @@
     "url": "https://github.com/dso-org/deep-symbolic-optimization/blob/2069d4eda47b0fd6d3e66e0ade9605cd9574b87c/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization)"
  },
  {
@@ -3811,6 +4351,13 @@
     "url": "https://github.com/SymposiumOrganization/ControllableNeuralSymbolicRegression/blob/3060cb8d2b79071f80c51cd35c2808833ae15ec8/test_set/only_five_variables_nc.csv"
    }
   },
+  "changes": [
+   {
+    "kind": "changed",
+    "problems": 2,
+    "text": "For 2 expressions the authors' out-of-distribution test region [-25, 25] contains no point where the expression is defined; srbf tests them on the training range."
+   }
+  ],
   "license": "MIT (SymposiumOrganization/ControllableNeuralSymbolicRegression)"
  },
  {
@@ -3853,6 +4400,7 @@
     "url": "https://github.com/SymposiumOrganization/ControllableNeuralSymbolicRegression/blob/3060cb8d2b79071f80c51cd35c2808833ae15ec8/test_set/only_five_variables_wc.csv"
    }
   },
+  "changes": [],
   "license": "MIT (SymposiumOrganization/ControllableNeuralSymbolicRegression)"
  },
  {
@@ -3890,6 +4438,7 @@
     "url": "https://github.com/SymposiumOrganization/ControllableNeuralSymbolicRegression/blob/3060cb8d2b79071f80c51cd35c2808833ae15ec8/test_set/train_nc.csv"
    }
   },
+  "changes": [],
   "license": "MIT (SymposiumOrganization/ControllableNeuralSymbolicRegression)"
  },
  {
@@ -3929,6 +4478,13 @@
     "url": "https://github.com/SymposiumOrganization/ControllableNeuralSymbolicRegression/blob/3060cb8d2b79071f80c51cd35c2808833ae15ec8/test_set/train_wc.csv"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 2,
+    "text": "srbf runs 299 of the 301 expressions: 2 have no point where they are defined on the input range [-10, 10]."
+   }
+  ],
   "license": "MIT (SymposiumOrganization/ControllableNeuralSymbolicRegression)"
  },
  {
@@ -3979,6 +4535,13 @@
     "url": "https://doi.org/10.1088/1674-1137/abddaf"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 3,
+    "text": "srbf runs 1 of the 4 datasets: the charge-radius data may not be shared, and the two KAN variants have no published data."
+   }
+  ],
   "license": "CC BY 3.0 (AME2020, Chin. Phys. C 45, 030003)"
  },
  {
@@ -4012,22 +4575,29 @@
     "url": "https://arxiv.org/abs/2007.10784"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 1,
+    "text": "srbf runs 22 of the 23 problems: OccamNet-P7 (a function iterated four times) is left out because its formula is too long for srbf's formula parser."
+   }
+  ],
   "license": "facts only: target functions and ranges cited from Dugan et al. 2023 (OccamNet, arXiv:2007.10784); no upstream license"
  },
  {
-  "name": "pagie",
-  "display": "Pagie",
-  "kind": "formula",
+  "name": "pagie-points",
+  "display": "Pagie (fixed points)",
+  "kind": "data",
   "origin": "classic benchmark",
-  "tags": [],
+  "tags": [
+   "no test split",
+   "fixed points"
+  ],
   "problems": 1,
   "groups": {
    "all": 1
   },
-  "sources": [
-   "Pagie & Hogeweg 1997 (Evolutionary Computation)",
-   "formulas + ranges from dso-org/deep-symbolic-optimization benchmarks.csv (BSD-3; Petersen et al. 2021, Mundhenk et al. 2021)"
-  ],
+  "sources": [],
   "citation": {
    "paper": {
     "short": "Pagie & Hogeweg 1997",
@@ -4041,6 +4611,13 @@
     "url": "https://github.com/dso-org/deep-symbolic-optimization/blob/2069d4eda47b0fd6d3e66e0ade9605cd9574b87c/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [
+   {
+    "kind": "changed",
+    "problems": 1,
+    "text": "Pagie and Hogeweg test on a 100 x 100 grid whose step and ends they do not state; srbf has no test."
+   }
+  ],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization benchmarks.csv); formulas and ranges as in each benchmark's first publication (facts)"
  },
  {
@@ -4080,6 +4657,13 @@
     "url": "https://doi.org/10.6084/m9.figshare.29615831.v1"
    }
   },
+  "changes": [
+   {
+    "kind": "filled",
+    "problems": 600,
+    "text": "For each formula the authors' code picks one of two input distributions at random (a folded normal or a uniform), anew in every evaluation run and without a seed; srbf picks it once per problem with its own seed and keeps it."
+   }
+  ],
   "license": "Apache-2.0 (figshare 10.6084/m9.figshare.29615831, PhyE2E_datas; Ying et al. 2025, Nat. Mach. Intell. 7:1726)"
  },
  {
@@ -4128,6 +4712,18 @@
     "url": "https://doi.org/10.6084/m9.figshare.29615831.v1"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 2,
+    "text": "srbf runs 15 of the 17 datasets: the sunspot data has a non-commercial license, and the lunar-tide data (13.3 million samples) needs a gridding the authors did not publish."
+   },
+   {
+    "kind": "changed",
+    "problems": 12,
+    "text": "For the plasma-pressure data the paper trains on several near-side radii (R = 8 to 28 Earth radii) and averages the far-side error; srbf uses only the largest, r < 28."
+   }
+  ],
   "license": "Apache-2.0 (the authors' figshare record)"
  },
  {
@@ -4159,6 +4755,13 @@
     "url": "https://doi.org/10.3847/1538-4357/ad014c"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 3,
+    "text": "srbf runs 9 of the 12 problems here; the NFW profile and the expansion law are in 'PhySO astrophysics', and the Pantheon supernova task fits a function through an integral, not y = f(x)."
+   }
+  ],
   "license": "CC BY 4.0 (Tenachi et al. 2023, ApJ 959:99, arXiv:2303.03192, Appendices A-B) + MIT (WassimTenachi/PhySO)"
  },
  {
@@ -4182,6 +4785,13 @@
     "url": "https://doi.org/10.3847/1538-4357/ad014c"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 10,
+    "text": "srbf runs 2 of the 12 problems of PhySO's astrophysics tests here; 9 more are in 'PhySO astrophysical case studies', and the Pantheon supernova task fits a function through an integral, not y = f(x)."
+   }
+  ],
   "license": "facts only: formulas and ranges from Tenachi et al. 2023, Appendix A"
  },
  {
@@ -4210,6 +4820,18 @@
     "url": "https://github.com/WassimTenachi/PhySO/blob/bfbfa88d5def09d3d0cd47f3e2252b5a25836721/physo/benchmark/ClassDataset/ClassEquations.csv"
    }
   },
+  "changes": [
+   {
+    "kind": "filled",
+    "problems": 8,
+    "text": "The authors pick each law's realization-specific constants at random from given ranges; srbf fixes each at one representative value (the middle of its range, or a quarter point)."
+   },
+   {
+    "kind": "changed",
+    "problems": 8,
+    "text": "Class SR asks for one formula shared by several datasets whose constants differ; srbf runs each law as a single dataset."
+   }
+  ],
   "license": "MIT (WassimTenachi/PhySO, ClassEquations.csv vendored under assets/upstream/physo/)"
  },
  {
@@ -4246,6 +4868,18 @@
     "url": "https://doi.org/10.5281/zenodo.11663147"
    }
   },
+  "changes": [
+   {
+    "kind": "filled",
+    "problems": 8,
+    "text": "The authors pick each law's realization-specific constants at random for every dataset; srbf picks them once per problem with its own seed and keeps them."
+   },
+   {
+    "kind": "changed",
+    "problems": 8,
+    "text": "Class SR asks for one formula shared by several datasets whose constants differ; srbf runs each law as a single dataset."
+   }
+  ],
   "license": "MIT (WassimTenachi/PhySO)"
  },
  {
@@ -4287,6 +4921,13 @@
     "url": "https://github.com/WassimTenachi/PhySO/blob/bfbfa88d5def09d3d0cd47f3e2252b5a25836721/demos/class_sr/demo_milky_way_streams/streams.csv"
    }
   },
+  "changes": [
+   {
+    "kind": "changed",
+    "problems": 29,
+    "text": "srbf fits each stream on its own (the authors' single-stream setting); the authors' main task fits one law to many streams at once."
+   }
+  ],
   "license": "MIT (WassimTenachi/PhySO)"
  },
  {
@@ -4315,6 +4956,7 @@
     "url": "https://github.com/dso-org/deep-symbolic-optimization/blob/2069d4eda47b0fd6d3e66e0ade9605cd9574b87c/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization benchmarks.csv); formulas and ranges as in each benchmark's first publication (facts)"
  },
  {
@@ -4352,6 +4994,7 @@
     "url": "https://github.com/intell-sci-comput/PSE/tree/7105caba63e754150dd3b160443984456ec99cd7/data/many_input"
    }
   },
+  "changes": [],
   "license": "MIT (intell-sci-comput/PSE; Ruan et al. 2026, arXiv:2407.04405)"
  },
  {
@@ -4393,6 +5036,13 @@
     "url": "https://github.com/MilesCranmer/pysr_paper/tree/b30687433fb32d3b9784fbedb1480d947dc46fc0/src/data/empirical_bench"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 5,
+    "text": "srbf runs the 4 problems with measured data here; 4 formula problems are in 'PySR EmpiricalBench formulas', and the fifth (Rydberg) is missing."
+   }
+  ],
   "license": "MIT (MilesCranmer/pysr_paper)"
  },
  {
@@ -4401,9 +5051,9 @@
   "kind": "formula",
   "origin": "science formula",
   "tags": [],
-  "problems": 4,
+  "problems": 5,
   "groups": {
-   "all": 4
+   "all": 5
   },
   "sources": [
    "https://arxiv.org/abs/2305.01582",
@@ -4432,6 +5082,13 @@
     "url": "https://github.com/MilesCranmer/pysr_paper/blob/b30687433fb32d3b9784fbedb1480d947dc46fc0/src/data/empirical_bench/equations.yml"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 4,
+    "text": "srbf runs the 5 formula problems here; the authors' 4 measured-data problems are in 'PySR EmpiricalBench data'."
+   }
+  ],
   "license": "MIT (MilesCranmer/pysr_paper)"
  },
  {
@@ -4463,6 +5120,7 @@
     "url": "https://github.com/dso-org/deep-symbolic-optimization/blob/2069d4eda47b0fd6d3e66e0ade9605cd9574b87c/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization)"
  },
  {
@@ -4500,6 +5158,18 @@
     "url": "https://github.com/Shun-0922/Mem-Bias-NSR/tree/7a153ec94f59caffbd9404094a2e1eab58aa0c2e/test_datasets/original_datasets"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 3,
+    "text": "srbf runs 297 of the 300 expressions: 3 have no point where they are defined."
+   },
+   {
+    "kind": "filled",
+    "problems": 297,
+    "text": "The authors give every input a random interval inside [-10, 10], chosen anew in every run; srbf chooses the interval once per problem with its own seed and keeps it."
+   }
+  ],
   "license": "MIT (Shun-0922/Mem-Bias-NSR; Sato & Sato 2025, arXiv:2505.22081)"
  },
  {
@@ -4537,6 +5207,7 @@
     "url": "https://github.com/kartelj/rils-rols/tree/54861c1c8dc4a521da6885bdcfdc54ecb7b38c31/paper_resources/random_12345_truth"
    }
   },
+  "changes": [],
   "license": "MIT (kartelj/rils-rols; Kartelj & Djukanovic 2023, J. Big Data 10:71)"
  },
  {
@@ -4563,6 +5234,18 @@
     "url": "https://proceedings.iclr.cc/paper_files/paper/2024/file/ef3a55fa15aa5fe39b7a2617b3a5d06e-Paper-Conference.pdf"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 4,
+    "text": "srbf runs 93 of the 97 pairs of expression and input range: 4 are identical to problems srbf runs in its Constant and Keijzer sets."
+   },
+   {
+    "kind": "filled",
+    "problems": 93,
+    "text": "The appendix gives only a range for the inputs, not how points are spread over it or whether all inputs share it; srbf samples every input uniformly on the same range."
+   }
+  ],
   "license": "facts only: formulas and ranges cited from Xu, Liu & Sun 2024 (RSRM, ICLR 2024, Appendix C.6, Table S8); no upstream license"
  },
  {
@@ -4594,6 +5277,13 @@
     "url": "https://arxiv.org/abs/2305.14656"
    }
   },
+  "changes": [
+   {
+    "kind": "changed",
+    "problems": 3,
+    "text": "srbf fits on every point RSRM's model saw (x = 0 to 100) and tests on the extrapolation x = -100 to -1; the appendix's test range [10, 25] lies inside the fitting range and is not used."
+   }
+  ],
   "license": "facts only: curves and grid cited from Xu, Liu & Sun 2024 (RSRM, ICLR 2024, arXiv:2305.14656); no upstream license"
  },
  {
@@ -4633,6 +5323,13 @@
     "url": "https://huggingface.co/datasets/RealSR/SciLaws-Bench/tree/15b93258fabc8f1785c5a5ffd4d3e51fc15dd860"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 61,
+    "text": "srbf runs 57 of SciLaws-Real's 118 tasks: only the 66 single-group (Type I) tasks fit srbf's protocol; of these, 7 have data that may not be shared and 2 with share-alike licenses are in a separate set."
+   }
+  ],
   "license": "per problem (SciLaws-Bench dataset/LICENSES.md, RealSR/SciLaws-Bench): CC BY 2.5/3.0/4.0, CC0 1.0, public domain, MIT, etalab-2.0"
  },
  {
@@ -4674,6 +5371,13 @@
     "url": "https://huggingface.co/datasets/RealSR/SciLaws-Bench/tree/15b93258fabc8f1785c5a5ffd4d3e51fc15dd860"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 116,
+    "text": "srbf runs here the 2 single-group tasks whose data carry a share-alike license; the other 57 shareable single-group tasks are in 'SciLaws-Bench SciLaws-Real (Type I)', the 52 multi-group tasks need a protocol srbf does not have, and 7 tasks have data that may not be shared."
+   }
+  ],
   "license": "per problem: CC BY-SA 3.0 and CC BY-SA 4.0 (SciLaws-Bench dataset/LICENSES.md)"
  },
  {
@@ -4684,9 +5388,9 @@
   "tags": [
    "dummy inputs"
   ],
-  "problems": 2,
+  "problems": 4,
   "groups": {
-   "all": 2
+   "all": 4
   },
   "sources": [
    "https://www.nature.com/articles/s41598-023-28328-2",
@@ -4719,6 +5423,13 @@
     "url": "https://github.com/LironSimon/SciMED/tree/27795878fd565d5aa238250bc9047eac27cebe25/data_generators"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 1,
+    "text": "srbf runs 4 of the 5 configurations: D is the authors' control without a formula."
+   }
+  ],
   "license": "MIT (LironSimon/SciMED) + CC BY 4.0 (Keren et al. 2023, Sci. Rep. 13:1249)"
  },
  {
@@ -4765,6 +5476,18 @@
     "url": "https://github.com/prescriptiveanalytics/SCR-Benchmarks/tree/2869bd564ff5eaa859577f02504752411bed817f"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 105,
+    "text": "srbf runs 15 of the 120 equations: the other 105 are identical to problems srbf runs in FastSRB and SRSD-dummy."
+   },
+   {
+    "kind": "changed",
+    "problems": 15,
+    "text": "srbf uses neither the shape constraints that define this benchmark nor its fixed validation sets (uniform over each input's range); it tests on new points from the training distribution."
+   }
+  ],
   "license": "MIT (prescriptiveanalytics/SCR-Benchmarks; SRSD laws: omron-sinicx/srsd-benchmark, MIT)"
  },
  {
@@ -4800,6 +5523,18 @@
     "url": "https://doi.org/10.24432/C5859H"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 3,
+    "text": "srbf runs 1 of the 4 problems: the friction and flow-stress data may not be shared."
+   },
+   {
+    "kind": "changed",
+    "problems": 1,
+    "text": "srbf does not check the shape constraints that the authors set for the problem."
+   }
+  ],
   "license": "CC BY 4.0 (UCI Auto MPG)"
  },
  {
@@ -4839,6 +5574,18 @@
     "url": "https://doi.org/10.1162/evco_a_00294"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 12,
+    "text": "srbf runs 7 of the 19 problems: the other 12 are identical to problems in srbf's Feynman sets."
+   },
+   {
+    "kind": "changed",
+    "problems": 7,
+    "text": "srbf does not check the shape constraints that the authors set for each problem."
+   }
+  ],
   "license": "facts only: formulas and input spaces cited from Kronberger et al. 2022 (Evol. Comput. 30(1):75, arXiv:2103.15624); no upstream license"
  },
  {
@@ -4875,6 +5622,7 @@
     "url": "http://www.gp-field-guide.org.uk"
    }
   },
+  "changes": [],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization)"
  },
  {
@@ -4921,6 +5669,13 @@
     "url": "https://journals.aps.org/prl/supplemental/10.1103/PhysRevLett.114.105503/Critical_Role_SI.pdf"
    }
   },
+  "changes": [
+   {
+    "kind": "changed",
+    "problems": 1,
+    "text": "3 of the 23 input features of the original study (properties of the heteronuclear AB dimer) were never published and are missing."
+   }
+  ],
   "license": "CC BY 3.0 (Ghiringhelli et al. 2015, Phys. Rev. Lett. 114:105503, Supplemental Material)"
  },
  {
@@ -4953,6 +5708,7 @@
     "url": "https://github.com/SymposiumOrganization/NeuralSymbolicRegressionThatScales/blob/0cfff793553f02c950c4350058a97aaea9a93322/data/benchmark/old_test.csv"
    }
   },
+  "changes": [],
   "license": "MIT (SymposiumOrganization/NeuralSymbolicRegressionThatScales)"
  },
  {
@@ -4985,6 +5741,7 @@
     "url": "https://github.com/SymposiumOrganization/NeuralSymbolicRegressionThatScales/blob/09f5af4b0e142b23a9cca82e682d92229c986df1/test_set/nc.csv"
    }
   },
+  "changes": [],
   "license": "MIT (SymposiumOrganization/NeuralSymbolicRegressionThatScales)"
  },
  {
@@ -5017,6 +5774,7 @@
     "url": "https://github.com/SymposiumOrganization/NeuralSymbolicRegressionThatScales/blob/0cfff793553f02c950c4350058a97aaea9a93322/data/benchmark/old_test.csv"
    }
   },
+  "changes": [],
   "license": "MIT (SymposiumOrganization/NeuralSymbolicRegressionThatScales)"
  },
  {
@@ -5059,6 +5817,7 @@
     "url": "https://github.com/PaulsonLab/TorchSISSO/tree/f869f9527bbe023402840c42c332b91cf58d738c/examples/Specific_Energy"
    }
   },
+  "changes": [],
   "license": "MIT (PaulsonLab/TorchSISSO)"
  },
  {
@@ -5087,6 +5846,7 @@
     "url": "https://arxiv.org/abs/2205.13134"
    }
   },
+  "changes": [],
   "license": "facts only: one formula and its range from Sun et al. 2023 (Symbolic Physics Learner, ICLR, arXiv:2205.13134v2, a CC BY-SA 4.0 paper)"
  },
  {
@@ -5133,6 +5893,7 @@
     "url": "https://github.com/EpistasisLab/pmlb/tree/7c1f4bdc00136dc2e55c87fa6b8ba6e8af6d1a68/datasets"
    }
   },
+  "changes": [],
   "license": "MIT (PMLB)"
  },
  {
@@ -5181,6 +5942,7 @@
     "url": "https://github.com/EpistasisLab/pmlb/tree/7c1f4bdc00136dc2e55c87fa6b8ba6e8af6d1a68/datasets"
    }
   },
+  "changes": [],
   "license": "MIT (PMLB)"
  },
  {
@@ -5225,6 +5987,7 @@
     "url": "https://github.com/EpistasisLab/pmlb/tree/5ed0151f01919aff0d616d5e8ea463587a255745/datasets"
    }
   },
+  "changes": [],
   "license": "MIT (PMLB)"
  },
  {
@@ -5254,6 +6017,7 @@
     "url": "https://github.com/EpistasisLab/pmlb/tree/00f6bd3f970c63771ebc42688b00711363734f31/datasets"
    }
   },
+  "changes": [],
   "license": "MIT (PMLB)"
  },
  {
@@ -5281,6 +6045,7 @@
     "url": "https://arxiv.org/abs/2206.10540"
    }
   },
+  "changes": [],
   "license": "MIT (base laws: viktmar/FastSRB; dummy recipe: omron-sinicx/srsd-benchmark) + CC BY 4.0 (dummy configuration: SRSD's Hugging Face datasets); see THIRD_PARTY_LICENSES"
  },
  {
@@ -5324,6 +6089,13 @@
     "url": "https://github.com/henniggroup/symbolic-regression-utilities/tree/11cf1f31888afe3a29140557dc7b3871102b8204/datasets/AllenDynes"
    }
   },
+  "changes": [
+   {
+    "kind": "changed",
+    "problems": 1,
+    "text": "For the 7-feature problem the authors validate by leave-one-out cross-validation; srbf fits all 29 rows and has no test."
+   }
+  ],
   "license": "Apache-2.0 (henniggroup/symbolic-regression-utilities; Xie et al. 2019, PRB 100:174513; values from Allen & Dynes 1975, PRB 12:905)"
  },
  {
@@ -5358,6 +6130,13 @@
     "url": "https://arxiv.org/abs/2511.10833"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 2,
+    "text": "srbf runs 128 of the 129 explicit surfaces (each with an in-range and an out-of-range test): NCS10 has no input range from the authors."
+   }
+  ],
   "license": "CC BY 4.0 (Kabra et al. 2026, SurfaceBench, arXiv:2511.10833, Table 7)"
  },
  {
@@ -5395,6 +6174,13 @@
     "url": "https://github.com/EPFL-IMOS/Sym-Q/blob/104a486070f615cd4fdb93a0e95adfd59625ee64/utils.py"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 15,
+    "text": "srbf runs the 15 AI-Feynman expressions without the drift terms that Sym-Q adds in its drift experiment; the paper never lists which drift goes with which expression, so no drift variant is run."
+   }
+  ],
   "license": "MIT (EPFL-IMOS/Sym-Q) + CC0 1.0 (Tian et al., arXiv:2402.05306)"
  },
  {
@@ -5426,6 +6212,7 @@
     "url": "https://doi.org/10.1021/acs.iecr.4c03503"
    }
   },
+  "changes": [],
   "license": "facts only: formulas and ranges cited from Muthyala et al. 2025 (SyMANTIC, Ind. Eng. Chem. Res. 64:3354; arXiv:2502.03367, CC BY-NC-ND 4.0); no text or tables reproduced"
  },
  {
@@ -5474,6 +6261,7 @@
     "url": "https://github.com/hftsoi/symbolfit/tree/3c814338f9d660baa3a1d44b13240024b90ba515/examples/datasets"
    }
   },
+  "changes": [],
   "license": "MIT (hftsoi/symbolfit; spectra from HEPData records, CC0)"
  },
  {
@@ -5523,6 +6311,18 @@
     "url": "https://github.com/rtymk/Symbolic_Diffusion/tree/07439d164d64891c9b006b11dd75cdeb2c45f6d0"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 6001,
+    "text": "The authors evaluate 7,000 validation samples but publish the formulas of only 1,024; srbf runs 999 of these: 24 have no point where they are defined on [-3, 3]^2 and 1 has no real value at all."
+   },
+   {
+    "kind": "filled",
+    "problems": 999,
+    "text": "The authors publish these formulas with their constants masked; srbf picks each constant once (uniform on [-2.1, 2.1], the authors' generator law) with its own seed."
+   }
+  ],
   "license": "MIT (mojivalipour/symbolicgpt; HF DataAnalyticsLab/SymbolicGPT)"
  },
  {
@@ -5534,9 +6334,9 @@
    "extrapolation",
    "dummy inputs"
   ],
-  "problems": 987,
+  "problems": 988,
   "groups": {
-   "all": 987
+   "all": 988
   },
   "sources": [
    "https://arxiv.org/abs/2106.14131",
@@ -5568,6 +6368,18 @@
     "url": "https://www.dropbox.com/sh/yq03daorth1h4kj/AADolbgySCjOO18qGoP5Abqfa?dl=0"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 2792,
+    "text": "srbf runs 988 problems of a fixed sample of 1,024 of the 3,780 published test formulas (the paper speaks of 4,000): 21 have no point where they are defined and 15 have no real value at all."
+   },
+   {
+    "kind": "changed",
+    "problems": 2,
+    "text": "For 2 formulas the authors' test region contains no point where the formula is defined; srbf tests them on the training range."
+   }
+  ],
   "license": "MIT (mojivalipour/symbolicgpt; HF DataAnalyticsLab/SymbolicGPT)"
  },
  {
@@ -5608,6 +6420,18 @@
     "url": "http://web.archive.org/web/20131208225350/http://symbolicregression.com/?q=node/5"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 9,
+    "text": "srbf runs 1 of the suite's 10 functions here: 6 are run as Vladislavleva-2 to -6 and -8, and 3 have no input range from the author."
+   },
+   {
+    "kind": "filled",
+    "problems": 1,
+    "text": "The suite gives no input range for Ripple2d; srbf uses the range and test region the same author gives for this function in her thesis and journal paper."
+   }
+  ],
   "license": "facts only: formulas cited from Vladislavleva's symbolicregression.com Toy Test Suite 1 (2008-2013) and Vladislavleva et al. 2009 (IEEE TEVC); no upstream license"
  },
  {
@@ -5653,6 +6477,13 @@
     "url": "https://github.com/vastlik/symformer/tree/35bc93c6c563c68a07a3a9adcf9b10d5b87a9d46"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 18976,
+    "text": "The authors never published their evaluation formulas; srbf regenerated the 20,000 with the authors' generator and seed and runs a fixed sample of 1,024 of them."
+   }
+  ],
   "license": "CC BY 4.0 (Vastl et al. 2024, SymFormer, IEEE Access 12:37840); formulas drawn by srbf from the authors' generator"
  },
  {
@@ -5681,6 +6512,13 @@
     "url": "https://doi.org/10.1016/j.ins.2018.02.040"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 901,
+    "text": "srbf runs 16 of SymTree's 17 benchmark functions (F7 is run as Nguyen-7); the paper's 900 random polynomials were never published and their generator has no seed."
+   }
+  ],
   "license": "facts only: functions and ranges cited from de Franca 2018 (Inf. Sci. 442:18, arXiv:1801.01807) and the original Kattan et al. papers; no upstream license"
  },
  {
@@ -5720,6 +6558,7 @@
     "url": "https://media.springernature.com/original/springer-static/esm/art%3A10.1007%2Fs10765-023-03197-z/MediaObjects/10765_2023_3197_MOESM1_ESM.pdf"
    }
   },
+  "changes": [],
   "license": "CC BY 4.0 (Frotscher et al. 2023, Int. J. Thermophys. 44:105, ESM1; experimental densities: von Preetzmann et al. 2021, Int. J. Thermophys. 42:127, Table 2)"
  },
  {
@@ -5750,6 +6589,13 @@
     "url": "https://doi.org/10.1016/j.dche.2024.100198"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 1,
+    "text": "srbf runs 9 of the 10 expressions: expression 9 is Feynman I.44.4 and is run in srbf's Feynman set."
+   }
+  ],
   "license": "facts only: formulas and ranges cited from Muthyala et al. 2024 (TorchSISSO, Digit. Chem. Eng. 13:100198; arXiv:2410.01752, CC BY-NC-ND 4.0); no text or tables reproduced"
  },
  {
@@ -5790,6 +6636,13 @@
     "url": "https://doi.org/10.1016/j.cma.2022.115731"
    }
   },
+  "changes": [
+   {
+    "kind": "changed",
+    "problems": 6,
+    "text": "The benchmark task built on these curves (EO-SR) uses only the 20 C curves, fitting the uniaxial and equibiaxial curves together and testing on the pure-shear curve; srbf fits each curve, including the three 50 C curves, on its own and has no test."
+   }
+  ],
   "license": "CC BY 4.0 (Linka & Kuhl 2023, Comput. Methods Appl. Mech. Eng. 403:115731, Table 2; data: Treloar 1944, Trans. Faraday Soc. 40:59)"
  },
  {
@@ -5821,6 +6674,13 @@
     "url": "https://github.com/dso-org/deep-symbolic-optimization/blob/2069d4eda47b0fd6d3e66e0ade9605cd9574b87c/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 3,
+    "text": "srbf runs 6 of the 9 problems of Vladislavleva et al. (2009) here: Vladislavleva-2 and -3 train on fixed points and are in 'Vladislavleva (fixed points)', and the real-world Tower data may not be shared."
+   }
+  ],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization benchmarks.csv); formulas and ranges as in each benchmark's first publication (facts)"
  },
  {
@@ -5864,6 +6724,13 @@
     "url": "https://github.com/dso-org/deep-symbolic-optimization/blob/2069d4eda47b0fd6d3e66e0ade9605cd9574b87c/dso/dso/task/regression/benchmarks.csv"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 7,
+    "text": "srbf runs here the 2 problems that train on fixed points (Vladislavleva-2 and -3); the others are in 'Vladislavleva' or, for the Tower data, not run."
+   }
+  ],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization)"
  },
  {
@@ -5902,6 +6769,13 @@
     "url": "https://doi.org/10.1007/s10710-012-9177-2"
    }
   },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 6,
+    "text": "srbf runs 1 of the 7 problems of White et al. (2013) here: Korns-12, Vladislavleva-4, Nguyen-7 and Pagie-1 are run in their own benchmarks' sets, and the Dow Chemical and GP Challenge data may not be shared."
+   }
+  ],
   "license": "facts only: Keijzer-6 grid cited from White et al. 2013 (GPEM 14:3) and Keijzer 2003; no upstream license"
  }
 ]

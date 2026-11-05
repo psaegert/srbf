@@ -312,6 +312,13 @@ html[data-theme="dark"] #va {
 .bm-tag { display: inline-block; margin: 0 .3rem .25rem 0; padding: .05rem .45rem; border: 1px solid var(--line); border-radius: var(--r-ctl); color: var(--ink-soft); font-size: .8rem; white-space: nowrap; }
 .bm-src { overflow-wrap: anywhere; min-width: 8rem; }
 .bm-cite { color: var(--ink-soft); }
+.bm-star { margin-left: .1rem; font-weight: 700; text-decoration: none; }
+.bm-changes { display: grid; gap: .2rem; }
+.bm-change { padding: .9rem 0 .4rem; border-top: 1px solid var(--line); scroll-margin-top: 76px; max-width: 52rem; }
+.bm-change h3 { margin: 0 0 .4rem; font-size: 1rem; font-weight: 700; }
+.bm-change ul { margin: 0 0 .5rem; padding-left: 1.2rem; color: var(--ink-soft); font-size: .95rem; }
+.bm-change li { margin: 0 0 .35rem; }
+.bm-kind { color: var(--ink); font-weight: 600; }
 .bm-defs { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .45rem 1rem; margin: 0 0 .85rem; }
 .bm-defs dt { margin: 0; }
 .bm-defs dd { margin: 0; color: var(--ink-soft); font-size: .96rem; }

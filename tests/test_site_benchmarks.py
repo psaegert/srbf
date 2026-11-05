@@ -42,7 +42,7 @@ def test_every_problem_set_has_a_name_an_origin_and_a_source() -> None:
     assert len(set(names)) == len(names), "two problem sets with one name"
     for r in ROWS:
         assert r["display"] != r["name"], r["name"]                       # a name, not the file's key
-        assert r["sources"], r["name"]
+        assert r["sources"] or (r["citation"] or {}).get("paper"), r["name"]        # a source or its paper
         assert r["origin"] in {o["name"] for o in TEXTS["origins"]}, r["name"]
 
 
@@ -94,3 +94,18 @@ def test_a_problem_set_cites_its_paper_and_its_data_where_both_exist() -> None:
                 assert f'>{bench.esc(c["short"])}</a>' in PAGE, (r["name"], side)
     assert bench.cite_html({"short": "Keijzer 2003", "title": "Improving SR", "url": "https://doi.org/10.1007/x"}) == \
         '<a href="https://doi.org/10.1007/x" target="_blank" rel="noopener" title="Improving SR">Keijzer 2003</a>'
+
+
+def test_a_star_marks_every_problem_set_that_differs_from_its_benchmark_and_leads_to_how() -> None:
+    changed = [r for r in ROWS if r["changes"]]
+    assert changed and PAGE.count('class="bm-star"') == len(changed) == PAGE.count('class="bm-change"')
+    for r in ROWS:
+        star = f'<a class="bm-star" href="#{bench.anchor(r["name"])}"'
+        if r["changes"]:
+            assert star in PAGE and f'id="{bench.anchor(r["name"])}"' in PAGE, r["name"]
+            assert all(c["kind"] in bench.KINDS and c["text"] for c in r["changes"]), r["name"]
+        else:
+            assert star not in PAGE, r["name"]
+        assert "*" not in r["display"], r["name"]                          # the page sets the star, never the name
+    # a problem set srbf completed carries the star too
+    assert all(r["changes"] for r in ROWS if "srbf-modified" in r["tags"])

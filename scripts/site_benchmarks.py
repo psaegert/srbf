@@ -45,7 +45,7 @@ def display(row: dict[str, Any], names: dict[str, str]) -> str:
         name = row["display_name"]
     else:
         name = row.get("set_name") or str(row.get("description") or row["name"]).rstrip(".")
-    return name.replace("(pinned points)", "(fixed points)")
+    return name.replace("(pinned points)", "(fixed points)").replace("*", "")      # the page sets the star itself
 
 
 def problem_sets(counts: dict[str, Any], texts: dict[str, Any]) -> list[dict[str, Any]]:
@@ -59,6 +59,7 @@ def problem_sets(counts: dict[str, Any], texts: dict[str, Any]) -> list[dict[str
             "problems": int(r["problems"]), "groups": {str(k): int(v) for k, v in r["subsets"].items()},
             "sources": list(texts["sources"].get(r["name"]) or r.get("sources") or []),
             "citation": r.get("citation") or {},
+            "changes": list(r.get("srbf_changes") or []),
             "license": texts["licenses_as"].get(r["name"]) or r.get("license"),
         })
     bad = [r["name"] for r in rows if LOCAL.search(json.dumps(r))]
@@ -171,6 +172,31 @@ def definitions(items: list[dict[str, str]], used: set[str]) -> str:
         for t in items if t["name"] in used) + "</dl>"
 
 
+KINDS = {"part": "Part of the benchmark", "filled": "Filled in by srbf", "changed": "Changed by srbf"}
+
+
+def anchor(name: str) -> str:
+    return "changed-" + re.sub(r"[^a-z0-9-]+", "-", name.lower())
+
+
+def name_html(r: dict[str, Any]) -> str:
+    """A problem set's name, with the star that leads to what srbf changed in it."""
+    star = (f'<a class="bm-star" href="#{anchor(r["name"])}" title="srbf\'s version differs from the authors\'; '
+            f'see how">*</a>' if r["changes"] else "")
+    return esc(r["display"]) + star
+
+
+def changes_section(rows: list[dict[str, Any]]) -> str:
+    """Every problem set with a star: what srbf changed, one line per change, by kind."""
+    items = []
+    for r in rows:
+        if not r["changes"]:
+            continue
+        lines = "".join(f'<li><span class="bm-kind">{esc(KINDS[c["kind"]])}.</span> {esc(c["text"])}</li>' for c in r["changes"])
+        items.append(f'<div class="bm-change" id="{anchor(r["name"])}"><h3>{esc(r["display"])}*</h3><ul>{lines}</ul></div>')
+    return '<div class="bm-changes">' + "\n".join(items) + "</div>"
+
+
 def table(rows: list[dict[str, Any]]) -> str:
     body = []
     for r in rows:
@@ -181,7 +207,7 @@ def table(rows: list[dict[str, Any]]) -> str:
         body.append(
             f'<tr data-name="{esc(r["name"])}" data-origin="{esc(r["origin"])}" data-tags="{esc("|".join(r["tags"]))}" '
             f'data-problems="{r["problems"]}">'
-            f'<th scope="row">{esc(r["display"])}</th><td>{esc(r["origin"])}</td><td class="bm-tags">{tags}</td>'
+            f'<th scope="row">{name_html(r)}</th><td>{esc(r["origin"])}</td><td class="bm-tags">{tags}</td>'
             f'<td class="num">{fmt(r["problems"])}</td>'
             f'<td class="num" title="{esc(group_names)}">{len(groups)}</td>'
             f'<td class="bm-src">{paper}</td><td class="bm-src">{data}</td><td>{esc(license_label(r["license"]))}</td></tr>')
@@ -221,7 +247,8 @@ def build(texts: dict[str, Any], rows: list[dict[str, Any]], gone: list[dict[str
         "<h2>The problem sets</h2>",
         f'<p class="section-lede">{fmt(len(rows))} problem sets with {fmt(n_formula + n_data)} problems: '
         f'{fmt(n_formula)} given as formulas and {fmt(n_data)} as data, in {fmt(n_groups)} groups. '
-        'The tags are explained <a href="#tags">below the list</a>.</p>',
+        'The tags are explained <a href="#tags">below the list</a>. '
+        f'{esc(texts["star"])} {fmt(sum(1 for r in rows if r["changes"]))} problem sets carry one.</p>',
         filters(rows, texts),
         table(rows),
         "</section>",
@@ -246,6 +273,12 @@ def build(texts: dict[str, Any], rows: list[dict[str, Any]], gone: list[dict[str
         '<p class="section-lede">Where a benchmark left something open, or exists in copies that differ, srbf had to '
         "choose. These are the choices.</p>",
         topics(texts["changes"]),
+        "</section>",
+        "",
+        '<section id="changed" class="prose">',
+        "<h2>What srbf changed in each problem set</h2>",
+        f'<p class="section-lede">{esc(texts["changed_lede"])}</p>',
+        changes_section(rows),
         "</section>",
         "",
         '<section id="left-out" class="prose">',

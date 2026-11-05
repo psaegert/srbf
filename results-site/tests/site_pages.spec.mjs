@@ -202,7 +202,16 @@ test('the Benchmarks page: one row per problem set, a filter that keeps the rows
     await expect(page.locator('#tags dt .bm-tag', { hasText: new RegExp(`^${tag}$`) })).toHaveCount(1);
   }
   expect(await page.locator('main h2').allTextContents()).toEqual(['The problem sets', 'What the tags mean',
-    'How srbf runs a benchmark', 'What srbf decided', 'What srbf could not include', 'Data srbf may not share']);
+    'How srbf runs a benchmark', 'What srbf decided', 'What srbf changed in each problem set', 'What srbf could not include',
+    'Data srbf may not share']);
+  // a star after a name leads to what srbf changed in that problem set
+  const changed = sets.filter((s) => s.changes.length);
+  await expect(page.locator('.bm-list .bm-star')).toHaveCount(changed.length);
+  const first = page.locator('.bm-list .bm-star').first();
+  const target = await first.getAttribute('href');
+  await first.click();
+  await expect(page.locator(target)).toBeInViewport();
+  await expect(page.locator(`${target} li`).first()).toBeVisible();
   expect(leftRows).toBeGreaterThan(0);
   expect(errors).toEqual([]);
 });
