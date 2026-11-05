@@ -79,7 +79,7 @@ run:
     worker: '%WORKER%'
     python: '%PYTHON%'   # the interpreter of the method's OWN environment
     options: {}                           # handed to load() and fit(); {{ROOT}} is replaced in its strings
-    simplipy_engine: acj-5-4-llm          # the engine the catalogs are judged with; keep it
+    simplipy_engine: acj2-5-4-llm          # the engine the catalogs are judged with; keep it
     timeout: 3600                         # seconds per problem
     worker_log: '{{ROOT}}/results/evaluation/%NAME%/worker.log'
   runner:

@@ -178,7 +178,7 @@ RELEASE_VERSIONS = ("PySR: version 2.3.0, with SymbolicRegression.jl 2.4.0. ",
                     ("dsr", "DSR and uDSR*: DSO 3.0.0 (deep-symbolic-optimization), with three fixes srbf documents. "),
                     ("rilsrols", "RILS-ROLS: version 1.6.7, the release its authors submitted to SRBench. "),
                     ("qlattice", "QLattice: feyn 3.5.0 (community edition, for non-commercial use). "),
-                    "Simplification: SimpliPy (a formula-simplification library), with its rule set acj-5-4-llm.")
+                    "Simplification: SimpliPy (a formula-simplification library), with its rule set acj2-5-4-llm.")
 
 
 def release_versions(keys: Any) -> str:
@@ -1703,7 +1703,7 @@ def main() -> None:
     ap.add_argument("out")
     ap.add_argument("--title", default=None)
     ap.add_argument("--notes", default="")
-    ap.add_argument("--engine", default="acj-5-4-llm", help="the SimpliPy engine the judge used (srbf table's default): the ground truths' canonical forms")
+    ap.add_argument("--engine", default="acj2-5-4-llm", help="the SimpliPy engine the judge used (srbf table's default): the ground truths' canonical forms")
     ap.add_argument("--sizes", default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results-site", "data", "catalog_mu.json"),
                     help="every catalog's ground-truth description lengths (scripts/catalog_mu.py; default: results-site/data/catalog_mu.json)")
     ap.add_argument("--site-dir", default=None, help="results-site directory (default: two levels above out.js); the private overlay's base path is relative to it (the release's is data/<release>/)")

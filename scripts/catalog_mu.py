@@ -5,7 +5,7 @@ problem's ground-truth expression, one problem per expression, in catalog order;
 catalog cannot realize) is null. The results explorer shows each catalog's size and the quartiles of these values
 (scripts/site_export_v2.py --sizes).
 
-  catalog_mu.py --out catalog_mu.json [--engine acj-5-4-llm] [--catalogs a,b,...]
+  catalog_mu.py --out catalog_mu.json [--engine acj2-5-4-llm] [--catalogs a,b,...]
 """
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ def main() -> int:
 
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--engine", default="acj-5-4-llm")
+    ap.add_argument("--engine", default="acj2-5-4-llm")
     ap.add_argument("--catalogs", default=",".join(SRBF_CATALOGS))
     a = ap.parse_args()
     out = describe([c for c in a.catalogs.split(",") if c], a.engine)

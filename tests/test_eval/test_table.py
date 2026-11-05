@@ -9,7 +9,7 @@ import pytest
 
 from srbf.table import COLUMNS, ResultTree, build_table, judge_result_file, parse_index_bases
 
-ENGINE = "acj-4-3"
+ENGINE = "acj2-4-llm"
 
 
 @pytest.fixture(scope="module")
@@ -206,14 +206,14 @@ def test_a_new_worker_does_not_change_the_judge(tmp_path, monkeypatch):
     (pkg / "reporting.py").write_text("REPORT = 1\n")
     (pkg / "worker" / "models" / "one_worker.py").write_text("X = 1\n")
     monkeypatch.setattr(srbf, "__file__", str(pkg / "__init__.py"))
-    before = judge_fingerprint("acj-5-4-llm")
+    before = judge_fingerprint("acj2-5-4-llm")
     (pkg / "worker" / "models" / "another_worker.py").write_text("Y = 2\n")
     (pkg / "worker" / "models" / "one_worker.py").write_text("X = 3\n")
     (pkg / "rungs.py").write_text("RUNG_PREFIXES = ('choices', 'another_unit')\n")   # a new budget unit
     (pkg / "reporting.py").write_text("REPORT = 2\n")                                   # not judging code
-    assert judge_fingerprint("acj-5-4-llm") == before
+    assert judge_fingerprint("acj2-5-4-llm") == before
     (pkg / "result_processing.py").write_text("JUDGE = 2\n")
-    assert judge_fingerprint("acj-5-4-llm") != before
+    assert judge_fingerprint("acj2-5-4-llm") != before
 
 
 def test_sympy_spellings_in_a_stored_prediction_are_read_the_engine_way(tmp_path, engine):

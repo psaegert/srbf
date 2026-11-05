@@ -58,7 +58,7 @@ float32 precision. **Is it the ground truth?** Prediction and ground truth are b
 so that `2.1*sin(x1)` and `3*sin(x1)` are the same structure. The engine is a fixed set of rewrite
 rules, [published](https://huggingface.co/datasets/psaegert/simplipy-assets) and downloaded on first
 use; judging involves no learned model. It is named in the config as `simplipy_engine`, and the
-catalogs of the srbf suite are judged with `acj-5-4-llm`. The engine also measures how long an
+catalogs of the srbf suite are judged with `acj2-5-4-llm`. The engine also measures how long an
 prediction is, as a **description length** in bits (MDL) that charges for operators, variables and the
 digits of constants. See [Metrics](metrics.md).
 

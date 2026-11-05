@@ -83,7 +83,7 @@ are left out of every summary, for every method alike.
 from simplipy import SimpliPyEngine
 from srbf import derive_metrics
 
-engine = SimpliPyEngine.load("acj-5-4-llm", install=True)
+engine = SimpliPyEngine.load("acj2-5-4-llm", install=True)
 scored = derive_metrics(snapshot, engine=engine)      # a new dict: the raw columns plus the metrics
 
 print(scored["fvu_val"][:3], scored["numeric_recovery_val"][:3], scored["symbolic_recovery"][:3])

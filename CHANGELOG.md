@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (SimpliPy 0.15)
+
+- **Requires SimpliPy 0.15, symbolic-data 0.19 and, for the flash-ansr adapters, flash-ansr 0.20.** SimpliPy 0.15
+  refuses every pre-0.15 rule file, so the judge's engine moves from `acj-5-4-llm` to `acj2-5-4-llm` (0.15's default,
+  rules to length 5) everywhere: `srbf table`, `srbf analyze`, the scaffold, `srbf check`, the shipped configs and the
+  docs. The test helper's small engine moves from `acj-4-3` to `acj2-4-llm`.
+- **The description length** is `complexity(e, certified=True, mode='f64')`: 0.15 dropped `canon=`, and a mode prices
+  in its own canonical reading, which for f64 is the old default canon.
+- `explicit_constant_placeholders` lost `convert_numbers_to_constant=` (0.15 never converts numerals); the
+  decontamination probe drops the keyword.
+- Every judged number changes with the engine: the release re-judges every result once (the judge fingerprint names
+  the SimpliPy version and the engine).
+
 ### Added
 - **Improvability, Validation (Mean Improvability).** `scripts/improvability.py`: a prediction's validation error
   against the best error a fixed pool reaches on the same problem and points, \((e - e^\ast)/\max(e, e^\ast)\) with \(e\) the RMSE

@@ -105,14 +105,14 @@ def test_mdl_ratio_absent_without_a_pricer_and_inf_on_failure():
 def test_mdl_ratio_through_the_engine():
     from simplipy import SimpliPyEngine
 
-    engine = SimpliPyEngine.load("acj-4-3", install=True)
+    engine = SimpliPyEngine.load("acj2-4-llm", install=True)
     snapshot = _mdl_snapshot()
     snapshot['skeleton'] = [['*', '<constant>', 'x1']] * 4  # the engine's vocabulary, not the fake arity map's
     snapshot['predicted_skeleton_prefix'] = [['+', 'x1', 'x1'], ['*', '<constant>', 'x1'], ['+', 'x1', 'x1'], ['+', 'x1', 'x1']]
     snapshot['predicted_expression_prefix'] = [['+', 'x1', 'x1'], ['*', '2.5', 'x1'], ['+', 'x1', 'x1'], ['+', 'x1', 'x1']]
     snapshot['ground_truth_prefix'] = [['*', '2', 'x1']] * 4
     scored = derive_metrics(snapshot, engine=engine)
-    expected = float(engine.complexity(['*', '2', 'x1'], certified=True, mode='f64', canon='default'))
+    expected = float(engine.complexity(['*', '2', 'x1'], certified=True, mode='f64'))
     assert list(scored['ground_truth_mdl']) == [expected] * 4
     assert scored['mdl_ratio'][1] > scored['mdl_ratio'][0] > 0  # a literal 2.5 costs more than the integer 2
 
@@ -144,7 +144,7 @@ def test_judges_the_canonical_form_the_prediction_was_priced_as():
     the exact recovery that flash-ansr < 0.15.2 hid behind the emitted spelling."""
     import numpy as np
     from simplipy import SimpliPyEngine
-    engine = SimpliPyEngine.load("acj-4-3", install=True)
+    engine = SimpliPyEngine.load("acj2-4-llm", install=True)
     x = np.linspace(-2, 2, 32).reshape(-1, 1)
     y = np.exp(-x[:, 0] ** 2)
     law = ["exp", "neg", "pow", "x1", "<constant>"]
@@ -223,7 +223,7 @@ def test_a_number_minted_by_simplification_is_a_constant_on_both_sides():
 def test_the_engine_judges_a_product_and_a_power_alike():
     """The same with the engine the srbf catalogs are judged with."""
     from simplipy import SimpliPyEngine
-    engine = SimpliPyEngine.load('acj-5-4-llm', install=True)
+    engine = SimpliPyEngine.load('acj2-5-4-llm', install=True)
     snapshot = {
         'skeleton': [['pow', 'x1', '<constant>'], ['*', 'x1', 'x1'], ['+', 'x1', 'x1']],
         'predicted_expression_prefix': [['*', 'x1', 'x1'], ['pow', 'x1', '2'], ['*', '2.0', 'x1']],
@@ -239,7 +239,7 @@ def test_law_and_prediction_are_judged_by_one_function_of_their_canonical_forms(
     ``x2 / (c * x4 ** 2)``, ``pow(u, 0.5)`` is ``rootn(u, 2)``, and ``pi`` is a number. Law and prediction are
     canonicalized WITH their values, then masked, so the side that wrote the longer spelling does not lose."""
     from simplipy import SimpliPyEngine
-    engine = SimpliPyEngine.load('acj-5-4-llm', install=True)
+    engine = SimpliPyEngine.load('acj2-5-4-llm', install=True)
     coulomb = ['/', '*', 'x1', 'x2', '*', '*', '*', '4', '3.1415926535897', '8.854e-12', 'pow', 'x2', '3']
     laws = [coulomb, ['rootn', '/', '*', 'x1', 'x2', 'x3', '2'], ['*', '*', '4', '3.141592653589793', 'x1'], coulomb]
     predictions = [['/', '/', '8.987742e9', 'x2', '/', 'x2', 'x1'], ['pow', '/', '*', 'x2', 'x1', 'x3', '0.5'],
@@ -262,7 +262,7 @@ def test_a_match_in_either_form_is_a_match():
     agree in canonical form only. Either agreement is a sound witness, and the judge takes both."""
     from simplipy import SimpliPyEngine
     from symbolic_data.token_ops import normalize_skeleton
-    engine = SimpliPyEngine.load('acj-5-4-llm', install=True)
+    engine = SimpliPyEngine.load('acj2-5-4-llm', install=True)
     laws = [['*', 'pow', 'x1', '/', '3', '2', '+', 'pow', 'x1', '/', '3', '2', 'x1'], ['pow', 'x1', '2']]
     predictions = [['*', '*', 'x1', 'x1', '+', 'pow', 'x1', '0.5', 'x1'], ['*', 'x1', 'x1']]
     snapshot = {
@@ -281,7 +281,7 @@ def test_a_malformed_answer_is_judged_as_stored_and_costs_no_other_row():
     """A stored prefix the engine cannot parse (trailing tokens) is masked token by token and compared as it
     stands. It must not raise: one bad row would take the whole result file with it."""
     from simplipy import SimpliPyEngine
-    engine = SimpliPyEngine.load('acj-5-4-llm', install=True)
+    engine = SimpliPyEngine.load('acj2-5-4-llm', install=True)
     snapshot = {
         'skeleton': [['pow', 'x1', '<constant>'], ['sin', 'x1']], 'ground_truth_prefix': [['pow', 'x1', '2'], ['sin', 'x1']],
         'predicted_expression_prefix': [['*', 'x1', 'x1'], ['sin', 'x1', 'x2', '3.0']],
@@ -475,7 +475,7 @@ def test_symbolic_recovery_is_asked_at_three_levels_of_masking():
     as well. Nothing masked: the constants are right too, to the precision numeric recovery asks for. Each level
     implies the one before it, and a failed prediction is a miss at all three."""
     from simplipy import SimpliPyEngine
-    scored = derive_metrics(_levels_snapshot(), engine=SimpliPyEngine.load('acj-5-4-llm', install=True))
+    scored = derive_metrics(_levels_snapshot(), engine=SimpliPyEngine.load('acj2-5-4-llm', install=True))
     assert list(scored['symbolic_recovery']) == [True, True, True, True, False]
     assert list(scored['symbolic_recovery_mask_fittable']) == [True, True, False, False, False]
     assert list(scored['symbolic_recovery_mask_none']) == [True, False, False, False, False]

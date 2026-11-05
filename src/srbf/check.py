@@ -204,7 +204,7 @@ def _check_experiment(raw: Mapping[str, Any], name: str | None, *, n_problems: i
             step("engine", True, f"{model_cfg.get('simplipy_engine')} in {time.time() - started:.1f}s")
         except Exception as exc:  # noqa: BLE001
             step("engine", False, f"{type(exc).__name__}: {_short(exc)}",
-                 "use the engine the catalogs are judged with: model_adapter.simplipy_engine: acj-5-4-llm")
+                 "use the engine the catalogs are judged with: model_adapter.simplipy_engine: acj2-5-4-llm")
             return
 
     started = time.time()

@@ -88,7 +88,7 @@ files of one or several configs.
 | `-c`, `--config` | a config; every experiment and rung whose result file exists becomes a run. Repeat the flag to compare methods |
 | `--model` | the method's name for the `-c` in the same position; by default derived from the adapter block |
 | `-o`, `--out-dir` | the output directory (required) |
-| `--engine` | the SimpliPy engine the expressions are judged with; by default `acj-5-4-llm` |
+| `--engine` | the SimpliPy engine the expressions are judged with; by default `acj2-5-4-llm` |
 | `--title` | the title of the report |
 
 Instead of `-c`, a manifest file can list the runs by hand:
@@ -115,7 +115,7 @@ srbf table --tree mymethod:1:results/evaluation/scaling/mymethod \
 |---|---|
 | `--tree` | `METHOD:DRAW:PATH`, the result files of one method and draw: `PATH/<catalog>/choices_<rung>.pkl`, shards included. Repeat the flag for more (required) |
 | `-o`, `--out` | the CSV to write (required) |
-| `--engine` | the SimpliPy engine the predictions are judged with; by default `acj-5-4-llm` |
+| `--engine` | the SimpliPy engine the predictions are judged with; by default `acj2-5-4-llm` |
 | `--workers` | processes that judge files in parallel; by default 4 |
 | `--cache` | a directory that keeps the rows of every judged file; a file is judged again only when it or the judge changed (the judge is the installed srbf source, the simplipy, sympy and numpy versions and the engine) |
 | `--index-variables` | `METHOD=FIRST`: the method's result files spell the variables `x_<i>` by column index, counted from `FIRST` (E2E counts from 0, NeSymReS from 1). srbf renames them when it records a prediction, so only files written by older versions need it |
