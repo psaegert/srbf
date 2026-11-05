@@ -70,6 +70,7 @@ def left_out(counts: dict[str, Any], texts: dict[str, Any]) -> list[dict[str, An
     """The data srbf leaves out for its license, from the release count: a whole benchmark, or some of its datasets."""
     rows = []
     for r in counts.get("left_out_for_license") or []:
+        why: list[dict[str, Any]]
         if r["members"]:
             by_reason: dict[str, list[str]] = {}
             for member, reason in r["members"].items():
