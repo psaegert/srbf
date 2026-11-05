@@ -58,6 +58,7 @@ def problem_sets(counts: dict[str, Any], texts: dict[str, Any]) -> list[dict[str
             "origin": tags.get("origin"), "tags": list(tags.get("tags") or []),
             "problems": int(r["problems"]), "groups": {str(k): int(v) for k, v in r["subsets"].items()},
             "sources": list(texts["sources"].get(r["name"]) or r.get("sources") or []),
+            "citation": r.get("citation") or {},
             "license": texts["licenses_as"].get(r["name"]) or r.get("license"),
         })
     bad = [r["name"] for r in rows if LOCAL.search(json.dumps(r))]
@@ -80,7 +81,8 @@ def left_out(counts: dict[str, Any], texts: dict[str, Any]) -> list[dict[str, An
             why = [{"reason": r["reason"], "members": None}]
         rows.append({"name": r["catalog"], "display": display({**r, "display_name": r.get("name")}, texts["names"]),
                      "problems": int(r["problems"] or 0), "whole": not r["members"], "why": why,
-                     "sources": list(texts["sources"].get(r["catalog"]) or r.get("sources") or [])})
+                     "sources": list(texts["sources"].get(r["catalog"]) or r.get("sources") or []),
+                     "citation": r.get("citation") or {}})
     bad = [r["name"] for r in rows if LOCAL.search(json.dumps(r))]
     if bad:
         raise SystemExit(f"local paths in {bad}")
@@ -96,13 +98,31 @@ def left_out_table(rows: list[dict[str, Any]], kept: dict[str, int]) -> str:
         else:
             what = f'{fmt(r["problems"])} of {fmt(r["problems"] + kept.get(r["name"], 0) + kept.get(r["name"] + "-share-alike", 0))}'
             why = "; ".join(f'{esc(", ".join(w["members"]))}: {esc(w["reason"])}' for w in r["why"])
-        source = source_html(r["sources"][0]) if r["sources"] else ""
+        paper, data = cited(r)
         body.append(f'<tr data-name="{esc(r["name"])}"><th scope="row">{esc(r["display"])}</th>'
                     f'<td class="num">{fmt(r["problems"])}</td><td>{what}</td><td>{why}</td>'
-                    f'<td class="bm-src">{source}</td></tr>')
+                    f'<td class="bm-src">{paper}</td><td class="bm-src">{data}</td></tr>')
     return ('<div class="bm-scroll"><table class="bm-table bm-left">\n<thead><tr><th scope="col">Benchmark</th>'
             '<th scope="col" class="num">Problems</th><th scope="col">Left out</th><th scope="col">Why</th>'
-            '<th scope="col">Source</th></tr></thead>\n<tbody>\n' + "\n".join(body) + "\n</tbody></table></div>")
+            '<th scope="col">Paper</th><th scope="col">Data</th></tr></thead>\n<tbody>\n' + "\n".join(body)
+            + "\n</tbody></table></div>")
+
+
+def cite_html(c: dict[str, Any] | None) -> str:
+    """A paper or dataset: its short name, linked, with its title as the link's hint."""
+    if not c:
+        return ""
+    title = " ".join(x for x in (c.get("title"), c.get("venue")) if x).replace("\u2014", ": ")   # the copy lint: no em-dash
+    return (f'<a href="{esc(c["url"])}" target="_blank" rel="noopener" title="{esc(title)}">{esc(c["short"])}</a>'
+            if c.get("url") else esc(c["short"]))
+
+
+def cited(r: dict[str, Any]) -> tuple[str, str]:
+    """The Paper and Data cells: the citations, else the first source in the paper's place."""
+    c = r.get("citation") or {}
+    if c:
+        return cite_html(c.get("paper")), cite_html(c.get("data"))
+    return (source_html(r["sources"][0]) if r["sources"] else ""), ""
 
 
 def source_html(source: str) -> str:
@@ -157,17 +177,18 @@ def table(rows: list[dict[str, Any]]) -> str:
         groups = r["groups"]
         group_names = ", ".join(f"{k} ({v})" for k, v in groups.items())
         tags = "".join(f'<span class="bm-tag">{esc(t)}</span>' for t in r["tags"])
-        source = source_html(r["sources"][0]) if r["sources"] else ""
+        paper, data = cited(r)
         body.append(
             f'<tr data-name="{esc(r["name"])}" data-origin="{esc(r["origin"])}" data-tags="{esc("|".join(r["tags"]))}" '
             f'data-problems="{r["problems"]}">'
             f'<th scope="row">{esc(r["display"])}</th><td>{esc(r["origin"])}</td><td class="bm-tags">{tags}</td>'
             f'<td class="num">{fmt(r["problems"])}</td>'
             f'<td class="num" title="{esc(group_names)}">{len(groups)}</td>'
-            f'<td class="bm-src">{source}</td><td>{esc(license_label(r["license"]))}</td></tr>')
-    return ('<div class="bm-scroll"><table class="bm-table">\n<thead><tr><th scope="col">Problem set</th>'
+            f'<td class="bm-src">{paper}</td><td class="bm-src">{data}</td><td>{esc(license_label(r["license"]))}</td></tr>')
+    return ('<div class="bm-scroll"><table class="bm-table bm-list">\n<thead><tr><th scope="col">Problem set</th>'
             '<th scope="col">Origin</th><th scope="col">Tags</th><th scope="col" class="num">Problems</th>'
-            '<th scope="col" class="num">Groups</th><th scope="col">Source</th><th scope="col">License</th></tr></thead>'
+            '<th scope="col" class="num">Groups</th><th scope="col">Paper</th><th scope="col">Data</th>'
+            '<th scope="col">License</th></tr></thead>'
             '\n<tbody>\n' + "\n".join(body) + "\n</tbody></table></div>")
 
 

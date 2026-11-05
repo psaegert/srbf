@@ -2,7 +2,7 @@
 // every chosen tag. Without this script the filter stays hidden and the list shows every problem set.
 (function () {
   var box = document.querySelector(".bm-filter");
-  var rows = Array.prototype.slice.call(document.querySelectorAll(".bm-table tbody tr"));
+  var rows = Array.prototype.slice.call(document.querySelectorAll(".bm-list tbody tr"));
   if (!box || !rows.length) { return; }
   var origin = "";
   var tags = [];

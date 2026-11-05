@@ -82,3 +82,15 @@ def test_the_data_left_out_for_its_license_has_its_own_section() -> None:
         assert g["whole"] or g["name"] in names                               # a split benchmark keeps the rest
     total = sum(g["problems"] for g in GONE)
     assert f"In all, {total:,} problems from {len(GONE)} benchmarks." in _text(PAGE)
+
+
+def test_a_problem_set_cites_its_paper_and_its_data_where_both_exist() -> None:
+    assert sum(1 for r in ROWS if (r["citation"] or {}).get("paper")) > 0.9 * len(ROWS)
+    for r in ROWS:
+        for side in ("paper", "data"):
+            c = (r["citation"] or {}).get(side)
+            if c:
+                assert c["short"] and c["url"].startswith(("https://", "http://")), (r["name"], side)
+                assert f'>{bench.esc(c["short"])}</a>' in PAGE, (r["name"], side)
+    assert bench.cite_html({"short": "Keijzer 2003", "title": "Improving SR", "url": "https://doi.org/10.1007/x"}) == \
+        '<a href="https://doi.org/10.1007/x" target="_blank" rel="noopener" title="Improving SR">Keijzer 2003</a>'

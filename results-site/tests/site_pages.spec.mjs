@@ -174,9 +174,10 @@ test('the Benchmarks page: one row per problem set, a filter that keeps the rows
   const errors = collectErrors(page);
   const sets = await (await request.get('/data/benchmarks/problem_sets.json')).json();
   await page.goto('/benchmarks.html');
-  const rows = page.locator('.bm-table tbody tr');
+  const rows = page.locator('.bm-list tbody tr');
   await expect(rows).toHaveCount(sets.length);
-  const visible = () => page.locator('.bm-table tbody tr:not([hidden])').count();
+  const visible = () => page.locator('.bm-list tbody tr:not([hidden])').count();
+  const leftRows = await page.locator('.bm-left tbody tr').count();
   const total = (list) => list.reduce((n, s) => n + s.problems, 0).toLocaleString('en-US');
   await expect(page.locator('.bm-filter')).toBeVisible();
   await expect(page.locator('.bm-count')).toHaveText(`All ${sets.length} problem sets, ${total(sets)} problems.`);
@@ -190,6 +191,7 @@ test('the Benchmarks page: one row per problem set, a filter that keeps the rows
   const both = measured.filter((s) => s.tags.includes('no test split'));
   expect(await visible()).toBe(both.length);
   await expect(page.locator('.bm-chips button', { hasText: 'no test split' })).toHaveAttribute('aria-pressed', 'true');
+  expect(await page.locator('.bm-left tbody tr:not([hidden])').count()).toBe(leftRows);   // the filter leaves the left-out list alone
   // all origins again, the tag still chosen
   await page.locator('.bm-seg button', { hasText: 'all' }).click();
   expect(await visible()).toBe(sets.filter((s) => s.tags.includes('no test split')).length);
@@ -200,7 +202,8 @@ test('the Benchmarks page: one row per problem set, a filter that keeps the rows
     await expect(page.locator('#tags dt .bm-tag', { hasText: new RegExp(`^${tag}$`) })).toHaveCount(1);
   }
   expect(await page.locator('main h2').allTextContents()).toEqual(['The problem sets', 'What the tags mean',
-    'How srbf runs a benchmark', 'What srbf decided', 'What srbf could not include']);
+    'How srbf runs a benchmark', 'What srbf decided', 'What srbf could not include', 'Data srbf may not share']);
+  expect(leftRows).toBeGreaterThan(0);
   expect(errors).toEqual([]);
 });
 
