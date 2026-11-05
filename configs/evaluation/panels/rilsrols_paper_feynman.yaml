@@ -17,7 +17,7 @@ experiments:
       worker: rilsrols
       python: '{{ROOT}}/envs/rilsrols/bin/python'
       config_provenance: harness_tuned
-      simplipy_engine: acj-5-4-llm
+      simplipy_engine: acj2-5-4-llm
       timeout: 4800
       options:
         max_fit_calls: 1000000
@@ -39,7 +39,7 @@ experiments:
       worker: rilsrols
       python: '{{ROOT}}/envs/rilsrols/bin/python'
       config_provenance: harness_tuned
-      simplipy_engine: acj-5-4-llm
+      simplipy_engine: acj2-5-4-llm
       timeout: 4800
       options:
         max_fit_calls: 1000000

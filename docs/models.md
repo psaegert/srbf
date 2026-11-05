@@ -21,7 +21,7 @@ block. To enter a method of your own, see [Adding your method](adapters.md).
 
 Two keys are common to every block. `config_provenance` states who chose the configuration
 ([Fairness](fairness.md#configuration-provenance-labels)). `simplipy_engine` names the engine the
-predictions are judged with; the srbf suite uses `acj-5-4-llm`, which is downloaded on first use.
+predictions are judged with; the srbf suite uses `acj2-5-4-llm`, which is downloaded on first use.
 Every type needs it except `flash_ansr`, which takes the engine from its checkpoint.
 
 **One environment per method.** Each method has a dependency set of its own: PySR brings Julia,
@@ -137,7 +137,7 @@ exist in the interpreter named by `python`, which may be srbf's own.
 model_adapter:
   type: pysr
   config_provenance: upstream_default
-  simplipy_engine: acj-5-4-llm
+  simplipy_engine: acj2-5-4-llm
   python: "{{ROOT}}/envs/pysr/bin/python"      # default: srbf's interpreter
   niterations: 100
   timeout_in_seconds: 3600
@@ -178,7 +178,7 @@ model_adapter:
   worker: operon
   python: "{{ROOT}}/envs/operon/bin/python"
   config_provenance: author_blessed
-  simplipy_engine: acj-5-4-llm
+  simplipy_engine: acj2-5-4-llm
   options:
     max_evaluations: 1048576
 ```
@@ -241,7 +241,7 @@ model_adapter:
   worker: rilsrols
   python: "{{ROOT}}/envs/rilsrols/bin/python"
   config_provenance: author_blessed
-  simplipy_engine: acj-5-4-llm
+  simplipy_engine: acj2-5-4-llm
   timeout: 4800
   options:
     max_fit_calls: 1048576
@@ -338,7 +338,7 @@ model_adapter:
   worker: tisr
   python: "{{ROOT}}/envs/tisr/bin/python"
   config_provenance: harness_tuned   # srbf picks the answer (selection), so the maintainers chose part of it
-  simplipy_engine: acj-5-4-llm
+  simplipy_engine: acj2-5-4-llm
   timeout: 7200
   selection: {mode: mdl}       # TiSR picks no answer; without this every problem counts as failed
   options:
@@ -409,7 +409,7 @@ checkpoint (`100M.ckpt`,
 model_adapter:
   type: nesymres
   config_provenance: upstream_default
-  simplipy_engine: acj-5-4-llm
+  simplipy_engine: acj2-5-4-llm
   eq_setting_path: "{{ROOT}}/models/nesymres/eq_setting.json"
   config_path: "{{ROOT}}/models/nesymres/config.yaml"
   weights_path: "{{ROOT}}/models/nesymres/100M.ckpt"
@@ -443,7 +443,7 @@ into `models/e2e/`, as the upstream repository describes.
 model_adapter:
   type: e2e
   config_provenance: upstream_default
-  simplipy_engine: acj-5-4-llm
+  simplipy_engine: acj2-5-4-llm
   model_path: "{{ROOT}}/models/e2e/model1.pt"
   candidates_per_bag: 1
   device: cuda
@@ -491,7 +491,7 @@ model_adapter:
   worker: dso
   python: "{{ROOT}}/envs/dso/bin/python"
   config_provenance: author_blessed        # upstream_default for arm: dsr
-  simplipy_engine: acj-5-4-llm
+  simplipy_engine: acj2-5-4-llm
   timeout: 7200
   options:
     arm: udsr
@@ -607,7 +607,7 @@ model_adapter:
   worker: gpgomea
   python: "{{ROOT}}/envs/gpgomea/bin/python"
   config_provenance: author_blessed
-  simplipy_engine: acj-5-4-llm
+  simplipy_engine: acj2-5-4-llm
   timeout: 9600
   options:
     max_evaluations: 1048576
@@ -695,7 +695,7 @@ model_adapter:
   worker: qlattice
   python: "{{ROOT}}/envs/qlattice/bin/python"
   config_provenance: author_blessed
-  simplipy_engine: acj-5-4-llm
+  simplipy_engine: acj2-5-4-llm
   timeout: 7200
   options:
     n_epochs: 16
@@ -767,7 +767,7 @@ model_adapter:
   worker: bingo
   python: "{{ROOT}}/envs/bingo/bin/python"
   config_provenance: author_blessed
-  simplipy_engine: acj-5-4-llm
+  simplipy_engine: acj2-5-4-llm
   timeout: 7200
   options:
     max_evals: 262144
@@ -829,7 +829,7 @@ expressions being evaluated.
 model_adapter:
   type: lample_charton
   config_provenance: harness_tuned
-  simplipy_engine: acj-5-4-llm
+  simplipy_engine: acj2-5-4-llm
   catalog: "{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M/catalog_train.yaml"
   samples: 32
 ```

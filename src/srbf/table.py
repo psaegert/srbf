@@ -114,12 +114,12 @@ def result_files(tree: ResultTree, *, max_rung: int | None = None) -> list[str]:
 
 
 def mdl_bits(engine: Any) -> Callable[[list[str]], float]:
-    """The description length the table reports, in bits: certified, f64 parse, the default canon (NaN on failure)."""
+    """The description length the table reports, in bits: certified, priced as f64 reads it (NaN on failure)."""
     from simplipy.engine import Mode
 
     def price(prefix: list[str]) -> float:
         try:
-            return float(engine.complexity(list(prefix), certified=True, mode=Mode.f64, canon="default")) / 1000.0
+            return float(engine.complexity(list(prefix), certified=True, mode=Mode.f64)) / 1000.0
         except Exception:  # noqa: BLE001 - an expression the engine cannot price has no description length
             return float("nan")
 
@@ -484,7 +484,7 @@ class TableReport:
     seconds: float
 
 
-def build_table(trees: Iterable[ResultTree], out: str, *, engine: str = "acj-5-4-llm", workers: int = 4,
+def build_table(trees: Iterable[ResultTree], out: str, *, engine: str = "acj2-5-4-llm", workers: int = 4,
                 cache_dir: str | None = None, max_rung: int | None = None, stall_timeout: float = 1800.0,
                 progress_path: str | None = None, log: Callable[[str], None] | None = print,
                 _judge: Callable[..., tuple[int, list[list[Any]], str | None]] = _judge_job) -> TableReport:

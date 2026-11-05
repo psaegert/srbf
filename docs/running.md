@@ -36,7 +36,7 @@ run:
     config_provenance: upstream_default
     worker: "{{ROOT}}/adapters/mymethod/worker.py"
     python: "{{ROOT}}/envs/mymethod/bin/python"
-    simplipy_engine: acj-5-4-llm
+    simplipy_engine: acj2-5-4-llm
   runner:
     output: "{{ROOT}}/results/evaluation/mymethod/fastsrb.pkl"
     save_every: 20
@@ -70,7 +70,7 @@ run:
   model_adapter:
     type: pysr
     config_provenance: upstream_default
-    simplipy_engine: acj-5-4-llm
+    simplipy_engine: acj2-5-4-llm
     niterations: !sweep {name: ladder, values: [1, 4, 16, 64]}
   runner:
     output: !sweep
@@ -127,7 +127,7 @@ run:
     config_provenance: upstream_default
     worker: "{{ROOT}}/adapters/mymethod/worker.py"
     python: "{{ROOT}}/envs/mymethod/bin/python"
-    simplipy_engine: acj-5-4-llm
+    simplipy_engine: acj2-5-4-llm
   runner:
     output: "{{ROOT}}/results/evaluation/mymethod/{catalog}.pkl"
     save_every: 20
@@ -220,7 +220,7 @@ run:
     config_provenance: upstream_default
     worker: "{{ROOT}}/adapters/mymethod/worker.py"
     python: "{{ROOT}}/envs/mymethod/bin/python"
-    simplipy_engine: acj-5-4-llm
+    simplipy_engine: acj2-5-4-llm
     options:
       budget: !sweep {name: ladder, values: [1, 4, 16]}
   runner:

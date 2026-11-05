@@ -805,9 +805,10 @@ def derive_metrics(
     if simplify_fn is None and engine is not None:
         simplify_fn = engine.simplify
     if mdl_fn is None and engine is not None:
-        # The price the flash-ansr ranking modes use: certified, f64 parse, the public Default canon.
+        # The price the flash-ansr ranking modes use: certified, priced as f64 reads it (SimpliPy 0.15 dropped
+        # `canon=`: a mode prices in its own canonical reading, and f64's is the old default canon).
         def mdl_fn(tokens: list[str], _engine: Any = engine) -> float:
-            return float(_engine.complexity(list(tokens), certified=True, mode='f64', canon='default'))
+            return float(_engine.complexity(list(tokens), certified=True, mode='f64'))
 
     if convert_fn is None and engine is not None:
         convert_fn = engine.convert_expression

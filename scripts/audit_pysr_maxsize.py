@@ -18,7 +18,7 @@ import argparse
 import sys
 from typing import Any
 
-ENGINE = "acj-5-4-llm"
+ENGINE = "acj2-5-4-llm"
 
 
 def installed_default_maxsize() -> int | None:

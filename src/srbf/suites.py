@@ -6,7 +6,7 @@ A whole-suite config names a suite (or lists catalogs) and gives ONE ``run:`` te
     run:
       data_source:
         sampling: {n_support: 512, n_validation: 512, noise: 0.0}
-      model_adapter: {type: subprocess, worker: ..., python: ..., simplipy_engine: acj-5-4-llm}
+      model_adapter: {type: subprocess, worker: ..., python: ..., simplipy_engine: acj2-5-4-llm}
       runner:
         output: '{{ROOT}}/results/evaluation/mymethod/{catalog}.pkl'
 

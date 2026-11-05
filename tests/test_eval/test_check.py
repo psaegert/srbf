@@ -28,7 +28,7 @@ def toy_catalog(monkeypatch):
 
 
 def _write(tmp_path, **model_overrides) -> str:
-    model = {"type": "subprocess", "worker": "example", "python": sys.executable, "simplipy_engine": "acj-4-3",
+    model = {"type": "subprocess", "worker": "example", "python": sys.executable, "simplipy_engine": "acj2-4-llm",
              "config_provenance": "harness_tuned", "timeout": 120}
     model.update(model_overrides)
     config = {"run": {"data_source": {"catalog": "toy", "sampling": {"n_support": 48}}, "model_adapter": model,
@@ -94,7 +94,7 @@ def test_checks_the_chosen_experiment_of_a_suite(tmp_path, toy_catalog):
             type: subprocess
             worker: example
             python: {sys.executable}
-            simplipy_engine: acj-4-3
+            simplipy_engine: acj2-4-llm
             config_provenance: harness_tuned
           runner:
             output: '{tmp_path}/{{catalog}}.pkl'

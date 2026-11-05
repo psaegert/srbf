@@ -121,7 +121,7 @@ run:
     worker: '{{ROOT}}/adapters/mymethod/worker.py'
     python: '{{ROOT}}/envs/mymethod/bin/python'
     options: {}
-    simplipy_engine: acj-5-4-llm
+    simplipy_engine: acj2-5-4-llm
     timeout: 3600
     worker_log: '{{ROOT}}/results/evaluation/mymethod/worker.log'
   runner:
@@ -142,7 +142,7 @@ complete config and the job array that runs it.
 | `worker` | required | the worker file, or the name of a built-in worker (`example`, `pysr`) |
 | `python` | srbf's interpreter | the interpreter of your method's environment |
 | `options` | `{}` | handed to `load` and to every `fit`; `{{ROOT}}` is replaced in its strings |
-| `simplipy_engine` | required | the engine the predictions are judged with; keep `acj-5-4-llm` for the srbf suite |
+| `simplipy_engine` | required | the engine the predictions are judged with; keep `acj2-5-4-llm` for the srbf suite |
 | `config_provenance` | `harness_tuned` | who chose this configuration ([Fairness](fairness.md#configuration-provenance-labels)) |
 | `env` | `{}` | environment variables for the worker, added to the environment srbf runs in, for example `{CUDA_VISIBLE_DEVICES: "0"}` |
 | `cwd` | none | the worker's working directory |
@@ -266,7 +266,7 @@ A config names the builder as `module:function`, and nothing in srbf has to chan
 model_adapter:
   type: mymethod.srbf_adapter:build
   config_provenance: upstream_default
-  simplipy_engine: acj-5-4-llm
+  simplipy_engine: acj2-5-4-llm
   hyperparameters: {beam: 8}
 ```
 

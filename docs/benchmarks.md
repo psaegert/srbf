@@ -161,7 +161,7 @@ from simplipy import SimpliPyEngine
 from symbolic_data import ProblemCatalog
 from srbf.config import build_catalog_source
 
-engine = SimpliPyEngine.load("acj-5-4-llm", install=True)
+engine = SimpliPyEngine.load("acj2-5-4-llm", install=True)
 source = build_catalog_source(
     {"catalog": "nguyen", "sampling": {"n_support": 512, "n_validation": 512}}, target_size=None, skip=0)
 source.prepare(adapter=SimpleNamespace(get_simplipy_engine=lambda: engine))

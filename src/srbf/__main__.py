@@ -40,14 +40,14 @@ def build_parser() -> argparse.ArgumentParser:
     analyze_parser.add_argument('-c', '--config', action='append', default=None, help='A run config: its experiments and sweep rungs whose outputs exist become the runs (repeat for several methods)')
     analyze_parser.add_argument('--model', action='append', default=None, help='The model name for the -c config in the same position (default: derived from its adapter block)')
     analyze_parser.add_argument('-o', '--out-dir', type=str, required=True, help='Output directory for results.md + figures/')
-    analyze_parser.add_argument('--engine', type=str, default='acj-5-4-llm', help='SimpliPy engine used for skeleton simplification + operator arities')
+    analyze_parser.add_argument('--engine', type=str, default='acj2-5-4-llm', help='SimpliPy engine used for skeleton simplification + operator arities')
     analyze_parser.add_argument('--title', type=str, default='Results', help='Title of the rendered results page')
 
     table_parser = subparsers.add_parser("table", help="Judge result trees into one table: a row per problem and rung, every metric")
     table_parser.add_argument('--tree', action='append', required=True, metavar='METHOD:DRAW:PATH',
                               help='A result tree (PATH/<catalog>/choices_<rung>.pkl) of one method and draw; repeat for more')
     table_parser.add_argument('-o', '--out', type=str, required=True, help='The CSV to write')
-    table_parser.add_argument('--engine', type=str, default='acj-5-4-llm', help='SimpliPy engine the predictions are judged with')
+    table_parser.add_argument('--engine', type=str, default='acj2-5-4-llm', help='SimpliPy engine the predictions are judged with')
     table_parser.add_argument('--workers', type=int, default=4, help='Processes that judge files in parallel (default: 4)')
     table_parser.add_argument('--cache', type=str, default=None, metavar='DIR',
                               help='Keep the rows of every judged file here and read them back while neither the file nor the judge changed')

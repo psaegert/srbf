@@ -28,7 +28,7 @@ def test_flash_ansr_adapter_accepts_valid_complexity(complexity) -> None:
 
 @pytest.fixture(scope="module")
 def simplipy_engine() -> SimpliPyEngine:
-    return SimpliPyEngine.load("acj-4-3", install=True)
+    return SimpliPyEngine.load("acj2-4-llm", install=True)
 
 
 def _build_toy_pool(engine: SimpliPyEngine) -> LampleChartonCatalog:
