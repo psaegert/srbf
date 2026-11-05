@@ -13,7 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rules to length 5) everywhere: `srbf table`, `srbf analyze`, the scaffold, `srbf check`, the shipped configs and the
   docs. The test helper's small engine moves from `acj-4-3` to `acj2-4-llm`.
 - **The description length** is `complexity(e, certified=True, mode='f64')`: 0.15 dropped `canon=`, and a mode prices
-  in its own canonical reading, which for f64 is the old default canon.
+  in its own canonical reading, which for f64 is the old default canon. The definition is unchanged, but 0.15's f64
+  canonical form and prices are not (literals priced as the float they read as, a new sign rule): on srbf's ground
+  truths 35 % of the values stay equal, the median ratio is 0.993, and physical-constant literals drop most. **MDL
+  values are not comparable across the 0.15 bump; every row is re-priced** (ground_truth_mdl, predicted_mdl, the MDL
+  ratio and everything built on them).
 - `explicit_constant_placeholders` lost `convert_numbers_to_constant=` (0.15 never converts numerals); the
   decontamination probe drops the keyword.
 - Every judged number changes with the engine: the release re-judges every result once (the judge fingerprint names
