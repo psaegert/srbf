@@ -251,3 +251,12 @@ left_out:
     text: >-
       SciLaws-Real defines two kinds of problems. srbf runs Type I; Type II tests a formula on held-out groups of
       data, which needs a protocol srbf does not have yet.
+
+# the data srbf leaves out because its license does not allow sharing it (a section of its own)
+license_section:
+  title: Data srbf may not share
+  text: >-
+    Every problem srbf runs can be downloaded by anyone, so srbf republishes a benchmark's data only where its license
+    allows it. The data below has no license, or one that does not allow sharing it (for example, a non-commercial
+    license), so srbf leaves it out. Where only some of a benchmark's datasets are affected, srbf keeps the others.
+

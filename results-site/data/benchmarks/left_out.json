@@ -1,0 +1,564 @@
+[
+ {
+  "name": "bms-real-data",
+  "display": "Bayesian machine scientist real datasets",
+  "problems": 3,
+  "whole": true,
+  "why": [
+   {
+    "reason": "no license",
+    "members": null
+   }
+  ],
+  "sources": [
+   "https://arxiv.org/abs/2004.12157",
+   "https://doi.org/10.1126/sciadv.aav6971",
+   "https://pmc.ncbi.nlm.nih.gov/articles/PMC6994216/"
+  ]
+ },
+ {
+  "name": "dimensionless-learning",
+  "display": "Dimensionless-learning scaling laws (Xie et al. 2022)",
+  "problems": 5,
+  "whole": true,
+  "why": [
+   {
+    "reason": "a copyleft license (GPL)",
+    "members": null
+   }
+  ],
+  "sources": [
+   "https://doi.org/10.1038/s41467-022-35084-w",
+   "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC9729234/fullTextXML",
+   "https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-022-35084-w/MediaObjects/41467_2022_35084_MOESM1_ESM.pdf"
+  ]
+ },
+ {
+  "name": "dow-chemical-evostar-2010",
+  "display": "Dow Chemical (EvoStar 2010 competition)",
+  "problems": 1,
+  "whole": true,
+  "why": [
+   {
+    "reason": "no license",
+    "members": null
+   }
+  ],
+  "sources": [
+   "https://web.archive.org/web/20120628140646/http://casnew.iti.upv.es/index.php/evocompetitions/105-symregcompetition",
+   "http://web.archive.org/web/20201001115943/http://gpbenchmarks.org/wp-content/uploads/2019/08/Evostar_2010_Symbolic_Regression_Competition.pdf",
+   "https://web.archive.org/web/20120628163816/http://casnew.iti.upv.es/cas/competitions/symreg/SymbolicRegressionCompetition.xls"
+  ]
+ },
+ {
+  "name": "drsr-debcat",
+  "display": "DRSR DEBCat mass-luminosity",
+  "problems": 2,
+  "whole": true,
+  "why": [
+   {
+    "reason": "no license that clearly allows sharing it",
+    "members": null
+   }
+  ],
+  "sources": [
+   "https://arxiv.org/abs/2605.15809",
+   "https://arxiv.org/pdf/2605.15809v1",
+   "https://arxiv.org/src/2605.15809v1"
+  ]
+ },
+ {
+  "name": "dow-emulator",
+  "display": "Emulator problem (Dow)",
+  "problems": 1,
+  "whole": true,
+  "why": [
+   {
+    "reason": "no license",
+    "members": null
+   }
+  ],
+  "sources": [
+   "http://web.archive.org/web/20131208231518/http://symbolicregression.com/?q=emulatorProblem",
+   "http://web.archive.org/web/20141008094848/http://www.symbolicregression.com/?q=emulatorProblem",
+   "http://symbolicregression.com/sites/SRDocuments/DataSets/EmulatorProblem.zip"
+  ]
+ },
+ {
+  "name": "eql-double-pendulum",
+  "display": "EQL double-pendulum kinematics",
+  "problems": 4,
+  "whole": true,
+  "why": [
+   {
+    "reason": "no license",
+    "members": null
+   }
+  ],
+  "sources": [
+   "https://arxiv.org/abs/1610.02995v1",
+   "https://arxiv.org/pdf/1610.02995v1",
+   "https://arxiv.org/e-print/1610.02995v1"
+  ]
+ },
+ {
+  "name": "eql-xray-kalpha2",
+  "display": "EQL X-ray transition energies",
+  "problems": 1,
+  "whole": true,
+  "why": [
+   {
+    "reason": "terms that forbid sharing it",
+    "members": null
+   }
+  ],
+  "sources": [
+   "https://arxiv.org/abs/1610.02995",
+   "https://arxiv.org/pdf/1610.02995v1",
+   "https://arxiv.org/e-print/1610.02995v1"
+  ]
+ },
+ {
+  "name": "ffx-cmos-ota",
+  "display": "FFX CMOS OTA circuit targets",
+  "problems": 6,
+  "whole": true,
+  "why": [
+   {
+    "reason": "no license",
+    "members": null
+   }
+  ],
+  "sources": [
+   "https://doi.org/10.1007/978-1-4614-1770-5_13",
+   "http://trent.st/content/2011-GPTP-FFX-paper.pdf",
+   "https://github.com/trentmc/ffx2011-benchmarks/tree/1aa15f6317c5c5ed18bad4c487e7114c6a497580"
+  ]
+ },
+ {
+  "name": "ffx-high-dimensional-circuits",
+  "display": "FFX high-dimensional circuit problems",
+  "problems": 12,
+  "whole": true,
+  "why": [
+   {
+    "reason": "no license",
+    "members": null
+   }
+  ],
+  "sources": [
+   "https://doi.org/10.1007/978-1-4614-1770-5_13",
+   "https://github.com/trentmc/ffx2011/blob/bf7f2b5f3458ee0cfef532cd568dcbd5e579fba3/resources/2011-GPTP-FFX-paper.pdf",
+   "https://doi.org/10.1109/CICC.2011.6055329"
+  ]
+ },
+ {
+  "name": "gecco-2013-2017-real",
+  "display": "GECCO 2013-2017 GP regression compilation (real data)",
+  "problems": 4,
+  "whole": false,
+  "why": [
+   {
+    "reason": "no license",
+    "members": [
+     "BOH"
+    ]
+   },
+   {
+    "reason": "a copyleft software license (GPL)",
+    "members": [
+     "OZO"
+    ]
+   },
+   {
+    "reason": "no license (industrial data, all rights reserved)",
+    "members": [
+     "DOW",
+     "TOW"
+    ]
+   }
+  ],
+  "sources": [
+   "https://arxiv.org/abs/1805.10365",
+   "https://doi.org/10.1145/3205651.3208293",
+   "https://github.com/laic-ufmg/gp-benchmarks (HEAD 53b10dff51; rsc/gp_benchmarks_get_data.py @ 8bc249b; datasets.ods @ 0b01a92; rsc/data/{ozone,yacht}.data @ 24fb56b)"
+  ]
+ },
+ {
+  "name": "gp-challenge-protein",
+  "display": "GP Challenge (protein energy function)",
+  "problems": 54,
+  "whole": true,
+  "why": [
+   {
+    "reason": "no license",
+    "members": null
+   }
+  ],
+  "sources": [
+   "https://doi.org/10.1007/s10710-009-9087-0",
+   "https://web.archive.org/web/20170403201603/http://human-competitive.org/sites/default/files/widera-genp-paper_1.pdf",
+   "http://ico2s.org/datasets/gp_challenge.html"
+  ]
+ },
+ {
+  "name": "gp-gomea-real-world",
+  "display": "GP-GOMEA real-world set",
+  "problems": 3,
+  "whole": false,
+  "why": [
+   {
+    "reason": "no license",
+    "members": [
+     "bostonhousing"
+    ]
+   },
+   {
+    "reason": "no license (industrial data, all rights reserved)",
+    "members": [
+     "dowchemical",
+     "tower"
+    ]
+   }
+  ],
+  "sources": [
+   "https://arxiv.org/abs/1904.02050v4",
+   "https://arxiv.org/pdf/1904.02050v4",
+   "https://doi.org/10.1162/evco_a_00278"
+  ]
+ },
+ {
+  "name": "heuristiclab-real-world",
+  "display": "HeuristicLab regression instances (real-world data)",
+  "problems": 14,
+  "whole": true,
+  "why": [
+   {
+    "reason": "no license that clearly allows sharing it",
+    "members": null
+   }
+  ],
+  "sources": [
+   "https://github.com/heal-research/HeuristicLab",
+   "https://github.com/heal-research/HeuristicLab/blob/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression",
+   "https://github.com/heal-research/HeuristicLab/blob/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/Data/RegressionRealWorld.zip"
+  ]
+ },
+ {
+  "name": "ideasearch-pdf",
+  "display": "IdeaSearchFitter parton distributions (CT18NNLO)",
+  "problems": 6,
+  "whole": true,
+  "why": [
+   {
+    "reason": "no license",
+    "members": null
+   }
+  ],
+  "sources": [
+   "https://arxiv.org/abs/2510.08317v1",
+   "https://arxiv.org/pdf/2510.08317v1",
+   "https://arxiv.org/e-print/2510.08317v1"
+  ]
+ },
+ {
+  "name": "implied-volatility-slices",
+  "display": "Implied-volatility slices",
+  "problems": 34,
+  "whole": true,
+  "why": [
+   {
+    "reason": "no license",
+    "members": null
+   }
+  ],
+  "sources": [
+   "https://arxiv.org/abs/2603.21892",
+   "https://arxiv.org/pdf/2603.21892v1",
+   "https://arxiv.org/html/2603.21892v1"
+  ]
+ },
+ {
+  "name": "mcdermott-predictive-modelling",
+  "display": "McDermott et al. predictive-modelling sets",
+  "problems": 3,
+  "whole": false,
+  "why": [
+   {
+    "reason": "no license",
+    "members": [
+     "mackey-glass"
+    ]
+   },
+   {
+    "reason": "a non-commercial license (CC BY-NC 4.0)",
+    "members": [
+     "sunspots/test-1921-1955",
+     "sunspots/test-1956-1979"
+    ]
+   }
+  ],
+  "sources": [
+   "http://web.archive.org/web/20210125223903/http://gpbenchmarks.org/wp-content/uploads/2019/08/paper1.pdf",
+   "https://doi.org/10.1145/2330163.2330273",
+   "https://arxiv.org/abs/1805.10365"
+  ]
+ },
+ {
+  "name": "materials-laws-multi-agent",
+  "display": "Multi-agent materials law datasets",
+  "problems": 1,
+  "whole": true,
+  "why": [
+   {
+    "reason": "no license",
+    "members": null
+   }
+  ],
+  "sources": [
+   "https://arxiv.org/abs/2411.16416",
+   "https://arxiv.org/html/2411.16416v1",
+   "https://arxiv.org/html/2411.16416v2"
+  ]
+ },
+ {
+  "name": "mvsr-2024",
+  "display": "Multi-view SR (2024) real data",
+  "problems": 501,
+  "whole": true,
+  "why": [
+   {
+    "reason": "no license that clearly allows sharing it",
+    "members": null
+   }
+  ],
+  "sources": [
+   "https://arxiv.org/abs/2402.04298",
+   "https://arxiv.org/pdf/2402.04298v4",
+   "https://doi.org/10.1145/3638529.3654087"
+  ]
+ },
+ {
+  "name": "mvsr-2025",
+  "display": "Multi-view SR (2025) real-world data",
+  "problems": 51,
+  "whole": true,
+  "why": [
+   {
+    "reason": "no license",
+    "members": null
+   }
+  ],
+  "sources": [
+   "https://arxiv.org/abs/2509.10500",
+   "https://arxiv.org/html/2509.10500v1",
+   "https://doi.org/10.1098/rsta.2024.0592"
+  ]
+ },
+ {
+  "name": "nuclear-misr",
+  "display": "Nuclear binding energies and charge radii (MISR)",
+  "problems": 1,
+  "whole": false,
+  "why": [
+   {
+    "reason": "no license",
+    "members": [
+     "misr-rc"
+    ]
+   }
+  ],
+  "sources": [
+   "https://arxiv.org/abs/2404.11477",
+   "https://arxiv.org/pdf/2404.11477v3",
+   "https://doi.org/10.1038/s42005-025-02023-2"
+  ]
+ },
+ {
+  "name": "oxygen-ion-conductors",
+  "display": "Oxygen-ion conductor database",
+  "problems": 2,
+  "whole": true,
+  "why": [
+   {
+    "reason": "no license that clearly allows sharing it",
+    "members": null
+   }
+  ],
+  "sources": [
+   "https://arxiv.org/abs/2601.16852",
+   "https://arxiv.org/pdf/2601.16852v1",
+   "https://doi.org/10.1038/s41597-026-07100-x"
+  ]
+ },
+ {
+  "name": "phye2e-space-physics",
+  "display": "PhyE2E space-physics applications",
+  "problems": 1,
+  "whole": false,
+  "why": [
+   {
+    "reason": "a non-commercial license (CC BY-NC 4.0)",
+    "members": [
+     "ssn"
+    ]
+   }
+  ],
+  "sources": [
+   "https://arxiv.org/abs/2503.07994v3",
+   "https://doi.org/10.1038/s42256-025-01126-3",
+   "https://doi.org/10.6084/m9.figshare.29615831.v1"
+  ]
+ },
+ {
+  "name": "sparc-radial-acceleration",
+  "display": "Radial acceleration relation (SPARC)",
+  "problems": 1,
+  "whole": true,
+  "why": [
+   {
+    "reason": "no license",
+    "members": null
+   }
+  ],
+  "sources": [
+   "https://arxiv.org/abs/2301.04368",
+   "https://doi.org/10.1093/mnras/stad597",
+   "https://astroweb.case.edu/SPARC/"
+  ]
+ },
+ {
+  "name": "scilaws-real",
+  "display": "SciLaws-Bench SciLaws-Real (Type I)",
+  "problems": 7,
+  "whole": false,
+  "why": [
+   {
+    "reason": "a copyleft software license (GPL)",
+    "members": [
+     "binary_pulsar_post_keplerian_atnf__PBDOT"
+    ]
+   },
+   {
+    "reason": "a non-commercial license (CC BY-NC 4.0)",
+    "members": [
+     "geomagnetic_storm_dst__dDst_dt"
+    ]
+   },
+   {
+    "reason": "the HydroSHEDS terms",
+    "members": [
+     "hacks_law_river_length_hydrosheds__main_length_km"
+    ]
+   },
+   {
+    "reason": "terms for scientific use only (VizieR)",
+    "members": [
+     "protoplanetary_disk_mmflux__F_mm",
+     "red_giant_asteroseismology__delta_nu",
+     "red_giant_asteroseismology__nu_max"
+    ]
+   },
+   {
+    "reason": "a share-alike database license (ODbL)",
+    "members": [
+     "wind_turbine_power_curve_engie__power_kW"
+    ]
+   }
+  ],
+  "sources": [
+   "https://arxiv.org/abs/2609.01552",
+   "https://github.com/yiyihum/SciLaws-Bench/blob/9239f66b921cb89c7a9d14061f782fdce49dcfb5/docs/assets/scilaws_bench_paper.pdf",
+   "https://huggingface.co/datasets/RealSR/SciLaws-Bench/tree/15b93258fabc8f1785c5a5ffd4d3e51fc15dd860"
+  ]
+ },
+ {
+  "name": "shadow-economies",
+  "display": "Shadow Economies",
+  "problems": 2,
+  "whole": true,
+  "why": [
+   {
+    "reason": "no license",
+    "members": null
+   }
+  ],
+  "sources": [
+   "http://web.archive.org/web/20131208233428/http://symbolicregression.com/?q=shadowEconomiesProblem",
+   "http://web.archive.org/web/20170304231546/http://symbolicregression.com/sites/default/files/DataSets/ShadowEconomiesProblem.zip",
+   "https://doi.org/10.1007/978-1-4614-1770-5_11"
+  ]
+ },
+ {
+  "name": "shape-constrained-real-world",
+  "display": "Shape-constrained SR real-world set",
+  "problems": 3,
+  "whole": false,
+  "why": [
+   {
+    "reason": "no license",
+    "members": [
+     "F05128_dyn",
+     "F05128_stat",
+     "FlowStress"
+    ]
+   }
+  ],
+  "sources": [
+   "https://arxiv.org/abs/2103.15624",
+   "https://arxiv.org/pdf/2103.15624v2",
+   "https://doi.org/10.1162/evco_a_00294"
+  ]
+ },
+ {
+  "name": "sldbench",
+  "display": "SLDBench (scaling-law discovery)",
+  "problems": 77,
+  "whole": true,
+  "why": [
+   {
+    "reason": "no license that clearly allows sharing it",
+    "members": null
+   }
+  ],
+  "sources": [
+   "https://arxiv.org/abs/2507.21184",
+   "https://arxiv.org/pdf/2507.21184v5",
+   "https://arxiv.org/pdf/2507.21184v1"
+  ]
+ },
+ {
+  "name": "dow-distillation-tower",
+  "display": "Tower (Dow distillation tower)",
+  "problems": 1,
+  "whole": true,
+  "why": [
+   {
+    "reason": "no license",
+    "members": null
+   }
+  ],
+  "sources": [
+   "http://web.archive.org/web/20130719082855/http://www.symbolicregression.com:80/?q=towerProblem",
+   "https://web.archive.org/web/20160707102934/http://symbolicregression.com/sites/default/files/DataSets/towerData.txt",
+   "https://doi.org/10.1109/TEVC.2008.926486"
+  ]
+ },
+ {
+  "name": "white-2013-proposed",
+  "display": "White et al. 2013 proposed SR set",
+  "problems": 1,
+  "whole": true,
+  "why": [
+   {
+    "reason": "no license",
+    "members": null
+   }
+  ],
+  "sources": [
+   "https://doi.org/10.1007/s10710-012-9177-2",
+   "http://gpbenchmarks.org/wp-content/uploads/2019/08/GP-Benchmarks-GPEM-2013-preprint-correction-v2.pdf",
+   "https://doi.org/10.1007/3-540-36599-0_7"
+  ]
+ }
+]

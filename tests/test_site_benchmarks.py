@@ -14,6 +14,7 @@ _SPEC.loader.exec_module(bench)
 
 TEXTS = yaml.safe_load(bench.TEXTS.read_text())
 ROWS = json.loads(bench.LIST.read_text())
+GONE = json.loads(bench.LEFT_OUT.read_text())
 PAGE = bench.PAGE.read_text()
 
 
@@ -22,14 +23,14 @@ def _text(html: str) -> str:
 
 
 def test_the_page_is_what_its_data_gives() -> None:
-    assert bench.render(PAGE, bench.build(TEXTS, ROWS)) == PAGE, "run python scripts/site_benchmarks.py"
+    assert bench.render(PAGE, bench.build(TEXTS, ROWS, GONE)) == PAGE, "run python scripts/site_benchmarks.py"
 
 
 def test_the_totals_are_the_sums_of_the_list() -> None:
     lede = re.search(r"([\d,]+) problem sets with ([\d,]+) problems: ([\d,]+) given as formulas and ([\d,]+) as data, "
                      r"in ([\d,]+) groups", _text(PAGE))
     sets, problems, formulas, data, groups = (int(x.replace(",", "")) for x in lede.groups())
-    assert sets == len(ROWS) == PAGE.count('<tr data-name="')
+    assert sets == len(ROWS) == PAGE.count('" data-origin="')                 # the rows of the list
     assert problems == sum(r["problems"] for r in ROWS) == formulas + data
     assert formulas == sum(r["problems"] for r in ROWS if r["kind"] == "formula")
     assert groups == sum(len(r["groups"]) for r in ROWS)
@@ -71,3 +72,13 @@ def test_a_source_is_named_by_its_site_and_a_citation_by_its_authors() -> None:
     assert bench.license_label(None) == ""
     assert bench.license_label("CC-BY-SA-4.0 (Sun et al. 2023)") == "CC BY-SA 4.0"
     assert bench.license_label("facts only: geometric formulas cited from Xu et al. 2024; no upstream license") == "formulas only"
+
+
+def test_the_data_left_out_for_its_license_has_its_own_section() -> None:
+    names = {r["name"] for r in ROWS}
+    assert GONE and not names & {g["name"] for g in GONE if g["whole"]}       # a benchmark left out is not run
+    for g in GONE:
+        assert f'<tr data-name="{g["name"]}">' in PAGE and all(w["reason"] for w in g["why"])
+        assert g["whole"] or g["name"] in names                               # a split benchmark keeps the rest
+    total = sum(g["problems"] for g in GONE)
+    assert f"In all, {total:,} problems from {len(GONE)} benchmarks." in _text(PAGE)

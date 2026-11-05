@@ -191,40 +191,6 @@
   "license": "MIT (AutoResearch/autora-synthetic)"
  },
  {
-  "name": "bms-real-data",
-  "display": "Bayesian machine scientist real datasets",
-  "kind": "data",
-  "origin": "measured data",
-  "tags": [
-   "no test split"
-  ],
-  "problems": 3,
-  "groups": {
-   "all": 3
-  },
-  "sources": [
-   "https://arxiv.org/abs/2004.12157",
-   "https://doi.org/10.1126/sciadv.aav6971",
-   "https://pmc.ncbi.nlm.nih.gov/articles/PMC6994216/",
-   "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC6994216/supplementaryFiles",
-   "https://bitbucket.org/rguimera/machine-scientist/src/9defb7aa2a1382b4a8518f3060e8dd87a20acb99/Validation/",
-   "https://bitbucket.org/rguimera/machine-scientist/src/9defb7aa2a1382b4a8518f3060e8dd87a20acb99/Validation/iodata.py",
-   "https://bitbucket.org/rguimera/machine-scientist/src/9defb7aa2a1382b4a8518f3060e8dd87a20acb99/Validation/Trepat/iodata.py",
-   "https://bitbucket.org/rguimera/machine-scientist/src/9defb7aa2a1382b4a8518f3060e8dd87a20acb99/Validation/data_analysis.py",
-   "https://bitbucket.org/rguimera/machine-scientist/src/9defb7aa2a1382b4a8518f3060e8dd87a20acb99/Validation/model_averaging.py",
-   "https://bitbucket.org/rguimera/machine-scientist/src/9defb7aa2a1382b4a8518f3060e8dd87a20acb99/README.md",
-   "https://bitbucket.org/rguimera/machine-scientist/raw/9defb7aa2a1382b4a8518f3060e8dd87a20acb99/Validation/RDFunding/data/EU_nature_clean.csv",
-   "https://bitbucket.org/rguimera/machine-scientist/raw/9defb7aa2a1382b4a8518f3060e8dd87a20acb99/Validation/Trepat/data/cadhesome_protein.csv",
-   "https://bitbucket.org/rguimera/machine-scientist/raw/9defb7aa2a1382b4a8518f3060e8dd87a20acb99/Validation/LogYe/data/seymour.csv",
-   "https://api.bitbucket.org/2.0/repositories/rguimera/machine-scientist/refs/branches",
-   "https://doi.org/10.1038/531580c",
-   "https://doi.org/10.1038/ncb3135",
-   "https://doi.org/10.1073/pnas.1417063112",
-   "https://github.com/EpistasisLab/pmlb/blob/master/pmlb/all_summary_stats.tsv"
-  ],
-  "license": null
- },
- {
   "name": "black-hole-spiral-plane",
   "display": "Black-hole mass scaling in spiral galaxies",
   "kind": "data",
@@ -586,87 +552,6 @@
   "license": "BSD-3-Clause (benchmarks.csv, DSO fork in samholt/DeepGenerativeSymbolicRegression; Holt et al. 2023, arXiv:2401.00282)"
  },
  {
-  "name": "dimensionless-learning",
-  "display": "Dimensionless-learning scaling laws (Xie et al. 2022)",
-  "kind": "data",
-  "origin": "measured data",
-  "tags": [],
-  "problems": 5,
-  "groups": {
-   "all": 5
-  },
-  "sources": [
-   "https://doi.org/10.1038/s41467-022-35084-w",
-   "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC9729234/fullTextXML",
-   "https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-022-35084-w/MediaObjects/41467_2022_35084_MOESM1_ESM.pdf",
-   "https://arxiv.org/abs/2111.03583",
-   "https://github.com/xiaoyuxie-vico/PyDimension/tree/7f90b01aab4335ba816f73e022e9639f2163df44",
-   "https://doi.org/10.5281/zenodo.7317017",
-   "https://raw.githubusercontent.com/xiaoyuxie-vico/PyDimension/7f90b01aab4335ba816f73e022e9639f2163df44/dataset/dataset_Rayleigh_Benard_convection.csv",
-   "https://raw.githubusercontent.com/xiaoyuxie-vico/PyDimension/7f90b01aab4335ba816f73e022e9639f2163df44/dataset/dataset_keyhole.csv",
-   "https://raw.githubusercontent.com/xiaoyuxie-vico/PyDimension/7f90b01aab4335ba816f73e022e9639f2163df44/dataset/dataset_porosity.csv",
-   "https://raw.githubusercontent.com/xiaoyuxie-vico/PyDimension/7f90b01aab4335ba816f73e022e9639f2163df44/scaling_law/utils/dataset.py",
-   "https://github.com/xiaoyuxie-vico/PyDimension/blob/7f90b01aab4335ba816f73e022e9639f2163df44/scaling_law/keyhole_example_pattern_search.py",
-   "https://github.com/xiaoyuxie-vico/PyDimension/blob/7f90b01aab4335ba816f73e022e9639f2163df44/scaling_law/cross_materials.ipynb",
-   "https://raw.githubusercontent.com/xiaoyuxie-vico/PyDimension/a899cd41e327a8ad185b139537272eecb6a9adb4/dataset/keyhole/dataset_keyhole.csv",
-   "https://raw.githubusercontent.com/xiaoyuxie-vico/PyDimension/a899cd41e327a8ad185b139537272eecb6a9adb4/dataset/keyhole/dimension_matrix.csv",
-   "https://github.com/xiaoyuxie-vico/PyDimension/commit/f54baf5"
-  ],
-  "license": null
- },
- {
-  "name": "dow-chemical-evostar-2010",
-  "display": "Dow Chemical (EvoStar 2010 competition)",
-  "kind": "data",
-  "origin": "measured data",
-  "tags": [],
-  "problems": 1,
-  "groups": {
-   "all": 1
-  },
-  "sources": [
-   "https://web.archive.org/web/20120628140646/http://casnew.iti.upv.es/index.php/evocompetitions/105-symregcompetition",
-   "http://web.archive.org/web/20201001115943/http://gpbenchmarks.org/wp-content/uploads/2019/08/Evostar_2010_Symbolic_Regression_Competition.pdf",
-   "https://web.archive.org/web/20120628163816/http://casnew.iti.upv.es/cas/competitions/symreg/SymbolicRegressionCompetition.xls",
-   "http://web.archive.org/web/20231227024212/http://gpbenchmarks.org/wp-content/uploads/2020/07/SymbolicRegressionCompetitionData.xls",
-   "https://raw.githubusercontent.com/heal-research/operon/191dc930c5bf20f3fc5c90c849b2892b9b76fed8/data/Chemical-II.csv",
-   "https://raw.githubusercontent.com/heal-research/operon/191dc930c5bf20f3fc5c90c849b2892b9b76fed8/data/Chemical-II.json",
-   "https://github.com/heal-research/HeuristicLab/blob/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/Data/RegressionRealWorld.zip",
-   "https://github.com/heal-research/HeuristicLab/blob/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/RealWorld/ChemicalOne.cs",
-   "https://heal.heuristiclab.com/news/post/first-place-symbolic-regression-competition",
-   "https://arxiv.org/abs/2406.03585",
-   "https://arxiv.org/abs/2502.03367",
-   "https://arxiv.org/abs/1904.02050"
-  ],
-  "license": null
- },
- {
-  "name": "drsr-debcat",
-  "display": "DRSR DEBCat mass-luminosity",
-  "kind": "data",
-  "origin": "measured data",
-  "tags": [
-   "no test split"
-  ],
-  "problems": 2,
-  "groups": {
-   "real-world-astronomical": 2
-  },
-  "sources": [
-   "https://arxiv.org/abs/2605.15809",
-   "https://arxiv.org/pdf/2605.15809v1",
-   "https://arxiv.org/src/2605.15809v1",
-   "https://doi.org/10.1145/3795095.3805087",
-   "https://vizier.cds.unistra.fr/viz-bin/VizieR?-source=V/152",
-   "https://cdsarc.cds.unistra.fr/ftp/V/152/ReadMe",
-   "https://cdsarc.cds.unistra.fr/ftp/V/152/debcat.dat",
-   "https://cdsarc.cds.unistra.fr/ftp/V/152/refs.dat",
-   "https://arxiv.org/abs/1411.1219",
-   "https://www.astro.keele.ac.uk/jkt/debcat/"
-  ],
-  "license": null
- },
- {
   "name": "dso-benchmark-registry",
   "display": "DSO benchmark registry (benchmarks.csv)",
   "kind": "formula",
@@ -751,30 +636,6 @@
   "license": "Apache-2.0 (facebookresearch/symbolicregression; Kamienny et al. 2022, arXiv:2204.10532)"
  },
  {
-  "name": "dow-emulator",
-  "display": "Emulator problem (Dow)",
-  "kind": "data",
-  "origin": "synthetic data",
-  "tags": [],
-  "problems": 1,
-  "groups": {
-   "all": 1
-  },
-  "sources": [
-   "http://web.archive.org/web/20131208231518/http://symbolicregression.com/?q=emulatorProblem",
-   "http://web.archive.org/web/20141008094848/http://www.symbolicregression.com/?q=emulatorProblem",
-   "http://symbolicregression.com/sites/SRDocuments/DataSets/EmulatorProblem.zip",
-   "https://dev.heuristiclab.com/trac.fcgi/wiki/Documentation/VideoTutorials/SymbolicRegression",
-   "https://dev.heuristiclab.com/trac.fcgi/raw-attachment/wiki/Documentation/VideoTutorials/SymbolicRegression/emulators.csv",
-   "https://dev.heuristiclab.com/trac.fcgi/raw-attachment/wiki/Documentation/VideoTutorials/SymbolicRegression/emulator.hl",
-   "http://web.archive.org/web/20100714033929/http://med.ee.nd.edu/MED11.zip",
-   "med.ee.nd.edu/MED11/pdf/papers/t7-059.pdf (the page's link; not captured on its own; extracted from the archived MED11.zip above)",
-   "https://github.com/jmmcd/PODI/blob/b78c9b90b2ebd446a2b4217b75e1b5dba245b1e9/src/get_data.py",
-   "https://web.archive.org/cdx/search/cdx?url=symbolicregression.com/sites/default/files/*"
-  ],
-  "license": null
- },
- {
   "name": "eql-cart-pendulum",
   "display": "EQL cart-pendulum",
   "kind": "formula",
@@ -800,37 +661,6 @@
    "https://github.com/martius-lab/EQL/tree/28521aed7a213299a52982430b2b83917fadae20/EQL-DIV-ICML/data"
   ],
   "license": "facts only: equations and input ranges cited from Sahoo, Lampert & Martius 2018 (ICML, arXiv:1806.07259) and their EQL generator; no upstream license"
- },
- {
-  "name": "eql-double-pendulum",
-  "display": "EQL double-pendulum kinematics",
-  "kind": "data",
-  "origin": "measured data",
-  "tags": [
-   "extrapolation"
-  ],
-  "problems": 4,
-  "groups": {
-   "all": 4
-  },
-  "sources": [
-   "https://arxiv.org/abs/1610.02995v1",
-   "https://arxiv.org/pdf/1610.02995v1",
-   "https://arxiv.org/e-print/1610.02995v1",
-   "https://openreview.net/forum?id=BkgRp0FYe",
-   "https://object.cloud.sdsc.edu/v1/AUTH_da4962d3368042ac8337e2dfdd3e7bf3/ml-papers-txt/ICLR/2017/extrapolation_and_learning_equations__4f62930c.txt",
-   "https://doi.org/10.1126/science.1165893",
-   "http://web.archive.org/web/20150226175125/http://www.sciencemag.org:80/content/324/5923/81/suppl/DC1",
-   "http://web.archive.org/web/20140123230753/http://www.sciencemag.org/content/suppl/2009/04/02/324.5923.81.DC1/Schmidt.SOM.pdf",
-   "http://www.sciencemag.org/content/suppl/2009/04/02/324.5923.81.DC1/invar_datasets.zip",
-   "https://raw.githubusercontent.com/erwincoumans/tiny-differentiable-simulator/ab1d9bec404e82cd660d8b249b00c585c91bb8c4/data/schmidt-lipson-exp-data/real_double_pend_h_1.txt",
-   "https://github.com/erwincoumans/tiny-differentiable-simulator/tree/ab1d9bec404e82cd660d8b249b00c585c91bb8c4/data/schmidt-lipson-exp-data",
-   "https://github.com/sammccallum/reversible-solvers/tree/main/experiments/physical_systems/data",
-   "https://github.com/Jhko725/NeuralODEHomotopy/tree/main/node_homotopy/experiments/data/invar_datasets",
-   "https://github.com/martius-lab/EQL",
-   "https://github.com/martius-lab/EQL_Tensorflow"
-  ],
-  "license": null
  },
  {
   "name": "eql-formulas-f-1-f-4-and-division-formula",
@@ -921,38 +751,6 @@
    "https://arxiv.org/abs/1806.07259"
   ],
   "license": "facts only: task geometry and ranges cited from Martius & Lampert 2016 (arXiv:1610.02995); formulas derived by srbf; no upstream license"
- },
- {
-  "name": "eql-xray-kalpha2",
-  "display": "EQL X-ray transition energies",
-  "kind": "data",
-  "origin": "measured data",
-  "tags": [
-   "extrapolation"
-  ],
-  "problems": 1,
-  "groups": {
-   "all": 1
-  },
-  "sources": [
-   "https://arxiv.org/abs/1610.02995",
-   "https://arxiv.org/pdf/1610.02995v1",
-   "https://arxiv.org/e-print/1610.02995v1",
-   "https://openreview.net/forum?id=BkgRp0FYe",
-   "https://object.cloud.sdsc.edu/v1/AUTH_da4962d3368042ac8337e2dfdd3e7bf3/ml-papers-txt/ICLR/2017/extrapolation_and_learning_equations__4f62930c.txt",
-   "https://doi.org/10.1103/RevModPhys.75.35",
-   "https://www.nist.gov/pml/x-ray-transition-energies-database",
-   "https://doi.org/10.18434/T4859Z",
-   "https://physics.nist.gov/cgi-bin/XrayTrans/search.pl?download=tab&element=All&trans=KL2&lower=&upper=&units=eV",
-   "https://physics.nist.gov/PhysRefData/XrayTrans/Html/search.html",
-   "http://web.archive.org/web/20161023154930/http://physics.info/curve-fitting/x-rays.txt",
-   "https://physics.info/curve-fitting/problems.shtml",
-   "https://www.nist.gov/open/copyright-fair-use-and-licensing-statements-srd-data-software-and-technical-series-publications",
-   "https://github.com/martius-lab/EQL",
-   "https://github.com/martius-lab/EQL_Tensorflow",
-   "https://github.com/martius-lab/EQL-Pytorch"
-  ],
-  "license": null
  },
  {
   "name": "erbench-densities",
@@ -1243,57 +1041,6 @@
   "license": "MIT (viktmar/FastSRB; see THIRD_PARTY_LICENSES + upstream PR viktmar/FastSRB#1)"
  },
  {
-  "name": "ffx-cmos-ota",
-  "display": "FFX CMOS OTA circuit targets",
-  "kind": "data",
-  "origin": "synthetic data",
-  "tags": [],
-  "problems": 6,
-  "groups": {
-   "all": 6
-  },
-  "sources": [
-   "https://doi.org/10.1007/978-1-4614-1770-5_13",
-   "http://trent.st/content/2011-GPTP-FFX-paper.pdf",
-   "https://github.com/trentmc/ffx2011-benchmarks/tree/1aa15f6317c5c5ed18bad4c487e7114c6a497580",
-   "https://github.com/trentmc/ffx2011-benchmarks/blob/1aa15f6317c5c5ed18bad4c487e7114c6a497580/med-dimensional_benchmark_datasets.zip",
-   "http://trent.st/ffx/",
-   "https://github.com/trentmc/ffx2011/blob/bf7f2b5f3458ee0cfef532cd568dcbd5e579fba3/FFX.py",
-   "https://github.com/trentmc/ffx2011/blob/bf7f2b5f3458ee0cfef532cd568dcbd5e579fba3/resources/FFX_license.txt",
-   "http://trent.st/content/2005-DATE-caffeine.pdf",
-   "http://trent.st/content/2009-TCAD-caffeine_scale.pdf",
-   "http://trent.st/content/2005-ISCAS-blackbox.pdf",
-   "https://doi.org/10.1109/TCAD.2003.810742"
-  ],
-  "license": null
- },
- {
-  "name": "ffx-high-dimensional-circuits",
-  "display": "FFX high-dimensional circuit problems",
-  "kind": "data",
-  "origin": "synthetic data",
-  "tags": [],
-  "problems": 12,
-  "groups": {
-   "all": 12
-  },
-  "sources": [
-   "https://doi.org/10.1007/978-1-4614-1770-5_13",
-   "https://github.com/trentmc/ffx2011/blob/bf7f2b5f3458ee0cfef532cd568dcbd5e579fba3/resources/2011-GPTP-FFX-paper.pdf",
-   "https://doi.org/10.1109/CICC.2011.6055329",
-   "https://github.com/trentmc/ffx2011/blob/bf7f2b5f3458ee0cfef532cd568dcbd5e579fba3/resources/2011-CICC-FFX-paper.pdf",
-   "https://github.com/trentmc/ffx2011-benchmarks/tree/1aa15f6317c5c5ed18bad4c487e7114c6a497580",
-   "https://github.com/trentmc/ffx2011-benchmarks/blob/1aa15f6317c5c5ed18bad4c487e7114c6a497580/high-dimensional_benchmark_datasets_part1.tar.gz",
-   "https://github.com/trentmc/ffx2011-benchmarks/blob/1aa15f6317c5c5ed18bad4c487e7114c6a497580/high-dimensional_benchmark_datasets_part2.tar.gz",
-   "https://github.com/trentmc/ffx2011-benchmarks/blob/1aa15f6317c5c5ed18bad4c487e7114c6a497580/high-dimensional_benchmark_datasets_part3.tar.gz",
-   "https://github.com/trentmc/ffx2011/blob/bf7f2b5f3458ee0cfef532cd568dcbd5e579fba3/runffx.py",
-   "https://github.com/trentmc/ffx2011/blob/bf7f2b5f3458ee0cfef532cd568dcbd5e579fba3/FFX.py",
-   "https://github.com/trentmc/ffx2011/blob/bf7f2b5f3458ee0cfef532cd568dcbd5e579fba3/resources/FFX_license.txt",
-   "http://trent.st/ffx/"
-  ],
-  "license": null
- },
- {
   "name": "falling-balls",
   "display": "Free-falling balls with air resistance",
   "kind": "data",
@@ -1377,9 +1124,9 @@
   "kind": "data",
   "origin": "measured data",
   "tags": [],
-  "problems": 18,
+  "problems": 14,
   "groups": {
-   "all": 18
+   "all": 14
   },
   "sources": [
    "https://arxiv.org/abs/1805.10365",
@@ -1403,7 +1150,7 @@
    "https://web.archive.org/web/20160707102934id_/http://symbolicregression.com/sites/default/files/DataSets/towerData.txt",
    "https://raw.githubusercontent.com/EpistasisLab/pmlb/7c1f4bdc00136dc2e55c87fa6b8ba6e8af6d1a68/pmlb/all_summary_stats.tsv"
   ],
-  "license": null
+  "license": "CC BY 4.0 (UCI Machine Learning Repository members) and MIT (the QSAR members, DALabNOVA/slim)"
  },
  {
   "name": "gecco-2022-covid-ny",
@@ -1706,41 +1453,14 @@
   "license": "facts only: grids cited from McDermott et al. 2012 (GECCO, Table 3) and the original family papers; no upstream license"
  },
  {
-  "name": "gp-challenge-protein",
-  "display": "GP Challenge (protein energy function)",
-  "kind": "data",
-  "origin": "synthetic data",
-  "tags": [
-   "no test split"
-  ],
-  "problems": 54,
-  "groups": {
-   "all": 54
-  },
-  "sources": [
-   "https://doi.org/10.1007/s10710-009-9087-0",
-   "https://web.archive.org/web/20170403201603/http://human-competitive.org/sites/default/files/widera-genp-paper_1.pdf",
-   "http://ico2s.org/datasets/gp_challenge.html",
-   "http://ico2s.org/data/instances/gp_challenge/energy_terms.tar.gz",
-   "http://ico2s.org/data/instances/gp_challenge/distances.tar.gz",
-   "https://eprints.nottingham.ac.uk/11394/1/thesis.pdf",
-   "https://web.archive.org/web/20250322164956/https://eprints.nottingham.ac.uk/11394/1/thesis.pdf",
-   "https://doi.org/10.1186/1741-7007-5-17",
-   "https://doi.org/10.1007/s10710-012-9177-2",
-   "https://github.com/heal-research/operon/blob/d4b53a63e94b628b3fc89ca117aef46c3a7a443a/data/GP-Challenge.csv",
-   "https://github.com/heal-research/operon/blob/d4b53a63e94b628b3fc89ca117aef46c3a7a443a/data/GP-Challenge.json"
-  ],
-  "license": null
- },
- {
   "name": "gp-gomea-real-world",
   "display": "GP-GOMEA real-world set",
   "kind": "data",
   "origin": "measured data",
   "tags": [],
-  "problems": 10,
+  "problems": 7,
   "groups": {
-   "all": 10
+   "all": 7
   },
   "sources": [
    "https://arxiv.org/abs/1904.02050v4",
@@ -1772,7 +1492,7 @@
    "https://arxiv.org/abs/1902.03983",
    "https://scikit-learn.org/1.1/modules/generated/sklearn.datasets.load_boston.html"
   ],
-  "license": null
+  "license": "CC BY 4.0 (UCI Machine Learning Repository)"
  },
  {
   "name": "gplearn-diabetes",
@@ -2057,39 +1777,6 @@
   "license": "facts only: Keijzer-6 grid cited from Keijzer 2003 (EuroGP) as provided by HeuristicLab; no upstream license"
  },
  {
-  "name": "heuristiclab-real-world",
-  "display": "HeuristicLab regression instances (real-world data)",
-  "kind": "data",
-  "origin": "measured data",
-  "tags": [],
-  "problems": 14,
-  "groups": {
-   "all": 14
-  },
-  "sources": [
-   "https://github.com/heal-research/HeuristicLab",
-   "https://github.com/heal-research/HeuristicLab/blob/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression",
-   "https://github.com/heal-research/HeuristicLab/blob/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/Data/RegressionRealWorld.zip",
-   "https://github.com/heal-research/HeuristicLab/blob/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/Data/MibaFriction.zip",
-   "https://github.com/heal-research/HeuristicLab/blob/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/Data/PennML.zip",
-   "https://doi.org/10.1007/3-540-36599-0_7",
-   "http://www.korns.com/Accuracy%20in%20Symbolic%20Regression.pdf",
-   "https://web.archive.org/web/20141006102506/http://symbolicregression.com/sites/SRDocuments/NonlinearityPreprint.pdf",
-   "https://doi.org/10.1214/aos/1176347963",
-   "https://projecteuclid.org/journals/annals-of-statistics/volume-19/issue-1/Multivariate-Adaptive-Regression-Splines/10.1214/aos/1176347963.pdf",
-   "https://arxiv.org/abs/1101.0689",
-   "https://arxiv.org/abs/1706.02281",
-   "https://doi.org/10.1016/j.eswa.2018.05.021",
-   "https://doi.org/10.1016/j.apples.2021.100049",
-   "https://doi.org/10.1007/3-540-36599-0_19",
-   "https://doi.org/10.1214/aos/1013203451",
-   "https://arxiv.org/abs/1804.09331",
-   "https://raw.githubusercontent.com/EpistasisLab/pmlb/7c1f4bdc00136dc2e55c87fa6b8ba6e8af6d1a68/pmlb/all_summary_stats.tsv",
-   "https://github.com/EpistasisLab/pmlb/tree/master/datasets"
-  ],
-  "license": null
- },
- {
   "name": "hierbosss-single-atom",
   "display": "HierBOSSS single-atom catalysis",
   "kind": "data",
@@ -2136,65 +1823,6 @@
    "https://github.com/mattsheng/iBART/blob/7d7a9b06866f96c25f633db4e0dbf81987006566/data/catalysis.rda"
   ],
   "license": "CC BY 4.0 (Roy et al. 2025, HierBOSSS, arXiv:2509.19710v1) + MIT (Roy-SR-007/HierBOSSS)"
- },
- {
-  "name": "ideasearch-pdf",
-  "display": "IdeaSearchFitter parton distributions (CT18NNLO)",
-  "kind": "data",
-  "origin": "synthetic data",
-  "tags": [
-   "extrapolation"
-  ],
-  "problems": 6,
-  "groups": {
-   "all": 6
-  },
-  "sources": [
-   "https://arxiv.org/abs/2510.08317v1",
-   "https://arxiv.org/pdf/2510.08317v1",
-   "https://arxiv.org/e-print/2510.08317v1",
-   "https://lhapdfsets.web.cern.ch/current/CT18NNLO.tar.gz",
-   "https://lhapdfsets.web.cern.ch/current/CT18NNLO/CT18NNLO.info",
-   "https://lhapdf.hepforge.org/pdfsets.html",
-   "https://arxiv.org/abs/1908.11394",
-   "https://arxiv.org/abs/1412.7420",
-   "https://gitlab.com/hepcedar/lhapdf",
-   "https://github.com/IdeaSearch/IdeaSearch-framework/tree/8142b202b4c84a35c3a17dd9c473071c03fbba08",
-   "https://github.com/IdeaSearch/IdeaSearch-fit/tree/50e41f806c6ed3f887791fc50011edfdb886bbcc"
-  ],
-  "license": null
- },
- {
-  "name": "implied-volatility-slices",
-  "display": "Implied-volatility slices",
-  "kind": "data",
-  "origin": "synthetic data",
-  "tags": [
-   "no test split"
-  ],
-  "problems": 34,
-  "groups": {
-   "all": 34
-  },
-  "sources": [
-   "https://arxiv.org/abs/2603.21892",
-   "https://arxiv.org/pdf/2603.21892v1",
-   "https://arxiv.org/html/2603.21892v1",
-   "https://github.com/hannesnikulski/master-thesis/tree/1da174236b507799cec6bb6d42f042484d9007ed",
-   "https://github.com/hannesnikulski/master-thesis/tree/1da174236b507799cec6bb6d42f042484d9007ed/data/vola-dynamics",
-   "https://github.com/hannesnikulski/master-thesis/blob/1da174236b507799cec6bb6d42f042484d9007ed/notebooks/vd-data-generate.ipynb",
-   "https://github.com/hannesnikulski/master-thesis/blob/1da174236b507799cec6bb6d42f042484d9007ed/vola-dynamics/notebooks/generate.ipynb",
-   "https://github.com/hannesnikulski/master-thesis/blob/1da174236b507799cec6bb6d42f042484d9007ed/core/sample.py",
-   "https://github.com/hannesnikulski/master-thesis/blob/1da174236b507799cec6bb6d42f042484d9007ed/notebooks/ivs-data-generate.ipynb",
-   "https://github.com/hannesnikulski/master-thesis/blob/1da174236b507799cec6bb6d42f042484d9007ed/global-problem/notebooks/generate.ipynb",
-   "https://github.com/hannesnikulski/pysr-tud/tree/c1d9fb2b16e985ff4f00ad5c9c1989c4d1279f62",
-   "https://api.github.com/repos/hannesnikulski/master-thesis",
-   "https://api.github.com/repos/hannesnikulski/pysr-tud",
-   "https://www.voladynamics.com",
-   "https://www.ivolatility.com",
-   "https://github.com/MilesCranmer/PySR/blob/master/docs/papers.yml"
-  ],
-  "license": null
  },
  {
   "name": "jin",
@@ -2658,11 +2286,9 @@
   "kind": "data",
   "origin": "measured data",
   "tags": [],
-  "problems": 6,
+  "problems": 3,
   "groups": {
-   "all": 4,
-   "sunspots test 1921-1955": 1,
-   "sunspots test 1956-1979": 1
+   "all": 3
   },
   "sources": [
    "http://web.archive.org/web/20210125223903/http://gpbenchmarks.org/wp-content/uploads/2019/08/paper1.pdf",
@@ -2697,7 +2323,7 @@
    "https://cs.adelaide.edu.au/~zbyszek/Papers/DyForGP.pdf",
    "https://doi.org/10.1109/TEVC.2006.882430"
   ],
-  "license": null
+  "license": "MIT (DALabNOVA/slim QSAR tables)"
  },
  {
   "name": "mcdermott-table-1-predictive-modelling-sets-points",
@@ -2761,110 +2387,6 @@
    "Meier, Gonter and Kruse 2013"
   ],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization benchmarks.csv); formulas and ranges as in each benchmark's first publication (facts)"
- },
- {
-  "name": "materials-laws-multi-agent",
-  "display": "Multi-agent materials law datasets",
-  "kind": "data",
-  "origin": "measured data",
-  "tags": [
-   "no test split"
-  ],
-  "problems": 1,
-  "groups": {
-   "all": 1
-  },
-  "sources": [
-   "https://arxiv.org/abs/2411.16416",
-   "https://arxiv.org/html/2411.16416v1",
-   "https://arxiv.org/html/2411.16416v2",
-   "https://arxiv.org/e-print/2411.16416v1",
-   "https://arxiv.org/e-print/2411.16416v2",
-   "https://arxiv.org/abs/2304.12880",
-   "https://doi.org/10.1016/j.jocs.2024.102402",
-   "https://github.com/AlexanderKvashnin/SISSO_hardness/tree/7f36d9b5edabe3dfe3068adb27f68ed2daa23fd2",
-   "https://raw.githubusercontent.com/AlexanderKvashnin/SISSO_hardness/7f36d9b5edabe3dfe3068adb27f68ed2daa23fd2/train.dat",
-   "https://arxiv.org/abs/2204.01788",
-   "https://doi.org/10.1016/j.actamat.2022.117924",
-   "https://github.com/vzguille/elasisso/tree/43da91994083fd3b0b5474195b7c054a4c54f242",
-   "https://raw.githubusercontent.com/vzguille/elasisso/43da91994083fd3b0b5474195b7c054a4c54f242/data/binaries.csv",
-   "https://raw.githubusercontent.com/vzguille/elasisso/43da91994083fd3b0b5474195b7c054a4c54f242/data/ternaries.csv",
-   "https://raw.githubusercontent.com/vzguille/elasisso/43da91994083fd3b0b5474195b7c054a4c54f242/data/LICENSE",
-   "https://codeocean.com/capsule/0209216/tree/v1"
-  ],
-  "license": null
- },
- {
-  "name": "mvsr-2024",
-  "display": "Multi-view SR (2024) real data",
-  "kind": "data",
-  "origin": "measured data",
-  "tags": [
-   "no test split"
-  ],
-  "problems": 501,
-  "groups": {
-   "Chemistry: UV-visible absorption (Sec. 5.1)": 4,
-   "Astrophysics: SN Ia light curves (Sec. 5.3)": 6,
-   "Finance: MvSR views (Sec. 5.2)": 10,
-   "Finance: test assets (Sec. 5.2)": 480,
-   "Finance: S&P500 (Sec. 5.2)": 1
-  },
-  "sources": [
-   "https://arxiv.org/abs/2402.04298",
-   "https://arxiv.org/pdf/2402.04298v4",
-   "https://doi.org/10.1145/3638529.3654087",
-   "https://github.com/erusseil/MvSR-analysis/tree/ec5abd674c466d4d22957122db7b26680c457e59",
-   "https://github.com/erusseil/MvSR-analysis/tree/ec5abd674c466d4d22957122db7b26680c457e59/real_data",
-   "https://www.kaggle.com/datasets/iveeaten3223times/massive-yahoo-finance-dataset",
-   "https://www.kaggle.com/api/v1/datasets/view/iveeaten3223times/massive-yahoo-finance-dataset",
-   "https://irsa.ipac.caltech.edu/cgi-bin/ZTF/nph_light_curves?ID=764116400012133&FORMAT=csv",
-   "https://irsa.ipac.caltech.edu/cgi-bin/ZTF/nph_light_curves?ID=717101200000722&FORMAT=csv",
-   "https://irsa.ipac.caltech.edu/cgi-bin/ZTF/nph_light_curves?ID=679215400015888&FORMAT=csv",
-   "https://blast.scimma.org/transients/2018aye",
-   "https://blast.scimma.org/transients/2019fck",
-   "https://blast.scimma.org/transients/2021mwb",
-   "https://github.com/EpistasisLab/pmlb/tree/master/datasets/first_principles_absorption",
-   "https://github.com/EpistasisLab/pmlb/tree/master/datasets/first_principles_supernovae_zg",
-   "https://github.com/EpistasisLab/pmlb/tree/master/datasets/first_principles_supernovae_zr",
-   "https://raw.githubusercontent.com/EpistasisLab/pmlb/master/pmlb/all_summary_stats.tsv"
-  ],
-  "license": null
- },
- {
-  "name": "mvsr-2025",
-  "display": "Multi-view SR (2025) real-world data",
-  "kind": "data",
-  "origin": "measured data",
-  "tags": [],
-  "problems": 51,
-  "groups": {
-   "all": 51
-  },
-  "sources": [
-   "https://arxiv.org/abs/2509.10500",
-   "https://arxiv.org/html/2509.10500v1",
-   "https://doi.org/10.1098/rsta.2024.0592",
-   "https://github.com/erusseil/mvsr/tree/b39ba792605d8ab08071d0e4fd2acd40c220ab5e",
-   "https://github.com/erusseil/mvsr/blob/b39ba792605d8ab08071d0e4fd2acd40c220ab5e/main.py",
-   "https://github.com/erusseil/mvsr/blob/b39ba792605d8ab08071d0e4fd2acd40c220ab5e/datasets/links.txt",
-   "https://github.com/erusseil/mvsr/blob/b39ba792605d8ab08071d0e4fd2acd40c220ab5e/datasets/metadata.json",
-   "https://github.com/erusseil/MvSR-analysis/tree/ec5abd674c466d4d22957122db7b26680c457e59/real_data/supernovae",
-   "https://github.com/erusseil/MvSR-analysis/blob/ec5abd674c466d4d22957122db7b26680c457e59/real_data/supernovae-real.ipynb",
-   "https://arxiv.org/abs/2402.04298",
-   "https://github.com/EpistasisLab/pmlb/tree/master/datasets/first_principles_supernovae_zg",
-   "https://github.com/EpistasisLab/pmlb/tree/master/datasets/first_principles_supernovae_zr",
-   "https://github.com/EpistasisLab/pmlb/tree/master/datasets/nikuradse_1",
-   "https://github.com/EpistasisLab/pmlb/issues/170",
-   "https://raw.githubusercontent.com/EpistasisLab/pmlb/master/pmlb/all_summary_stats.tsv",
-   "https://arxiv.org/abs/2008.04732",
-   "https://doi.org/10.1051/0004-6361/201937079",
-   "https://doi.org/10.1021/bi201284u",
-   "https://doi.org/10.3109/14756366.2012.688039",
-   "http://konect.cc/",
-   "https://arxiv.org/abs/1402.5500"
-  ],
-  "license": null
  },
  {
   "name": "multi-view-sr-synthetic-benchmarks",
@@ -3186,9 +2708,9 @@
   "kind": "data",
   "origin": "measured data",
   "tags": [],
-  "problems": 2,
+  "problems": 1,
   "groups": {
-   "all": 2
+   "all": 1
   },
   "sources": [
    "https://arxiv.org/abs/2404.11477",
@@ -3215,7 +2737,7 @@
    "https://www-nds.iaea.org/radii/",
    "https://doi.org/10.1016/j.adt.2011.12.006"
   ],
-  "license": null
+  "license": "CC BY 3.0 (AME2020, Chin. Phys. C 45, 030003)"
  },
  {
   "name": "occamnet-analytic-and-non-analytic-suites",
@@ -3241,34 +2763,6 @@
    "https://github.com/druidowm/OccamNet_Versions"
   ],
   "license": "facts only: target functions and ranges cited from Dugan et al. 2023 (OccamNet, arXiv:2007.10784); no upstream license"
- },
- {
-  "name": "oxygen-ion-conductors",
-  "display": "Oxygen-ion conductor database",
-  "kind": "data",
-  "origin": "measured data",
-  "tags": [],
-  "problems": 2,
-  "groups": {
-   "all": 2
-  },
-  "sources": [
-   "https://arxiv.org/abs/2601.16852",
-   "https://arxiv.org/pdf/2601.16852v1",
-   "https://doi.org/10.1038/s41597-026-07100-x",
-   "https://www.nature.com/articles/s41597-026-07100-x",
-   "https://doi.org/10.5281/zenodo.18947543",
-   "https://zenodo.org/api/records/18947543",
-   "https://arxiv.org/abs/2510.18325",
-   "https://arxiv.org/pdf/2510.18325v7",
-   "https://github.com/JerryGarcia1995/OxygenIonConductor/tree/5ffef73ed3ea2cfccaf68de822b1766b13f96115",
-   "https://github.com/JerryGarcia1995/OxygenIonConductor/tree/5ffef73ed3ea2cfccaf68de822b1766b13f96115/modelling_GoodRegressor/DatabaseOnly",
-   "https://github.com/JerryGarcia1995/OxygenIonConductor/blob/5ffef73ed3ea2cfccaf68de822b1766b13f96115/database/oxygen_ion_conductor_dataset.csv",
-   "https://github.com/JerryGarcia1995/OxygenIonConductor/tree/5ffef73ed3ea2cfccaf68de822b1766b13f96115/modelling_GoodRegressor/002_GoodCurator",
-   "https://github.com/JerryGarcia1995/OxygenIonConductor/blob/5ffef73ed3ea2cfccaf68de822b1766b13f96115/modelling_GoodRegressor/CodeOnly/Utility/benchmark_v12.py",
-   "https://github.com/JerryGarcia1995/GoodRegressor"
-  ],
-  "license": null
  },
  {
   "name": "pagie",
@@ -3320,9 +2814,9 @@
   "tags": [
    "extrapolation"
   ],
-  "problems": 16,
+  "problems": 15,
   "groups": {
-   "all": 16
+   "all": 15
   },
   "sources": [
    "https://arxiv.org/abs/2503.07994v3",
@@ -3345,7 +2839,7 @@
    "http://www.chiantidatabase.org",
    "https://www.space.umn.edu/rbspefw-data/"
   ],
-  "license": null
+  "license": "Apache-2.0 (the authors' figshare record)"
  },
  {
   "name": "physo-astrophysical-case-studies",
@@ -3563,33 +3057,6 @@
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization)"
  },
  {
-  "name": "sparc-radial-acceleration",
-  "display": "Radial acceleration relation (SPARC)",
-  "kind": "data",
-  "origin": "measured data",
-  "tags": [
-   "no test split"
-  ],
-  "problems": 1,
-  "groups": {
-   "sparc": 1
-  },
-  "sources": [
-   "https://arxiv.org/abs/2301.04368",
-   "https://doi.org/10.1093/mnras/stad597",
-   "https://astroweb.case.edu/SPARC/",
-   "https://astroweb.case.edu/SPARC/MassModels_Lelli2016c.mrt",
-   "https://astroweb.case.edu/SPARC/SPARC_Lelli2016c.mrt",
-   "https://astroweb.case.edu/SPARC/RAR.mrt",
-   "https://arxiv.org/abs/1606.09251",
-   "https://arxiv.org/abs/1610.08981",
-   "https://arxiv.org/abs/2201.02109",
-   "https://github.com/DeaglanBartlett/ESR/tree/23c3907a0fb08301d5e89fb666ae01bec0398faa/examples/RAR_results",
-   "https://arxiv.org/abs/2404.17292"
-  ],
-  "license": null
- },
- {
   "name": "reproduction-bias-not-included-test-sets",
   "display": "Reproduction-bias 'not included' test sets",
   "kind": "formula",
@@ -3684,9 +3151,9 @@
   "kind": "data",
   "origin": "measured data",
   "tags": [],
-  "problems": 66,
+  "problems": 57,
   "groups": {
-   "all": 66
+   "all": 57
   },
   "sources": [
    "https://arxiv.org/abs/2609.01552",
@@ -3702,7 +3169,35 @@
    "https://github.com/yiyihum/SciLaws-Bench/blob/9239f66b921cb89c7a9d14061f782fdce49dcfb5/harness/AGENT_INTERFACE.md",
    "https://yiyihum.github.io/SciLaws-Bench/"
   ],
-  "license": null
+  "license": "per problem (SciLaws-Bench dataset/LICENSES.md, RealSR/SciLaws-Bench): CC BY 2.5/3.0/4.0, CC0 1.0, public domain, MIT, etalab-2.0"
+ },
+ {
+  "name": "scilaws-real-share-alike",
+  "display": "SciLaws-Bench SciLaws-Real (Type I) (share-alike)",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [
+   "extrapolation"
+  ],
+  "problems": 2,
+  "groups": {
+   "all": 2
+  },
+  "sources": [
+   "https://arxiv.org/abs/2609.01552",
+   "https://github.com/yiyihum/SciLaws-Bench/blob/9239f66b921cb89c7a9d14061f782fdce49dcfb5/docs/assets/scilaws_bench_paper.pdf",
+   "https://huggingface.co/datasets/RealSR/SciLaws-Bench/tree/15b93258fabc8f1785c5a5ffd4d3e51fc15dd860",
+   "https://huggingface.co/datasets/RealSR/SciLaws-Bench/blob/15b93258fabc8f1785c5a5ffd4d3e51fc15dd860/tasks/domains.json",
+   "https://huggingface.co/datasets/RealSR/SciLaws-Bench/blob/15b93258fabc8f1785c5a5ffd4d3e51fc15dd860/task_index.csv",
+   "https://huggingface.co/datasets/RealSR/SciLaws-Bench/blob/15b93258fabc8f1785c5a5ffd4d3e51fc15dd860/LICENSES.md",
+   "https://huggingface.co/datasets/RealSR/SciLaws-Bench/blob/15b93258fabc8f1785c5a5ffd4d3e51fc15dd860/README.md",
+   "https://github.com/yiyihum/SciLaws-Bench/tree/9239f66b921cb89c7a9d14061f782fdce49dcfb5",
+   "https://github.com/yiyihum/SciLaws-Bench/blob/9239f66b921cb89c7a9d14061f782fdce49dcfb5/harness/evaluate_numeric.py",
+   "https://github.com/yiyihum/SciLaws-Bench/blob/9239f66b921cb89c7a9d14061f782fdce49dcfb5/harness/eval_formula.py",
+   "https://github.com/yiyihum/SciLaws-Bench/blob/9239f66b921cb89c7a9d14061f782fdce49dcfb5/harness/AGENT_INTERFACE.md",
+   "https://yiyihum.github.io/SciLaws-Bench/"
+  ],
+  "license": "per problem: CC BY-SA 3.0 and CC BY-SA 4.0 (SciLaws-Bench dataset/LICENSES.md)"
  },
  {
   "name": "scimed-settling-sphere-configurations",
@@ -3770,37 +3265,14 @@
   "license": "MIT (prescriptiveanalytics/SCR-Benchmarks; SRSD laws: omron-sinicx/srsd-benchmark, MIT)"
  },
  {
-  "name": "shadow-economies",
-  "display": "Shadow Economies",
-  "kind": "data",
-  "origin": "measured data",
-  "tags": [
-   "no test split"
-  ],
-  "problems": 2,
-  "groups": {
-   "all": 2
-  },
-  "sources": [
-   "http://web.archive.org/web/20131208233428/http://symbolicregression.com/?q=shadowEconomiesProblem",
-   "http://web.archive.org/web/20170304231546/http://symbolicregression.com/sites/default/files/DataSets/ShadowEconomiesProblem.zip",
-   "https://doi.org/10.1007/978-1-4614-1770-5_11",
-   "http://web.archive.org/web/20231128223901/http://korns.com/Detecting%20Shadow%20Economy%20Sizes%20with%20Symbolic%20Regression.pdf",
-   "https://gpbib.cs.ucl.ac.uk/gp-html/Truscott_2011_GPTP.html",
-   "https://api.semanticscholar.org/graph/v1/paper/DOI:10.1007/978-1-4614-1770-5_11",
-   "http://data.worldbank.org/"
-  ],
-  "license": null
- },
- {
   "name": "shape-constrained-real-world",
   "display": "Shape-constrained SR real-world set",
   "kind": "data",
   "origin": "measured data",
   "tags": [],
-  "problems": 4,
+  "problems": 1,
   "groups": {
-   "all": 4
+   "all": 1
   },
   "sources": [
    "https://arxiv.org/abs/2103.15624",
@@ -3812,7 +3284,7 @@
    "https://archive.ics.uci.edu/dataset/9/auto+mpg",
    "https://doi.org/10.1063/1.5112747"
   ],
-  "license": null
+  "license": "CC BY 4.0 (UCI Auto MPG)"
  },
  {
   "name": "shape-constrained-sr-synthetic",
@@ -3905,39 +3377,6 @@
    "https://gitlab.mpcdf.mpg.de/nomad-lab/analytics-toolkit-tutorials/-/blob/9f70c4ce188cc5543cc7c76f02267a270f795f13/lasso/LASSO_L0.bkr"
   ],
   "license": "CC BY 3.0 (Ghiringhelli et al. 2015, Phys. Rev. Lett. 114:105503, Supplemental Material)"
- },
- {
-  "name": "sldbench",
-  "display": "SLDBench (scaling-law discovery)",
-  "kind": "data",
-  "origin": "measured data",
-  "tags": [
-   "extrapolation"
-  ],
-  "problems": 77,
-  "groups": {
-   "parallel_scaling_law": 2,
-   "vocab_scaling_law": 1,
-   "sft_scaling_law": 42,
-   "domain_mixture_scaling_law": 20,
-   "moe_scaling_law": 1,
-   "data_constrained_scaling_law": 1,
-   "lr_bsz_scaling_law": 1,
-   "easy_question_scaling_law": 9
-  },
-  "sources": [
-   "https://arxiv.org/abs/2507.21184",
-   "https://arxiv.org/pdf/2507.21184v5",
-   "https://arxiv.org/pdf/2507.21184v1",
-   "https://huggingface.co/datasets/pkuHaowei/sldbench/tree/721b846056f031737ff7fa72572c021324e3ec0e",
-   "https://huggingface.co/api/datasets/pkuHaowei/sldbench/revision/721b846056f031737ff7fa72572c021324e3ec0e",
-   "https://github.com/linhaowei1/SLD/blob/df9d125389751e31124319c0e18d08c4d5c00f78/data_loader.py",
-   "https://github.com/linhaowei1/SLD/blob/df9d125389751e31124319c0e18d08c4d5c00f78/evaluator.py",
-   "https://github.com/linhaowei1/SLD/blob/df9d125389751e31124319c0e18d08c4d5c00f78/README.md",
-   "https://github.com/linhaowei1/SLD/tree/df9d125389751e31124319c0e18d08c4d5c00f78/configs",
-   "https://github.com/laude-institute/harbor-datasets/tree/5d929c1e4fac5e9f98e978b5c35e67b8e269a6e8/datasets/sldbench"
-  ],
-  "license": null
  },
  {
   "name": "soose-fc",
@@ -4043,7 +3482,7 @@
    "https://github.com/isds-neu/SymbolicPhysicsLearner/blob/c0c18c90d61510a78ff2d24ac5299ad92c8acc59/regression_task/make_datasets.py",
    "https://github.com/isds-neu/SymbolicPhysicsLearner/blob/c0c18c90d61510a78ff2d24ac5299ad92c8acc59/regression_task/task_info.py"
   ],
-  "license": "CC BY-SA 4.0 (Sun et al. 2023, Symbolic Physics Learner, ICLR, arXiv:2205.13134v2, Sec. 4.1)"
+  "license": "facts only: one formula and its range from Sun et al. 2023 (Symbolic Physics Learner, ICLR, arXiv:2205.13134v2, a CC BY-SA 4.0 paper)"
  },
  {
   "name": "srbench-2.0-blackbox",
@@ -4513,33 +3952,6 @@
   "license": "facts only: formulas and ranges cited from Muthyala et al. 2024 (TorchSISSO, Digit. Chem. Eng. 13:100198; arXiv:2410.01752, CC BY-NC-ND 4.0); no text or tables reproduced"
  },
  {
-  "name": "dow-distillation-tower",
-  "display": "Tower (Dow distillation tower)",
-  "kind": "data",
-  "origin": "measured data",
-  "tags": [
-   "no test split"
-  ],
-  "problems": 1,
-  "groups": {
-   "all": 1
-  },
-  "sources": [
-   "http://web.archive.org/web/20130719082855/http://www.symbolicregression.com:80/?q=towerProblem",
-   "https://web.archive.org/web/20160707102934/http://symbolicregression.com/sites/default/files/DataSets/towerData.txt",
-   "https://doi.org/10.1109/TEVC.2008.926486",
-   "https://web.archive.org/web/20141006102506/http://symbolicregression.com/sites/SRDocuments/NonlinearityPreprint.pdf",
-   "http://www0.cs.ucl.ac.uk/staff/W.Langdon/ftp/papers/vladislavleva_2008_thesis.pdf",
-   "https://github.com/heal-research/HeuristicLab/blob/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/RealWorld/Tower.cs",
-   "https://github.com/heal-research/HeuristicLab/blob/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/Data/RegressionRealWorld.zip",
-   "https://github.com/folivetti/ITEA/tree/9edf15755ab2d7ff649be54e8facb5527f3d2bc7/datasets/towerData",
-   "https://arxiv.org/abs/1904.02050",
-   "https://arxiv.org/abs/1905.13266",
-   "https://raw.githubusercontent.com/EpistasisLab/pmlb/master/pmlb/all_summary_stats.tsv"
-  ],
-  "license": null
- },
- {
   "name": "treloar-rubber",
   "display": "Treloar rubber hyperelasticity",
   "kind": "data",
@@ -4613,33 +4025,6 @@
    "local: symbolic-data/assets/upstream/dso_benchmarks.csv line 95 (origin of the deviating Ripple)"
   ],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization)"
- },
- {
-  "name": "white-2013-proposed",
-  "display": "White et al. 2013 proposed SR set",
-  "kind": "data",
-  "origin": "measured data",
-  "tags": [],
-  "problems": 1,
-  "groups": {
-   "all": 1
-  },
-  "sources": [
-   "https://doi.org/10.1007/s10710-012-9177-2",
-   "http://gpbenchmarks.org/wp-content/uploads/2019/08/GP-Benchmarks-GPEM-2013-preprint-correction-v2.pdf",
-   "https://doi.org/10.1007/3-540-36599-0_7",
-   "http://web.archive.org/web/20070206014709/http://www.cs.vu.nl:80/~mkeijzer/publications/eurogp2003.ps.gz",
-   "http://gpbenchmarks.org/wp-content/uploads/2019/08/Evostar_2010_Symbolic_Regression_Competition.pdf",
-   "http://gpbenchmarks.org/wp-content/uploads/2020/07/SymbolicRegressionCompetitionData.xls",
-   "https://doi.org/10.1007/s10710-009-9087-0",
-   "http://web.archive.org/web/20170403201603/http://human-competitive.org/sites/default/files/widera-genp-paper_1.pdf",
-   "https://ico2s.org/datasets/gp_challenge.html",
-   "https://ico2s.org/data/instances/gp_challenge/energy_terms.tar.gz",
-   "https://ico2s.org/data/instances/gp_challenge/distances.tar.gz",
-   "https://raw.githubusercontent.com/heal-research/HeuristicLab/master/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/RealWorld/ChemicalOne.cs",
-   "https://raw.githubusercontent.com/EpistasisLab/pmlb/master/pmlb/all_summary_stats.tsv"
-  ],
-  "license": null
  },
  {
   "name": "white-et-al-2013-proposed-sr-set-points",
