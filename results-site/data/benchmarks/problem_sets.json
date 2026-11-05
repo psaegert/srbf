@@ -1654,11 +1654,6 @@
     "kind": "part",
     "problems": 2,
     "text": "srbf runs 1 of the 3 ESR problems here (the mock problem); the cosmic-chronometer data are in 'ESR cosmology data', and the Pantheon+ task is not y = f(x)."
-   },
-   {
-    "kind": "changed",
-    "problems": 1,
-    "text": "ESR searches for H^2 as a function of x = 1 + z; srbf asks for H itself."
    }
   ],
   "license": "MIT (DeaglanBartlett/ESR; Bartlett, Desmond & Ferreira 2024, IEEE TEVC 28:950, arXiv:2211.11461)"
@@ -1967,11 +1962,6 @@
     "kind": "part",
     "problems": 7,
     "text": "srbf runs 14 of the 21 real-world datasets: 4 have data that may not be shared (Boston housing, Ozone, Dow Chemical, Tower), the Million Song Dataset is left out for its size (375 MB), and NOX and WND were never published."
-   },
-   {
-    "kind": "changed",
-    "problems": 11,
-    "text": "The compilers test on one fixed shuffled 5-fold partition (reused across runs); srbf takes a fresh random 20% test part in every run instead."
    }
   ],
   "license": "CC BY 4.0 (UCI Machine Learning Repository members) and MIT (the QSAR members, DALabNOVA/slim)"
@@ -3362,11 +3352,6 @@
   "changes": [
    {
     "kind": "changed",
-    "problems": 3,
-    "text": "The authors evaluate with a fixed 5-fold split (random_state 42); srbf takes a fresh random 20% test part in every run instead."
-   },
-   {
-    "kind": "changed",
     "problems": 2,
     "text": "The out-of-distribution tests for bulk modulus (10 perovskites) and OER activity (5 perovskites) are not published in the authors' input form and are not used."
    }
@@ -4661,7 +4646,7 @@
    {
     "kind": "filled",
     "problems": 600,
-    "text": "For each formula the authors' code picks one of two input distributions at random (a folded normal or a uniform), anew in every evaluation run and without a seed; srbf picks it once per problem with its own seed and keeps it."
+    "text": "For each formula the authors' code picks one of two input distributions at random (a folded normal or a uniform), anew in every evaluation run and without a seed; srbf picks it once, when the problem set is built, from a seed fixed by the problem's name, and every run uses that choice."
    }
   ],
   "license": "Apache-2.0 (figshare 10.6084/m9.figshare.29615831, PhyE2E_datas; Ying et al. 2025, Nat. Mach. Intell. 7:1726)"
@@ -4872,7 +4857,7 @@
    {
     "kind": "filled",
     "problems": 8,
-    "text": "The authors pick each law's realization-specific constants at random for every dataset; srbf picks them once per problem with its own seed and keeps them."
+    "text": "The authors pick each law's realization-specific constants at random for every dataset; srbf draws them once, when the problem set is built, from a seed fixed by the problem's name, and every run uses those values."
    },
    {
     "kind": "changed",
@@ -5167,7 +5152,7 @@
    {
     "kind": "filled",
     "problems": 297,
-    "text": "The authors give every input a random interval inside [-10, 10], chosen anew in every run; srbf chooses the interval once per problem with its own seed and keeps it."
+    "text": "The authors give every input a random interval inside [-10, 10], chosen anew in every run; srbf chooses it once, when the problem set is built, from a seed fixed by the problem's name, and every run uses that interval."
    }
   ],
   "license": "MIT (Shun-0922/Mem-Bias-NSR; Sato & Sato 2025, arXiv:2505.22081)"
@@ -6141,7 +6126,7 @@
  },
  {
   "name": "sym-q-ai-feynman-with-drift-terms",
-  "display": "Sym-Q AI-Feynman with drift terms",
+  "display": "Sym-Q AI-Feynman, 15 expressions",
   "kind": "formula",
   "origin": "science formula",
   "tags": [],
@@ -6178,7 +6163,7 @@
    {
     "kind": "part",
     "problems": 15,
-    "text": "srbf runs the 15 AI-Feynman expressions without the drift terms that Sym-Q adds in its drift experiment; the paper never lists which drift goes with which expression, so no drift variant is run."
+    "text": "srbf runs the 15 AI-Feynman expressions Sym-Q evaluates, without the drift terms of its drift experiment. Those problems cannot be rebuilt: Sym-Q names nine kinds of drift but not the equations it added them to (only 'all equations with three or fewer variables, excluding those exceeding the model's size limits') nor the input each drift uses."
    }
   ],
   "license": "MIT (EPFL-IMOS/Sym-Q) + CC0 1.0 (Tian et al., arXiv:2402.05306)"
@@ -6320,7 +6305,7 @@
    {
     "kind": "filled",
     "problems": 999,
-    "text": "The authors publish these formulas with their constants masked; srbf picks each constant once (uniform on [-2.1, 2.1], the authors' generator law) with its own seed."
+    "text": "The authors publish these formulas with their constants masked; srbf draws each constant once (uniform on [-2.1, 2.1], the authors' generator law), when the problem set is built, from a seed fixed by the problem's name, and every run uses that value."
    }
   ],
   "license": "MIT (mojivalipour/symbolicgpt; HF DataAnalyticsLab/SymbolicGPT)"

@@ -11,6 +11,7 @@ names:
   fastsrb: FastSRB (Feynman laws, SRSD ranges)
   esr-cosmology: ESR cosmology data
   esr-cosmology-datasets: ESR cosmology formulas
+  sym-q-ai-feynman-with-drift-terms: Sym-Q AI-Feynman, 15 expressions
   pysr-empiricalbench: PySR EmpiricalBench data
   pysr-empiricalbench-formulas: PySR EmpiricalBench formulas
   feynman: AI Feynman laws
@@ -85,15 +86,16 @@ rules:
     text: >-
       Most problem sets are formulas. srbf takes each formula, its constants, the ranges and distributions of its
       inputs and any inputs the formula does not use from the benchmark's authors. srbf itself chooses how many points
-      a method sees (512 to fit, 512 to test) and the noise, the same for every formula problem; constants that the
-      authors draw at random are drawn once per problem. Where the authors fix the exact points (for example x = 1, 2,
-      ..., 50), srbf uses those points.
+      a method sees (512 to fit, 512 to test) and the noise, the same for every formula problem; a value that the
+      authors choose at random in every run (a constant, an input range) is chosen once per problem. Where the
+      authors fix the exact points (for example x = 1, 2, ..., 50), srbf uses those points.
   - title: Data
     text: >-
       Some problem sets are data: measurements, simulations or files the authors published, with or without a known
       formula. srbf uses the data as published. Each run fits at most 512 rows and tests on at most 512 rows, drawn
-      afresh. srbf tests only where the authors name test data or a way to choose it; where they do not, a method is
-      scored only on the data it fitted, and the problem set carries the tag "no test split".
+      afresh; where the authors test on fixed folds of their data, each run tests on one of those folds. srbf tests
+      only where the authors name test data or a way to choose it; where they do not, a method is scored only on the
+      data it fitted, and the problem set carries the tag "no test split".
   - title: Tests
     text: >-
       Where the authors give test points, srbf tests on them. Where they give several (for example inside and beyond
@@ -212,9 +214,39 @@ changes:
       srbf keeps both tests, as groups "id" and "ood", and picks the moved input at random for each point.
   - title: Constant targets
     text: >-
-      On some ERBench problems every point of a run has the same target value (for example when an integer sequence is
-      constant on a short window). srbf keeps these problems. On such a run the measures of fit quality are undefined
+      On some ERBench problems every point of a run has exactly the same target value, to the last digit of a 64-bit
+      floating-point number (for example when an integer sequence is constant on a short window). srbf keeps these problems. On such a run the measures of fit quality are undefined
       and left out; the comparison of formulas works as usual.
+  - title: Values chosen once*
+    text: >-
+      Some authors choose a value anew in every run: a constant (SymbolicGPT's bivariate set, PhySO's Class SR
+      benchmark), the range of an input (the reproduction-bias test sets) or which of two input distributions a formula
+      uses (PhyE2E). srbf chooses each such value once, when it builds the problem set, at random from the authors'
+      distribution with a seed fixed by the problem's name, and stores the value and the seed with the problem. Every
+      run of every method then meets the same problem.
+  - title: The authors' folds
+    text: >-
+      The GECCO 2013-2017 compilation and LangLaw test by cross-validation on fixed folds: the data are split once into
+      five parts, and each part serves in turn as the test data. srbf keeps these folds. Each run tests on one of the
+      five parts, picked at random, and fits on the other four. The compilers of the GECCO set published no fold
+      indices; their script splits the data with fixed seeds, so srbf runs it again to recover the folds.
+  - title: ESR's H squared
+    text: >-
+      Exhaustive symbolic regression (ESR) searches for the square of the Hubble rate, H^2, as a function of
+      x = 1 + z, and compares the square root of its formula with the measured H. srbf asks for the same function in
+      both ESR problem sets, the cosmic-chronometer data and the mock data.
+  - title: Sym-Q's drift terms*
+    text: >-
+      In one experiment, Sym-Q adds drift terms (for example + 1, + x1 or a factor exp(0.1 x1)) to AI-Feynman
+      equations. The paper names nine kinds of drift but not the equations it added them to, nor which input each
+      drift uses, so these problems cannot be rebuilt and srbf does not run them. srbf runs the 15 AI-Feynman
+      expressions Sym-Q evaluates, without drift terms.
+  - title: LaSR's unused inputs*
+    text: >-
+      LaSR's paper adds random unused inputs to its noisy Feynman problems without saying how many or how they are
+      distributed, and the authors' released code turns them off for these problems. srbf follows the paper and adds
+      them as the authors' code does for their other problem sets: up to 11 inputs in all, each extra one uniform on
+      [1, 20].
   - title: Two checks dropped
     text: >-
       Const-Test-1 and -2 are dropped from the Constant problem set: they are checks of a software package, not
