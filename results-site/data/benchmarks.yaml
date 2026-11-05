@@ -86,9 +86,9 @@ rules:
     text: >-
       Most problem sets are formulas. srbf takes each formula, its constants, the ranges and distributions of its
       inputs and any inputs the formula does not use from the benchmark's authors. srbf itself chooses how many points
-      a method sees (512 to fit, 512 to test) and the noise, the same for every formula problem; a value that the
-      authors choose at random in every run (a constant, an input range) is chosen once per problem. Where the
-      authors fix the exact points (for example x = 1, 2, ..., 50), srbf uses those points.
+      a method sees (512 to fit, 512 to test) and the noise, the same for every formula problem. A value that the
+      authors choose at random in every run (a constant, the range of an input) is chosen anew in every run of srbf
+      too. Where the authors fix the exact points (for example x = 1, 2, ..., 50), srbf uses those points.
   - title: Data
     text: >-
       Some problem sets are data: measurements, simulations or files the authors published, with or without a known
@@ -217,13 +217,14 @@ changes:
       On some ERBench problems every point of a run has exactly the same target value, to the last digit of a 64-bit
       floating-point number (for example when an integer sequence is constant on a short window). srbf keeps these problems. On such a run the measures of fit quality are undefined
       and left out; the comparison of formulas works as usual.
-  - title: Values chosen once*
+  - title: Values chosen in every run
     text: >-
       Some authors choose a value anew in every run: a constant (SymbolicGPT's bivariate set, PhySO's Class SR
       benchmark), the range of an input (the reproduction-bias test sets) or which of two input distributions a formula
-      uses (PhyE2E). srbf chooses each such value once, when it builds the problem set, at random from the authors'
-      distribution with a seed fixed by the problem's name, and stores the value and the seed with the problem. Every
-      run of every method then meets the same problem.
+      uses (PhyE2E). srbf does the same. Each run first chooses these values from the authors' distributions, then
+      draws its points, and uses the same values for its fitting and its test points; its ground truth is the formula
+      with that run's values. SymbolicGPT's authors publish their formulas with the constants hidden, so srbf chooses
+      them from the range of the authors' formula generator (marked with a star).
   - title: The authors' folds
     text: >-
       The GECCO 2013-2017 compilation and LangLaw test by cross-validation on fixed folds: the data are split once into
