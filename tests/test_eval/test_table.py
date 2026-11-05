@@ -193,20 +193,24 @@ def test_tree_and_index_specs_parse_as_the_command_line_takes_them():
 
 
 def test_a_new_worker_does_not_change_the_judge(tmp_path, monkeypatch):
-    """The judge fingerprint names the srbf source the judge runs; the out-of-process workers are not part of it,
-    so adding a baseline worker keeps every cached judgment, while a change to judging code discards them."""
+    """The judge fingerprint names the srbf source the judge runs (srbf.table and what it imports); the
+    out-of-process workers and the rest of the package are not part of it, so adding a baseline worker or changing
+    the reports keeps every cached judgment, while a change to judging code discards them."""
     import srbf
     from srbf.table import judge_fingerprint
     pkg = tmp_path / "srbf"
     (pkg / "worker" / "models").mkdir(parents=True)
-    (pkg / "__init__.py").write_text("")
+    (pkg / "__init__.py").write_text("from srbf.reporting import REPORT\n")
+    (pkg / "table.py").write_text("def judge():\n    from srbf.result_processing import JUDGE\n    return JUDGE\n")
     (pkg / "result_processing.py").write_text("JUDGE = 1\n")
+    (pkg / "reporting.py").write_text("REPORT = 1\n")
     (pkg / "worker" / "models" / "one_worker.py").write_text("X = 1\n")
     monkeypatch.setattr(srbf, "__file__", str(pkg / "__init__.py"))
     before = judge_fingerprint("acj-5-4-llm")
     (pkg / "worker" / "models" / "another_worker.py").write_text("Y = 2\n")
     (pkg / "worker" / "models" / "one_worker.py").write_text("X = 3\n")
     (pkg / "rungs.py").write_text("RUNG_PREFIXES = ('choices', 'another_unit')\n")   # a new budget unit
+    (pkg / "reporting.py").write_text("REPORT = 2\n")                                   # not judging code
     assert judge_fingerprint("acj-5-4-llm") == before
     (pkg / "result_processing.py").write_text("JUDGE = 2\n")
     assert judge_fingerprint("acj-5-4-llm") != before
