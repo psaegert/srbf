@@ -95,6 +95,9 @@ def _assert_matches_golden(model, golden_rows: list[dict]) -> None:
     assert scores == sorted(scores)
 
 
+@pytest.mark.xfail(strict=True, reason=(
+    "golden captured on SimpliPy 0.14's 23 operators; 0.15's 36 enumerate new length<=2 candidates (floor, ceil, erf, "
+    "...) and its prices may still move: re-pin on the released rules"))
 def test_bruteforce_results_match_golden(simplipy_engine, golden) -> None:
     pool = _build_pool(simplipy_engine, [("x1",)], variables=("x1",))
     # max_expressions huge + short max_length => the generator enumerates the COMPLETE length<=2 space
