@@ -172,7 +172,8 @@ def definitions(items: list[dict[str, str]], used: set[str]) -> str:
         for t in items if t["name"] in used) + "</dl>"
 
 
-KINDS = {"part": "Part of the benchmark", "filled": "Filled in by srbf", "changed": "Changed by srbf"}
+KINDS = {"part": "Part of the benchmark", "filled": "Filled in by srbf", "changed": "Changed by srbf",
+         "kept": "Kept as published"}
 
 
 def anchor(name: str) -> str:

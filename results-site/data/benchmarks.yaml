@@ -147,7 +147,8 @@ star: >-
 changed_lede: >-
   Where srbf's version of a benchmark differs from what its name leads a reader to expect, the problem set carries a
   star and is listed here, with each difference: srbf runs only part of the benchmark, filled in something the
-  authors left open, or changed something they defined. The number of points and the noise, which srbf sets the same
+  authors left open, or changed something they defined. A weakness of the benchmark that srbf keeps as published is
+  listed too. The number of points and the noise, which srbf sets the same
   way for every benchmark, are explained under "How srbf runs a benchmark" and do not earn a star.
 tag_rule: >-
   A problem set carries a tag when it holds for at least half of its problems. The tags describe the problems as srbf
@@ -278,13 +279,12 @@ left_out:
       Orzechowski et al. study (94) and the GECCO 2022 qualification track (20) are part of SRBench 2021's black-box
       problems, and nearly all of the PMLB regression collection (152) is in SRBench 2021 or in other problem sets srbf
       runs; E2E's 57 black-box problems are a selection of SRBench 2021's. SRBench 2021's Feynman data files and AI Descartes' noisy Feynman data sample the AI Feynman
-      laws srbf already holds. SymbolicArena gathers problems from other benchmarks, which srbf runs from their own
-      sources (apart from LLM-SRBench, below). 26 laws of the dimensionless AI Feynman version reduce to constants;
-      srbf holds them with their units.
-  - title: No license, or incomplete
+      laws srbf already holds. SymbolicArena gathers problems from other benchmarks, LLM-SRBench among them, which srbf
+      runs from their own sources, and LSR-Transform-Anon is LLM-SRBench's LSR-Transform with its variables renamed.
+      26 laws of the dimensionless AI Feynman version reduce to constants; srbf holds them with their units.
+  - title: Incomplete
     text: >-
-      LLM-SRBench (LSR-Transform and LSR-Synth) is published without a license, and some of its problems lack their
-      constants. KAN's special functions give no input ranges and leave two of their outputs unspecified.
+      KAN's special functions give no input ranges and leave two of their outputs unspecified.
   - title: Too large, or not published
     text: >-
       CAMELS (a 15.8 GB download), PhyE2E's lunar tide (13.3 million rows) and the Million Song Dataset (375 MB) are

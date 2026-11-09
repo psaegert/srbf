@@ -4564,6 +4564,81 @@
   "license": "CC BY 4.0 (Mendeley Data 10.17632/rd6jm9tyb6.1, Aakash et al. 2019) via deep-symbolic-mathematics/LLM-SR (MIT)"
  },
  {
+  "name": "llm-srbench",
+  "display": "LLM-SRBench",
+  "kind": "data",
+  "origin": "synthetic data",
+  "tags": [
+   "several tests"
+  ],
+  "problems": 369,
+  "groups": {
+   "LSR-Transform": 111,
+   "LSR-Synth chemistry in-domain": 36,
+   "LSR-Synth chemistry out-of-domain": 36,
+   "LSR-Synth biology in-domain": 24,
+   "LSR-Synth biology out-of-domain": 24,
+   "LSR-Synth physics in-domain": 44,
+   "LSR-Synth physics out-of-domain": 44,
+   "LSR-Synth materials science in-domain": 25,
+   "LSR-Synth materials science out-of-domain": 25
+  },
+  "sources": [
+   "https://arxiv.org/abs/2504.10415",
+   "https://huggingface.co/datasets/nnheui/llm-srbench/tree/4f22d48100d94125d3af1e7bd40897fcc7f9597d",
+   "https://huggingface.co/datasets/nnheui/llm-srbench/resolve/4f22d48100d94125d3af1e7bd40897fcc7f9597d/lsr_bench_data.hdf5",
+   "https://huggingface.co/datasets/nnheui/llm-srbench/resolve/4f22d48100d94125d3af1e7bd40897fcc7f9597d/data/lsr_transform-00000-of-00001.parquet",
+   "https://huggingface.co/datasets/nnheui/llm-srbench/resolve/4f22d48100d94125d3af1e7bd40897fcc7f9597d/data/lsr_synth_chem_react-00000-of-00001.parquet",
+   "https://huggingface.co/datasets/nnheui/llm-srbench/resolve/4f22d48100d94125d3af1e7bd40897fcc7f9597d/data/lsr_synth_bio_pop_growth-00000-of-00001.parquet",
+   "https://huggingface.co/datasets/nnheui/llm-srbench/resolve/4f22d48100d94125d3af1e7bd40897fcc7f9597d/data/lsr_synth_phys_osc-00000-of-00001.parquet",
+   "https://huggingface.co/datasets/nnheui/llm-srbench/resolve/4f22d48100d94125d3af1e7bd40897fcc7f9597d/data/lsr_synth_matsci-00000-of-00001.parquet",
+   "https://github.com/deep-symbolic-mathematics/llm-srbench/blob/6fdbe409b75ea749c0a93c69b6861637d804dec4/bench/datamodules.py",
+   "https://github.com/deep-symbolic-mathematics/llm-srbench/blob/6fdbe409b75ea749c0a93c69b6861637d804dec4/bench/dataclasses.py",
+   "https://github.com/deep-symbolic-mathematics/llm-srbench/blob/6fdbe409b75ea749c0a93c69b6861637d804dec4/bench/pipelines.py"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Shojaee et al. 2025",
+    "title": "LLM-SRBench: A New Benchmark for Scientific Equation Discovery with Large Language Models",
+    "venue": "ICML 2025",
+    "url": "https://arxiv.org/abs/2504.10415"
+   },
+   "data": {
+    "short": "Hugging Face nnheui/llm-srbench@4f22d48",
+    "title": "LLM-SRBench data release: lsr_bench_data.hdf5 and five parquet splits (no license stated)",
+    "url": "https://huggingface.co/datasets/nnheui/llm-srbench/tree/4f22d48100d94125d3af1e7bd40897fcc7f9597d"
+   }
+  },
+  "changes": [
+   {
+    "kind": "filled",
+    "problems": 160,
+    "text": "The authors give no values for the constants of the 80 chemistry and physics formulas. srbf fitted them to each problem's training data; with them every formula reproduces the authors' data to float32 precision. The values are srbf's reconstruction, not the authors'."
+   },
+   {
+    "kind": "changed",
+    "problems": 208,
+    "text": "The authors write the time-series inputs as functions of time, A(t), and the chemistry constants as numbers joined to names, 0.19_z, which do not read as formulas, and print the exponent 1/3 as 0.333333333333333; srbf writes plain inputs, named constants and 1/3."
+   },
+   {
+    "kind": "changed",
+    "problems": 258,
+    "text": "srbf follows the authors' data release: 240 problems, 44 of them in physics, named from 0, where the paper's Table 4 numbers from 1 (CRK0 is its CRK1) and the materials science names skip 15, 17, 26 and 27 (MatSci28 is its MatSci25). The paper's text counts 239 problems, 43 in physics."
+   },
+   {
+    "kind": "kept",
+    "problems": 50,
+    "text": "In the materials science problems strain and temperature move together on one line (the temperature is 273 K plus 500 times the strain), so the data cannot separate a formula's dependence on each. srbf keeps them as published."
+   },
+   {
+    "kind": "kept",
+    "problems": 22,
+    "text": "In 22 LSR-Synth problems (12 physics, 5 chemistry, 5 biology) the system has settled before the out-of-domain window: the targets there vary by less than 0.1% of their training spread, so the out-of-domain error mostly measures tiny absolute differences. srbf keeps them as published."
+   }
+  ],
+  "license": "no license: the Hugging Face dataset states none; the code repository's README names MIT, but the repository has no license file and does not hold the data"
+ },
+ {
   "name": "mcdermott-predictive-modelling",
   "display": "McDermott et al. predictive-modelling sets",
   "kind": "data",
