@@ -4636,7 +4636,7 @@
     "text": "In 22 LSR-Synth problems (12 physics, 5 chemistry, 5 biology) the system has settled before the out-of-domain window: the targets there vary by less than 0.1% of their training spread, so the out-of-domain error mostly measures tiny absolute differences. srbf keeps them as published."
    }
   ],
-  "license": "no license: the Hugging Face dataset states none; the code repository's README names MIT, but the repository has no license file and does not hold the data"
+  "license": "no license: the Hugging Face dataset states none, and it is gated (access is granted automatically, without terms, to anyone who shares their contact details with the authors); the code repository's README names MIT, but the repository has no license file and does not hold the data"
  },
  {
   "name": "mcdermott-predictive-modelling",
