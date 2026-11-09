@@ -203,7 +203,7 @@ test('the Benchmarks page: one row per problem set, a filter that keeps the rows
   }
   expect(await page.locator('main h2').allTextContents()).toEqual(['The problem sets', 'What the tags mean',
     'How srbf runs a benchmark', 'What srbf decided', 'What srbf changed in each problem set', 'What srbf could not include',
-    'Data srbf may not share']);
+    'Data srbf may not republish']);
   // a star after a name leads to what srbf changed in that problem set
   const changed = sets.filter((s) => s.changes.length);
   await expect(page.locator('.bm-list .bm-star')).toHaveCount(changed.length);

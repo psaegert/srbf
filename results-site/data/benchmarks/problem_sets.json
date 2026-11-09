@@ -333,6 +333,60 @@
   "license": "MIT (AutoResearch/autora-synthetic)"
  },
  {
+  "name": "bms-real-data",
+  "display": "Bayesian machine scientist real datasets",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [
+   "no test split"
+  ],
+  "problems": 3,
+  "groups": {
+   "all": 3
+  },
+  "sources": [
+   "https://arxiv.org/abs/2004.12157",
+   "https://doi.org/10.1126/sciadv.aav6971",
+   "https://pmc.ncbi.nlm.nih.gov/articles/PMC6994216/",
+   "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC6994216/supplementaryFiles",
+   "https://bitbucket.org/rguimera/machine-scientist/src/9defb7aa2a1382b4a8518f3060e8dd87a20acb99/Validation/",
+   "https://bitbucket.org/rguimera/machine-scientist/src/9defb7aa2a1382b4a8518f3060e8dd87a20acb99/Validation/iodata.py",
+   "https://bitbucket.org/rguimera/machine-scientist/src/9defb7aa2a1382b4a8518f3060e8dd87a20acb99/Validation/Trepat/iodata.py",
+   "https://bitbucket.org/rguimera/machine-scientist/src/9defb7aa2a1382b4a8518f3060e8dd87a20acb99/Validation/data_analysis.py",
+   "https://bitbucket.org/rguimera/machine-scientist/src/9defb7aa2a1382b4a8518f3060e8dd87a20acb99/Validation/model_averaging.py",
+   "https://bitbucket.org/rguimera/machine-scientist/src/9defb7aa2a1382b4a8518f3060e8dd87a20acb99/README.md",
+   "https://bitbucket.org/rguimera/machine-scientist/raw/9defb7aa2a1382b4a8518f3060e8dd87a20acb99/Validation/RDFunding/data/EU_nature_clean.csv",
+   "https://bitbucket.org/rguimera/machine-scientist/raw/9defb7aa2a1382b4a8518f3060e8dd87a20acb99/Validation/Trepat/data/cadhesome_protein.csv",
+   "https://bitbucket.org/rguimera/machine-scientist/raw/9defb7aa2a1382b4a8518f3060e8dd87a20acb99/Validation/LogYe/data/seymour.csv",
+   "https://api.bitbucket.org/2.0/repositories/rguimera/machine-scientist/refs/branches",
+   "https://doi.org/10.1038/531580c",
+   "https://doi.org/10.1038/ncb3135",
+   "https://doi.org/10.1073/pnas.1417063112",
+   "https://github.com/EpistasisLab/pmlb/blob/master/pmlb/all_summary_stats.tsv"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Guimerà et al. 2020",
+    "title": "A Bayesian machine scientist to aid in the solution of challenging scientific problems",
+    "venue": "Science Advances 6(5):eaav6971",
+    "url": "https://doi.org/10.1126/sciadv.aav6971"
+   },
+   "data": {
+    "short": "Bitbucket rguimera/machine-scientist@9defb7a",
+    "title": "Bayesian machine scientist repository, Validation/ data folders (no licence file)",
+    "url": "https://bitbucket.org/rguimera/machine-scientist/src/9defb7aa2a1382b4a8518f3060e8dd87a20acb99/Validation/"
+   }
+  },
+  "changes": [
+   {
+    "kind": "changed",
+    "problems": 3,
+    "text": "The authors validate by leave-one-out cross-validation over all rows; srbf fits all rows of each dataset and has no test."
+   }
+  ],
+  "license": "no licence: data files from rguimera/machine-scientist (Guimera et al. 2020, Sci. Adv. 6:eaav6971); not redistributable without permission"
+ },
+ {
   "name": "black-hole-spiral-plane",
   "display": "Black-hole mass scaling in spiral galaxies",
   "kind": "data",
@@ -971,6 +1025,150 @@
   "license": "BSD-3-Clause (benchmarks.csv, DSO fork in samholt/DeepGenerativeSymbolicRegression; Holt et al. 2023, arXiv:2401.00282)"
  },
  {
+  "name": "dimensionless-learning",
+  "display": "Dimensionless-learning scaling laws (Xie et al. 2022)",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [],
+  "problems": 5,
+  "groups": {
+   "all": 5
+  },
+  "sources": [
+   "https://doi.org/10.1038/s41467-022-35084-w",
+   "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC9729234/fullTextXML",
+   "https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-022-35084-w/MediaObjects/41467_2022_35084_MOESM1_ESM.pdf",
+   "https://arxiv.org/abs/2111.03583",
+   "https://github.com/xiaoyuxie-vico/PyDimension/tree/7f90b01aab4335ba816f73e022e9639f2163df44",
+   "https://doi.org/10.5281/zenodo.7317017",
+   "https://raw.githubusercontent.com/xiaoyuxie-vico/PyDimension/7f90b01aab4335ba816f73e022e9639f2163df44/dataset/dataset_Rayleigh_Benard_convection.csv",
+   "https://raw.githubusercontent.com/xiaoyuxie-vico/PyDimension/7f90b01aab4335ba816f73e022e9639f2163df44/dataset/dataset_keyhole.csv",
+   "https://raw.githubusercontent.com/xiaoyuxie-vico/PyDimension/7f90b01aab4335ba816f73e022e9639f2163df44/dataset/dataset_porosity.csv",
+   "https://raw.githubusercontent.com/xiaoyuxie-vico/PyDimension/7f90b01aab4335ba816f73e022e9639f2163df44/scaling_law/utils/dataset.py",
+   "https://github.com/xiaoyuxie-vico/PyDimension/blob/7f90b01aab4335ba816f73e022e9639f2163df44/scaling_law/keyhole_example_pattern_search.py",
+   "https://github.com/xiaoyuxie-vico/PyDimension/blob/7f90b01aab4335ba816f73e022e9639f2163df44/scaling_law/cross_materials.ipynb",
+   "https://raw.githubusercontent.com/xiaoyuxie-vico/PyDimension/a899cd41e327a8ad185b139537272eecb6a9adb4/dataset/keyhole/dataset_keyhole.csv",
+   "https://raw.githubusercontent.com/xiaoyuxie-vico/PyDimension/a899cd41e327a8ad185b139537272eecb6a9adb4/dataset/keyhole/dimension_matrix.csv",
+   "https://github.com/xiaoyuxie-vico/PyDimension/commit/f54baf5"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Xie et al. 2022",
+    "title": "Data-driven discovery of dimensionless numbers and governing laws from scarce measurements",
+    "venue": "Nature Communications 13(1):7562",
+    "url": "https://doi.org/10.1038/s41467-022-35084-w"
+   },
+   "data": {
+    "short": "Zenodo 10.5281/zenodo.7317017",
+    "title": "xiaoyuxie-vico/PyDimension: PyDimension 0.1 (v1.0.0)",
+    "url": "https://doi.org/10.5281/zenodo.7317017"
+   }
+  },
+  "changes": [
+   {
+    "kind": "changed",
+    "problems": 2,
+    "text": "For the keyhole data the authors' code fixes the 18 test rows of its 80/20 split, and the supplement adds a test on SS316 after fitting on the other two alloys; srbf uses neither and splits the rows 80/20 anew in every run."
+   },
+   {
+    "kind": "filled",
+    "problems": 1,
+    "text": "For the porosity data the authors report training and test scores without saying how they split the rows; srbf uses the random 80/20 split they state for the convection data."
+   }
+  ],
+  "license": "GPL-3.0 (xiaoyuxie-vico/PyDimension v1.0.0 dataset files; Xie et al. 2022, Nat. Commun. 13:7562)"
+ },
+ {
+  "name": "dow-chemical-evostar-2010",
+  "display": "Dow Chemical (EvoStar 2010 competition)",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [],
+  "problems": 1,
+  "groups": {
+   "all": 1
+  },
+  "sources": [
+   "https://web.archive.org/web/20120628140646/http://casnew.iti.upv.es/index.php/evocompetitions/105-symregcompetition",
+   "http://web.archive.org/web/20201001115943/http://gpbenchmarks.org/wp-content/uploads/2019/08/Evostar_2010_Symbolic_Regression_Competition.pdf",
+   "https://web.archive.org/web/20120628163816/http://casnew.iti.upv.es/cas/competitions/symreg/SymbolicRegressionCompetition.xls",
+   "http://web.archive.org/web/20231227024212/http://gpbenchmarks.org/wp-content/uploads/2020/07/SymbolicRegressionCompetitionData.xls",
+   "https://raw.githubusercontent.com/heal-research/operon/191dc930c5bf20f3fc5c90c849b2892b9b76fed8/data/Chemical-II.csv",
+   "https://raw.githubusercontent.com/heal-research/operon/191dc930c5bf20f3fc5c90c849b2892b9b76fed8/data/Chemical-II.json",
+   "https://github.com/heal-research/HeuristicLab/blob/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/Data/RegressionRealWorld.zip",
+   "https://github.com/heal-research/HeuristicLab/blob/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/RealWorld/ChemicalOne.cs",
+   "https://heal.heuristiclab.com/news/post/first-place-symbolic-regression-competition",
+   "https://arxiv.org/abs/2406.03585",
+   "https://arxiv.org/abs/2502.03367",
+   "https://arxiv.org/abs/1904.02050"
+  ],
+  "citation": {
+   "data": {
+    "short": "EvoStar 2010 SR competition data (Wayback 2012-06-28)",
+    "title": "SymbolicRegressionCompetition.xls (A. Kordon, The Dow Chemical Company), organiser's file",
+    "url": "https://web.archive.org/web/20120628163816/http://casnew.iti.upv.es/cas/competitions/symreg/SymbolicRegressionCompetition.xls"
+   }
+  },
+  "changes": [],
+  "license": "no licence: Dow Chemical data (EvoStar 2010 SR competition, A. Kordon); not redistributable without permission"
+ },
+ {
+  "name": "drsr-debcat",
+  "display": "DRSR DEBCat mass-luminosity",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [
+   "no test split"
+  ],
+  "problems": 2,
+  "groups": {
+   "real-world-astronomical": 2
+  },
+  "sources": [
+   "https://arxiv.org/abs/2605.15809",
+   "https://arxiv.org/pdf/2605.15809v1",
+   "https://arxiv.org/src/2605.15809v1",
+   "https://doi.org/10.1145/3795095.3805087",
+   "https://vizier.cds.unistra.fr/viz-bin/VizieR?-source=V/152",
+   "https://cdsarc.cds.unistra.fr/ftp/V/152/ReadMe",
+   "https://cdsarc.cds.unistra.fr/ftp/V/152/debcat.dat",
+   "https://cdsarc.cds.unistra.fr/ftp/V/152/refs.dat",
+   "https://arxiv.org/abs/1411.1219",
+   "https://www.astro.keele.ac.uk/jkt/debcat/"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Ikeda et al. 2026",
+    "title": "Diversified Residual Symbolic Regression",
+    "venue": "Proceedings of the Genetic and Evolutionary Computation Conference (GECCO '26), pp. 771-779",
+    "url": "https://doi.org/10.1145/3795095.3805087"
+   },
+   "data": {
+    "short": "VizieR V/152 (DEBCat)",
+    "title": "DEBCat detached eclipsing binary catalogue (Southworth 2015), debcat.dat 2017/10/10 version",
+    "url": "http://web.archive.org/web/20260518064827/https://vizier.cds.unistra.fr/viz-bin/VizieR?-source=V/152"
+   }
+  },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 1,
+    "text": "srbf runs 2 of DRSR's 3 problems here (the DEBCat mass-luminosity data in linear and in log units): the synthetic mixture data set, half linear and half logistic at random, is not a function of x and is not run."
+   },
+   {
+    "kind": "filled",
+    "problems": 2,
+    "text": "The authors do not say which stars they used; srbf takes both stars of every catalogued system that has a luminosity (324 stars), the selection that reproduces the scaling constants they print."
+   },
+   {
+    "kind": "changed",
+    "problems": 1,
+    "text": "In the linear-units setting the authors rescale mass and luminosity to [0, 1] with constants they do not print; srbf uses both in solar units."
+   }
+  ],
+  "license": "VizieR V/152 DEBCat (Southworth 2015, ASPC 496, 164): free scientific use with citation per VizieR rules of usage; no open licence"
+ },
+ {
   "name": "dso-benchmark-registry",
   "display": "DSO benchmark registry (benchmarks.csv)",
   "kind": "formula",
@@ -1115,6 +1313,55 @@
   "license": "Apache-2.0 (facebookresearch/symbolicregression; Kamienny et al. 2022, arXiv:2204.10532)"
  },
  {
+  "name": "dow-emulator",
+  "display": "Emulator problem (Dow)",
+  "kind": "data",
+  "origin": "synthetic data",
+  "tags": [],
+  "problems": 1,
+  "groups": {
+   "all": 1
+  },
+  "sources": [
+   "http://web.archive.org/web/20131208231518/http://symbolicregression.com/?q=emulatorProblem",
+   "http://web.archive.org/web/20141008094848/http://www.symbolicregression.com/?q=emulatorProblem",
+   "http://symbolicregression.com/sites/SRDocuments/DataSets/EmulatorProblem.zip",
+   "https://dev.heuristiclab.com/trac.fcgi/wiki/Documentation/VideoTutorials/SymbolicRegression",
+   "https://dev.heuristiclab.com/trac.fcgi/raw-attachment/wiki/Documentation/VideoTutorials/SymbolicRegression/emulators.csv",
+   "https://dev.heuristiclab.com/trac.fcgi/raw-attachment/wiki/Documentation/VideoTutorials/SymbolicRegression/emulator.hl",
+   "http://web.archive.org/web/20100714033929/http://med.ee.nd.edu/MED11.zip",
+   "med.ee.nd.edu/MED11/pdf/papers/t7-059.pdf (the page's link; not captured on its own; extracted from the archived MED11.zip above)",
+   "https://github.com/jmmcd/PODI/blob/b78c9b90b2ebd446a2b4217b75e1b5dba245b1e9/src/get_data.py",
+   "https://web.archive.org/cdx/search/cdx?url=symbolicregression.com/sites/default/files/*"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Kordon et al. 2003",
+    "title": "Empirical Emulators for Process Monitoring and Optimization",
+    "venue": "Proc. 11th Mediterranean Conference on Control and Automation (MED 2003), paper T7-059",
+    "url": "http://web.archive.org/web/20100714033929/http://med.ee.nd.edu/MED11.zip"
+   },
+   "data": {
+    "short": "HeuristicLab wiki emulators.csv",
+    "title": "Emulator problem data (A. Kordon, Dow), surviving copy on the HeuristicLab wiki",
+    "url": "https://dev.heuristiclab.com/trac.fcgi/raw-attachment/wiki/Documentation/VideoTutorials/SymbolicRegression/emulators.csv"
+   }
+  },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 1,
+    "text": "srbf runs 1 of the 2 outputs (y2): y1 was published only in the original download, which is lost, and the one surviving copy of the data holds y2 only."
+   },
+   {
+    "kind": "changed",
+    "problems": 1,
+    "text": "The paper also tests on a 181-point extreme-range set, with some inputs 8 to 10% outside the training range, that was never released; srbf tests only on the 275 published random points."
+   }
+  ],
+  "license": "no licence: Dow emulator data (Kordon et al. 2003) via the HeuristicLab wiki; not redistributable without permission"
+ },
+ {
   "name": "eql-cart-pendulum",
   "display": "EQL cart-pendulum",
   "kind": "formula",
@@ -1154,6 +1401,57 @@
   },
   "changes": [],
   "license": "facts only: equations and input ranges cited from Sahoo, Lampert & Martius 2018 (ICML, arXiv:1806.07259) and their EQL generator; no upstream license"
+ },
+ {
+  "name": "eql-double-pendulum",
+  "display": "EQL double-pendulum kinematics",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [
+   "extrapolation"
+  ],
+  "problems": 4,
+  "groups": {
+   "all": 4
+  },
+  "sources": [
+   "https://arxiv.org/abs/1610.02995v1",
+   "https://arxiv.org/pdf/1610.02995v1",
+   "https://arxiv.org/e-print/1610.02995v1",
+   "https://openreview.net/forum?id=BkgRp0FYe",
+   "https://object.cloud.sdsc.edu/v1/AUTH_da4962d3368042ac8337e2dfdd3e7bf3/ml-papers-txt/ICLR/2017/extrapolation_and_learning_equations__4f62930c.txt",
+   "https://doi.org/10.1126/science.1165893",
+   "http://web.archive.org/web/20150226175125/http://www.sciencemag.org:80/content/324/5923/81/suppl/DC1",
+   "http://web.archive.org/web/20140123230753/http://www.sciencemag.org/content/suppl/2009/04/02/324.5923.81.DC1/Schmidt.SOM.pdf",
+   "http://www.sciencemag.org/content/suppl/2009/04/02/324.5923.81.DC1/invar_datasets.zip",
+   "https://raw.githubusercontent.com/erwincoumans/tiny-differentiable-simulator/ab1d9bec404e82cd660d8b249b00c585c91bb8c4/data/schmidt-lipson-exp-data/real_double_pend_h_1.txt",
+   "https://github.com/erwincoumans/tiny-differentiable-simulator/tree/ab1d9bec404e82cd660d8b249b00c585c91bb8c4/data/schmidt-lipson-exp-data",
+   "https://github.com/sammccallum/reversible-solvers/tree/main/experiments/physical_systems/data",
+   "https://github.com/Jhko725/NeuralODEHomotopy/tree/main/node_homotopy/experiments/data/invar_datasets",
+   "https://github.com/martius-lab/EQL",
+   "https://github.com/martius-lab/EQL_Tensorflow"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Martius & Lampert 2016",
+    "title": "Extrapolation and learning equations",
+    "venue": "arXiv preprint (ICLR 2017 submission, OpenReview BkgRp0FYe)",
+    "url": "https://arxiv.org/abs/1610.02995"
+   },
+   "data": {
+    "short": "GitHub erwincoumans/tiny-differentiable-simulator@ab1d9be",
+    "title": "real_double_pend_h_1.txt (Schmidt & Lipson 2009 SOM invar_datasets.zip), byte-identical mirror",
+    "url": "https://github.com/erwincoumans/tiny-differentiable-simulator/blob/ab1d9bec404e82cd660d8b249b00c585c91bb8c4/data/schmidt-lipson-exp-data/real_double_pend_h_1.txt"
+   }
+  },
+  "changes": [
+   {
+    "kind": "changed",
+    "problems": 4,
+    "text": "The authors fit one model with all four outputs (the x and y positions of the two segment tips) and report one error over them; srbf runs each output as a separate problem."
+   }
+  ],
+  "license": "no licence: Schmidt & Lipson 2009 (Science 324:81) SOM data real_double_pend_h_1.txt; not redistributable without permission"
  },
  {
   "name": "eql-formulas-f-1-f-4-and-division-formula",
@@ -1798,6 +2096,85 @@
   "license": "MIT (viktmar/FastSRB; see THIRD_PARTY_LICENSES + upstream PR viktmar/FastSRB#1)"
  },
  {
+  "name": "ffx-cmos-ota",
+  "display": "FFX CMOS OTA circuit targets",
+  "kind": "data",
+  "origin": "synthetic data",
+  "tags": [],
+  "problems": 6,
+  "groups": {
+   "all": 6
+  },
+  "sources": [
+   "https://doi.org/10.1007/978-1-4614-1770-5_13",
+   "http://trent.st/content/2011-GPTP-FFX-paper.pdf",
+   "https://github.com/trentmc/ffx2011-benchmarks/tree/1aa15f6317c5c5ed18bad4c487e7114c6a497580",
+   "https://github.com/trentmc/ffx2011-benchmarks/blob/1aa15f6317c5c5ed18bad4c487e7114c6a497580/med-dimensional_benchmark_datasets.zip",
+   "http://trent.st/ffx/",
+   "https://github.com/trentmc/ffx2011/blob/bf7f2b5f3458ee0cfef532cd568dcbd5e579fba3/FFX.py",
+   "https://github.com/trentmc/ffx2011/blob/bf7f2b5f3458ee0cfef532cd568dcbd5e579fba3/resources/FFX_license.txt",
+   "http://trent.st/content/2005-DATE-caffeine.pdf",
+   "http://trent.st/content/2009-TCAD-caffeine_scale.pdf",
+   "http://trent.st/content/2005-ISCAS-blackbox.pdf",
+   "https://doi.org/10.1109/TCAD.2003.810742"
+  ],
+  "citation": {
+   "paper": {
+    "short": "McConaghy 2011",
+    "title": "FFX: Fast, Scalable, Deterministic Symbolic Regression Technology",
+    "venue": "Genetic Programming Theory and Practice IX, Genetic and Evolutionary Computation, pp. 235-260",
+    "url": "https://doi.org/10.1007/978-1-4614-1770-5_13"
+   },
+   "data": {
+    "short": "GitHub trentmc/ffx2011-benchmarks@1aa15f6",
+    "title": "FFX medium-dimensional benchmark datasets (CMOS OTA)",
+    "url": "https://github.com/trentmc/ffx2011-benchmarks/blob/1aa15f6317c5c5ed18bad4c487e7114c6a497580/med-dimensional_benchmark_datasets.zip"
+   }
+  },
+  "changes": [],
+  "license": "no licence: FFX 2011 benchmark data (McConaghy 2011, GPTP IX) from trentmc/ffx2011-benchmarks; all rights reserved"
+ },
+ {
+  "name": "ffx-high-dimensional-circuits",
+  "display": "FFX high-dimensional circuit problems",
+  "kind": "data",
+  "origin": "synthetic data",
+  "tags": [],
+  "problems": 12,
+  "groups": {
+   "all": 12
+  },
+  "sources": [
+   "https://doi.org/10.1007/978-1-4614-1770-5_13",
+   "https://github.com/trentmc/ffx2011/blob/bf7f2b5f3458ee0cfef532cd568dcbd5e579fba3/resources/2011-GPTP-FFX-paper.pdf",
+   "https://doi.org/10.1109/CICC.2011.6055329",
+   "https://github.com/trentmc/ffx2011/blob/bf7f2b5f3458ee0cfef532cd568dcbd5e579fba3/resources/2011-CICC-FFX-paper.pdf",
+   "https://github.com/trentmc/ffx2011-benchmarks/tree/1aa15f6317c5c5ed18bad4c487e7114c6a497580",
+   "https://github.com/trentmc/ffx2011-benchmarks/blob/1aa15f6317c5c5ed18bad4c487e7114c6a497580/high-dimensional_benchmark_datasets_part1.tar.gz",
+   "https://github.com/trentmc/ffx2011-benchmarks/blob/1aa15f6317c5c5ed18bad4c487e7114c6a497580/high-dimensional_benchmark_datasets_part2.tar.gz",
+   "https://github.com/trentmc/ffx2011-benchmarks/blob/1aa15f6317c5c5ed18bad4c487e7114c6a497580/high-dimensional_benchmark_datasets_part3.tar.gz",
+   "https://github.com/trentmc/ffx2011/blob/bf7f2b5f3458ee0cfef532cd568dcbd5e579fba3/runffx.py",
+   "https://github.com/trentmc/ffx2011/blob/bf7f2b5f3458ee0cfef532cd568dcbd5e579fba3/FFX.py",
+   "https://github.com/trentmc/ffx2011/blob/bf7f2b5f3458ee0cfef532cd568dcbd5e579fba3/resources/FFX_license.txt",
+   "http://trent.st/ffx/"
+  ],
+  "citation": {
+   "paper": {
+    "short": "McConaghy 2011",
+    "title": "FFX: Fast, Scalable, Deterministic Symbolic Regression Technology",
+    "venue": "Genetic Programming Theory and Practice IX, Genetic and Evolutionary Computation, pp. 235-260",
+    "url": "https://doi.org/10.1007/978-1-4614-1770-5_13"
+   },
+   "data": {
+    "short": "GitHub trentmc/ffx2011-benchmarks@1aa15f6",
+    "title": "FFX high-dimensional benchmark datasets part1-3.tar.gz",
+    "url": "https://github.com/trentmc/ffx2011-benchmarks/tree/1aa15f6317c5c5ed18bad4c487e7114c6a497580"
+   }
+  },
+  "changes": [],
+  "license": "no licence: FFX 2011 high-dimensional circuit data (McConaghy 2011, GPTP IX / CICC 2011) from trentmc/ffx2011-benchmarks; all rights reserved"
+ },
+ {
   "name": "falling-balls",
   "display": "Free-falling balls with air resistance",
   "kind": "data",
@@ -1961,10 +2338,118 @@
    {
     "kind": "part",
     "problems": 7,
-    "text": "srbf runs 14 of the 21 real-world datasets: 4 have data that may not be shared (Boston housing, Ozone, Dow Chemical, Tower), the Million Song Dataset is left out for its size (375 MB), and NOX and WND were never published."
+    "text": "srbf runs 14 of the 21 real-world datasets here: Boston housing, Dow Chemical and Tower, whose sources state no license, are in 'GECCO 2013-2017 GP regression compilation (real data) (restricted)', Ozone (GPL) is in its share-alike set, the Million Song Dataset is left out for its size (375 MB), and NOX and WND were never published."
    }
   ],
   "license": "CC BY 4.0 (UCI Machine Learning Repository members) and MIT (the QSAR members, DALabNOVA/slim)"
+ },
+ {
+  "name": "gecco-2013-2017-real-restricted",
+  "display": "GECCO 2013-2017 GP regression compilation (real data) (restricted)",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [],
+  "problems": 3,
+  "groups": {
+   "all": 3
+  },
+  "sources": [
+   "https://arxiv.org/abs/1805.10365",
+   "https://doi.org/10.1145/3205651.3208293",
+   "https://github.com/laic-ufmg/gp-benchmarks (HEAD 53b10dff51; rsc/gp_benchmarks_get_data.py @ 8bc249b; datasets.ods @ 0b01a92; rsc/data/{ozone,yacht}.data @ 24fb56b)",
+   "https://archive.ics.uci.edu/ml/machine-learning-databases/ (files per dataset)",
+   "https://archive.ics.uci.edu/api/dataset?id={1,291,294,29,165,242,162,172,186,243,203} (UCI metadata: DOIs, creators, sizes)",
+   "https://archive.ics.uci.edu/dataset/203/yearpredictionmsd",
+   "https://archive.ics.uci.edu/dataset/172/ozone+level+detection",
+   "https://web.archive.org/web/20181207040437id_/http://lib.stat.cmu.edu/datasets/boston",
+   "https://raw.githubusercontent.com/scikit-learn/scikit-learn/1.1.3/sklearn/datasets/data/boston_house_prices.csv",
+   "https://cran.r-project.org/src/contrib/mlbench_2.1-11.tar.gz",
+   "http://www.cmap.polytechnique.fr/~nikolaus.hansen/proceedings/2017/GECCO/proceedings/proceedings_files/pap447s3-file1.pdf (Thuong et al. 2017)",
+   "https://arxiv.org/abs/1905.13266 (La Cava et al. GECCO 2016)",
+   "https://cavalab.org/assets/papers/La%20Cava%20et%20al.%20-%202016%20-%20Automatic%20identification%20of%20wind%20turbine%20models%20us.pdf",
+   "https://www.cs.put.poznan.pl/kkrawiec/wiki/uploads/Site/2015GeccoMRGP.pdf (Arnaldo et al. GECCO 2014)",
+   "https://www.cs.put.poznan.pl/kkrawiec/wiki/uploads/Research/2014GECCOBP.pdf (Krawiec & O'Reilly GECCO 2014)",
+   "https://github.com/DALabNOVA/slim/tree/aca73575c46a1a2d90dd55680e09f8b1c4d3a8cf/slim_gsgp/datasets/data",
+   "https://github.com/PonyGE/PonyGE2/tree/0e32c165a8e82e756d990de5bda1c2e020b4aeeb/datasets/Dow",
+   "https://web.archive.org/web/20120628163816id_/http://casnew.iti.upv.es/cas/competitions/symreg/SymbolicRegressionCompetition.xls",
+   "https://web.archive.org/web/20160707102934id_/http://symbolicregression.com/sites/default/files/DataSets/towerData.txt",
+   "https://raw.githubusercontent.com/EpistasisLab/pmlb/7c1f4bdc00136dc2e55c87fa6b8ba6e8af6d1a68/pmlb/all_summary_stats.tsv"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Oliveira et al. 2018",
+    "title": "Analysing symbolic regression benchmarks under a meta-learning approach",
+    "venue": "Proceedings of the Genetic and Evolutionary Computation Conference Companion (GECCO '18), pp. 1342-1349",
+    "url": "https://doi.org/10.1145/3205651.3208293"
+   },
+   "data": {
+    "short": "GitHub laic-ufmg/gp-benchmarks@53b10df",
+    "title": "gp-benchmarks compilation repository (script + spreadsheet of the 2013-2017 GECCO datasets)",
+    "url": "https://github.com/laic-ufmg/gp-benchmarks/tree/53b10dff51b9d773e1b91868208cf2e6cccf5ad6"
+   }
+  },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 18,
+    "text": "srbf runs here the 3 real-world datasets whose sources state no license (Boston housing, Dow Chemical, Tower); 14 more are in 'GECCO 2013-2017 GP regression compilation (real data)' and Ozone is in its share-alike set, the Million Song Dataset is left out for its size (375 MB), and NOX and WND were never published."
+   }
+  ],
+  "license": "per problem: all rights reserved (Dow Chemical); none found (StatLib Boston housing)"
+ },
+ {
+  "name": "gecco-2013-2017-real-share-alike",
+  "display": "GECCO 2013-2017 GP regression compilation (real data) (share-alike)",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [],
+  "problems": 1,
+  "groups": {
+   "all": 1
+  },
+  "sources": [
+   "https://arxiv.org/abs/1805.10365",
+   "https://doi.org/10.1145/3205651.3208293",
+   "https://github.com/laic-ufmg/gp-benchmarks (HEAD 53b10dff51; rsc/gp_benchmarks_get_data.py @ 8bc249b; datasets.ods @ 0b01a92; rsc/data/{ozone,yacht}.data @ 24fb56b)",
+   "https://archive.ics.uci.edu/ml/machine-learning-databases/ (files per dataset)",
+   "https://archive.ics.uci.edu/api/dataset?id={1,291,294,29,165,242,162,172,186,243,203} (UCI metadata: DOIs, creators, sizes)",
+   "https://archive.ics.uci.edu/dataset/203/yearpredictionmsd",
+   "https://archive.ics.uci.edu/dataset/172/ozone+level+detection",
+   "https://web.archive.org/web/20181207040437id_/http://lib.stat.cmu.edu/datasets/boston",
+   "https://raw.githubusercontent.com/scikit-learn/scikit-learn/1.1.3/sklearn/datasets/data/boston_house_prices.csv",
+   "https://cran.r-project.org/src/contrib/mlbench_2.1-11.tar.gz",
+   "http://www.cmap.polytechnique.fr/~nikolaus.hansen/proceedings/2017/GECCO/proceedings/proceedings_files/pap447s3-file1.pdf (Thuong et al. 2017)",
+   "https://arxiv.org/abs/1905.13266 (La Cava et al. GECCO 2016)",
+   "https://cavalab.org/assets/papers/La%20Cava%20et%20al.%20-%202016%20-%20Automatic%20identification%20of%20wind%20turbine%20models%20us.pdf",
+   "https://www.cs.put.poznan.pl/kkrawiec/wiki/uploads/Site/2015GeccoMRGP.pdf (Arnaldo et al. GECCO 2014)",
+   "https://www.cs.put.poznan.pl/kkrawiec/wiki/uploads/Research/2014GECCOBP.pdf (Krawiec & O'Reilly GECCO 2014)",
+   "https://github.com/DALabNOVA/slim/tree/aca73575c46a1a2d90dd55680e09f8b1c4d3a8cf/slim_gsgp/datasets/data",
+   "https://github.com/PonyGE/PonyGE2/tree/0e32c165a8e82e756d990de5bda1c2e020b4aeeb/datasets/Dow",
+   "https://web.archive.org/web/20120628163816id_/http://casnew.iti.upv.es/cas/competitions/symreg/SymbolicRegressionCompetition.xls",
+   "https://web.archive.org/web/20160707102934id_/http://symbolicregression.com/sites/default/files/DataSets/towerData.txt",
+   "https://raw.githubusercontent.com/EpistasisLab/pmlb/7c1f4bdc00136dc2e55c87fa6b8ba6e8af6d1a68/pmlb/all_summary_stats.tsv"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Oliveira et al. 2018",
+    "title": "Analysing symbolic regression benchmarks under a meta-learning approach",
+    "venue": "Proceedings of the Genetic and Evolutionary Computation Conference Companion (GECCO '18), pp. 1342-1349",
+    "url": "https://doi.org/10.1145/3205651.3208293"
+   },
+   "data": {
+    "short": "GitHub laic-ufmg/gp-benchmarks@53b10df",
+    "title": "gp-benchmarks compilation repository (script + spreadsheet of the 2013-2017 GECCO datasets)",
+    "url": "https://github.com/laic-ufmg/gp-benchmarks/tree/53b10dff51b9d773e1b91868208cf2e6cccf5ad6"
+   }
+  },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 20,
+    "text": "srbf runs here the Ozone dataset, whose data carry a copyleft license (GPL-2); 14 more are in 'GECCO 2013-2017 GP regression compilation (real data)' and 3 in its restricted set, the Million Song Dataset is left out for its size (375 MB), and NOX and WND were never published."
+   }
+  ],
+  "license": "per problem: GPL-2 (R package mlbench)"
  },
  {
   "name": "gecco-2022-covid-ny",
@@ -2407,6 +2892,53 @@
   "license": "facts only: grids cited from McDermott et al. 2012 (GECCO, Table 3) and the original family papers; no upstream license"
  },
  {
+  "name": "gp-challenge-protein",
+  "display": "GP Challenge (protein energy function)",
+  "kind": "data",
+  "origin": "synthetic data",
+  "tags": [
+   "no test split"
+  ],
+  "problems": 54,
+  "groups": {
+   "all": 54
+  },
+  "sources": [
+   "https://doi.org/10.1007/s10710-009-9087-0",
+   "https://web.archive.org/web/20170403201603/http://human-competitive.org/sites/default/files/widera-genp-paper_1.pdf",
+   "http://ico2s.org/datasets/gp_challenge.html",
+   "http://ico2s.org/data/instances/gp_challenge/energy_terms.tar.gz",
+   "http://ico2s.org/data/instances/gp_challenge/distances.tar.gz",
+   "https://eprints.nottingham.ac.uk/11394/1/thesis.pdf",
+   "https://web.archive.org/web/20250322164956/https://eprints.nottingham.ac.uk/11394/1/thesis.pdf",
+   "https://doi.org/10.1186/1741-7007-5-17",
+   "https://doi.org/10.1007/s10710-012-9177-2",
+   "https://github.com/heal-research/operon/blob/d4b53a63e94b628b3fc89ca117aef46c3a7a443a/data/GP-Challenge.csv",
+   "https://github.com/heal-research/operon/blob/d4b53a63e94b628b3fc89ca117aef46c3a7a443a/data/GP-Challenge.json"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Widera et al. 2010",
+    "title": "GP challenge: evolving energy function for protein structure prediction",
+    "venue": "Genetic Programming and Evolvable Machines 11(1):61-88",
+    "url": "https://doi.org/10.1007/s10710-009-9087-0"
+   },
+   "data": {
+    "short": "ICOS GP challenge dataset",
+    "title": "GP challenge protein energy-function data (energy_terms.tar.gz + distances.tar.gz)",
+    "url": "http://ico2s.org/datasets/gp_challenge.html"
+   }
+  },
+  "changes": [
+   {
+    "kind": "changed",
+    "problems": 54,
+    "text": "The authors ask for one energy function shared by all 54 proteins, scored by how well it ranks each protein's decoys; srbf runs each protein as a separate regression of the decoys' reference rank on the 8 energy terms."
+   }
+  ],
+  "license": "no licence: GP challenge protein-decoy energy terms (Widera, Garibaldi & Krasnogor 2010, ICOS, ico2s.org); use encouraged, redistribution not granted"
+ },
+ {
   "name": "gp-gomea-real-world",
   "display": "GP-GOMEA real-world set",
   "kind": "data",
@@ -2463,10 +2995,72 @@
    {
     "kind": "part",
     "problems": 3,
-    "text": "srbf runs 7 of the 10 datasets: Boston housing, Dow Chemical and Tower have data that may not be shared."
+    "text": "srbf runs 7 of the 10 datasets here: Boston housing, Dow Chemical and Tower, whose sources state no license, are in 'GP-GOMEA real-world set (restricted)'."
    }
   ],
   "license": "CC BY 4.0 (UCI Machine Learning Repository)"
+ },
+ {
+  "name": "gp-gomea-real-world-restricted",
+  "display": "GP-GOMEA real-world set (restricted)",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [],
+  "problems": 3,
+  "groups": {
+   "all": 3
+  },
+  "sources": [
+   "https://arxiv.org/abs/1904.02050v4",
+   "https://arxiv.org/pdf/1904.02050v4",
+   "https://doi.org/10.1162/evco_a_00278",
+   "https://goo.gl/tn6Zxv",
+   "https://drive.google.com/drive/folders/1cUU7f23z_lBPQCOX7h1unZWKZH3YO_EB",
+   "https://goo.gl/9D2z3b",
+   "https://drive.google.com/drive/folders/1FKUfIT2Cr_cCt88AekpGCsNbzUY3tqib",
+   "https://drive.google.com/drive/folders/1w-uTuSA-3d07LKyWIcVk3FdnysDz-QaV",
+   "https://docs.google.com/document/d/1oflf_1CUixpKWmAUjkwPe2BRDASNOOlPRZSAAGiKCEc",
+   "https://ir.cwi.nl/pub/28890/28890.pdf",
+   "https://doi.org/10.1145/3321707.3321758",
+   "https://goo.gl/15tMV7",
+   "https://github.com/marcovirgolin/GP-GOMEA/tree/7a9c690a327a818a928100def60ab3e2744dcd5c",
+   "https://github.com/marcovirgolin/GP-GOMEA/blob/7a9c690a327a818a928100def60ab3e2744dcd5c/src/Evolution/EvolutionState.cpp",
+   "https://arxiv.org/abs/1804.06808",
+   "https://archive.ics.uci.edu/dataset/291/airfoil+self+noise",
+   "https://archive.ics.uci.edu/dataset/165/concrete+compressive+strength",
+   "https://archive.ics.uci.edu/dataset/242/energy+efficiency",
+   "https://archive.ics.uci.edu/dataset/186/wine+quality",
+   "https://archive.ics.uci.edu/dataset/243/yacht+hydrodynamics",
+   "https://archive.ics.uci.edu/ml/machine-learning-databases/housing/housing.data",
+   "https://archive.ics.uci.edu/ml/machine-learning-databases/housing/housing.names",
+   "https://github.com/heal-research/HeuristicLab/blob/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/Data/RegressionRealWorld.zip",
+   "https://github.com/heal-research/HeuristicLab/blob/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/RealWorld/ChemicalOne.cs",
+   "https://github.com/heal-research/HeuristicLab/blob/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/RealWorld/Tower.cs",
+   "https://github.com/folivetti/ITEA/tree/9edf15755ab2d7ff649be54e8facb5527f3d2bc7/datasets",
+   "https://arxiv.org/abs/1902.03983",
+   "https://scikit-learn.org/1.1/modules/generated/sklearn.datasets.load_boston.html"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Virgolin et al. 2021",
+    "title": "Improving Model-Based Genetic Programming for Symbolic Regression of Small Expressions",
+    "venue": "Evolutionary Computation 29(2):211-237",
+    "url": "https://doi.org/10.1162/evco_a_00278"
+   },
+   "data": {
+    "short": "GP-GOMEA authors' Google Drive folder DatasetsGP/Regression",
+    "title": "Preprocessed regression datasets of Virgolin et al.",
+    "url": "https://drive.google.com/drive/folders/1w-uTuSA-3d07LKyWIcVk3FdnysDz-QaV"
+   }
+  },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 7,
+    "text": "srbf runs here the 3 datasets whose sources state no license (Boston housing, Dow Chemical, Tower); the other 7 are in 'GP-GOMEA real-world set'."
+   }
+  ],
+  "license": "per problem: all rights reserved (Dow Chemical); none found (StatLib Boston housing)"
  },
  {
   "name": "gplearn-diabetes",
@@ -2514,6 +3108,11 @@
     "kind": "part",
     "problems": 1,
     "text": "srbf runs 1 of the 2 gplearn examples here (diabetes data); the formula example is in 'gplearn documentation examples'."
+   },
+   {
+    "kind": "changed",
+    "problems": 1,
+    "text": "In gplearn's example the evolved formulas serve as extra features for a ridge regression, scored by that model's test R^2; srbf asks for one formula that predicts disease progression directly."
    }
   ],
   "license": "BSD-3-Clause (scikit-learn, sklearn/datasets/data/diabetes_data_raw.csv.gz; data: Efron et al. 2004, Ann. Stat. 32:407-499)"
@@ -2837,7 +3436,7 @@
    {
     "kind": "part",
     "problems": 362,
-    "text": "srbf runs 14 of HeuristicLab's 376 problems here and 1 in its pinned-points set: 164 are run in other srbf sets (Keijzer, Korns, Nguyen, Vladislavleva, Feynman, ...), the 88 generated instances have no published formula, the 94 PennML datasets are run in SRBench, the 14 real-world and Miba datasets have no clear license, and AircraftMaximumLift has inputs without a range."
+    "text": "srbf runs 14 of HeuristicLab's 376 problems here and 1 in its pinned-points set: 164 are run in other srbf sets (Keijzer, Korns, Nguyen, Vladislavleva, Feynman, ...), the 88 generated instances have no published formula, the 94 PennML datasets are run in SRBench, the 14 real-world and Miba datasets are in 'HeuristicLab regression instances (real-world data)', and AircraftMaximumLift has inputs without a range."
    }
   ],
   "license": "facts only: formulas cited from the defining authors and instances generated with HeuristicLab's providers (heal-research/HeuristicLab, GPL-3.0 code, not copied)"
@@ -2897,6 +3496,58 @@
    }
   ],
   "license": "facts only: Keijzer-6 grid cited from Keijzer 2003 (EuroGP) as provided by HeuristicLab; no upstream license"
+ },
+ {
+  "name": "heuristiclab-real-world",
+  "display": "HeuristicLab regression instances (real-world data)",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [],
+  "problems": 14,
+  "groups": {
+   "all": 14
+  },
+  "sources": [
+   "https://github.com/heal-research/HeuristicLab",
+   "https://github.com/heal-research/HeuristicLab/blob/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression",
+   "https://github.com/heal-research/HeuristicLab/blob/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/Data/RegressionRealWorld.zip",
+   "https://github.com/heal-research/HeuristicLab/blob/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/Data/MibaFriction.zip",
+   "https://github.com/heal-research/HeuristicLab/blob/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/Data/PennML.zip",
+   "https://doi.org/10.1007/3-540-36599-0_7",
+   "http://www.korns.com/Accuracy%20in%20Symbolic%20Regression.pdf",
+   "https://web.archive.org/web/20141006102506/http://symbolicregression.com/sites/SRDocuments/NonlinearityPreprint.pdf",
+   "https://doi.org/10.1214/aos/1176347963",
+   "https://projecteuclid.org/journals/annals-of-statistics/volume-19/issue-1/Multivariate-Adaptive-Regression-Splines/10.1214/aos/1176347963.pdf",
+   "https://arxiv.org/abs/1101.0689",
+   "https://arxiv.org/abs/1706.02281",
+   "https://doi.org/10.1016/j.eswa.2018.05.021",
+   "https://doi.org/10.1016/j.apples.2021.100049",
+   "https://doi.org/10.1007/3-540-36599-0_19",
+   "https://doi.org/10.1214/aos/1013203451",
+   "https://arxiv.org/abs/1804.09331",
+   "https://raw.githubusercontent.com/EpistasisLab/pmlb/7c1f4bdc00136dc2e55c87fa6b8ba6e8af6d1a68/pmlb/all_summary_stats.tsv",
+   "https://github.com/EpistasisLab/pmlb/tree/master/datasets"
+  ],
+  "citation": {
+   "data": {
+    "short": "GitHub heal-research/HeuristicLab@c57538b",
+    "title": "HeuristicLab RegressionRealWorld.zip + MibaFriction.zip",
+    "url": "https://github.com/heal-research/HeuristicLab/tree/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/Data"
+   }
+  },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 362,
+    "text": "srbf runs 14 of HeuristicLab's 376 problems here (the 5 real-world and 9 Miba friction datasets): 15 formula problems are in 'HeuristicLab regression instance providers' and 'HeuristicLab regression instance providers (fixed points)', 164 are run in other srbf sets (Keijzer, Korns, Nguyen, Vladislavleva, Feynman, ...), the 88 generated instances have no published formula, the 94 PennML datasets are run in SRBench, and AircraftMaximumLift has inputs without a range."
+   },
+   {
+    "kind": "changed",
+    "problems": 9,
+    "text": "In the 9 Miba friction datasets the material, material category, grooving and oil inputs are letter codes; srbf turns each code into an input of its own that is 1 where the code applies and 0 elsewhere."
+   }
+  ],
+  "license": "no data licence: HeuristicLab (GPL-3.0 code repository) RegressionRealWorld.zip and MibaFriction.zip; data from Dow Chemical, Miba frictec, StatLib (Boston) and others"
  },
  {
   "name": "hierbosss-single-atom",
@@ -2985,6 +3636,115 @@
    }
   ],
   "license": "CC BY 4.0 (Roy et al. 2025, HierBOSSS, arXiv:2509.19710v1) + MIT (Roy-SR-007/HierBOSSS)"
+ },
+ {
+  "name": "ideasearch-pdf",
+  "display": "IdeaSearchFitter parton distributions (CT18NNLO)",
+  "kind": "data",
+  "origin": "synthetic data",
+  "tags": [
+   "extrapolation"
+  ],
+  "problems": 6,
+  "groups": {
+   "all": 6
+  },
+  "sources": [
+   "https://arxiv.org/abs/2510.08317v1",
+   "https://arxiv.org/pdf/2510.08317v1",
+   "https://arxiv.org/e-print/2510.08317v1",
+   "https://lhapdfsets.web.cern.ch/current/CT18NNLO.tar.gz",
+   "https://lhapdfsets.web.cern.ch/current/CT18NNLO/CT18NNLO.info",
+   "https://lhapdf.hepforge.org/pdfsets.html",
+   "https://arxiv.org/abs/1908.11394",
+   "https://arxiv.org/abs/1412.7420",
+   "https://gitlab.com/hepcedar/lhapdf",
+   "https://github.com/IdeaSearch/IdeaSearch-framework/tree/8142b202b4c84a35c3a17dd9c473071c03fbba08",
+   "https://github.com/IdeaSearch/IdeaSearch-fit/tree/50e41f806c6ed3f887791fc50011edfdb886bbcc"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Song et al. 2026",
+    "title": "Iterated agent for symbolic regression",
+    "venue": "Communications in Theoretical Physics 78(12):125802",
+    "url": "https://doi.org/10.1088/1572-9494/aea105"
+   },
+   "data": {
+    "short": "LHAPDF set CT18NNLO (ID 14000)",
+    "title": "CT18NNLO parton distribution grid",
+    "url": "https://lhapdfsets.web.cern.ch/current/CT18NNLO.tar.gz"
+   }
+  },
+  "changes": [
+   {
+    "kind": "filled",
+    "problems": 6,
+    "text": "The authors published no data, only how they made them; srbf computed the six parton densities from the CT18NNLO grid on the authors' 20 x 20 training grid and their 20 test points at Q = 100 GeV, taking the details the text leaves open, such as where the test points lie in x, from the authors' own figures."
+   }
+  ],
+  "license": "no licence: values computed from the CT18NNLO PDF grid (Hou et al. 2021, Phys. Rev. D 103:014013) via LHAPDF; CTEQ-TEA states no data licence"
+ },
+ {
+  "name": "implied-volatility-slices",
+  "display": "Implied-volatility slices",
+  "kind": "data",
+  "origin": "synthetic data",
+  "tags": [
+   "no test split"
+  ],
+  "problems": 34,
+  "groups": {
+   "all": 34
+  },
+  "sources": [
+   "https://arxiv.org/abs/2603.21892",
+   "https://arxiv.org/pdf/2603.21892v1",
+   "https://arxiv.org/html/2603.21892v1",
+   "https://github.com/hannesnikulski/master-thesis/tree/1da174236b507799cec6bb6d42f042484d9007ed",
+   "https://github.com/hannesnikulski/master-thesis/tree/1da174236b507799cec6bb6d42f042484d9007ed/data/vola-dynamics",
+   "https://github.com/hannesnikulski/master-thesis/blob/1da174236b507799cec6bb6d42f042484d9007ed/notebooks/vd-data-generate.ipynb",
+   "https://github.com/hannesnikulski/master-thesis/blob/1da174236b507799cec6bb6d42f042484d9007ed/vola-dynamics/notebooks/generate.ipynb",
+   "https://github.com/hannesnikulski/master-thesis/blob/1da174236b507799cec6bb6d42f042484d9007ed/core/sample.py",
+   "https://github.com/hannesnikulski/master-thesis/blob/1da174236b507799cec6bb6d42f042484d9007ed/notebooks/ivs-data-generate.ipynb",
+   "https://github.com/hannesnikulski/master-thesis/blob/1da174236b507799cec6bb6d42f042484d9007ed/global-problem/notebooks/generate.ipynb",
+   "https://github.com/hannesnikulski/pysr-tud/tree/c1d9fb2b16e985ff4f00ad5c9c1989c4d1279f62",
+   "https://api.github.com/repos/hannesnikulski/master-thesis",
+   "https://api.github.com/repos/hannesnikulski/pysr-tud",
+   "https://www.voladynamics.com",
+   "https://www.ivolatility.com",
+   "https://github.com/MilesCranmer/PySR/blob/master/docs/papers.yml"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Keller-Ressel & Nikulski 2026",
+    "title": "Discovering parametrizations of implied volatility with symbolic regression",
+    "venue": "arXiv preprint arXiv:2603.21892",
+    "url": "https://arxiv.org/abs/2603.21892"
+   },
+   "data": {
+    "short": "GitHub hannesnikulski/master-thesis@1da1742",
+    "title": "master-thesis data/vola-dynamics (no licence)",
+    "url": "https://github.com/hannesnikulski/master-thesis/tree/1da174236b507799cec6bb6d42f042484d9007ed/data/vola-dynamics"
+   }
+  },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 61428,
+    "text": "srbf runs the 34 public slices of the paper's data set D2; the 61,428 S&P 500 slices of its data set D1 were never published."
+   },
+   {
+    "kind": "changed",
+    "problems": 34,
+    "text": "The authors fit one formula per curve type (SVI5, C6, C8), with parameters refitted per slice; srbf runs each slice as a separate problem."
+   },
+   {
+    "kind": "filled",
+    "problems": 34,
+    "text": "The paper does not say how many points per slice it used; srbf uses the 125-point version of each slice, the largest in the authors' repository and the one their evaluation notebook fits."
+   }
+  ],
+  "license": "no licence: implied-volatility curves digitized from VolaDynamics plots (all rights reserved) in hannesnikulski/master-thesis (Keller-Ressel & Nikulski 2026, arXiv:2603.21892)"
  },
  {
   "name": "jin",
@@ -3316,9 +4076,9 @@
   "kind": "data",
   "origin": "measured data",
   "tags": [],
-  "problems": 4,
+  "problems": 3,
   "groups": {
-   "all": 4
+   "all": 3
   },
   "sources": [
    "https://arxiv.org/abs/2602.22967",
@@ -3351,12 +4111,65 @@
   },
   "changes": [
    {
+    "kind": "part",
+    "problems": 1,
+    "text": "srbf runs 3 of the 4 problems here: the band-gap data, extracted from a closed-access article and without a license, are in 'LangLaw perovskite datasets (restricted)'."
+   },
+   {
     "kind": "changed",
     "problems": 2,
     "text": "The out-of-distribution tests for bulk modulus (10 perovskites) and OER activity (5 perovskites) are not published in the authors' input form and are not used."
    }
   ],
   "license": "MIT (NAKONAKO4/langlaw, README licence statement; Roy-SR-007/HierBOSSS) ; underlying data CC BY 4.0 (Weng et al. 2020, Nat. Commun. 11:3513; NOMAD)"
+ },
+ {
+  "name": "langlaw-perovskites-restricted",
+  "display": "LangLaw perovskite datasets (restricted)",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [],
+  "problems": 1,
+  "groups": {
+   "all": 1
+  },
+  "sources": [
+   "https://arxiv.org/abs/2602.22967",
+   "https://arxiv.org/e-print/2602.22967",
+   "https://github.com/NAKONAKO4/langlaw/tree/a69229ce0c8f4549f5ba87514713c19e0e7974c2",
+   "https://arxiv.org/abs/2202.13019",
+   "https://doi.org/10.1103/PhysRevLett.129.055301",
+   "https://journals.aps.org/prl/supplemental/10.1103/PhysRevLett.129.055301/ESI.pdf",
+   "https://doi.org/10.17172/NOMAD/2022.02.21-3",
+   "https://gitlab.mpcdf.mpg.de/nomad-lab/ai-toolkit/tutorial-hierarchical-sisso/-/tree/b4d13ce5fa398042c62974ad0ab1ada82a71fc78/data/hierarchical_sisso",
+   "https://doi.org/10.1016/j.apsusc.2021.150916",
+   "https://doi.org/10.1038/s41467-020-17263-9",
+   "https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-020-17263-9/MediaObjects/41467_2020_17263_MOESM3_ESM.pdf",
+   "https://arxiv.org/abs/2509.19710",
+   "https://arxiv.org/e-print/2509.19710",
+   "https://github.com/Roy-SR-007/HierBOSSS/tree/0c6b856c2bf031318a8ae0188d39f4cbc6bab3bb"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Guan et al. 2026",
+    "title": "Discovery of Interpretable Physical Laws in Materials via Language-Model-Guided Symbolic Regression",
+    "venue": "arXiv preprint arXiv:2602.22967",
+    "url": "https://arxiv.org/abs/2602.22967"
+   },
+   "data": {
+    "short": "GitHub NAKONAKO4/langlaw@a69229c",
+    "title": "LangLaw data/{bulk_modulus,bandgap,oer_activity}.csv (README: MIT)",
+    "url": "https://github.com/NAKONAKO4/langlaw/tree/a69229ce0c8f4549f5ba87514713c19e0e7974c2/data"
+   }
+  },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 3,
+    "text": "srbf runs here the band-gap problem, whose data were extracted from a closed-access article and state no license; the other 3 are in 'LangLaw perovskite datasets'."
+   }
+  ],
+  "license": "per problem: none stated: extracted from Gao et al. 2021 (Appl. Surf. Sci., closed access)"
  },
  {
   "name": "lasr-bigbench",
@@ -3810,10 +4623,79 @@
    {
     "kind": "part",
     "problems": 9,
-    "text": "srbf runs 3 of the 12 problems of McDermott et al.'s list here: Mackey-Glass and the two sunspot problems have data that may not be shared, the two trading, the prime-number and the DyFor GDP and CPI problems have no published data, and the simulated DyFor series is in the pinned-points set."
+    "text": "srbf runs 3 of the 12 problems of McDermott et al.'s list here: Mackey-Glass (no license stated) and the two sunspot problems (non-commercial license) are in 'McDermott et al. predictive-modelling sets (restricted)', the two trading, the prime-number and the DyFor GDP and CPI problems have no published data, and the simulated DyFor series is in the pinned-points set."
    }
   ],
   "license": "MIT (DALabNOVA/slim QSAR tables)"
+ },
+ {
+  "name": "mcdermott-predictive-modelling-restricted",
+  "display": "McDermott et al. predictive-modelling sets (restricted)",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [
+   "several tests"
+  ],
+  "problems": 3,
+  "groups": {
+   "all": 1,
+   "sunspots test 1921-1955": 1,
+   "sunspots test 1956-1979": 1
+  },
+  "sources": [
+   "http://web.archive.org/web/20210125223903/http://gpbenchmarks.org/wp-content/uploads/2019/08/paper1.pdf",
+   "https://doi.org/10.1145/2330163.2330273",
+   "https://arxiv.org/abs/1805.10365",
+   "http://gpbib.cs.ucl.ac.uk/gecco2006/docs/p255.pdf",
+   "https://arxiv.org/abs/1208.2437",
+   "https://doi.org/10.1007/978-3-642-13214-8_22",
+   "https://doi.org/10.1007/978-3-540-71783-6_2",
+   "https://doi.org/10.1007/s10710-007-9040-z",
+   "https://arxiv.org/abs/2205.02598",
+   "https://arxiv.org/abs/2305.16956",
+   "https://github.com/DALabNOVA/slim/tree/aca73575c46a1a2d90dd55680e09f8b1c4d3a8cf/slim_gsgp/datasets/data",
+   "https://web.archive.org/cdx/search/cdx?url=personal.disco.unimib.it/Vanneschi/*",
+   "http://www.cs.ucl.ac.uk/staff/W.Langdon/ftp/papers/wbl_repeat_linear.pdf",
+   "http://web.archive.org/web/20050307104557/http://neural.cs.nthu.edu.tw/jang/benchmark/",
+   "http://web.archive.org/web/20050307104557id_/http://neural.cs.nthu.edu.tw/jang/dataset/mg/mg.dat",
+   "http://web.archive.org/web/20050307160237id_/http://neural.cs.nthu.edu.tw:80/jang/dataset/mg/mg.c",
+   "https://gpbib.cs.ucl.ac.uk/gp-html/ga96aJaske.html",
+   "http://web.archive.org/web/20060101085552/http://www.uwasa.fi/cs/publications/2NWGA/2NWGA.html",
+   "http://web.archive.org/web/2006/http://www.uwasa.fi/cs/publications/2NWGA/node71.html",
+   "http://web.archive.org/web/2006/http://www.uwasa.fi/cs/publications/2NWGA/node75.html",
+   "http://web.archive.org/web/2006/http://www.uwasa.fi/cs/publications/2NWGA/node76.html",
+   "https://www.sidc.be/SILSO/versionarchive",
+   "https://www.sidc.be/SILSO/DATA/ARCHIVE/V1.0/yearssn.dat",
+   "https://www.sidc.be/SILSO/DATA/SN_y_tot_V2.0.txt",
+   "https://gpbib.cs.ucl.ac.uk/gp-html/dempsey_2006_CEC.html",
+   "https://doi.org/10.1109/CEC.2006.1688631",
+   "https://doi.org/10.1007/978-3-642-01129-0_27",
+   "https://gpbib.cs.ucl.ac.uk/gp-html/eurogp07_jwalker1.html",
+   "https://doi.org/10.1007/978-3-540-71605-1_19",
+   "https://cs.adelaide.edu.au/~zbyszek/Papers/DyForGP.pdf",
+   "https://doi.org/10.1109/TEVC.2006.882430"
+  ],
+  "citation": {
+   "paper": {
+    "short": "McDermott et al. 2012",
+    "title": "Genetic programming needs better benchmarks",
+    "venue": "Proceedings of the 14th annual conference on Genetic and evolutionary computation (GECCO '12), pp. 791-798",
+    "url": "https://doi.org/10.1145/2330163.2330273"
+   },
+   "data": {
+    "short": "GitHub DALabNOVA/slim@aca7357",
+    "title": "slim_gsgp datasets/data (QSAR %F, LD50, %PPB tables; MIT)",
+    "url": "https://github.com/DALabNOVA/slim/tree/aca73575c46a1a2d90dd55680e09f8b1c4d3a8cf/slim_gsgp/datasets/data"
+   }
+  },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 9,
+    "text": "srbf runs here 3 of the 12 problems of McDermott et al.'s list: Mackey-Glass, whose source states no license, and the two sunspot problems, whose license is non-commercial; 3 more are in 'McDermott et al. predictive-modelling sets', the two trading, the prime-number and the DyFor GDP and CPI problems have no published data, and the simulated DyFor series is in the pinned-points set."
+   }
+  ],
+  "license": "per problem: CC BY-NC 4.0 (SILSO, Royal Observatory of Belgium); none found"
  },
  {
   "name": "mcdermott-table-1-predictive-modelling-sets-points",
@@ -3911,6 +4793,185 @@
    }
   ],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization benchmarks.csv); formulas and ranges as in each benchmark's first publication (facts)"
+ },
+ {
+  "name": "materials-laws-multi-agent",
+  "display": "Multi-agent materials law datasets",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [
+   "no test split"
+  ],
+  "problems": 1,
+  "groups": {
+   "all": 1
+  },
+  "sources": [
+   "https://arxiv.org/abs/2411.16416",
+   "https://arxiv.org/html/2411.16416v1",
+   "https://arxiv.org/html/2411.16416v2",
+   "https://arxiv.org/e-print/2411.16416v1",
+   "https://arxiv.org/e-print/2411.16416v2",
+   "https://arxiv.org/abs/2304.12880",
+   "https://doi.org/10.1016/j.jocs.2024.102402",
+   "https://github.com/AlexanderKvashnin/SISSO_hardness/tree/7f36d9b5edabe3dfe3068adb27f68ed2daa23fd2",
+   "https://raw.githubusercontent.com/AlexanderKvashnin/SISSO_hardness/7f36d9b5edabe3dfe3068adb27f68ed2daa23fd2/train.dat",
+   "https://arxiv.org/abs/2204.01788",
+   "https://doi.org/10.1016/j.actamat.2022.117924",
+   "https://github.com/vzguille/elasisso/tree/43da91994083fd3b0b5474195b7c054a4c54f242",
+   "https://raw.githubusercontent.com/vzguille/elasisso/43da91994083fd3b0b5474195b7c054a4c54f242/data/binaries.csv",
+   "https://raw.githubusercontent.com/vzguille/elasisso/43da91994083fd3b0b5474195b7c054a4c54f242/data/ternaries.csv",
+   "https://raw.githubusercontent.com/vzguille/elasisso/43da91994083fd3b0b5474195b7c054a4c54f242/data/LICENSE",
+   "https://codeocean.com/capsule/0209216/tree/v1"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Hu et al. 2024",
+    "title": "A Multi-agent Framework for Physical Laws Discovery",
+    "venue": "arXiv preprint arXiv:2411.16416",
+    "url": "https://arxiv.org/abs/2411.16416"
+   },
+   "data": {
+    "short": "GitHub AlexanderKvashnin/SISSO_hardness@7f36d9b",
+    "title": "SISSO_hardness train.dat (61-compound Vickers hardness set; no licence)",
+    "url": "https://github.com/AlexanderKvashnin/SISSO_hardness/blob/7f36d9b5edabe3dfe3068adb27f68ed2daa23fd2/train.dat"
+   }
+  },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 2,
+    "text": "srbf runs 1 of the 3 case studies (Vickers hardness): the metallic-glass data were published only in a supplement that is not available, and the descriptors the authors computed from the alloy compositions for the Young's-modulus task were never published."
+   },
+   {
+    "kind": "changed",
+    "problems": 1,
+    "text": "The authors report training and test errors on the hardness data but never say which compounds they tested on; srbf fits all 61 compounds and has no test."
+   }
+  ],
+  "license": "no licence: train.dat from AlexanderKvashnin/SISSO_hardness (Tantardini et al. 2024, J. Comput. Sci. 82:102402); repo unlicensed"
+ },
+ {
+  "name": "mvsr-2024",
+  "display": "Multi-view SR (2024) real data",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [
+   "no test split"
+  ],
+  "problems": 501,
+  "groups": {
+   "Chemistry: UV-visible absorption (Sec. 5.1)": 4,
+   "Astrophysics: SN Ia light curves (Sec. 5.3)": 6,
+   "Finance: MvSR views (Sec. 5.2)": 10,
+   "Finance: test assets (Sec. 5.2)": 480,
+   "Finance: S&P500 (Sec. 5.2)": 1
+  },
+  "sources": [
+   "https://arxiv.org/abs/2402.04298",
+   "https://arxiv.org/pdf/2402.04298v4",
+   "https://doi.org/10.1145/3638529.3654087",
+   "https://github.com/erusseil/MvSR-analysis/tree/ec5abd674c466d4d22957122db7b26680c457e59",
+   "https://github.com/erusseil/MvSR-analysis/tree/ec5abd674c466d4d22957122db7b26680c457e59/real_data",
+   "https://www.kaggle.com/datasets/iveeaten3223times/massive-yahoo-finance-dataset",
+   "https://www.kaggle.com/api/v1/datasets/view/iveeaten3223times/massive-yahoo-finance-dataset",
+   "https://irsa.ipac.caltech.edu/cgi-bin/ZTF/nph_light_curves?ID=764116400012133&FORMAT=csv",
+   "https://irsa.ipac.caltech.edu/cgi-bin/ZTF/nph_light_curves?ID=717101200000722&FORMAT=csv",
+   "https://irsa.ipac.caltech.edu/cgi-bin/ZTF/nph_light_curves?ID=679215400015888&FORMAT=csv",
+   "https://blast.scimma.org/transients/2018aye",
+   "https://blast.scimma.org/transients/2019fck",
+   "https://blast.scimma.org/transients/2021mwb",
+   "https://github.com/EpistasisLab/pmlb/tree/master/datasets/first_principles_absorption",
+   "https://github.com/EpistasisLab/pmlb/tree/master/datasets/first_principles_supernovae_zg",
+   "https://github.com/EpistasisLab/pmlb/tree/master/datasets/first_principles_supernovae_zr",
+   "https://raw.githubusercontent.com/EpistasisLab/pmlb/master/pmlb/all_summary_stats.tsv"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Russeil et al. 2024",
+    "title": "Multiview Symbolic Regression",
+    "venue": "Proceedings of the Genetic and Evolutionary Computation Conference (GECCO '24), pp. 961-970",
+    "url": "https://doi.org/10.1145/3638529.3654087"
+   },
+   "data": {
+    "short": "GitHub erusseil/MvSR-analysis@ec5abd6",
+    "title": "MvSR-analysis real_data/ (no licence file)",
+    "url": "https://github.com/erusseil/MvSR-analysis/tree/ec5abd674c466d4d22957122db7b26680c457e59/real_data"
+   }
+  },
+  "changes": [
+   {
+    "kind": "changed",
+    "problems": 20,
+    "text": "The authors pose one task per domain (chemistry, astrophysics, finance): one formula, with constants refitted per view, fitted to all its views at once; srbf runs each of the 20 views as a separate problem."
+   },
+   {
+    "kind": "changed",
+    "problems": 481,
+    "text": "In the finance task the authors test the formulas found on the 10 company views by refitting them to the price-change histograms of 480 other companies and of the S&P 500; srbf rebuilt these 481 histograms with the authors' recipe (the authors publish only the resulting errors) and runs each as a problem of its own."
+   }
+  ],
+  "license": "no licence: erusseil/MvSR-analysis real_data (Russeil et al. 2024, GECCO); finance views from the Kaggle Yahoo-finance dump (Apache-2.0 label, Yahoo Finance terms)"
+ },
+ {
+  "name": "mvsr-2025",
+  "display": "Multi-view SR (2025) real-world data",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [],
+  "problems": 51,
+  "groups": {
+   "all": 51
+  },
+  "sources": [
+   "https://arxiv.org/abs/2509.10500",
+   "https://arxiv.org/html/2509.10500v1",
+   "https://doi.org/10.1098/rsta.2024.0592",
+   "https://github.com/erusseil/mvsr/tree/b39ba792605d8ab08071d0e4fd2acd40c220ab5e",
+   "https://github.com/erusseil/mvsr/blob/b39ba792605d8ab08071d0e4fd2acd40c220ab5e/main.py",
+   "https://github.com/erusseil/mvsr/blob/b39ba792605d8ab08071d0e4fd2acd40c220ab5e/datasets/links.txt",
+   "https://github.com/erusseil/mvsr/blob/b39ba792605d8ab08071d0e4fd2acd40c220ab5e/datasets/metadata.json",
+   "https://github.com/erusseil/MvSR-analysis/tree/ec5abd674c466d4d22957122db7b26680c457e59/real_data/supernovae",
+   "https://github.com/erusseil/MvSR-analysis/blob/ec5abd674c466d4d22957122db7b26680c457e59/real_data/supernovae-real.ipynb",
+   "https://arxiv.org/abs/2402.04298",
+   "https://github.com/EpistasisLab/pmlb/tree/master/datasets/first_principles_supernovae_zg",
+   "https://github.com/EpistasisLab/pmlb/tree/master/datasets/first_principles_supernovae_zr",
+   "https://github.com/EpistasisLab/pmlb/tree/master/datasets/nikuradse_1",
+   "https://github.com/EpistasisLab/pmlb/issues/170",
+   "https://raw.githubusercontent.com/EpistasisLab/pmlb/master/pmlb/all_summary_stats.tsv",
+   "https://arxiv.org/abs/2008.04732",
+   "https://doi.org/10.1051/0004-6361/201937079",
+   "https://doi.org/10.1021/bi201284u",
+   "https://doi.org/10.3109/14756366.2012.688039",
+   "http://konect.cc/",
+   "https://arxiv.org/abs/1402.5500"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Russeil et al. 2026",
+    "title": "Exploring multi-view symbolic regression methods in physical sciences",
+    "venue": "Philosophical Transactions of the Royal Society A: Mathematical, Physical and Engineering Sciences 384(2317):20240592",
+    "url": "https://doi.org/10.1098/rsta.2024.0592"
+   },
+   "data": {
+    "short": "GitHub erusseil/mvsr@b39ba79",
+    "title": "mvsr datasets/ (no licence file)",
+    "url": "https://github.com/erusseil/mvsr/tree/b39ba792605d8ab08071d0e4fd2acd40c220ab5e/datasets"
+   }
+  },
+  "changes": [
+   {
+    "kind": "changed",
+    "problems": 51,
+    "text": "The authors pose one task per data set (supernovae, galaxies, Michaelis-Menten, Nikuradse, network degrees): one formula, with parameters refitted per view, fitted to all its views at once and scored by its worst view; srbf runs each of the 51 views as a separate problem."
+   },
+   {
+    "kind": "changed",
+    "problems": 51,
+    "text": "The authors pick each view's 20% test rows with replacement, so some repeat and fewer than 20% of the rows are held out; srbf picks them without replacement."
+   }
+  ],
+  "license": "no licence: erusseil/mvsr datasets (Russeil et al. 2025, Phil. Trans. R. Soc. A); upstream galaxy, supernova, enzyme-kinetics and KONECT network data"
  },
  {
   "name": "multi-view-sr-synthetic-benchmarks",
@@ -4524,10 +5585,67 @@
    {
     "kind": "part",
     "problems": 3,
-    "text": "srbf runs 1 of the 4 datasets: the charge-radius data may not be shared, and the two KAN variants have no published data."
+    "text": "srbf runs 1 of the 4 datasets here: the charge-radius data, whose source states no license, are in 'Nuclear binding energies and charge radii (MISR) (restricted)', and the two KAN variants have no published data."
    }
   ],
   "license": "CC BY 3.0 (AME2020, Chin. Phys. C 45, 030003)"
+ },
+ {
+  "name": "nuclear-misr-restricted",
+  "display": "Nuclear binding energies and charge radii (MISR) (restricted)",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [],
+  "problems": 1,
+  "groups": {
+   "all": 1
+  },
+  "sources": [
+   "https://arxiv.org/abs/2404.11477",
+   "https://arxiv.org/pdf/2404.11477v3",
+   "https://doi.org/10.1038/s42005-025-02023-2",
+   "https://www.nature.com/articles/s42005-025-02023-2.pdf",
+   "https://github.com/munozariasjm/nuclear-misr/tree/791e28ca28d1bd2c48274fef498b80d62aed2a2f",
+   "https://github.com/munozariasjm/nuclear-misr/tree/791e28ca28d1bd2c48274fef498b80d62aed2a2f/Data/Experimental",
+   "https://github.com/munozariasjm/nuclear-misr/blob/791e28ca28d1bd2c48274fef498b80d62aed2a2f/nuclearpy_models/models/BE/sr.py",
+   "https://github.com/munozariasjm/nuclear-misr/blob/791e28ca28d1bd2c48274fef498b80d62aed2a2f/nuclearpy_models/models/rc/sr.py",
+   "https://github.com/munozariasjm/nuclear-misr/blob/791e28ca28d1bd2c48274fef498b80d62aed2a2f/nuclearpy_models/models/BE/semf.py",
+   "https://github.com/munozariasjm/nuclear-misr/blob/791e28ca28d1bd2c48274fef498b80d62aed2a2f/nuclearpy_models/models/rc/mnp.py",
+   "https://github.com/munozariasjm/nuclear-misr/blob/791e28ca28d1bd2c48274fef498b80d62aed2a2f/nuclearpy_models/utils/physics.py",
+   "https://github.com/munozariasjm/nuclear-misr/blob/791e28ca28d1bd2c48274fef498b80d62aed2a2f/notebooks/test/be.ipynb",
+   "https://github.com/munozariasjm/nuclear-misr/blob/791e28ca28d1bd2c48274fef498b80d62aed2a2f/notebooks/test/rc.ipynb",
+   "https://github.com/munozariasjm/nuclear-misr/blob/791e28ca28d1bd2c48274fef498b80d62aed2a2f/notebooks/uncertainty/be.ipynb",
+   "https://github.com/munozariasjm/nuclear-misr/blob/791e28ca28d1bd2c48274fef498b80d62aed2a2f/notebooks/uncertainty/rc.ipynb",
+   "https://arxiv.org/abs/2407.20737",
+   "https://arxiv.org/pdf/2407.20737v3",
+   "https://doi.org/10.1103/PhysRevC.111.024316",
+   "https://www-nds.iaea.org/amdc/ame2020/mass_1.mas20.txt",
+   "https://doi.org/10.1088/1674-1137/abddaf",
+   "https://www-nds.iaea.org/radii/charge_radii.csv",
+   "https://www-nds.iaea.org/radii/",
+   "https://doi.org/10.1016/j.adt.2011.12.006"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Munoz et al. 2025",
+    "title": "Discovering nuclear models from symbolic machine learning",
+    "venue": "Communications Physics 8(1):101",
+    "url": "https://doi.org/10.1038/s42005-025-02023-2"
+   },
+   "data": {
+    "short": "AME2020 (Wang et al. 2021, Chin. Phys. C 45:030003)",
+    "title": "The AME 2020 atomic mass evaluation (II). Tables, graphs and references*",
+    "url": "https://doi.org/10.1088/1674-1137/abddaf"
+   }
+  },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 3,
+    "text": "srbf runs here the charge-radius dataset, whose source states no license; the binding-energy dataset is in 'Nuclear binding energies and charge radii (MISR)', and the two KAN variants have no published data."
+   }
+  ],
+  "license": "per problem: none found (IAEA charge-radii compilation)"
  },
  {
   "name": "occamnet-analytic-and-non-analytic-suites",
@@ -4568,6 +5686,48 @@
    }
   ],
   "license": "facts only: target functions and ranges cited from Dugan et al. 2023 (OccamNet, arXiv:2007.10784); no upstream license"
+ },
+ {
+  "name": "oxygen-ion-conductors",
+  "display": "Oxygen-ion conductor database",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [],
+  "problems": 2,
+  "groups": {
+   "all": 2
+  },
+  "sources": [
+   "https://arxiv.org/abs/2601.16852",
+   "https://arxiv.org/pdf/2601.16852v1",
+   "https://doi.org/10.1038/s41597-026-07100-x",
+   "https://www.nature.com/articles/s41597-026-07100-x",
+   "https://doi.org/10.5281/zenodo.18947543",
+   "https://zenodo.org/api/records/18947543",
+   "https://arxiv.org/abs/2510.18325",
+   "https://arxiv.org/pdf/2510.18325v7",
+   "https://github.com/JerryGarcia1995/OxygenIonConductor/tree/5ffef73ed3ea2cfccaf68de822b1766b13f96115",
+   "https://github.com/JerryGarcia1995/OxygenIonConductor/tree/5ffef73ed3ea2cfccaf68de822b1766b13f96115/modelling_GoodRegressor/DatabaseOnly",
+   "https://github.com/JerryGarcia1995/OxygenIonConductor/blob/5ffef73ed3ea2cfccaf68de822b1766b13f96115/database/oxygen_ion_conductor_dataset.csv",
+   "https://github.com/JerryGarcia1995/OxygenIonConductor/tree/5ffef73ed3ea2cfccaf68de822b1766b13f96115/modelling_GoodRegressor/002_GoodCurator",
+   "https://github.com/JerryGarcia1995/OxygenIonConductor/blob/5ffef73ed3ea2cfccaf68de822b1766b13f96115/modelling_GoodRegressor/CodeOnly/Utility/benchmark_v12.py",
+   "https://github.com/JerryGarcia1995/GoodRegressor"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Jang et al. 2026",
+    "title": "Charting the Landscape of Oxygen Ion Conductors: A 60-Year Dataset with Interpretable Regression Models",
+    "venue": "Scientific Data 13(1):778",
+    "url": "https://doi.org/10.1038/s41597-026-07100-x"
+   },
+   "data": {
+    "short": "Zenodo 10.5281/zenodo.18947543",
+    "title": "Charting the Landscape of Oxygen Ion Conductors: A 60-Year Dataset",
+    "url": "https://doi.org/10.5281/zenodo.18947543"
+   }
+  },
+  "changes": [],
+  "license": "CC BY 4.0 (Zenodo 10.5281/zenodo.18947543, oxygen-ion conductor database) for the raw records; featurized task files from JerryGarcia1995/OxygenIonConductor (no licence)"
  },
  {
   "name": "pagie-points",
@@ -4695,7 +5855,7 @@
    {
     "kind": "part",
     "problems": 2,
-    "text": "srbf runs 15 of the 17 datasets: the sunspot data has a non-commercial license, and the lunar-tide data (13.3 million samples) needs a gridding the authors did not publish."
+    "text": "srbf runs 15 of the 17 datasets here: the sunspot data, whose license is non-commercial, are in 'PhyE2E space-physics applications (restricted)', and the lunar-tide data (13.3 million samples) needs a gridding the authors did not publish."
    },
    {
     "kind": "changed",
@@ -4704,6 +5864,61 @@
    }
   ],
   "license": "Apache-2.0 (the authors' figshare record)"
+ },
+ {
+  "name": "phye2e-space-physics-restricted",
+  "display": "PhyE2E space-physics applications (restricted)",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [
+   "extrapolation"
+  ],
+  "problems": 1,
+  "groups": {
+   "all": 1
+  },
+  "sources": [
+   "https://arxiv.org/abs/2503.07994v3",
+   "https://doi.org/10.1038/s42256-025-01126-3",
+   "https://doi.org/10.6084/m9.figshare.29615831.v1",
+   "https://api.figshare.com/v2/articles/29615831",
+   "https://github.com/Jie0618/PhysicsRegression/tree/b2586ec02b65f0fe48dfe696b100e545f99a47c7",
+   "https://github.com/Jie0618/PhysicsRegression/blob/b2586ec02b65f0fe48dfe696b100e545f99a47c7/physical/case1_SSN.ipynb",
+   "https://github.com/Jie0618/PhysicsRegression/blob/b2586ec02b65f0fe48dfe696b100e545f99a47c7/physical/case2_Plasma.ipynb",
+   "https://github.com/Jie0618/PhysicsRegression/blob/b2586ec02b65f0fe48dfe696b100e545f99a47c7/physical/case3_DifferentialRotation.ipynb",
+   "https://github.com/Jie0618/PhysicsRegression/blob/b2586ec02b65f0fe48dfe696b100e545f99a47c7/physical/case4_ContributionFunction.ipynb",
+   "https://github.com/Jie0618/PhysicsRegression/blob/b2586ec02b65f0fe48dfe696b100e545f99a47c7/physical/case5_LunarTide.ipynb",
+   "https://github.com/Jie0618/PhysicsRegression/tree/v1.0.0",
+   "https://doi.org/10.5281/zenodo.16305086",
+   "https://drive.google.com/drive/folders/17rbDLb2ZBgK9DidJtb1nyBFmGtOokhYs",
+   "https://www.sidc.be/SILSO/datafiles",
+   "https://www.sidc.be/SILSO/infosnmtot",
+   "https://www.sidc.be/SILSO/cyclesminmax",
+   "https://themis.igpp.ucla.edu/overview_data.shtml",
+   "http://www.chiantidatabase.org",
+   "https://www.space.umn.edu/rbspefw-data/"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Ying et al. 2025",
+    "title": "A neural symbolic model for space physics",
+    "venue": "Nature Machine Intelligence 7(10):1726-1741",
+    "url": "https://doi.org/10.1038/s42256-025-01126-3"
+   },
+   "data": {
+    "short": "figshare 10.6084/m9.figshare.29615831.v1",
+    "title": "PhyE2E_datas",
+    "url": "https://doi.org/10.6084/m9.figshare.29615831.v1"
+   }
+  },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 16,
+    "text": "srbf runs here the sunspot dataset, whose license is non-commercial; 15 more are in 'PhyE2E space-physics applications', and the lunar-tide data (13.3 million samples) needs a gridding the authors did not publish."
+   }
+  ],
+  "license": "per problem: CC BY-NC 4.0 (SILSO, Royal Observatory of Belgium)"
  },
  {
   "name": "physo-astrophysical-case-studies",
@@ -5050,6 +6265,53 @@
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization)"
  },
  {
+  "name": "sparc-radial-acceleration",
+  "display": "Radial acceleration relation (SPARC)",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [
+   "no test split"
+  ],
+  "problems": 1,
+  "groups": {
+   "sparc": 1
+  },
+  "sources": [
+   "https://arxiv.org/abs/2301.04368",
+   "https://doi.org/10.1093/mnras/stad597",
+   "https://astroweb.case.edu/SPARC/",
+   "https://astroweb.case.edu/SPARC/MassModels_Lelli2016c.mrt",
+   "https://astroweb.case.edu/SPARC/SPARC_Lelli2016c.mrt",
+   "https://astroweb.case.edu/SPARC/RAR.mrt",
+   "https://arxiv.org/abs/1606.09251",
+   "https://arxiv.org/abs/1610.08981",
+   "https://arxiv.org/abs/2201.02109",
+   "https://github.com/DeaglanBartlett/ESR/tree/23c3907a0fb08301d5e89fb666ae01bec0398faa/examples/RAR_results",
+   "https://arxiv.org/abs/2404.17292"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Desmond et al. 2023",
+    "title": "On the functional form of the radial acceleration relation",
+    "venue": "Monthly Notices of the Royal Astronomical Society 521(2):1817-1831",
+    "url": "https://doi.org/10.1093/mnras/stad597"
+   },
+   "data": {
+    "short": "SPARC database (Lelli, McGaugh & Schombert 2016)",
+    "title": "SPARC mass models (MassModels_Lelli2016c.mrt, SPARC_Lelli2016c.mrt)",
+    "url": "https://astroweb.case.edu/SPARC/"
+   }
+  },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 2,
+    "text": "srbf runs 1 of the 3 problems of Desmond et al. (2023) (the observed SPARC data); the two MOND mock data sets, which place the authors' laws on the 2,696 observed baryonic accelerations rather than on a stated input range, are not run."
+   }
+  ],
+  "license": "SPARC (Lelli, McGaugh & Schombert 2016, AJ 152:157): no licence; data freely downloadable with a citation request"
+ },
+ {
   "name": "reproduction-bias-not-included-test-sets",
   "display": "Reproduction-bias 'not included' test sets",
   "kind": "formula",
@@ -5207,9 +6469,9 @@
   "kind": "data",
   "origin": "measured data",
   "tags": [],
-  "problems": 57,
+  "problems": 55,
   "groups": {
-   "all": 57
+   "all": 55
   },
   "sources": [
    "https://arxiv.org/abs/2609.01552",
@@ -5241,11 +6503,59 @@
   "changes": [
    {
     "kind": "part",
-    "problems": 61,
-    "text": "srbf runs 57 of SciLaws-Real's 118 tasks: only the 66 single-group (Type I) tasks fit srbf's protocol; of these, 7 have data that may not be shared and 2 with share-alike licenses are in a separate set."
+    "problems": 63,
+    "text": "srbf runs 55 of SciLaws-Real's 118 tasks here: only the 66 single-group (Type I) tasks fit srbf's protocol; of these, 6 whose sources set non-commercial or scientific-use-only terms or state no license are in 'SciLaws-Bench SciLaws-Real (Type I) (restricted)', 4 with share-alike or copyleft licenses are in its share-alike set, and 1 (river lengths derived from HydroSHEDS) may not be redistributed."
    }
   ],
   "license": "per problem (SciLaws-Bench dataset/LICENSES.md, RealSR/SciLaws-Bench): CC BY 2.5/3.0/4.0, CC0 1.0, public domain, MIT, etalab-2.0"
+ },
+ {
+  "name": "scilaws-real-restricted",
+  "display": "SciLaws-Bench SciLaws-Real (Type I) (restricted)",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [
+   "extrapolation"
+  ],
+  "problems": 6,
+  "groups": {
+   "all": 6
+  },
+  "sources": [
+   "https://arxiv.org/abs/2609.01552",
+   "https://github.com/yiyihum/SciLaws-Bench/blob/9239f66b921cb89c7a9d14061f782fdce49dcfb5/docs/assets/scilaws_bench_paper.pdf",
+   "https://huggingface.co/datasets/RealSR/SciLaws-Bench/tree/15b93258fabc8f1785c5a5ffd4d3e51fc15dd860",
+   "https://huggingface.co/datasets/RealSR/SciLaws-Bench/blob/15b93258fabc8f1785c5a5ffd4d3e51fc15dd860/tasks/domains.json",
+   "https://huggingface.co/datasets/RealSR/SciLaws-Bench/blob/15b93258fabc8f1785c5a5ffd4d3e51fc15dd860/task_index.csv",
+   "https://huggingface.co/datasets/RealSR/SciLaws-Bench/blob/15b93258fabc8f1785c5a5ffd4d3e51fc15dd860/LICENSES.md",
+   "https://huggingface.co/datasets/RealSR/SciLaws-Bench/blob/15b93258fabc8f1785c5a5ffd4d3e51fc15dd860/README.md",
+   "https://github.com/yiyihum/SciLaws-Bench/tree/9239f66b921cb89c7a9d14061f782fdce49dcfb5",
+   "https://github.com/yiyihum/SciLaws-Bench/blob/9239f66b921cb89c7a9d14061f782fdce49dcfb5/harness/evaluate_numeric.py",
+   "https://github.com/yiyihum/SciLaws-Bench/blob/9239f66b921cb89c7a9d14061f782fdce49dcfb5/harness/eval_formula.py",
+   "https://github.com/yiyihum/SciLaws-Bench/blob/9239f66b921cb89c7a9d14061f782fdce49dcfb5/harness/AGENT_INTERFACE.md",
+   "https://yiyihum.github.io/SciLaws-Bench/"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Huang et al. 2026",
+    "title": "Can LLMs Discover Scientific Laws in Real and Parallel Worlds?",
+    "venue": "arXiv preprint arXiv:2609.01552",
+    "url": "https://arxiv.org/abs/2609.01552"
+   },
+   "data": {
+    "short": "Hugging Face RealSR/SciLaws-Bench@15b9325",
+    "title": "SciLaws-Bench (SciLaws-Real tasks; per-task licences)",
+    "url": "https://huggingface.co/datasets/RealSR/SciLaws-Bench/tree/15b93258fabc8f1785c5a5ffd4d3e51fc15dd860"
+   }
+  },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 112,
+    "text": "srbf runs here the 6 single-group tasks whose sources set non-commercial or scientific-use-only terms or state no license; 55 more single-group tasks are in 'SciLaws-Bench SciLaws-Real (Type I)' and 4 in its share-alike set, 1 may not be redistributed, and the 52 multi-group tasks need a protocol srbf does not have."
+   }
+  ],
+  "license": "per problem: CC-BY-NC-4.0; DEBCat via VizieR V/152 (Southworth 2015): free scientific use with citation, no open licence; SciLaws labels it CC-BY-4.0; Gaia data, CC BY-NC 3.0 IGO (ESA); SciLaws labels it CC-BY-4.0; VizieR-CDS academic (free for scientific use with citation); VizieR-custom-free"
  },
  {
   "name": "scilaws-real-share-alike",
@@ -5255,9 +6565,9 @@
   "tags": [
    "extrapolation"
   ],
-  "problems": 2,
+  "problems": 4,
   "groups": {
-   "all": 2
+   "all": 4
   },
   "sources": [
    "https://arxiv.org/abs/2609.01552",
@@ -5289,11 +6599,11 @@
   "changes": [
    {
     "kind": "part",
-    "problems": 116,
-    "text": "srbf runs here the 2 single-group tasks whose data carry a share-alike license; the other 57 shareable single-group tasks are in 'SciLaws-Bench SciLaws-Real (Type I)', the 52 multi-group tasks need a protocol srbf does not have, and 7 tasks have data that may not be shared."
+    "problems": 114,
+    "text": "srbf runs here the 4 single-group tasks whose data carry a share-alike or copyleft license; 55 more single-group tasks are in 'SciLaws-Bench SciLaws-Real (Type I)' and 6 in its restricted set, 1 may not be redistributed, and the 52 multi-group tasks need a protocol srbf does not have."
    }
   ],
-  "license": "per problem: CC BY-SA 3.0 and CC BY-SA 4.0 (SciLaws-Bench dataset/LICENSES.md)"
+  "license": "per problem: CC-BY-SA-3.0; CC-BY-SA-4.0; GPL-3.0-or-later (ATNF psrcat v2.8.0 distribution, CSIRO/ATNF); ODbL"
  },
  {
   "name": "scimed-settling-sphere-configurations",
@@ -5406,6 +6716,49 @@
   "license": "MIT (prescriptiveanalytics/SCR-Benchmarks; SRSD laws: omron-sinicx/srsd-benchmark, MIT)"
  },
  {
+  "name": "shadow-economies",
+  "display": "Shadow Economies",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [
+   "no test split"
+  ],
+  "problems": 2,
+  "groups": {
+   "all": 2
+  },
+  "sources": [
+   "http://web.archive.org/web/20131208233428/http://symbolicregression.com/?q=shadowEconomiesProblem",
+   "http://web.archive.org/web/20170304231546/http://symbolicregression.com/sites/default/files/DataSets/ShadowEconomiesProblem.zip",
+   "https://doi.org/10.1007/978-1-4614-1770-5_11",
+   "http://web.archive.org/web/20231128223901/http://korns.com/Detecting%20Shadow%20Economy%20Sizes%20with%20Symbolic%20Regression.pdf",
+   "https://gpbib.cs.ucl.ac.uk/gp-html/Truscott_2011_GPTP.html",
+   "https://api.semanticscholar.org/graph/v1/paper/DOI:10.1007/978-1-4614-1770-5_11",
+   "http://data.worldbank.org/"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Truscott & Korns 2011",
+    "title": "Detecting Shadow Economy Sizes with Symbolic Regression",
+    "venue": "Genetic Programming Theory and Practice IX, Genetic and Evolutionary Computation, pp. 195-210",
+    "url": "https://doi.org/10.1007/978-1-4614-1770-5_11"
+   },
+   "data": {
+    "short": "symbolicregression.com ShadowEconomiesProblem.zip (Wayback 2017-03-04)",
+    "title": "SHADOW_ECONOMIES.xlsx (data provided by P. Truscott)",
+    "url": "http://web.archive.org/web/20170304231546/http://symbolicregression.com/sites/default/files/DataSets/ShadowEconomiesProblem.zip"
+   }
+  },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 1,
+    "text": "srbf runs 2 of the 3 tasks (shadow-economy share and absolute economy size): the target of the third, per-capita GDP, is not in the published file."
+   }
+  ],
+  "license": "no licence: Shadow Economies data (Truscott & Korns, GPTP IX 2011) via symbolicregression.com; not redistributable without permission"
+ },
+ {
   "name": "shape-constrained-real-world",
   "display": "Shape-constrained SR real-world set",
   "kind": "data",
@@ -5442,7 +6795,7 @@
    {
     "kind": "part",
     "problems": 3,
-    "text": "srbf runs 1 of the 4 problems: the friction and flow-stress data may not be shared."
+    "text": "srbf runs 1 of the 4 problems here: the friction and flow-stress data, whose sources state no license, are in 'Shape-constrained SR real-world set (restricted)'."
    },
    {
     "kind": "changed",
@@ -5451,6 +6804,53 @@
    }
   ],
   "license": "CC BY 4.0 (UCI Auto MPG)"
+ },
+ {
+  "name": "shape-constrained-real-world-restricted",
+  "display": "Shape-constrained SR real-world set (restricted)",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [],
+  "problems": 3,
+  "groups": {
+   "all": 3
+  },
+  "sources": [
+   "https://arxiv.org/abs/2103.15624",
+   "https://arxiv.org/pdf/2103.15624v2",
+   "https://doi.org/10.1162/evco_a_00294",
+   "https://github.com/folivetti/ITEA/tree/8669fd19a24f789e1503f76f91a755c234d58d00/datasets/knowledge",
+   "https://github.com/folivetti/ITEA/tree/8669fd19a24f789e1503f76f91a755c234d58d00/configs/fi2pop",
+   "https://github.com/folivetti/ITEA/commit/835425588b8a032053a156400cba1fe4423a02b6",
+   "https://archive.ics.uci.edu/dataset/9/auto+mpg",
+   "https://doi.org/10.1063/1.5112747"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Kronberger et al. 2022",
+    "title": "Shape-Constrained Symbolic Regression—Improving Extrapolation with Prior Knowledge",
+    "venue": "Evolutionary Computation 30(1):75-98",
+    "url": "https://doi.org/10.1162/evco_a_00294"
+   },
+   "data": {
+    "short": "UCI ML Repository 10.24432/C5859H",
+    "title": "Auto MPG",
+    "url": "https://doi.org/10.24432/C5859H"
+   }
+  },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 1,
+    "text": "srbf runs here the friction and flow-stress problems, whose sources state no license; the Auto MPG problem is in 'Shape-constrained SR real-world set'."
+   },
+   {
+    "kind": "changed",
+    "problems": 3,
+    "text": "srbf does not check the shape constraints that the authors set for the problems."
+   }
+  ],
+  "license": "per problem: none found"
  },
  {
   "name": "shape-constrained-sr-synthetic",
@@ -5594,6 +6994,59 @@
   "license": "CC BY 3.0 (Ghiringhelli et al. 2015, Phys. Rev. Lett. 114:105503, Supplemental Material)"
  },
  {
+  "name": "sldbench",
+  "display": "SLDBench (scaling-law discovery)",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [
+   "extrapolation"
+  ],
+  "problems": 77,
+  "groups": {
+   "parallel_scaling_law": 2,
+   "vocab_scaling_law": 1,
+   "sft_scaling_law": 42,
+   "domain_mixture_scaling_law": 20,
+   "moe_scaling_law": 1,
+   "data_constrained_scaling_law": 1,
+   "lr_bsz_scaling_law": 1,
+   "easy_question_scaling_law": 9
+  },
+  "sources": [
+   "https://arxiv.org/abs/2507.21184",
+   "https://arxiv.org/pdf/2507.21184v5",
+   "https://arxiv.org/pdf/2507.21184v1",
+   "https://huggingface.co/datasets/pkuHaowei/sldbench/tree/721b846056f031737ff7fa72572c021324e3ec0e",
+   "https://huggingface.co/api/datasets/pkuHaowei/sldbench/revision/721b846056f031737ff7fa72572c021324e3ec0e",
+   "https://github.com/linhaowei1/SLD/blob/df9d125389751e31124319c0e18d08c4d5c00f78/data_loader.py",
+   "https://github.com/linhaowei1/SLD/blob/df9d125389751e31124319c0e18d08c4d5c00f78/evaluator.py",
+   "https://github.com/linhaowei1/SLD/blob/df9d125389751e31124319c0e18d08c4d5c00f78/README.md",
+   "https://github.com/linhaowei1/SLD/tree/df9d125389751e31124319c0e18d08c4d5c00f78/configs",
+   "https://github.com/laude-institute/harbor-datasets/tree/5d929c1e4fac5e9f98e978b5c35e67b8e269a6e8/datasets/sldbench"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Lin et al. 2025",
+    "title": "Can Language Models Discover Scaling Laws?",
+    "venue": "arXiv preprint arXiv:2507.21184",
+    "url": "https://arxiv.org/abs/2507.21184"
+   },
+   "data": {
+    "short": "Hugging Face pkuHaowei/sldbench@721b846",
+    "title": "SLDBench (8 scaling-law configs; no licence stated)",
+    "url": "https://huggingface.co/datasets/pkuHaowei/sldbench/tree/721b846056f031737ff7fa72572c021324e3ec0e"
+   }
+  },
+  "changes": [
+   {
+    "kind": "changed",
+    "problems": 77,
+    "text": "SLDBench poses 8 tasks, each asking for one law shared by all control groups of the task with constants refitted per group (the domain-mixture task predicts 5 losses at once); srbf runs each control group, and each of the 5 domain-mixture losses, as a separate problem."
+   }
+  ],
+  "license": "no licence on the dataset: pkuHaowei/sldbench (Hugging Face) rows compiled from published scaling-law studies; SLD code MIT per README"
+ },
+ {
   "name": "soose-fc",
   "display": "SOOSE-FC",
   "kind": "formula",
@@ -5708,10 +7161,10 @@
    "https://arxiv.org/abs/2410.01752",
    "https://arxiv.org/html/2410.01752v2",
    "https://doi.org/10.1016/j.dche.2024.100198",
-   "https://github.com/PaulsonLab/TorchSISSO/tree/f869f9527bbe023402840c42c332b91cf58d738c/examples/Specific_Energy",
-   "https://raw.githubusercontent.com/PaulsonLab/TorchSISSO/f869f9527bbe023402840c42c332b91cf58d738c/examples/Specific_Energy/train.dat",
-   "https://raw.githubusercontent.com/PaulsonLab/TorchSISSO/f869f9527bbe023402840c42c332b91cf58d738c/examples/Specific_Energy/redox_test_pade.csv",
-   "https://raw.githubusercontent.com/PaulsonLab/TorchSISSO/f869f9527bbe023402840c42c332b91cf58d738c/examples/Specific_Energy/README.md",
+   "https://github.com/PaulsonLab/TorchSISSO/tree/acbf6eef8ffcdea7c5cfe2fb358f9bdbf9256d12/examples/Specific_Energy",
+   "https://raw.githubusercontent.com/PaulsonLab/TorchSISSO/acbf6eef8ffcdea7c5cfe2fb358f9bdbf9256d12/examples/Specific_Energy/train.dat",
+   "https://raw.githubusercontent.com/PaulsonLab/TorchSISSO/acbf6eef8ffcdea7c5cfe2fb358f9bdbf9256d12/examples/Specific_Energy/redox_test_pade.csv",
+   "https://raw.githubusercontent.com/PaulsonLab/TorchSISSO/acbf6eef8ffcdea7c5cfe2fb358f9bdbf9256d12/examples/Specific_Energy/README.md",
    "https://github.com/PaulsonLab/TorchSISSO/blob/acbf6eef8ffcdea7c5cfe2fb358f9bdbf9256d12/LICENSE",
    "https://api.github.com/repos/PaulsonLab/TorchSISSO/commits?path=examples/Specific_Energy",
    "https://arxiv.org/abs/2502.03367",
@@ -5727,9 +7180,9 @@
     "url": "https://doi.org/10.1016/j.dche.2024.100198"
    },
    "data": {
-    "short": "GitHub PaulsonLab/TorchSISSO@f869f95",
+    "short": "GitHub PaulsonLab/TorchSISSO@acbf6ee",
     "title": "TorchSISSO examples/Specific_Energy (MIT)",
-    "url": "https://github.com/PaulsonLab/TorchSISSO/tree/f869f9527bbe023402840c42c332b91cf58d738c/examples/Specific_Energy"
+    "url": "https://github.com/PaulsonLab/TorchSISSO/tree/acbf6eef8ffcdea7c5cfe2fb358f9bdbf9256d12/examples/Specific_Energy"
    }
   },
   "changes": [],
@@ -5770,9 +7223,9 @@
   "kind": "data",
   "origin": "measured data",
   "tags": [],
-  "problems": 12,
+  "problems": 5,
   "groups": {
-   "non-friedman": 9,
+   "non-friedman": 2,
    "friedman": 3
   },
   "sources": [
@@ -5808,8 +7261,66 @@
     "url": "https://github.com/EpistasisLab/pmlb/tree/7c1f4bdc00136dc2e55c87fa6b8ba6e8af6d1a68/datasets"
    }
   },
-  "changes": [],
-  "license": "MIT (PMLB)"
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 7,
+    "text": "srbf runs 5 of the 12 datasets here: the 7 whose sources set non-commercial terms or state no license (2 non-commercial, 5 without a license) are in 'SRBench 2.0 black-box (restricted)'."
+   }
+  ],
+  "license": "per dataset: CC BY 4.0 (UCI), generated data, OpenML BNG (public domain), StatLib permissions (503_wind; 505_tecator with its note), CC0 (titanic); PMLB's copies (MIT)"
+ },
+ {
+  "name": "srbench-2.0-blackbox-restricted",
+  "display": "SRBench 2.0 black-box (restricted)",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [],
+  "problems": 7,
+  "groups": {
+   "non-friedman": 7
+  },
+  "sources": [
+   "https://arxiv.org/abs/2505.03977",
+   "https://arxiv.org/pdf/2505.03977",
+   "https://dl.acm.org/doi/10.1145/3712255.3734309",
+   "https://github.com/cavalab/srbench/tree/srbench_2025 (head dc3f6daa93bf10955df8775256a6f8644f38fd93, 2026-05-05)",
+   "https://raw.githubusercontent.com/cavalab/srbench/srbench_2025/datasets/download_data.py",
+   "https://raw.githubusercontent.com/cavalab/srbench/srbench_2025/experiment/seeds.py",
+   "https://raw.githubusercontent.com/cavalab/srbench/srbench_2025/experiment/analyze.py",
+   "https://raw.githubusercontent.com/cavalab/srbench/srbench_2025/experiment/optimize_model.py",
+   "https://raw.githubusercontent.com/cavalab/srbench/srbench_2025/experiment/read_file.py",
+   "https://raw.githubusercontent.com/cavalab/srbench/srbench_2025/docs/user_guide.md",
+   "https://raw.githubusercontent.com/cavalab/srbench/srbench_2025/postprocessing/README.md",
+   "https://raw.githubusercontent.com/cavalab/srbench/srbench_2025/postprocessing/scripts/collate_experiments_results.py",
+   "https://raw.githubusercontent.com/cavalab/srbench/srbench_2025/postprocessing/notebooks/fried_nonfried_analysis.ipynb",
+   "https://github.com/cavalab/srbench/blob/srbench_2025/results/black-box-tuning/results.feather (LFS sha256 5b428264a346f6bbbeabded219f87454b9206afa70c19c012075c672533f342e, 5596634 bytes)",
+   "https://github.com/EpistasisLab/pmlb (MIT; master 7c1f4bdc00136dc2e55c87fa6b8ba6e8af6d1a68)",
+   "https://raw.githubusercontent.com/EpistasisLab/pmlb/master/pmlb/all_summary_stats.tsv",
+   "https://github.com/EpistasisLab/pmlb/commit/9cc9017958",
+   "https://arxiv.org/abs/2012.00058"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Imai Aldeia et al. 2025",
+    "title": "Call for Action: towards the next generation of symbolic regression benchmark",
+    "venue": "Proceedings of the Genetic and Evolutionary Computation Conference Companion (GECCO '25 Companion), pp. 2529-2538",
+    "url": "https://doi.org/10.1145/3712255.3734309"
+   },
+   "data": {
+    "short": "PMLB (EpistasisLab/pmlb@7c1f4bd)",
+    "title": "PMLB datasets (MIT)",
+    "url": "https://github.com/EpistasisLab/pmlb/tree/7c1f4bdc00136dc2e55c87fa6b8ba6e8af6d1a68/datasets"
+   }
+  },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 5,
+    "text": "srbf runs here the 7 datasets whose sources set non-commercial terms or state no license (2 non-commercial, 5 without a license); the other 5 are in 'SRBench 2.0 black-box'."
+   }
+  ],
+  "license": "per problem: Simonoff smoothmeth: non-commercial use only; PMLB's copy (EpistasisLab/pmlb, MIT); analcatdata: non-commercial use only; PMLB's copy (EpistasisLab/pmlb, MIT); none stated at the source; PMLB's copy (EpistasisLab/pmlb, MIT)"
  },
  {
   "name": "srbench-2.0-first-principles",
@@ -5817,9 +7328,9 @@
   "kind": "data",
   "origin": "measured data",
   "tags": [],
-  "problems": 12,
+  "problems": 10,
   "groups": {
-   "remainder": 12
+   "remainder": 10
   },
   "sources": [
    "https://arxiv.org/abs/2505.03977 (v1, 6 May 2025)",
@@ -5857,8 +7368,71 @@
     "url": "https://github.com/EpistasisLab/pmlb/tree/7c1f4bdc00136dc2e55c87fa6b8ba6e8af6d1a68/datasets"
    }
   },
-  "changes": [],
-  "license": "MIT (PMLB)"
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 2,
+    "text": "srbf runs 10 of the 12 datasets here: absorption and supernovae_zr, taken from a repository without a license, are in 'SRBench 2.0 first-principles (restricted)'."
+   }
+  ],
+  "license": "per dataset: MIT (MilesCranmer/pysr_paper, EmpiricalBench); two from the unlicensed MvSR-analysis repo"
+ },
+ {
+  "name": "srbench-2.0-first-principles-restricted",
+  "display": "SRBench 2.0 first-principles (restricted)",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [
+   "noisy data"
+  ],
+  "problems": 2,
+  "groups": {
+   "remainder": 2
+  },
+  "sources": [
+   "https://arxiv.org/abs/2505.03977 (v1, 6 May 2025)",
+   "https://arxiv.org/html/2505.03977 (Sec. 3.1 + Table 1, 3.2, 3.3, 3.5, Sec. 4 Fig. 4 + Table 3, Sec. 5.4)",
+   "https://doi.org/10.1145/3712255.3734309 (GECCO '25 Companion, pp. 2529-2538; Crossref checked)",
+   "https://github.com/cavalab/srbench/tree/srbench_2025 (head dc3f6daa93bf10955df8775256a6f8644f38fd93, 2026-05-05)",
+   "https://raw.githubusercontent.com/cavalab/srbench/dc3f6daa93bf10955df8775256a6f8644f38fd93/datasets/download_data.py",
+   "https://raw.githubusercontent.com/cavalab/srbench/dc3f6daa93bf10955df8775256a6f8644f38fd93/experiment/seeds.py",
+   "https://raw.githubusercontent.com/cavalab/srbench/dc3f6daa93bf10955df8775256a6f8644f38fd93/experiment/analyze.py",
+   "https://raw.githubusercontent.com/cavalab/srbench/dc3f6daa93bf10955df8775256a6f8644f38fd93/experiment/optimize_model.py",
+   "https://raw.githubusercontent.com/cavalab/srbench/dc3f6daa93bf10955df8775256a6f8644f38fd93/experiment/read_file.py",
+   "https://raw.githubusercontent.com/cavalab/srbench/dc3f6daa93bf10955df8775256a6f8644f38fd93/docs/user_guide.md",
+   "https://raw.githubusercontent.com/cavalab/srbench/dc3f6daa93bf10955df8775256a6f8644f38fd93/base_environment.yml",
+   "https://raw.githubusercontent.com/cavalab/srbench/dc3f6daa93bf10955df8775256a6f8644f38fd93/postprocessing/notebooks/firstprinciples_results.ipynb",
+   "https://github.com/cavalab/srbench/blob/dc3f6daa93bf10955df8775256a6f8644f38fd93/results/first-principles-tuning/results.feather (LFS sha256 2f56ad1a4faa8115381c0a181e7173fb7bd85de54f4dbe0f9499b9e4ae808570, 2370514 bytes)",
+   "https://github.com/EpistasisLab/pmlb/pull/181",
+   "https://github.com/EpistasisLab/pmlb/tree/7c1f4bdc00136dc2e55c87fa6b8ba6e8af6d1a68/datasets",
+   "https://raw.githubusercontent.com/EpistasisLab/pmlb/7c1f4bdc00136dc2e55c87fa6b8ba6e8af6d1a68/pmlb/all_summary_stats.tsv",
+   "https://raw.githubusercontent.com/EpistasisLab/pmlb/7c1f4bdc00136dc2e55c87fa6b8ba6e8af6d1a68/pmlb/pmlb.py",
+   "https://github.com/erusseil/MvSR-analysis (real_data/absorption/examples, real_data/supernovae/examples; no licence declared)",
+   "https://doi.org/10.1145/3638529.3654087 (MvSR, GECCO 2024)",
+   "https://arxiv.org/abs/2305.01582 (EmpiricalBench, Cranmer 2023)",
+   "https://github.com/MilesCranmer/PySR"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Imai Aldeia et al. 2025",
+    "title": "Call for Action: towards the next generation of symbolic regression benchmark",
+    "venue": "Proceedings of the Genetic and Evolutionary Computation Conference Companion (GECCO '25 Companion), pp. 2529-2538",
+    "url": "https://doi.org/10.1145/3712255.3734309"
+   },
+   "data": {
+    "short": "PMLB (EpistasisLab/pmlb@7c1f4bd)",
+    "title": "PMLB first_principles_* datasets (MIT)",
+    "url": "https://github.com/EpistasisLab/pmlb/tree/7c1f4bdc00136dc2e55c87fa6b8ba6e8af6d1a68/datasets"
+   }
+  },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 10,
+    "text": "srbf runs here absorption and supernovae_zr, whose source repository states no license; the other 10 are in 'SRBench 2.0 first-principles'."
+   }
+  ],
+  "license": "per problem: none stated: erusseil/MvSR-analysis real_data (Russeil et al. 2024), unlicensed; PMLB's copy (EpistasisLab/pmlb, MIT)"
  },
  {
   "name": "srbench-2021-blackbox",
@@ -5866,10 +7440,10 @@
   "kind": "data",
   "origin": "synthetic data",
   "tags": [],
-  "problems": 122,
+  "problems": 84,
   "groups": {
    "friedman": 62,
-   "non_friedman": 60
+   "non_friedman": 22
   },
   "sources": [
    "https://arxiv.org/abs/2107.14351",
@@ -5902,8 +7476,64 @@
     "url": "https://github.com/EpistasisLab/pmlb/tree/5ed0151f01919aff0d616d5e8ea463587a255745/datasets"
    }
   },
-  "changes": [],
-  "license": "MIT (PMLB)"
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 38,
+    "text": "srbf runs 84 of the 122 datasets here: the 38 whose sources set non-commercial terms or state no license (20 non-commercial, 18 without a license) are in 'SRBench 2021 black-box (restricted)'."
+   }
+  ],
+  "license": "per dataset: CC BY 4.0 (UCI), generated data, OpenML BNG (public domain), StatLib permissions (503_wind; 505_tecator with its note), CC0 (titanic); PMLB's copies (MIT)"
+ },
+ {
+  "name": "srbench-2021-blackbox-restricted",
+  "display": "SRBench 2021 black-box (restricted)",
+  "kind": "data",
+  "origin": "synthetic data",
+  "tags": [],
+  "problems": 38,
+  "groups": {
+   "non_friedman": 38
+  },
+  "sources": [
+   "https://arxiv.org/abs/2107.14351",
+   "https://arxiv.org/pdf/2107.14351v1",
+   "https://github.com/cavalab/srbench/tree/e5ded4715ed5721703353d3500a2fdb99004faf1",
+   "https://github.com/cavalab/srbench/blob/e5ded4715ed5721703353d3500a2fdb99004faf1/docs/csv/blackbox_results_datasets.csv",
+   "https://github.com/cavalab/srbench/blob/e5ded4715ed5721703353d3500a2fdb99004faf1/results/black-box_results.feather",
+   "https://github.com/cavalab/srbench/blob/e5ded4715ed5721703353d3500a2fdb99004faf1/experiment/evaluate_model.py",
+   "https://github.com/cavalab/srbench/blob/e5ded4715ed5721703353d3500a2fdb99004faf1/experiment/seeds.py",
+   "https://github.com/cavalab/srbench/blob/e5ded4715ed5721703353d3500a2fdb99004faf1/experiment/analyze.py",
+   "https://github.com/cavalab/srbench/blob/e5ded4715ed5721703353d3500a2fdb99004faf1/experiment/read_file.py",
+   "https://github.com/cavalab/srbench/blob/e5ded4715ed5721703353d3500a2fdb99004faf1/postprocessing/collate_blackbox_results.py",
+   "https://github.com/EpistasisLab/pmlb/tree/5ed0151f01919aff0d616d5e8ea463587a255745",
+   "https://github.com/EpistasisLab/pmlb/blob/5ed0151f01919aff0d616d5e8ea463587a255745/pmlb/all_summary_stats.tsv",
+   "https://www.openml.org/d/579",
+   "https://www.openml.org/d/564",
+   "https://www.openml.org/d/215",
+   "https://www.openml.org/d/344"
+  ],
+  "citation": {
+   "paper": {
+    "short": "La Cava et al. 2021",
+    "title": "Contemporary Symbolic Regression Methods and their Relative Performance",
+    "venue": "NeurIPS 2021 Track on Datasets and Benchmarks",
+    "url": "https://arxiv.org/abs/2107.14351"
+   },
+   "data": {
+    "short": "PMLB (EpistasisLab/pmlb@5ed0151)",
+    "title": "PMLB v1.0.2a datasets (MIT)",
+    "url": "https://github.com/EpistasisLab/pmlb/tree/5ed0151f01919aff0d616d5e8ea463587a255745/datasets"
+   }
+  },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 84,
+    "text": "srbf runs here the 38 datasets whose sources set non-commercial terms or state no license (20 non-commercial, 18 without a license); the other 84 are in 'SRBench 2021 black-box'."
+   }
+  ],
+  "license": "per problem: Chatterjee, Handcock & Simonoff: non-commercial use only; PMLB's copy (EpistasisLab/pmlb, MIT); DELVE: non-commercial use only; PMLB's copy (EpistasisLab/pmlb, MIT); Simonoff smoothmeth: non-commercial use only; PMLB's copy (EpistasisLab/pmlb, MIT); StatLib bodyfat (Fisher): non-commercial use only; PMLB's copy (EpistasisLab/pmlb, MIT); The Statistical Sleuth: non-commercial use only; PMLB's copy (EpistasisLab/pmlb, MIT); analcatdata: non-commercial use only; PMLB's copy (EpistasisLab/pmlb, MIT); none stated at the source; PMLB's copy (EpistasisLab/pmlb, MIT)"
  },
  {
   "name": "srbench-2021-strogatz",
@@ -6514,6 +8144,53 @@
   "license": "facts only: formulas and ranges cited from Muthyala et al. 2024 (TorchSISSO, Digit. Chem. Eng. 13:100198; arXiv:2410.01752, CC BY-NC-ND 4.0); no text or tables reproduced"
  },
  {
+  "name": "dow-distillation-tower",
+  "display": "Tower (Dow distillation tower)",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [
+   "no test split"
+  ],
+  "problems": 1,
+  "groups": {
+   "all": 1
+  },
+  "sources": [
+   "http://web.archive.org/web/20130719082855/http://www.symbolicregression.com:80/?q=towerProblem",
+   "https://web.archive.org/web/20160707102934/http://symbolicregression.com/sites/default/files/DataSets/towerData.txt",
+   "https://doi.org/10.1109/TEVC.2008.926486",
+   "https://web.archive.org/web/20141006102506/http://symbolicregression.com/sites/SRDocuments/NonlinearityPreprint.pdf",
+   "http://www0.cs.ucl.ac.uk/staff/W.Langdon/ftp/papers/vladislavleva_2008_thesis.pdf",
+   "https://github.com/heal-research/HeuristicLab/blob/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/RealWorld/Tower.cs",
+   "https://github.com/heal-research/HeuristicLab/blob/c57538bf4bf4e944e75bcac0468c33ec5a27d4bf/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/Data/RegressionRealWorld.zip",
+   "https://github.com/folivetti/ITEA/tree/9edf15755ab2d7ff649be54e8facb5527f3d2bc7/datasets/towerData",
+   "https://arxiv.org/abs/1904.02050",
+   "https://arxiv.org/abs/1905.13266",
+   "https://raw.githubusercontent.com/EpistasisLab/pmlb/master/pmlb/all_summary_stats.tsv"
+  ],
+  "citation": {
+   "paper": {
+    "short": "Vladislavleva et al. 2009",
+    "title": "Order of Nonlinearity as a Complexity Measure for Models Generated by Symbolic Regression via Pareto Genetic Programming",
+    "venue": "IEEE Transactions on Evolutionary Computation 13(2):333-349",
+    "url": "https://doi.org/10.1109/TEVC.2008.926486"
+   },
+   "data": {
+    "short": "symbolicregression.com towerData.txt (Wayback 2016-07-07)",
+    "title": "Tower problem data (Dow distillation tower; E. Vladislavleva's site)",
+    "url": "https://web.archive.org/web/20160707102934/http://symbolicregression.com/sites/default/files/DataSets/towerData.txt"
+   }
+  },
+  "changes": [
+   {
+    "kind": "changed",
+    "problems": 1,
+    "text": "Vladislavleva et al. (2009) test extrapolation on the records outside a box in five scaled inputs, but on the published 4,999 records their rule does not give their 3,136 / 1,864 split (it gives 4,721 / 278); srbf fits all records and has no test."
+   }
+  ],
+  "license": "no licence: Dow distillation-tower data via symbolicregression.com (Vladislavleva et al. 2009); all rights reserved"
+ },
+ {
   "name": "treloar-rubber",
   "display": "Treloar rubber hyperelasticity",
   "kind": "data",
@@ -6593,7 +8270,7 @@
    {
     "kind": "part",
     "problems": 3,
-    "text": "srbf runs 6 of the 9 problems of Vladislavleva et al. (2009) here: Vladislavleva-2 and -3 train on fixed points and are in 'Vladislavleva (fixed points)', and the real-world Tower data may not be shared."
+    "text": "srbf runs 6 of the 9 problems of Vladislavleva et al. (2009) here: Vladislavleva-2 and -3 train on fixed points and are in 'Vladislavleva (fixed points)', and the real-world Tower data are in 'Tower (Dow distillation tower)'."
    }
   ],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization benchmarks.csv); formulas and ranges as in each benchmark's first publication (facts)"
@@ -6643,10 +8320,57 @@
    {
     "kind": "part",
     "problems": 7,
-    "text": "srbf runs here the 2 problems that train on fixed points (Vladislavleva-2 and -3); the others are in 'Vladislavleva' or, for the Tower data, not run."
+    "text": "srbf runs here the 2 problems that train on fixed points (Vladislavleva-2 and -3); the others are in 'Vladislavleva' and, for the Tower data, in 'Tower (Dow distillation tower)'."
    }
   ],
   "license": "BSD-3-Clause (dso-org/deep-symbolic-optimization)"
+ },
+ {
+  "name": "white-2013-proposed",
+  "display": "White et al. 2013 proposed SR set",
+  "kind": "data",
+  "origin": "measured data",
+  "tags": [],
+  "problems": 1,
+  "groups": {
+   "all": 1
+  },
+  "sources": [
+   "https://doi.org/10.1007/s10710-012-9177-2",
+   "http://gpbenchmarks.org/wp-content/uploads/2019/08/GP-Benchmarks-GPEM-2013-preprint-correction-v2.pdf",
+   "https://doi.org/10.1007/3-540-36599-0_7",
+   "http://web.archive.org/web/20070206014709/http://www.cs.vu.nl:80/~mkeijzer/publications/eurogp2003.ps.gz",
+   "http://gpbenchmarks.org/wp-content/uploads/2019/08/Evostar_2010_Symbolic_Regression_Competition.pdf",
+   "http://gpbenchmarks.org/wp-content/uploads/2020/07/SymbolicRegressionCompetitionData.xls",
+   "https://doi.org/10.1007/s10710-009-9087-0",
+   "http://web.archive.org/web/20170403201603/http://human-competitive.org/sites/default/files/widera-genp-paper_1.pdf",
+   "https://ico2s.org/datasets/gp_challenge.html",
+   "https://ico2s.org/data/instances/gp_challenge/energy_terms.tar.gz",
+   "https://ico2s.org/data/instances/gp_challenge/distances.tar.gz",
+   "https://raw.githubusercontent.com/heal-research/HeuristicLab/master/HeuristicLab.Problems.Instances.DataAnalysis/3.3/Regression/RealWorld/ChemicalOne.cs",
+   "https://raw.githubusercontent.com/EpistasisLab/pmlb/master/pmlb/all_summary_stats.tsv"
+  ],
+  "citation": {
+   "paper": {
+    "short": "White et al. 2013",
+    "title": "Better GP benchmarks: community survey results and proposals",
+    "venue": "Genetic Programming and Evolvable Machines 14(1):3-29",
+    "url": "https://doi.org/10.1007/s10710-012-9177-2"
+   },
+   "data": {
+    "short": "gpbenchmarks.org SymbolicRegressionCompetitionData.xls",
+    "title": "Dow Chemical (EvoStar 2010) data, gpbenchmarks.org mirror",
+    "url": "http://gpbenchmarks.org/wp-content/uploads/2020/07/SymbolicRegressionCompetitionData.xls"
+   }
+  },
+  "changes": [
+   {
+    "kind": "part",
+    "problems": 6,
+    "text": "srbf runs 1 of the 7 problems of White et al. (2013) here (the Dow Chemical data): Keijzer-6 is in 'White et al. 2013 proposed SR set (fixed points)', Korns-12, Vladislavleva-4, Nguyen-7 and Pagie-1 are run in their own benchmarks' sets, and the GP Challenge, one ranking task over 54 proteins, is run protein by protein in 'GP Challenge (protein energy function)'."
+   }
+  ],
+  "license": "no licence: Dow Chemical data (EvoStar 2010 SR competition, A. Kordon) via gpbenchmarks.org; not redistributable without permission"
  },
  {
   "name": "white-et-al-2013-proposed-sr-set-points",
@@ -6688,7 +8412,7 @@
    {
     "kind": "part",
     "problems": 6,
-    "text": "srbf runs 1 of the 7 problems of White et al. (2013) here: Korns-12, Vladislavleva-4, Nguyen-7 and Pagie-1 are run in their own benchmarks' sets, and the Dow Chemical and GP Challenge data may not be shared."
+    "text": "srbf runs 1 of the 7 problems of White et al. (2013) here: Korns-12, Vladislavleva-4, Nguyen-7 and Pagie-1 are run in their own benchmarks' sets, the Dow Chemical data are in 'White et al. 2013 proposed SR set', and the GP Challenge is run protein by protein in 'GP Challenge (protein energy function)'."
    }
   ],
   "license": "facts only: Keijzer-6 grid cited from White et al. 2013 (GPEM 14:3) and Keijzer 2003; no upstream license"

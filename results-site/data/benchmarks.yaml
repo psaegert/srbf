@@ -227,8 +227,9 @@ changes:
       them from the range of the authors' formula generator (marked with a star).
   - title: The authors' folds
     text: >-
-      The GECCO 2013-2017 compilation and LangLaw test by cross-validation on fixed folds: the data are split once into
-      five parts, and each part serves in turn as the test data. srbf keeps these folds. Each run tests on one of the
+      The GECCO 2013-2017 compilation, LangLaw and the oxygen-ion conductor database test by cross-validation on fixed
+      folds: the data are split once into five parts, and each part serves in turn as the test data. srbf keeps these
+      folds. Each run tests on one of the
       five parts, picked at random, and fits on the other four. The compilers of the GECCO set published no fold
       indices; their script splits the data with fixed seeds, so srbf runs it again to recover the folds.
   - title: ESR's H squared
@@ -254,6 +255,14 @@ changes:
       benchmark problems.
 
 # what srbf could not include, and why
+  - title: Data under restricted terms
+    text: >-
+      Some benchmarks' data come with terms that allow only non-commercial or scientific use, or with no license at
+      all. srbf runs them too, in problem sets of their own, and keeps its own copy of the data so that the benchmark
+      does not depend on hosts that may change or disappear. Each dataset names where it comes from and the terms at its
+      source, and these terms still apply to anyone who uses it. If you hold rights to any of these data and object,
+      open an issue at github.com/psaegert/symbolic-data and they will be removed.
+
 left_out:
   - title: No input ranges
     text: >-
@@ -290,11 +299,12 @@ left_out:
       SciLaws-Real defines two kinds of problems. srbf runs Type I; Type II tests a formula on held-out groups of
       data, which needs a protocol srbf does not have yet.
 
-# the data srbf leaves out because its license does not allow sharing it (a section of its own)
+# the data srbf leaves out because its terms forbid republishing it (a section of its own)
 license_section:
-  title: Data srbf may not share
+  title: Data srbf may not republish
   text: >-
-    Every problem srbf runs can be downloaded by anyone, so srbf republishes a benchmark's data only where its license
-    allows it. The data below has no license, or one that does not allow sharing it (for example, a non-commercial
-    license), so srbf leaves it out. Where only some of a benchmark's datasets are affected, srbf keeps the others.
+    Every problem srbf runs can be downloaded by anyone. srbf republishes data under non-commercial terms or with no
+    license, each with its source and terms (see "Data under restricted terms"), but not data whose terms forbid
+    republishing it. The data below is such data, so srbf leaves it out. Where only some of a benchmark's datasets
+    are affected, srbf keeps the others.
 
