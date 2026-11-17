@@ -62,6 +62,9 @@ EXPRESSION_COLUMNS = ["predicted_expression", "ground_truth_expression"]
 COLUMNS = ID_COLUMNS + RATE_COLUMNS + ANALYSIS_COLUMNS + GROUND_TRUTH_COLUMNS + EXPRESSION_COLUMNS
 #: Bumped whenever a row's content changes without a change to srbf's source (it is part of the cache key).
 TABLE_VERSION = 1
+# A fresh pool counts as stalled when nothing is in flight and nothing finishes for stall_timeout; before its first file
+# has started it gets at least this long, since its workers may still be starting (over 3 s at load 16, 2026-11-17).
+POOL_START_GRACE = 60.0
 
 _RECOVERIES = ["numeric_recovery_val", "numeric_recovery_fit", "numeric_recovery_relative_val", "numeric_recovery_relative_fit",
                "symbolic_recovery", "symbolic_recovery_mask_fittable", "symbolic_recovery_mask_none"]
@@ -422,13 +425,17 @@ def _mark(progress_path: str | None, tag: str, index: int, path: str) -> None:
 
 def _judge_job(job: tuple[int, ResultTree, str, str, str | None]) -> tuple[int, list[list[Any]], str | None]:
     """(job index, rows, error). The file is marked in flight while it is judged, so a file that does not finish can be
-    found and stopped."""
+    found and stopped. The worker's engine is loaded first (once per worker): its start is not the file's time."""
     index, tree, path, engine_name, progress_path = job
+    warnings.simplefilter("ignore")
+    try:
+        engine = _worker_engine(engine_name)
+    except Exception as e:  # noqa: BLE001 - reported for the file, as a failed judgement would be
+        return index, [], f"{path}: {type(e).__name__}: {e}"
     _mark(progress_path, "S", index, path)
     try:
-        warnings.simplefilter("ignore")
         try:
-            rows = judge_result_file(path, method=tree.method, draw=tree.draw, engine=_worker_engine(engine_name),
+            rows = judge_result_file(path, method=tree.method, draw=tree.draw, engine=engine,
                                      first_index=tree.first_index)
         except Exception as e:  # noqa: BLE001 - a file that cannot be judged is reported, not fatal
             return index, [], f"{path}: {type(e).__name__}: {e}"
@@ -476,6 +483,8 @@ def build_table(trees: Iterable[ResultTree], out: str, *, engine: str = "acj-5-4
     Files are judged by ``workers`` processes, largest first, and taken as they finish. A file still running
     ``stall_timeout`` seconds after it started is stopped with its pool and judged once more in a fresh one; a file
     that does not finish twice is left out and reported (``STALLED``, ``stalled``), and every other file is judged. A
+    pool in which nothing is in flight and nothing finishes for ``stall_timeout`` (``POOL_START_GRACE`` at least, until
+    its first file has started) is stopped too, and its files are reported. A
     file that cannot be read or judged is reported in ``errors`` and left out (a result file that is still being
     written is the usual cause). ``progress_path`` (a temporary file when not given) records which files are in flight.
 
@@ -533,7 +542,7 @@ def build_table(trees: Iterable[ResultTree], out: str, *, engine: str = "acj-5-4
         while queue:
             remaining = set(queue)
             pool = context.Pool(max(1, workers), maxtasksperchild=25)
-            restart, last = False, time.time()
+            restart, last, begun = False, time.time(), False
             try:
                 results = pool.imap_unordered(_judge, [(i, jobs[i][0], jobs[i][1], engine, progress) for i in queue],
                                               chunksize=1)
@@ -543,6 +552,7 @@ def build_table(trees: Iterable[ResultTree], out: str, *, engine: str = "acj-5-4
                     except PoolTimeout:
                         now = time.time()
                         running = {i: v for i, v in _in_flight(progress).items() if i in remaining}
+                        begun = begun or bool(running)
                         late = [i for i, (started, _p) in running.items() if now - started > stall_timeout]
                         if late:
                             for i in late:
@@ -557,7 +567,10 @@ def build_table(trees: Iterable[ResultTree], out: str, *, engine: str = "acj-5-4
                                     say(f"RETRY {jobs[i][1]}: not finished after {stall_timeout:.0f}s; judging it once more in a fresh worker")
                             restart = True
                             break
-                        if not running and now - last > stall_timeout:   # nothing in flight and nothing finishing
+                        # nothing in flight and nothing finishing; before a fresh pool has started any file its workers
+                        # may still be starting (over 3 s on a busy machine), so it gets at least POOL_START_GRACE
+                        quiet = stall_timeout if begun else max(stall_timeout, POOL_START_GRACE)
+                        if not running and now - last > quiet:
                             say(f"STALLED after {judged}/{len(pending)} files: none finished for {stall_timeout:.0f}s and none in flight")
                             failed |= remaining
                             remaining.clear()
@@ -567,7 +580,7 @@ def build_table(trees: Iterable[ResultTree], out: str, *, engine: str = "acj-5-4
                         continue
                     except StopIteration:
                         break
-                    last = time.time()
+                    last, begun = time.time(), True
                     remaining.discard(i)
                     judged += 1
                     keep(i, rows, err)
