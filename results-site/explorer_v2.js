@@ -528,9 +528,10 @@
   // The results are problem sets > problems > runs. A problem's value is the mean of its runs; a set is its number of
   // problems with a value, their sum and their sum of squares (the exporter's cells). Sets are combined by a random-
   // effects model: weights 1 / (tau^2 + the set's own noise), tau^2 by Paule-Mandel, the 95 % interval over these problem
-  // sets (combineScale), the prediction interval for a new problem set with t on S - 2. Rates on the logit
-  // scale, with the continuity-corrected rate (x n + 0.5) / (n + 1). scripts/site_random_effects.py is the reference:
-  // the same arithmetic, step for step, and the site suite checks that the two agree.
+  // sets (combineScale), the prediction interval for a new problem set with t on S - 2. Rates by the beta-binomial
+  // model (combineRates, owner 2026-11-17), one set as its plain rate with the Wilson interval.
+  // scripts/site_random_effects.py is the reference: the same arithmetic, step for step, and the site suite checks that
+  // the two agree.
   var EPS_VAR = 1e-12;
   function lgamma(x) { var g = 7, c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7]; if (x < 0.5) { return Math.log(Math.PI / Math.sin(Math.PI * x)) - lgamma(1 - x); } x -= 1; var a = c[0], t = x + g + 0.5; for (var i = 1; i < g + 2; i++) { a += c[i] / (x + i); } return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a); }
   function betacf(a, b, x) {
@@ -561,16 +562,15 @@
   function tP(t, df) { return Math.min(1, 2 * (1 - tCdf(Math.abs(t), df))); }
   function expit(x) { return 1 / (1 + Math.exp(-x)); }
   function setVar(st) { if (st.n < 2) { return null; } var m = st.s1 / st.n; return Math.max(0, (st.s2 - st.n * m * m) / (st.n - 1)); }
-  // each set's estimate on the combining scale and its squared standard error; a set with one problem, or whose problems
-  // all have the same value, borrows a spread: a rate its continuity-corrected p(1 - p), any other metric the pooled one
-  function setEstimates(sets, scale) {
+  // each set's mean and its squared standard error, for a metric that is not a rate (rates: combineRates); a set with
+  // one problem, or whose problems all have the same value, borrows the spread pooled over the sets
+  function setEstimates(sets) {
     var num = 0, den = 0, y = [], v = [];
     sets.forEach(function (st) { var vv = setVar(st); if (vv !== null) { num += (st.n - 1) * vv; den += st.n - 1; } });
     var pooled = den > 0 ? num / den : 0;
     sets.forEach(function (st) {
       var own = setVar(st), m = st.s1 / st.n; own = own !== null && own > 0 ? own : null;
-      if (scale === "logit") { var pc = (st.n * m + 0.5) / (st.n + 1), vr = own !== null ? own : pc * (1 - pc); y.push(Math.log(pc / (1 - pc))); v.push(Math.max(EPS_VAR, vr / st.n / Math.pow(pc * (1 - pc), 2))); }
-      else { y.push(m); v.push(Math.max(EPS_VAR, (own !== null ? own : pooled) / st.n)); }
+      y.push(m); v.push(Math.max(EPS_VAR, (own !== null ? own : pooled) / st.n));
     });
     return { y: y, v: v, pooled: pooled };
   }
@@ -598,13 +598,114 @@
     return { mu: mu, lo: mu - tq * se, hi: mu + tq * se, piLo: half === null ? null : mu - half, piHi: half === null ? null : mu + half,
              tau2: tau2, w: w.map(function (x) { return x / sw; }), S: S, p: se > 0 ? tP(mu / se, df) : (mu !== 0 ? 0 : 1) };
   }
+  // ---- rates: the beta-binomial model (owner 2026-11-17) -----------------------------------------------------------
+  // A set's sum k of n problem values is binomial with its set's rate, and the rates follow Beta(m s, (1 - m) s): m is
+  // the mean rate of a problem set, s how tightly the sets cluster. The likelihood is closed-form (log-gamma), so 0 %
+  // and 100 % enter as they are. m and s by maximum likelihood, Newton in (logit m, log s). The reference,
+  // scripts/site_random_effects.py (combine_rates), has the derivation of the interval.
+  var LAM_MIN = -20, LAM_MAX = 15, MAX_STEP = 2, Z975 = 1.959963984540054, RATEMEMO = {};
+  function digamma(x) {
+    var r = 0; while (x < 10) { r -= 1 / x; x += 1; }
+    var f = 1 / (x * x);
+    return r + Math.log(x) - 0.5 / x - f * (1 / 12 - f * (1 / 120 - f * (1 / 252 - f * (1 / 240 - f * (1 / 132)))));
+  }
+  function trigamma(x) {
+    var r = 0; while (x < 10) { r += 1 / (x * x); x += 1; }
+    var f = 1 / (x * x);
+    return r + 1 / x + 0.5 * f + (1 / x) * f * (1 / 6 - f * (1 / 30 - f * (1 / 42 - f * (1 / 30 - f * (5 / 66)))));
+  }
+  function sig(x) { if (x >= 0) { return 1 / (1 + Math.exp(-x)); } var e = Math.exp(x); return e / (1 + e); }
+  // log likelihood (without the binomial coefficients), gradient and Hessian in (eta, lam) = (logit m, log s)
+  function bbMoments(sets, eta, lam) {
+    var m = 1 / (1 + Math.exp(-eta)), s = Math.exp(lam), a = m * s, b = (1 - m) * s, q = m * (1 - m), j;
+    var ll = 0, Da = 0, Db = 0, Haa = 0, Hbb = 0, Hab = 0, lgS = lgamma(s), dgS = digamma(s), tgS = trigamma(s);
+    var lgA = lgamma(a), lgB = lgamma(b), dgA = digamma(a), dgB = digamma(b), tgA = trigamma(a), tgB = trigamma(b);
+    for (j = 0; j < sets.length; j++) {
+      var n = sets[j].n, k = sets[j].s1, dns = digamma(n + s), tns = trigamma(n + s);
+      ll += lgamma(k + a) + lgamma(n - k + b) - lgamma(n + s) - lgA - lgB + lgS;
+      Da += digamma(k + a) - dns - dgA + dgS; Db += digamma(n - k + b) - dns - dgB + dgS;
+      Haa += trigamma(k + a) - tns - tgA + tgS; Hbb += trigamma(n - k + b) - tns - tgB + tgS; Hab += -tns + tgS;
+    }
+    var ae = s * q, be = -s * q, al = a, bl = b;
+    return { ll: ll, ge: ae * Da + be * Db, gl: al * Da + bl * Db,
+             hee: ae * ae * Haa + 2 * ae * be * Hab + be * be * Hbb + (Da - Db) * s * q * (1 - 2 * m),
+             hel: ae * al * Haa + (ae * bl + be * al) * Hab + be * bl * Hbb + (Da - Db) * s * q,
+             hll: al * al * Haa + 2 * al * bl * Hab + bl * bl * Hbb + Da * a + Db * b };
+  }
+  // maximum likelihood (eta, lam) by Newton on |H| (the reference's rate_fit, step for step); lam = Infinity: no spread
+  // beyond the binomial (the pooled rate)
+  function rateFit(sets) {
+    if (sets.every(function (st) { return st.s1 <= 0; })) { return { eta: -Infinity, lam: Infinity }; }
+    if (sets.every(function (st) { return st.s1 >= st.n; })) { return { eta: Infinity, lam: Infinity }; }
+    var N = 0, K = 0, j, it; for (j = 0; j < sets.length; j++) { N += sets[j].n; K += sets[j].s1; }
+    var p0 = K / N, l0 = 0; for (j = 0; j < sets.length; j++) { l0 += sets[j].s1 * Math.log(p0) + (sets[j].n - sets[j].s1) * Math.log(1 - p0); }
+    var eta = Math.log(p0 / (1 - p0)), lam = 0, r = bbMoments(sets, eta, lam), res, etaN, lamN;
+    for (it = 0; it < 100; it++) {
+      var de, dl;
+      if ((lam >= LAM_MAX && r.gl > 0) || (lam <= LAM_MIN && r.gl < 0)) { de = r.hee < 0 ? -r.ge / r.hee : r.ge; dl = 0; }
+      else {
+        var halfTr = 0.5 * (r.hee + r.hll), rad = Math.sqrt(Math.pow(0.5 * (r.hee - r.hll), 2) + r.hel * r.hel), ev1 = halfTr + rad, ev2 = halfTr - rad, v1, v2;
+        if (rad === 0) { v1 = [1, 0]; v2 = [0, 1]; }
+        else if (Math.abs(r.hel) > 0) { var nrm = Math.hypot(ev1 - r.hll, r.hel); v1 = [(ev1 - r.hll) / nrm, r.hel / nrm]; v2 = [-v1[1], v1[0]]; }
+        else if (r.hee >= r.hll) { v1 = [1, 0]; v2 = [0, 1]; } else { v1 = [0, 1]; v2 = [1, 0]; }
+        var floor = 1e-10 * Math.max(1, Math.abs(ev1), Math.abs(ev2));
+        var c1 = (v1[0] * r.ge + v1[1] * r.gl) / Math.max(Math.abs(ev1), floor), c2 = (v2[0] * r.ge + v2[1] * r.gl) / Math.max(Math.abs(ev2), floor);
+        de = c1 * v1[0] + c2 * v2[0]; dl = c1 * v1[1] + c2 * v2[1];
+      }
+      var big = Math.max(Math.abs(de), Math.abs(dl)); if (big > MAX_STEP) { de = de * MAX_STEP / big; dl = dl * MAX_STEP / big; }
+      var step = 1;
+      while (true) {
+        etaN = eta + step * de; lamN = Math.min(LAM_MAX, Math.max(LAM_MIN, lam + step * dl));
+        res = bbMoments(sets, etaN, lamN);
+        if (res.ll >= r.ll - 1e-12 * Math.abs(r.ll) || step < 1e-12) { break; }
+        step *= 0.5;
+      }
+      var moved = Math.max(Math.abs(etaN - eta), Math.abs(lamN - lam)); eta = etaN; lam = lamN; r = res;
+      if (moved <= 1e-10 || Math.max(Math.abs(r.ge), Math.abs(r.gl)) <= 1e-9) { break; }
+    }
+    return l0 >= r.ll ? { eta: Math.log(p0 / (1 - p0)), lam: Infinity } : { eta: eta, lam: lam };
+  }
+  function betaPpf(q, a, b) { var lo = 0, hi = 1, i, mid; for (i = 0; i < 100; i++) { mid = 0.5 * (lo + hi); if (betai(a, b, mid) < q) { lo = mid; } else { hi = mid; } } return 0.5 * (lo + hi); }
+  function wilson(k, n) {
+    var p = k / n, z2 = Z975 * Z975, den = 1 + z2 / n, c = (p + z2 / (2 * n)) / den, h = Z975 * Math.sqrt(p * (1 - p) / n + z2 / (4 * n * n)) / den;
+    return [Math.max(0, c - h), Math.min(1, c + h)];
+  }
+  // rates over problem sets on the 0-1 scale; one set: its plain rate and the Wilson interval
+  function combineRates(sets) {
+    var S = sets.length, N = 0, K = 0, df = 0, j;
+    for (j = 0; j < S; j++) { N += sets[j].n; K += sets[j].s1; df += sets[j].n - 1; }
+    var f = S > 1 ? rateFit(sets) : { eta: 0, lam: 0 };
+    if (S === 1 || !isFinite(f.eta)) {
+      var wi = wilson(K, N);
+      return { mu: K / N, lo: wi[0], hi: wi[1], piLo: null, piHi: null, tau2: 0, w: sets.map(function (st) { return st.n / N; }), S: S, p: null };
+    }
+    var lam = Math.min(f.lam, LAM_MAX), m = 1 / (1 + Math.exp(-f.eta)), s = Math.exp(lam), a = m * s, b = (1 - m) * s, q = m * (1 - m);
+    var dgA = digamma(a), dgB = digamma(b), tgA = trigamma(a), tgB = trigamma(b), num = 0, den = 0, info = [], tot = 0;
+    for (j = 0; j < S; j++) {
+      var n = sets[j].n, k = sets[j].s1, tka = trigamma(k + a), tnb = trigamma(n - k + b);
+      var u = s * q * (digamma(k + a) - dgA - digamma(n - k + b) + dgB), fisher = -Math.pow(s * q, 2) * (tka - tgA + tnb - tgB);
+      info.push(fisher); tot += fisher;
+      var dudk = s * q * (tka + tnb), pt = (k + a) / (n + s);
+      num += dudk * dudk * n * pt * (1 - pt); den += -fisher + u * (1 - 2 * m);
+    }
+    var se = Math.sqrt(num) / Math.abs(den), tq = tq975(Math.max(1, df));
+    return { mu: m, lo: sig(f.eta - tq * se), hi: sig(f.eta + tq * se), piLo: S >= 3 ? betaPpf(0.025, a, b) : null, piHi: S >= 3 ? betaPpf(0.975, a, b) : null,
+             tau2: isFinite(f.lam) ? 1 / s : 0, w: info.map(function (x) { return x / tot; }), S: S, p: null };
+  }
   // sets: [{n, s1, s2, ...}]; a rate ("logit") comes back on its own 0-1 scale. Also: the problems behind it, and n0,
-  // the number of problems at which a set counts half as much as a very large one (sigma^2 / tau^2)
+  // the number of problems at which a set counts half as much as a very large one (sigma^2 / tau^2; not for rates)
   function reCombine(sets, scale) {
     sets = sets.filter(function (st) { return st.n > 0; }); if (!sets.length) { return null; }
-    var e = setEstimates(sets, scale), c = combineScale(e.y, e.v, sets.reduce(function (a, st) { return a + st.n - 1; }, 0));
-    if (scale === "logit") { ["mu", "lo", "hi", "piLo", "piHi"].forEach(function (k) { if (c[k] !== null) { c[k] = expit(c[k]); } }); }
-    c.n = sets.reduce(function (a, st) { return a + st.n; }, 0); c.sets = sets; c.n0 = c.tau2 > 0 ? e.pooled / c.tau2 : Infinity;
+    var c, n0 = Infinity;
+    if (scale === "logit") {   // the same sets give the same fit: remembered, a chart asks for many
+      var key = sets.map(function (st) { return st.n + ":" + st.s1; }).join(",");
+      if (!(key in RATEMEMO)) { RATEMEMO[key] = combineRates(sets); }
+      c = Object.assign({}, RATEMEMO[key]);
+    } else {
+      var e = setEstimates(sets); c = combineScale(e.y, e.v, sets.reduce(function (a, st) { return a + st.n - 1; }, 0));
+      n0 = c.tau2 > 0 ? e.pooled / c.tau2 : Infinity;
+    }
+    c.n = sets.reduce(function (a, st) { return a + st.n; }, 0); c.sets = sets; c.n0 = n0;
     return c;
   }
   function holm(ps) {
