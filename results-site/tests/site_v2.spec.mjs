@@ -13,6 +13,12 @@ function collectErrors(page) {
 }
 const V2 = '#results-explorer-v2';
 // every metric is chosen through the same picker: open the control, click the entry
+// the explorer computes the intervals of rate averages in idle time and draws again once they are in: a test that
+// reads or taps a drawing waits for that, so it sees the page at rest
+async function intervalsIn(page) {
+  await page.waitForFunction(() => document.documentElement.getAttribute('data-rate-intervals') === 'done', null, { timeout: 30000 });
+}
+
 async function pick(page, trigger, key) {
   await trigger.click();
   await expect(page.locator('.v2picker')).toBeVisible();
@@ -610,12 +616,14 @@ test('an untimed method changes nothing else on the time axis', async ({ page })
   await pick(page, page.locator(V2 + ' .v2plot .v2xsel').first(), 'time');
   const chart = page.locator(V2 + ' .v2view svg.v2chart').first();
   await calibrated(chart);
+  await intervalsIn(page);
   const before = await chart.textContent();                           // every drawn point, with its value and its pool
 
   await page.locator(V2 + ' .v2addmopen').click();
   await page.locator(V2 + ' .v2addmkey').fill(FIXTURE_KEY);
   await page.locator(V2 + ' [data-act="add-method-go"]').click();
   await expect(page.locator(V2 + ' .v2methods')).toContainText('Fixture Method', { timeout: 20000 });
+  await intervalsIn(page);
   // the point of the whole arrangement: an uncalibrated method costs its own points and nothing else -- same
   // methods, same values, same matched pool, because it never enters the set the axis is drawn over
   await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toHaveText(before);
@@ -1132,6 +1140,7 @@ test('a headline legend keeps its order while a method cycles: shown, hidden, fa
 test('on a phone a legend tap keeps the page where it is: the tapped name stays under the finger', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
+  await intervalsIn(page);
   const charts = page.locator('.headline-v2 svg.v2chart');
   expect(await charts.count()).toBeGreaterThan(1);
   const last = charts.nth((await charts.count()) - 1);           // a chart far below the first one
@@ -1790,6 +1799,7 @@ test('the release has one home: a title and its update time in the headline role
   const style = (sel) => page.locator(sel).first().evaluate((el) => { const c = getComputedStyle(el); return [c.fontSize, c.fontWeight, c.color, c.textTransform, c.letterSpacing].join(' '); });
   await page.goto('/');
   await expect(page.locator('.headline-v2 .v2hltitle')).toBeVisible();
+  await intervalsIn(page);
   const [hlTitle, hlSub] = [await style('.headline-v2 .v2hltitle'), await style('.headline-v2 .v2hlsub')];
   await page.goto('/explorer.html?release=2026-09&v=curves');
   const head = page.locator(V2 + ' .v2relhead');
