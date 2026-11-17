@@ -16,7 +16,7 @@ where the logit of an observed rate needs a correction ((k + 0.5) / (n + 1) unti
 towards 50 %. The interval follows the same rule as above: s held at its estimate, only the
 problems' sampling within each set, t on sum (n - 1). One set is its plain rate k / n with the Wilson score interval.
 Chosen over the binomial-normal (logit-normal) model by a simulation on srbf's own set sizes (bias, coverage, and the
-quadrature the logit-normal likelihood needs at 0 % and 100 %); the study is in the lab's handoff notes.
+quadrature the logit-normal likelihood needs at 0 % and 100 %); CHANGELOG.md has the numbers.
 
 results-site/explorer_v2.js implements the same arithmetic, step for step (the t distribution below is the same
 continued fraction), so the two agree to rounding; tests/test_site_random_effects.py and the site suite check that.
