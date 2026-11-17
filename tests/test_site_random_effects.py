@@ -91,12 +91,21 @@ def test_sets_without_spread_of_their_own():
 
 
 def test_sets_that_agree_give_the_pooled_rate():
-    # no spread beyond the binomial: the mean rate is the pooled one, its interval the pooled binomial's on the logit scale
+    # no spread beyond the binomial: the mean rate is the pooled one, and inverting the estimating equation, which is then
+    # the binomial score K - N m, gives the pooled rate plus or minus t sqrt(p (1 - p) / N)
     c = re_.combine([re_.SetStat(100, 30.0, 30.0)] * 3, "logit")
     assert c.mu == pytest.approx(0.3, abs=1e-12) and c.tau2 == 0.0
-    half = re_.t_ppf(0.975, 297) / np.sqrt(300 * 0.3 * 0.7)   # (the interval is taken at s = e^15, the cap, not at s = inf)
-    assert (c.lo, c.hi) == pytest.approx((1 / (1 + np.exp(-(np.log(0.3 / 0.7) - half))),
-                                          1 / (1 + np.exp(-(np.log(0.3 / 0.7) + half)))), abs=1e-6)
+    half = re_.t_ppf(0.975, 297) * np.sqrt(0.3 * 0.7 / 300)   # (taken at s = e^15, the cap, not at s = inf)
+    assert (c.lo, c.hi) == pytest.approx((0.3 - half, 0.3 + half), abs=1e-6)
+
+
+def test_one_success_among_sets_at_zero_keeps_a_narrow_interval():
+    # 28 sets at 0 % and one problem of 200 solved in one more: the linearised (delta-method) interval on the log-odds
+    # reached 0 % to 88 % here; inverting the estimating equation keeps it under 1 %
+    sizes = [5301, 200, 200, 150, 120, 120, 100, 90, 33, 25, 20, 15, 12, 12, 10, 8, 8, 8, 6, 6, 6, 2, 2, 2, 1, 1, 1, 1, 1]
+    sets = [re_.SetStat(n, 1.0 if i == 1 else 0.0, 1.0 if i == 1 else 0.0) for i, n in enumerate(sizes)]
+    c = re_.combine(sets, "logit")
+    assert 0.0 <= c.lo <= c.mu < c.hi < 0.01
 
 
 def test_two_sets_at_opposite_ends_say_half_and_little_more():

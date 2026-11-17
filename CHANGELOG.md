@@ -52,6 +52,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (storage key .9), so an earlier visit cannot keep the old default.
 
 ### Fixed
+- **Results site: the interval of a rate average near 0 % and 100 %.** The beta-binomial average's interval was the
+  delta method on the log-odds, which fails where many problem sets sit at 0 % or 100 %: one success in 6,660 problems
+  (E2E, Symbolic Recovery at 8 candidates) showed 0.05 % with an interval of 0 % to 88 %, and 104 of the 2026-09
+  release's 1,267 rate averages had intervals wider than 50 points. The interval now inverts the estimating equation
+  (every mean rate whose score stays within t times the score's standard deviation from the problems' sampling), which
+  equals the old interval where the score is close to linear: that case becomes 0 % to 0.52 %, and one rate average is
+  left wider than 50 points. The averages are unchanged.
 - **Results site: a curve on the time axis follows its method's budgets.** The chart re-sorted every series by x, so on
   the time axis points were joined in the order of their measured times. Where a larger budget was timed faster than a
   smaller one (PySR at 1 and 2 iterations: 2.58 and 2.03 s per problem; E2E at 4 and 8 candidates), the line dipped
