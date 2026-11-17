@@ -29,7 +29,7 @@ one reference machine that runs one problem at a time with nothing else on it, o
 the suite: 262 problems, stratified by catalog, the same instances for every method and every
 budget. The results explorer averages each catalog's mean time over the catalogs like every other
 number it shows (a random-effects average, see
-[the site's guide](https://psaegert.github.io/srbf/guide.html#averaging)), so no catalog decides the
+[How results are averaged](averaging.md)), so no catalog decides the
 time on its own. A fit that returns no prediction does not enter the mean time; how often that happens
 is a metric of its own, the success rate.
 

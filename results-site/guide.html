@@ -224,36 +224,24 @@
         <div>
           <p>
             The problems come in problem sets, and the sets differ a lot, in difficulty and in size:
-            the largest holds 5,301 of the 6,660 problems. A plain average over all
-            problems would mostly describe that one set. Every value is therefore averaged in three
-            steps. First, each problem's runs are averaged, so every problem counts once. Second, each
-            problem set's problems are averaged. Third, the problem sets are averaged, each weighted by
-            how precisely its own average is known, plus an allowance \(\tau^2\) for how much problem
-            sets differ from each other:
-          </p>
-          $$
-            \hat{\theta} = \frac{\sum_s w_s\, \bar{x}_s}{\sum_s w_s},
-            \qquad
-            w_s = \frac{1}{\tau^2 + \sigma_s^2 / n_s},
-          $$
-          <p>
-            where \(\bar{x}_s\) is the average of problem set \(s\) over its \(n_s\) problems and
-            \(\sigma_s^2\) the variance of its problems' values. The allowance \(\tau^2\) is estimated
-            from the data (Paule and Mandel's estimator), the usual way to combine studies that measure
-            the same quantity on different populations. Problem sets differ far more than chance would
-            make them differ, so the allowance dominates: every set counts about the same whatever its
-            size, and a set of only a few problems counts less, because its own average is uncertain.
+            the largest holds 5,301 of the 6,660 problems. A plain average over all problems would
+            mostly describe that one set. Every value is therefore averaged in three steps: each
+            problem's runs, then each problem set's problems, then the problem sets. The last step is
+            the random-effects average used to combine studies of different populations: every set
+            counts about the same whatever its size, and a set of only a few problems counts less,
+            because its own average is uncertain.
           </p>
           <p>
-            Rates, the share of problems a method solves, are averaged with a model made for rates: each
-            problem set has its own rate, the sets' rates spread around their average as a beta
-            distribution, and the problems a set solves follow from its rate. The average is the mean
-            rate of a problem set, and it stays between 0 and 100 %, as does its interval. A set where a
-            method solves every problem, or none, counts as it is, and one problem set on its own shows
-            its plain rate, 8 of 8 as 100 %, with the Wilson interval.
-            Ratios, such as the MDL ratio, are averaged on a log scale, as geometric means:
-            a ratio of 2 and one of 0.5 average to 1. Medians and distributions weigh each problem set
-            as the average does.
+            Rates, the share of problems a method solves, are averaged with a model made for rates, the
+            beta-binomial model, so a set where a method solves every problem, or none, counts as it is.
+            One problem set on its own shows its plain rate, 8 of 8 as 100 %. Ratios, such as the MDL
+            ratio, are averaged as geometric means: a ratio of 2 and one of 0.5 average to 1. Medians
+            and distributions weigh each problem set as the average does.
+          </p>
+          <p>
+            The formulas, why they were chosen and the literature they rest on are in the
+            documentation: <a href="https://srbf.readthedocs.io/en/latest/averaging/" target="_blank"
+            rel="noopener">How results are averaged</a>.
           </p>
         </div>
       </section>
@@ -263,22 +251,12 @@
         <div>
           <p>
             Every value comes with a 95 % interval. It shows how precisely the value is known on the
-            problem sets you selected: the weights of the sets are held fixed, and only the variation
-            between the problems within each set counts. With \(v_s = \sigma_s^2 / n_s\), the squared
-            standard error of set \(s\)'s average,
-          </p>
-          $$
-            \hat{\theta} \;\pm\; t_{0.975}\, \frac{\sqrt{\sum_s w_s^2\, v_s}}{\sum_s w_s} ,
-          $$
-          <p>
-            with \(t\) on \(\sum_s (n_s - 1)\) degrees of freedom, close to 1.96 here. Rates follow the
-            same rule through their model: the spread of the sets' rates is held at its estimate, and only
-            the variation between the problems within each set counts. The interval is
-            about srbf's problem sets, not about problem sets in general. Tables and tooltips also show
-            where the value of one more problem set would fall, with 95 % probability, once at least
-            three problem sets are selected. That range is much wider than the interval: the interval
-            says how precisely the average is known, the range how far single problem sets spread
-            around it.
+            problem sets you selected: only the variation between the problems within each set counts,
+            so a value is a claim about srbf's own problem sets, not about problem sets in general.
+            Tables and tooltips also show where the value of one more problem set would fall, once at
+            least three problem sets are selected. That range is much wider than the interval: the
+            interval says how precisely the average is known, the range how far single problem sets
+            spread around it.
           </p>
         </div>
       </section>

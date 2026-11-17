@@ -117,6 +117,13 @@ resampling. Placeholder rows are dropped, and so are values that are `None`; an 
 not finite is left out, which for `log10_fvu_val` means the expressions that were fitted exactly
 (\(-\infty\)) and the failed predictions (\(+\infty\)). Read it next to the recovery rate.
 
+## Averages over problem sets
+
+`bootstrap_report`, and `srbf analyze` below, take every expression of a run alike, across its benchmarks. The
+[results explorer](https://psaegert.github.io/srbf/) averages over problem sets (catalogs) instead, so that one large
+catalog does not decide the number: [How results are averaged](averaging.md) describes the method, why it was chosen,
+and the literature it rests on.
+
 ## One table for every problem
 
 `srbf table` judges the result files of any number of methods, draws and rungs at once and writes one
