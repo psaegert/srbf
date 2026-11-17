@@ -151,8 +151,9 @@ Every experiment and rung of a config whose result file exists becomes a run; th
 with a note, so the report can be built while an evaluation is still going. The experiment's name
 is the benchmark, a numeric sweep label is the budget, and the method's name comes from `--model`
 or from the adapter block. `report/results.md` holds one row per method at its largest budget,
-pooled over the benchmarks, each cell a bootstrap median with its 95 % interval, for numeric
-recovery, symbolic recovery, skeleton F1, the MDL ratio, log10 FVU and R². `report/figures/` holds the
+each cell the average over the benchmarks with its 95 % interval, as the results explorer averages
+([How results are averaged](averaging.md)): every benchmark counts about the same whatever its size,
+for numeric recovery, symbolic recovery, skeleton F1, the MDL ratio, log10 FVU and R². `report/figures/` holds the
 metric along the budget, per benchmark, and as a distribution over expressions.
 
 ### From Python

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`srbf.aggregate`: the results site's averaging in the package.** `average(problems, kind)` averages per-problem
+  run values over problem sets: `"mean"` (random-effects average, Paule-Mandel between-set variance), `"rate"`
+  (beta-binomial), `"ratio"` (in log2, a geometric mean) or `"median"` (each set weighted as the average weighs it,
+  Woodruff's interval), each with its 95 % interval over these sets and, from three sets, the range for one more set.
+  `combine` and the rest of the site's reference (`scripts/site_random_effects.py`) moved here; that script now loads
+  `src/srbf/aggregate.py` from its checkout, so the site and the package compute the same numbers.
 - **Improvability, Validation (Mean Improvability).** `scripts/improvability.py`: a prediction's validation error
   against the best error a fixed pool reaches on the same problem and points, \((e - e^\ast)/\max(e, e^\ast)\) with \(e\) the RMSE
   in units of the targets' standard deviation (Erickson et al. 2025). Numerically recovered predictions tie (the error
@@ -16,6 +22,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its mean over problems is the Mean Improvability.
 
 ### Changed
+- **`srbf analyze` averages over benchmarks as the results site does.** `leaderboard`, `scaling_table`,
+  `per_benchmark_table`, `export_data` and `build_report` no longer pool every expression of a run across its benchmarks
+  with a bootstrap; each benchmark is a problem set, a problem's value is the mean of its runs (a problem is a catalog
+  row, its runs the draws), and the benchmarks are combined by `srbf.aggregate.average`, so one large benchmark no
+  longer decides a number. The kind of average follows the column (`metric_kind`: rates, ratios, the median for R²,
+  the mean otherwise; `Metric.kind` overrides it). The columns change with it: a leaderboard has `<label>`,
+  `<label> lo`, `<label> hi` and `n_benchmarks` (was `<label> median`); `scaling_table` and `export_data` carry
+  `value` (was `median`). The `n_bootstrap` and `interval` parameters are gone; `bootstrap_report` itself is unchanged.
 - **Results site: rates are averaged by the beta-binomial model, and a single problem set shows its plain rate.**
   Rates were averaged on the logit scale, which needs a corrected rate, (k + 0.5) / (n + 1), for sets at 0 % or 100 %.
   The correction pulls a set towards 50 % by up to 0.5 / (n + 1): a single problem set showed 8 of 8 problems as
