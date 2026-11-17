@@ -245,8 +245,13 @@
             size, and a set of only a few problems counts less, because its own average is uncertain.
           </p>
           <p>
-            Rates are averaged on the log-odds scale, which keeps them and their intervals between 0
-            and 100 %. Ratios, such as the MDL ratio, are averaged on a log scale, as geometric means:
+            Rates, the share of problems a method solves, are averaged with a model made for rates: each
+            problem set has its own rate, the sets' rates spread around their average as a beta
+            distribution, and the problems a set solves follow from its rate. The average is the mean
+            rate of a problem set, and it stays between 0 and 100 %, as does its interval. A set where a
+            method solves every problem, or none, counts as it is, and one problem set on its own shows
+            its plain rate, 8 of 8 as 100 %, with the Wilson interval.
+            Ratios, such as the MDL ratio, are averaged on a log scale, as geometric means:
             a ratio of 2 and one of 0.5 average to 1. Medians and distributions weigh each problem set
             as the average does.
           </p>
@@ -266,7 +271,9 @@
             \hat{\theta} \;\pm\; t_{0.975}\, \frac{\sqrt{\sum_s w_s^2\, v_s}}{\sum_s w_s} ,
           $$
           <p>
-            with \(t\) on \(\sum_s (n_s - 1)\) degrees of freedom, close to 1.96 here. The interval is
+            with \(t\) on \(\sum_s (n_s - 1)\) degrees of freedom, close to 1.96 here. Rates follow the
+            same rule through their model: the spread of the sets' rates is held at its estimate, and only
+            the variation between the problems within each set counts. The interval is
             about srbf's problem sets, not about problem sets in general. Tables and tooltips also show
             where the value of one more problem set would fall, with 95 % probability, once at least
             three problem sets are selected. That range is much wider than the interval: the interval

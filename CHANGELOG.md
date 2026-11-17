@@ -16,6 +16,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its mean over problems is the Mean Improvability.
 
 ### Changed
+- **Results site: rates are averaged by the beta-binomial model, and a single problem set shows its plain rate.**
+  Rates were averaged on the logit scale, which needs a corrected rate, (k + 0.5) / (n + 1), for sets at 0 % or 100 %.
+  The correction pulls a set towards 50 % by up to 0.5 / (n + 1): a single problem set showed 8 of 8 problems as
+  94.4 % and 1 of 1 as 75 %. On the 2026-09 release 12,844 of 35,931 single-set cells were 5 points or more away
+  from their plain rate. The sets' rates now follow a beta distribution and each set's count of solved problems a
+  binomial; the likelihood is closed-form, so 0 % and 100 % enter as they are, and the average is the mean rate of a
+  problem set. Its interval keeps the rule of every other metric (the spread held at its estimate, only the problems'
+  sampling within each set); the range for one more set is the fitted beta distribution's 2.5 % to 97.5 %. One set
+  alone is its plain rate with the Wilson interval. In a simulation on srbf's own set sizes (true rates fixed, problems
+  redrawn), the corrected average missed by 5 to 6 points on average and its 95 % interval covered the truth in 6 to
+  32 % of the repetitions; the beta-binomial average missed by 0.7 to 1.1 points and covered it in 93 to 96 %.
 - **Results site: the Flash-ANSR prior starts unchecked in the explorer.** A method can be marked `off` in the exporter's
   `METHOD_STYLE`; the explorer leaves it out of its default selection, and a link naming it or its checkbox shows it.
   The prior is the first such method. The headline charts are unchanged. Saved explorer settings start over once
