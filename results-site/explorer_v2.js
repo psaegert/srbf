@@ -753,14 +753,15 @@
     return [ends[0] === -Infinity ? 0 : sig(ends[0]), ends[1] === Infinity ? 1 : sig(ends[1])];
   }
   // rates over problem sets on the 0-1 scale; one set: its plain rate and the Wilson interval. The interval inverts Rao's
-  // score test (see the reference's combine_rates)
-  function combineRates(sets) {
+  // score test (see the reference's combine_rates). rateCore is the fit without the interval; the interval is the part
+  // that costs (about 5 ms over 29 sets, up to 60 ms over 192), added by rateFinish
+  function rateCore(sets) {
     var S = sets.length, N = 0, K = 0, df = 0, j;
     for (j = 0; j < S; j++) { N += sets[j].n; K += sets[j].s1; df += sets[j].n - 1; }
     var f = S > 1 ? rateFit(sets) : { eta: 0, lam: 0 };
     if (S === 1 || !isFinite(f.eta)) {
       var wi = wilson(K, N);
-      return { mu: K / N, lo: wi[0], hi: wi[1], piLo: null, piHi: null, tau2: 0, w: sets.map(function (st) { return st.n / N; }), S: S, p: null };
+      return { mu: K / N, lo: wi[0], hi: wi[1], piLo: null, piHi: null, tau2: 0, w: sets.map(function (st) { return st.n / N; }), S: S, p: null, ci: null };
     }
     var lam = Math.min(f.lam, LAM_MAX), m = 1 / (1 + Math.exp(-f.eta)), s = Math.exp(lam), a = m * s, b = (1 - m) * s, q = m * (1 - m);
     var tgA = trigamma(a), tgB = trigamma(b), info = [], tot = 0;
@@ -768,9 +769,55 @@
       var fisher = -Math.pow(s * q, 2) * (trigamma(sets[j].s1 + a) - tgA + trigamma(sets[j].n - sets[j].s1 + b) - tgB);
       info.push(fisher); tot += fisher;
     }
-    var tq = tq975(Math.max(1, df)), ci = rateInterval(sets, f.eta, f.lam, tq * tq);
-    return { mu: m, lo: Math.min(ci[0], m), hi: Math.max(ci[1], m), piLo: S >= 3 ? betaPpf(0.025, a, b) : null, piHi: S >= 3 ? betaPpf(0.975, a, b) : null,
-             tau2: isFinite(f.lam) ? 1 / s : 0, w: info.map(function (x) { return x / tot; }), S: S, p: null };
+    var tq = tq975(Math.max(1, df));
+    return { mu: m, lo: NaN, hi: NaN, piLo: S >= 3 ? betaPpf(0.025, a, b) : null, piHi: S >= 3 ? betaPpf(0.975, a, b) : null,
+             tau2: isFinite(f.lam) ? 1 / s : 0, w: info.map(function (x) { return x / tot; }), S: S, p: null, ci: { eta: f.eta, lam: f.lam, t2: tq * tq } };
+  }
+  function rateFinish(core, sets) {
+    var lo = core.lo, hi = core.hi;
+    if (core.ci) { var ci = rateInterval(sets, core.ci.eta, core.ci.lam, core.ci.t2); lo = Math.min(ci[0], core.mu); hi = Math.max(ci[1], core.mu); }
+    return { mu: core.mu, lo: lo, hi: hi, piLo: core.piLo, piHi: core.piHi, tau2: core.tau2, w: core.w, S: core.S, p: null };
+  }
+  function combineRates(sets) { return rateFinish(rateCore(sets), sets); }
+  // Rate intervals in idle time. A drawing computes the intervals it needs while it is within RATE_SYNC_MS of its start;
+  // the rest are drawn without one (no whisker, "…" for the numbers), queued, computed while the browser is idle, and
+  // drawn once they are all in (on a long queue, at most every RATE_REDRAW_MS). A new drawing drops the queue the last one left, so a
+  // selection that changes fast never waits on intervals no one sees any more. Outside a drawing, every interval is
+  // computed at once.
+  var RATECORE = {}, RATEQ = [], RATEQUEUED = {}, RATE_SYNC_MS = 40, RATE_REDRAW_MS = 1000, rateSyncEnd = Infinity, ratePumping = false, rateFresh = false, rateDrawnAt = 0;
+  function rateIdle(fn) { if (window.requestIdleCallback) { window.requestIdleCallback(fn, { timeout: 100 }); } else { setTimeout(function () { fn(null); }, 0); } }
+  function ratePump(deadline) {
+    var t0 = Date.now(), first = true;
+    while (RATEQ.length) {
+      var left = deadline && deadline.timeRemaining ? deadline.timeRemaining() : 12 - (Date.now() - t0);
+      if (!first && left < 2) { break; }
+      first = false;
+      var job = RATEQ.shift(); delete RATEQUEUED[job.key];
+      if (!(job.key in RATEMEMO)) { RATEMEMO[job.key] = rateFinish(job.core, job.sets); rateFresh = true; }
+    }
+    if (rateFresh && (!RATEQ.length || Date.now() - rateDrawnAt >= RATE_REDRAW_MS)) { rateFresh = false; ratePumping = false; rateRedraw(); return; }
+    if (RATEQ.length) { rateIdle(ratePump); } else { ratePumping = false; }
+  }
+  // the drawing that brings intervals in: the reader did nothing, so it waits while a picker or a help text is open,
+  // and a legend entry they had focused keeps the focus
+  function rateRedraw() {
+    if (document.querySelector(".v2picker, .v2pop:not(.v2ctip)")) { setTimeout(rateRedraw, 300); return; }   // never close what the reader opened
+    var a = document.activeElement, charts, keep = null;
+    if (a && a.getAttribute && a.getAttribute("data-cycle") !== null && a.closest("svg.v2chart")) {
+      charts = Array.prototype.slice.call(document.querySelectorAll("svg.v2chart"));
+      keep = { chart: charts.indexOf(a.closest("svg.v2chart")), cycle: a.getAttribute("data-cycle") };
+    }
+    render();
+    if (keep && keep.chart >= 0) {
+      var c = document.querySelectorAll("svg.v2chart")[keep.chart], el = c && c.querySelector('[data-cycle="' + keep.cycle + '"]');
+      if (el && el.focus) { el.focus({ preventScroll: true }); }
+    }
+  }
+  function rateDrawStart() { RATEQ = []; RATEQUEUED = {}; rateSyncEnd = Date.now() + RATE_SYNC_MS; rateDrawnAt = Date.now(); }
+  function rateDrawEnd() {
+    rateSyncEnd = Infinity;
+    document.documentElement.setAttribute("data-rate-intervals", RATEQ.length ? "pending" : "done");
+    if (RATEQ.length && !ratePumping) { ratePumping = true; rateIdle(ratePump); }
   }
   // sets: [{n, s1, s2, ...}]; a rate ("logit") comes back on its own 0-1 scale. Also: the problems behind it, and n0,
   // the number of problems at which a set counts half as much as a very large one (sigma^2 / tau^2; not for rates)
@@ -779,8 +826,12 @@
     var c, n0 = Infinity;
     if (scale === "logit") {   // the same sets give the same fit: remembered, a chart asks for many
       var key = sets.map(function (st) { return st.n + ":" + st.s1; }).join(",");
-      if (!(key in RATEMEMO)) { RATEMEMO[key] = combineRates(sets); }
-      c = Object.assign({}, RATEMEMO[key]);
+      if (!(key in RATEMEMO)) {
+        var core = RATECORE[key] || (RATECORE[key] = rateCore(sets));
+        if (!core.ci || Date.now() < rateSyncEnd) { RATEMEMO[key] = rateFinish(core, sets); }
+        else if (!(key in RATEQUEUED)) { RATEQUEUED[key] = true; RATEQ.push({ key: key, core: core, sets: sets }); }
+      }
+      c = key in RATEMEMO ? Object.assign({}, RATEMEMO[key]) : Object.assign({}, rateFinish({ mu: RATECORE[key].mu, lo: NaN, hi: NaN, piLo: RATECORE[key].piLo, piHi: RATECORE[key].piHi, tau2: RATECORE[key].tau2, w: RATECORE[key].w, S: RATECORE[key].S, ci: null }, sets), { ciPending: true });
     } else {
       var e = setEstimates(sets); c = combineScale(e.y, e.v, sets.reduce(function (a, st) { return a + st.n - 1; }, 0));
       n0 = c.tau2 > 0 ? e.pooled / c.tau2 : Infinity;
@@ -877,7 +928,7 @@
     var fit, out;
     if (metric.kind === "rate") {
       fit = reCombine(cells.map(function (c) { var t = c.m[metric.key]; return t ? { n: t[0], s1: t[1], s2: t[2] } : { n: 0 }; }), "logit");
-      return fit ? { v: fit.mu, lo: fit.lo, hi: fit.hi, piLo: fit.piLo, piHi: fit.piHi, n: fit.n, S: fit.S, share: 1 } : null;
+      return fit ? { v: fit.mu, lo: fit.lo, hi: fit.hi, piLo: fit.piLo, piHi: fit.piHi, n: fit.n, S: fit.S, share: 1, ciPending: !!fit.ciPending } : null;
     }
     var share = validShare(metric, cells);
     if (statOf(metric) === "mean") {
@@ -1189,7 +1240,7 @@
     shown.forEach(function (m) { var pts = [];
       D.rungs.forEach(function (r) { var use = poolCats(m.key, r, keys); if (!use.length) { return; } var x = xOf(m.key, r, use, src); if (x === null) { return; }
         var st = stat(metric, m.key, r, use); if (!st) { return; } if (st.pending) { pending = true; return; } if (!isFinite(st.v)) { return; }
-        var title = m.label + " at budget " + r + (state.xaxis === "time" ? " (" + x.toFixed(2) + " s per problem)" : "") + ": " + fmt(metric, st.v, st.edge) + " (95 % interval " + fmt(metric, st.lo) + " to " + fmt(metric, st.hi) + rangeText(metric, st) + "). " + problemsText(st, use) + (st.share < 1 ? "; " + shareText(st) : "") + ".";
+        var title = m.label + " at budget " + r + (state.xaxis === "time" ? " (" + x.toFixed(2) + " s per problem)" : "") + ": " + fmt(metric, st.v, st.edge) + " (95 % interval " + (st.ciPending ? "still being computed" : fmt(metric, st.lo) + " to " + fmt(metric, st.hi)) + rangeText(metric, st) + "). " + problemsText(st, use) + (st.share < 1 ? "; " + shareText(st) : "") + ".";
         if (thin(st)) { thinDrawn = true; }
         pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, hollow: thin(st), end: endsAt(m.key, r), title: withEnd(m.key, r, title) });   // a budget has no interval: the candidate count is exact, and the measured time is within a pixel of its mean (0.4-1.1 px, measured)
         [st.v, anyCI() ? st.lo : st.v, anyCI() ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
@@ -1348,7 +1399,7 @@
   var rangeShown = false, tweenShown = false;   // tweenShown: a table cell held a number between two budgets
   function cellText(st, p) { if (!st) { return ""; } if (st.pending) { return "…"; } if (thin(st)) { thinDrawn = true; } var pi = anyCI() && st.piLo !== null && st.piLo !== undefined; if (pi) { rangeShown = true; }
     if (st.between) { tweenShown = true; }
-    return (st.between ? '<span class="v2tween" title="' + esc(tweenText(st.between)) + '">\u2248</span>' : "") + (thin(st) ? '<span title="' + esc(shareText(st)) + '">' + THIN_MARK + "</span>" : "") + fmt(p, st.v, st.edge) + (anyCI() ? ' <span class="v2ci-txt">[' + fmt(p, st.lo) + ", " + fmt(p, st.hi) + "]</span>" : "") + (pi ? '<br><span class="v2ci-txt">one set: ' + fmt(p, st.piLo) + " to " + fmt(p, st.piHi) + "</span>" : ""); }
+    return (st.between ? '<span class="v2tween" title="' + esc(tweenText(st.between)) + '">\u2248</span>' : "") + (thin(st) ? '<span title="' + esc(shareText(st)) + '">' + THIN_MARK + "</span>" : "") + fmt(p, st.v, st.edge) + (anyCI() ? ' <span class="v2ci-txt">[' + (st.ciPending ? "\u2026" : fmt(p, st.lo) + ", " + fmt(p, st.hi)) + "]</span>" : "") + (pi ? '<br><span class="v2ci-txt">one set: ' + fmt(p, st.piLo) + " to " + fmt(p, st.piHi) + "</span>" : ""); }
   function renderTable(shown) {
     var plots = plotMetrics().map(function (k) { return METRIC[k]; }); var keys = shown.map(function (m) { return m.key; });
     if (!plots.length || !shown.length) { return '<p class="v2hint">Select at least one method and one metric.</p>'; }
@@ -1565,8 +1616,8 @@
     cats.forEach(function (c, i) { var yy = T + (i + 0.5) * rowH; s += '<text x="' + (Lw - 8) + '" y="' + (yy + 4) + '" class="tick" text-anchor="end">' + esc(c) + " · " + CAT[c].laws + "</text>";
       if (i % 2) { s += '<rect x="' + Lw + '" y="' + (yy - rowH / 2) + '" width="' + (W - Lw - R) + '" height="' + rowH + '" class="v2stripe"/>'; }
       present.forEach(function (m, j) { var st = cell(m.key, c, r) ? stat(p, m.key, r, [c]) : null; if (!st) { return; } var yj = yy + (j - (present.length - 1) / 2) * 7, col = colorOf(m);
-        s += '<line x1="' + xs(st.lo).toFixed(1) + '" y1="' + yj.toFixed(1) + '" x2="' + xs(st.hi).toFixed(1) + '" y2="' + yj.toFixed(1) + '" stroke="' + col + '" stroke-width="2" stroke-opacity="0.4"/>';
-        s += '<circle cx="' + xs(st.v).toFixed(1) + '" cy="' + yj.toFixed(1) + '" r="3.2" fill="' + col + '"><title>' + esc(m.label + " on " + c + ": " + fmt(p, st.v) + ", 95 % interval " + fmt(p, st.lo) + " to " + fmt(p, st.hi) + ", from " + Math.round(st.n).toLocaleString() + " problems") + "</title></circle>"; }); });
+        if (isFinite(st.lo) && isFinite(st.hi)) { s += '<line x1="' + xs(st.lo).toFixed(1) + '" y1="' + yj.toFixed(1) + '" x2="' + xs(st.hi).toFixed(1) + '" y2="' + yj.toFixed(1) + '" stroke="' + col + '" stroke-width="2" stroke-opacity="0.4"/>'; }
+        s += '<circle cx="' + xs(st.v).toFixed(1) + '" cy="' + yj.toFixed(1) + '" r="3.2" fill="' + col + '"><title>' + esc(m.label + " on " + c + ": " + fmt(p, st.v) + ", 95 % interval " + (st.ciPending ? "still being computed" : fmt(p, st.lo) + " to " + fmt(p, st.hi)) + ", from " + Math.round(st.n).toLocaleString() + " problems") + "</title></circle>"; }); });
     var ly = Hh - B1 + 34; present.forEach(function (m) { s += '<circle cx="' + (Lw + 6) + '" cy="' + ly + '" r="4" fill="' + colorOf(m) + '"/><text x="' + (Lw + 16) + '" y="' + (ly + 4) + '" class="leg">' + esc(m.label + (m.local ? " (local)" : "")) + "</text>"; ly += 18; });
     return swap + s + "</svg>" + '<p class="v2hint">One row per problem set, largest first; one dot per method with its ' + term("interval", "95 % interval") + ".</p>" + missingNote(shown, present, "any selected problem set at " + posText(r), r, true) + tweenNote(present, r);
   }
@@ -2816,7 +2867,8 @@
   }
   var rt = null;
   function scheduleRender() { clearTimeout(rt); rt = setTimeout(render, 30); }
-  function render() {
+  function render() { rateDrawStart(); try { renderNow(); } finally { rateDrawEnd(); } }
+  function renderNow() {
     if (!root) {   // the home page: the headline, and the release's line of progress where the page has a place for it
       renderHeadline();
       var pl = document.getElementById("results-progress-v2");
