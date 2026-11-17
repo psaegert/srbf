@@ -30,6 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the mean otherwise; `Metric.kind` overrides it). The columns change with it: a leaderboard has `<label>`,
   `<label> lo`, `<label> hi` and `n_benchmarks` (was `<label> median`); `scaling_table` and `export_data` carry
   `value` (was `median`). The `n_bootstrap` and `interval` parameters are gone; `bootstrap_report` itself is unchanged.
+- **Documentation: how results are averaged, with the literature it rests on.** A new docs page, "How results are
+  averaged", gives the explorer's method in full: the three steps, the random-effects average, the beta-binomial model
+  for rates, medians, the interval about these problem sets and the range for one more set, the simulation behind the
+  choice for rates, how the explorer's numbers differ from `srbf analyze`'s, and its sources. The site's guide keeps a
+  short account of the steps and links to it.
 - **Results site: rates are averaged by the beta-binomial model, and a single problem set shows its plain rate.**
   Rates were averaged on the logit scale, which needs a corrected rate, (k + 0.5) / (n + 1), for sets at 0 % or 100 %.
   The correction pulls a set towards 50 % by up to 0.5 / (n + 1): a single problem set showed 8 of 8 problems as
