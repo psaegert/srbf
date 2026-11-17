@@ -117,6 +117,78 @@ resampling. Placeholder rows are dropped, and so are values that are `None`; an 
 not finite is left out, which for `log10_fvu_val` means the expressions that were fitted exactly
 (\(-\infty\)) and the failed predictions (\(+\infty\)). Read it next to the recovery rate.
 
+## Averages over problem sets (the results site)
+
+`bootstrap_report` and `srbf analyze` (below) treat every expression alike, across all benchmarks of a run. The
+[results explorer](https://psaegert.github.io/srbf/) averages differently, and its numbers therefore differ from
+theirs whenever the benchmarks differ in size. In srbf's suite one catalog, `erbench-syneq`, holds 5,301 of the
+6,660 problems, so a number taken over all expressions is mostly a number on that catalog. The explorer averages
+in three steps instead:
+
+1. A problem's value is the mean of its runs, so every problem counts once.
+2. A catalog (a problem set) is summarised by the mean \(\bar{x}_s\) and variance \(\sigma_s^2\) of its
+   \(n_s\) problems' values.
+3. The catalogs are combined by a random-effects average, the standard way to combine studies that measure the
+   same quantity in different populations ([DerSimonian and Laird 1986](https://doi.org/10.1016/0197-2456(86)90046-2)):
+
+$$
+\hat{\theta} = \frac{\sum_s w_s\, \bar{x}_s}{\sum_s w_s},
+\qquad
+w_s = \frac{1}{\tau^2 + \sigma_s^2 / n_s} .
+$$
+
+The between-catalog variance \(\tau^2\) is estimated by Paule and Mandel's estimator
+([Paule and Mandel 1982](https://doi.org/10.6028/jres.087.022)), which a review of the estimators recommends
+([Veroniki et al. 2016](https://doi.org/10.1002/jrsm.1164)). Catalogs differ far more than their own sampling
+noise, so \(\tau^2\) dominates the weights: on the 2026-09 release, `erbench-syneq` (79 % of the problems) carries
+about 5 % of the weight of an average over the 29 catalogs, against 3.4 % for an equal share, and a catalog of one
+or two problems about 2 %. Ratios such as the MDL ratio are averaged on a log scale (geometric means).
+
+**Rates** (numeric and symbolic recovery and every other share of problems) are averaged by the beta-binomial
+model ([Skellam 1948](https://doi.org/10.1111/j.2517-6161.1948.tb00014.x)): a catalog's sum \(k_s\) of problem
+values is binomial with the catalog's own rate, and the catalogs' rates follow a beta distribution with mean
+\(m\),
+
+$$
+k_s \sim \operatorname{Binomial}(n_s,\, p_s),
+\qquad
+p_s \sim \operatorname{Beta}\big(m\,\nu,\ (1 - m)\,\nu\big),
+$$
+
+with \(m\), the mean rate of a catalog, and the concentration \(\nu\) estimated by maximum likelihood
+([Griffiths 1973](https://doi.org/10.2307/2529131)). The likelihood is closed-form, so catalogs at 0 % or 100 %
+enter as they are ([Kuss 2015](https://doi.org/10.1002/sim.6383)). Averaging the log-odds of the catalogs' rates
+would need a continuity correction for those, such as \((k + 0.5)/(n + 1)\), and such corrections bias small
+catalogs towards 50 % ([Sweeting et al. 2004](https://doi.org/10.1002/sim.1761)). A catalog of one or two
+problems carries under 1 % of a rate average's weight, since one problem says little about its catalog's rate.
+A single catalog is shown as its plain rate \(k/n\) with the Wilson interval
+([Wilson 1927](https://doi.org/10.1080/01621459.1927.10502953)), whose coverage stays close to 95 % even for a few
+problems ([Brown, Cai and DasGupta 2001](https://doi.org/10.1214/ss/1009213286)).
+
+**Intervals.** The 95 % interval is about the selected catalogs themselves: the weights (for rates, \(\nu\)) are
+held at their estimates and only the sampling of problems within each catalog counts, the reading of a weighted
+average of these catalogs' own values ([Rice, Higgins and Lumley 2018](https://doi.org/10.1111/rssa.12275)):
+
+$$
+\hat{\theta} \pm t_{0.975}\, \frac{\sqrt{\sum_s w_s^2\, \sigma_s^2 / n_s}}{\sum_s w_s},
+$$
+
+with \(t\) on \(\sum_s (n_s - 1)\) degrees of freedom. For rates the same rule goes through the model's estimating
+equation, as a sandwich variance (Huber 1967, *Proceedings of the Fifth Berkeley Symposium on Mathematical
+Statistics and Probability* 1, 221–233). Where a single further catalog would fall is a separate range,
+\(\hat{\theta} \pm t_{0.975,\,S-2} \sqrt{\tau^2 + 1/\sum_s w_s}\) for \(S\) catalogs
+([Higgins, Thompson and Spiegelhalter 2009](https://doi.org/10.1111/j.1467-985X.2008.00552.x)), and for rates the
+2.5 % to 97.5 % range of the fitted beta distribution.
+
+In a simulation on srbf's own catalog sizes (the 29 catalogs of the 2026-09 release and the 192 problem sets of
+the next one; true rates fixed, problems drawn anew 100 times in each of 96 settings), the beta-binomial average
+missed by 0.7 to 1.1 points on average and its interval held the true value 93 to 96 % of the time; the log-odds
+average with the continuity correction missed by 5 to 6 points and held it 6 to 32 % of the time.
+
+The reference implementation is `scripts/site_random_effects.py`; the explorer runs the same arithmetic, and the
+site's test suite checks that the two agree. The [site's guide](https://psaegert.github.io/srbf/guide.html#averaging)
+explains the same steps for a reader of the results.
+
 ## One table for every problem
 
 `srbf table` judges the result files of any number of methods, draws and rungs at once and writes one

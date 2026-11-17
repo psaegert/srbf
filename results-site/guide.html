@@ -238,19 +238,45 @@
           $$
           <p>
             where \(\bar{x}_s\) is the average of problem set \(s\) over its \(n_s\) problems and
-            \(\sigma_s^2\) the variance of its problems' values. The allowance \(\tau^2\) is estimated
-            from the data (Paule and Mandel's estimator), the usual way to combine studies that measure
-            the same quantity on different populations. Problem sets differ far more than chance would
-            make them differ, so the allowance dominates: every set counts about the same whatever its
-            size, and a set of only a few problems counts less, because its own average is uncertain.
+            \(\sigma_s^2\) the variance of its problems' values. This is the random-effects average used
+            to combine studies that measure the same quantity in different populations
+            (<a href="#ref-dersimonian">DerSimonian and Laird 1986</a>): each problem set is such a
+            population, with its own true value. The allowance \(\tau^2\) is estimated from the data by
+            Paule and Mandel's estimator (<a href="#ref-paule">Paule and Mandel 1982</a>), which a review
+            of the estimators recommends for this purpose
+            (<a href="#ref-veroniki">Veroniki et al. 2016</a>). Problem sets differ far more than chance
+            would make them differ, so the allowance dominates: every set counts about the same whatever
+            its size, and a set of only a few problems counts less, because its own average is
+            uncertain. In the current release the largest set, with 79 % of the problems, carries about
+            5 % of the weight of a typical average, against 3.4 % for an equal share, and a set of one or
+            two problems about 2 %.
           </p>
           <p>
-            Rates, the share of problems a method solves, are averaged with a model made for rates: each
-            problem set has its own rate, the sets' rates spread around their average as a beta
-            distribution, and the problems a set solves follow from its rate. The average is the mean
-            rate of a problem set, and it stays between 0 and 100 %, as does its interval. A set where a
-            method solves every problem, or none, counts as it is, and one problem set on its own shows
-            its plain rate, 8 of 8 as 100 %, with the Wilson interval.
+            Rates, the share of problems a method solves, are averaged with a model made for rates, the
+            beta-binomial model (<a href="#ref-skellam">Skellam 1948</a>). Each problem set \(s\) has its
+            own rate \(p_s\), the sets' rates spread around their mean \(m\) as a beta distribution, and
+            the problems a set solves follow from its rate:
+          </p>
+          $$
+            k_s \sim \operatorname{Binomial}(n_s,\, p_s),
+            \qquad
+            p_s \sim \operatorname{Beta}\big(m\,\nu,\ (1 - m)\,\nu\big),
+          $$
+          <p>
+            where \(k_s\) is the sum of the set's problem values and \(\nu\) says how closely the sets'
+            rates cluster around \(m\). The average is \(m\), the mean rate of a problem set, estimated
+            together with \(\nu\) by maximum likelihood (<a href="#ref-griffiths">Griffiths 1973</a>);
+            it stays between 0 and 100 %, as does its interval. A set where a method solves every
+            problem, or none, counts as it is. Averaging rates on the log-odds scale instead would need a
+            correction for such sets, such as \((k + 0.5)/(n + 1)\), and corrections like it pull small
+            sets towards 50 % (<a href="#ref-sweeting">Sweeting et al. 2004</a>); the beta-binomial
+            model needs none (<a href="#ref-kuss">Kuss 2015</a>). For rates a set of one or two problems
+            counts less than for other values, under 1 % of the weight, because a single problem says
+            little about its set's rate. One problem set on its own shows its plain rate, 8 of 8 as
+            100 %, with the Wilson interval (<a href="#ref-wilson">Wilson 1927</a>), which stays close to
+            95 % even for a few problems (<a href="#ref-brown">Brown, Cai and DasGupta 2001</a>).
+          </p>
+          <p>
             Ratios, such as the MDL ratio, are averaged on a log scale, as geometric means:
             a ratio of 2 and one of 0.5 average to 1. Medians and distributions weigh each problem set
             as the average does.
@@ -264,7 +290,10 @@
           <p>
             Every value comes with a 95 % interval. It shows how precisely the value is known on the
             problem sets you selected: the weights of the sets are held fixed, and only the variation
-            between the problems within each set counts. With \(v_s = \sigma_s^2 / n_s\), the squared
+            between the problems within each set counts. A value is then a claim about srbf's own
+            problem sets, a weighted average of their values, as in the reading of such averages by
+            <a href="#ref-rice">Rice, Higgins and Lumley (2018)</a>; problem sets in general would need
+            the spread between sets in the interval too. With \(v_s = \sigma_s^2 / n_s\), the squared
             standard error of set \(s\)'s average,
           </p>
           $$
@@ -272,14 +301,67 @@
           $$
           <p>
             with \(t\) on \(\sum_s (n_s - 1)\) degrees of freedom, close to 1.96 here. Rates follow the
-            same rule through their model: the spread of the sets' rates is held at its estimate, and only
-            the variation between the problems within each set counts. The interval is
-            about srbf's problem sets, not about problem sets in general. Tables and tooltips also show
-            where the value of one more problem set would fall, with 95 % probability, once at least
-            three problem sets are selected. That range is much wider than the interval: the interval
-            says how precisely the average is known, the range how far single problem sets spread
-            around it.
+            same rule through their model: \(\nu\) is held at its estimate, the sets' rates are fixed, and
+            only the variation between the problems within each set counts, carried through the model's
+            estimating equation (<a href="#ref-huber">Huber 1967</a>). In a simulation on srbf's own
+            problem set sizes, with known rates and the problems drawn anew 100 times in each of 96
+            settings, the rate averages missed by 0.7 to 1.1 points on average and their intervals held
+            the true value 93 to 96 % of the time.
           </p>
+          <p>
+            Tables and tooltips also show where the value of one more problem set would fall, with 95 %
+            probability, once at least three problem sets are selected: the average plus or minus \(t\)
+            on \(S - 2\) degrees of freedom times \(\sqrt{\tau^2 + 1/\sum_s w_s}\) for \(S\) problem sets
+            (<a href="#ref-higgins">Higgins, Thompson and Spiegelhalter 2009</a>), and for rates the
+            2.5 % to 97.5 % range of the fitted beta distribution. That range is much wider than the
+            interval: the interval says how precisely the average is known, the range how far single
+            problem sets spread around it.
+          </p>
+        </div>
+      </section>
+
+      <section class="topic" id="averaging-sources">
+        <h3>Sources for the averaging</h3>
+        <div>
+          <ul class="protocol">
+            <li id="ref-brown">Brown, L. D., Cai, T. T. and DasGupta, A. (2001). Interval estimation for a binomial
+              proportion. <i>Statistical Science</i> 16(2), 101&ndash;133.
+              <a href="https://doi.org/10.1214/ss/1009213286">doi:10.1214/ss/1009213286</a></li>
+            <li id="ref-dersimonian">DerSimonian, R. and Laird, N. (1986). Meta-analysis in clinical trials.
+              <i>Controlled Clinical Trials</i> 7(3), 177&ndash;188.
+              <a href="https://doi.org/10.1016/0197-2456(86)90046-2">doi:10.1016/0197-2456(86)90046-2</a></li>
+            <li id="ref-griffiths">Griffiths, D. A. (1973). Maximum likelihood estimation for the beta-binomial
+              distribution and an application to the household distribution of the total number of cases of a disease.
+              <i>Biometrics</i> 29(4), 637&ndash;648. <a href="https://doi.org/10.2307/2529131">doi:10.2307/2529131</a></li>
+            <li id="ref-higgins">Higgins, J. P. T., Thompson, S. G. and Spiegelhalter, D. J. (2009). A re-evaluation of
+              random-effects meta-analysis. <i>Journal of the Royal Statistical Society, Series A</i> 172(1),
+              137&ndash;159. <a href="https://doi.org/10.1111/j.1467-985X.2008.00552.x">doi:10.1111/j.1467-985X.2008.00552.x</a></li>
+            <li id="ref-huber">Huber, P. J. (1967). The behavior of maximum likelihood estimates under nonstandard
+              conditions. <i>Proceedings of the Fifth Berkeley Symposium on Mathematical Statistics and
+              Probability</i> 1, 221&ndash;233.</li>
+            <li id="ref-kuss">Kuss, O. (2015). Statistical methods for meta-analyses including information from studies
+              without any events: add nothing to nothing and succeed nevertheless. <i>Statistics in Medicine</i> 34(7),
+              1097&ndash;1116. <a href="https://doi.org/10.1002/sim.6383">doi:10.1002/sim.6383</a></li>
+            <li id="ref-paule">Paule, R. C. and Mandel, J. (1982). Consensus values and weighting factors. <i>Journal of
+              Research of the National Bureau of Standards</i> 87(5), 377&ndash;385.
+              <a href="https://doi.org/10.6028/jres.087.022">doi:10.6028/jres.087.022</a></li>
+            <li id="ref-rice">Rice, K., Higgins, J. P. T. and Lumley, T. (2018). A re-evaluation of fixed effect(s)
+              meta-analysis. <i>Journal of the Royal Statistical Society, Series A</i> 181(1), 205&ndash;227.
+              <a href="https://doi.org/10.1111/rssa.12275">doi:10.1111/rssa.12275</a></li>
+            <li id="ref-skellam">Skellam, J. G. (1948). A probability distribution derived from the binomial distribution
+              by regarding the probability of success as variable between the sets of trials. <i>Journal of the Royal
+              Statistical Society, Series B</i> 10(2), 257&ndash;261.
+              <a href="https://doi.org/10.1111/j.2517-6161.1948.tb00014.x">doi:10.1111/j.2517-6161.1948.tb00014.x</a></li>
+            <li id="ref-sweeting">Sweeting, M. J., Sutton, A. J. and Lambert, P. C. (2004). What to add to nothing? Use and
+              avoidance of continuity corrections in meta-analysis of sparse data. <i>Statistics in Medicine</i> 23(9),
+              1351&ndash;1375. <a href="https://doi.org/10.1002/sim.1761">doi:10.1002/sim.1761</a></li>
+            <li id="ref-veroniki">Veroniki, A. A. et al. (2016). Methods to estimate the between-study variance and its
+              uncertainty in meta-analysis. <i>Research Synthesis Methods</i> 7(1), 55&ndash;79.
+              <a href="https://doi.org/10.1002/jrsm.1164">doi:10.1002/jrsm.1164</a></li>
+            <li id="ref-wilson">Wilson, E. B. (1927). Probable inference, the law of succession, and statistical inference.
+              <i>Journal of the American Statistical Association</i> 22(158), 209&ndash;212.
+              <a href="https://doi.org/10.1080/01621459.1927.10502953">doi:10.1080/01621459.1927.10502953</a></li>
+          </ul>
         </div>
       </section>
 

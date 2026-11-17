@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its mean over problems is the Mean Improvability.
 
 ### Changed
+- **Documentation: how results are averaged, with the literature it rests on.** The site's guide gives the rate
+  model's formulas, the interval and the range for one more problem set for rates, and a list of sources; the docs'
+  Results page has a new section, "Averages over problem sets", on the explorer's averaging, why it differs from
+  `srbf analyze`'s numbers over all expressions, and its sources.
 - **Results site: rates are averaged by the beta-binomial model, and a single problem set shows its plain rate.**
   Rates were averaged on the logit scale, which needs a corrected rate, (k + 0.5) / (n + 1), for sets at 0 % or 100 %.
   The correction pulls a set towards 50 % by up to 0.5 / (n + 1): a single problem set showed 8 of 8 problems as
