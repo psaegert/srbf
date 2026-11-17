@@ -90,22 +90,41 @@ def test_sets_without_spread_of_their_own():
     assert v[0] == pytest.approx(1.0) and v[1] == pytest.approx(1.0 / 3)
 
 
-def test_sets_that_agree_give_the_pooled_rate():
-    # no spread beyond the binomial: the mean rate is the pooled one, and inverting the estimating equation, which is then
-    # the binomial score K - N m, gives the pooled rate plus or minus t sqrt(p (1 - p) / N)
+def test_sets_that_agree_give_the_pooled_rate_and_about_wilsons_interval():
+    # no spread beyond the binomial: the mean rate is the pooled one. At the estimate s is at its cap and the test is
+    # Wilson's (t for z); away from it s is refitted, and three sets cannot rule out a spread, so the interval holds
+    # Wilson's and is a little wider
     c = re_.combine([re_.SetStat(100, 30.0, 30.0)] * 3, "logit")
     assert c.mu == pytest.approx(0.3, abs=1e-12) and c.tau2 == 0.0
-    half = re_.t_ppf(0.975, 297) * np.sqrt(0.3 * 0.7 / 300)   # (taken at s = e^15, the cap, not at s = inf)
-    assert (c.lo, c.hi) == pytest.approx((0.3 - half, 0.3 + half), abs=1e-6)
+    t, n, p = re_.t_ppf(0.975, 297), 300.0, 0.3
+    centre, half = (p + t * t / (2 * n)) / (1 + t * t / n), t * np.sqrt(p * (1 - p) / n + t * t / (4 * n * n)) / (1 + t * t / n)
+    assert c.lo <= centre - half and centre + half <= c.hi and c.hi - c.lo < 1.25 * 2 * half
 
 
 def test_one_success_among_sets_at_zero_keeps_a_narrow_interval():
     # 28 sets at 0 % and one problem of 200 solved in one more: the linearised (delta-method) interval on the log-odds
-    # reached 0 % to 88 % here; inverting the estimating equation keeps it under 1 %
+    # reached 0 % to 88 % here; the score test keeps it within a few percent, and above 0 (a problem was solved)
     sizes = [5301, 200, 200, 150, 120, 120, 100, 90, 33, 25, 20, 15, 12, 12, 10, 8, 8, 8, 6, 6, 6, 2, 2, 2, 1, 1, 1, 1, 1]
     sets = [re_.SetStat(n, 1.0 if i == 1 else 0.0, 1.0 if i == 1 else 0.0) for i, n in enumerate(sizes)]
     c = re_.combine(sets, "logit")
-    assert 0.0 <= c.lo <= c.mu < c.hi < 0.01
+    assert 0.0 < c.lo < c.mu < c.hi < 0.05
+    # and the mirror image near 100 %, with many sets at 100 % and a few just below: the interval stays near the top
+    high = [re_.SetStat(n, float(n), float(n)) for n in sizes[2:]] + [re_.SetStat(5301, 5296.0, 5296.0), re_.SetStat(200, 199.5, 199.25)]
+    c = re_.combine(high, "logit")
+    assert 0.95 < c.lo < c.mu < c.hi < 1.0
+
+
+def test_the_rate_interval_is_the_score_tests_kept_means():
+    # the ends are where Rao's score test (s refitted) switches from keeping to rejecting the mean
+    sets = [re_.SetStat(n, k, k) for n, k in ((40, 12.0), (25, 3.0), (60, 30.0), (10, 0.0), (8, 8.0))]
+    c = re_.combine(sets, "logit")
+    eta, lam = re_.rate_fit(sets)
+    t2 = re_.t_ppf(0.975, sum(st.n - 1 for st in sets)) ** 2
+    for end, outward in ((c.lo, -1e-4), (c.hi, 1e-4)):
+        e = np.log(end / (1 - end))
+        kept = re_._rate_band(sets, e - outward, re_._profile_lam(sets, re_._sig(e - outward), lam), t2)
+        dropped = re_._rate_band(sets, e + outward, re_._profile_lam(sets, re_._sig(e + outward), lam), t2)
+        assert kept and not dropped
 
 
 def test_two_sets_at_opposite_ends_say_half_and_little_more():

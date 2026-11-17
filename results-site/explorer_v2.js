@@ -670,32 +670,90 @@
     var p = k / n, z2 = Z975 * Z975, den = 1 + z2 / n, c = (p + z2 / (2 * n)) / den, h = Z975 * Math.sqrt(p * (1 - p) / n + z2 / (4 * n * n)) / den;
     return [Math.max(0, c - h), Math.min(1, c + h)];
   }
-  // the score in eta of all sets, s held fixed (a difference psi(x + c) - psi(c) is exactly 0 for x = 0)
-  var RATE_ETA_MAX = 30;
-  function rateScore(sets, eta, s) {
-    var m = 1 / (1 + Math.exp(-eta)), a = m * s, b = (1 - m) * s, total = 0, j;
+  // the rate interval: Rao's score test for the mean m with s refitted at m, inverted (the reference's _lam_slope,
+  // _profile_lam, _rate_band and _rate_interval, step for step)
+  var RATE_ETA_MAX = 30, RATE_SCAN_STEP = 0.5, RATE_K_SPAN = 12;
+  function lamSlope(sets, m, lam) {
+    var s = Math.exp(lam), a = m * s, b = (1 - m) * s, j;
+    var dgA = digamma(a), dgB = digamma(b), dgS = digamma(s), tgA = trigamma(a), tgB = trigamma(b), tgS = trigamma(s), d1 = 0, d2 = 0;
     for (j = 0; j < sets.length; j++) {
-      var k = sets[j].s1, rest = sets[j].n - sets[j].s1;
-      total += (k > 0 ? digamma(k + a) - digamma(a) : 0) - (rest > 0 ? digamma(rest + b) - digamma(b) : 0);
+      var n = sets[j].n, k = sets[j].s1, g = -(digamma(n + s) - dgS), h = -(trigamma(n + s) - tgS);
+      if (k > 0) { g += m * (digamma(k + a) - dgA); h += m * m * (trigamma(k + a) - tgA); }
+      if (n - k > 0) { g += (1 - m) * (digamma(n - k + b) - dgB); h += (1 - m) * (1 - m) * (trigamma(n - k + b) - tgB); }
+      d1 += g; d2 += h;
     }
-    return s * m * (1 - m) * total;
+    return [s * d1, s * d1 + s * s * d2];
   }
-  // the last eta, from the estimate in `direction`, whose score stays within `bound` (the reference's _rate_edge)
-  function rateEdge(sets, eta, s, bound, direction) {
-    var inside = function (e) { var u = rateScore(sets, e, s); return isFinite(u) && Math.abs(u) <= bound; };
-    var last = eta, step = 0.25, e, i;
-    while (true) {
-      e = last + direction * step;
-      if (Math.abs(e) >= RATE_ETA_MAX) { e = direction * RATE_ETA_MAX; if (inside(e)) { return direction * Infinity; } break; }
-      if (!inside(e)) { break; }
-      last = e; step *= 1.5;
+  function profileLam(sets, m, start) {
+    var lo = LAM_MIN, hi = LAM_MAX, loKnown = false, hiKnown = false, x = Math.min(LAM_MAX, Math.max(LAM_MIN, start)), it;
+    for (it = 0; it < 200; it++) {
+      var d = lamSlope(sets, m, x), d1 = d[0], d2 = d[1];
+      if (d1 > 0) { if (x >= LAM_MAX) { return LAM_MAX; } lo = x; loKnown = true; }
+      else if (d1 < 0) { if (x <= LAM_MIN) { return LAM_MIN; } hi = x; hiKnown = true; }
+      else { return x; }
+      var step = d2 < 0 ? -d1 / d2 : (d1 > 0 ? MAX_STEP : -MAX_STEP);
+      step = Math.max(-MAX_STEP, Math.min(MAX_STEP, step));
+      var xn = x + step;
+      if (xn >= hi) { xn = hiKnown ? 0.5 * (lo + hi) : LAM_MAX; }
+      else if (xn <= lo) { xn = loKnown ? 0.5 * (lo + hi) : LAM_MIN; }
+      if (Math.abs(xn - x) <= 1e-12 * Math.max(1, Math.abs(x)) || (loKnown && hiKnown && hi - lo <= 1e-12 * Math.max(1, Math.abs(x)))) { return xn; }
+      x = xn;
     }
-    var lo = last, hi = e;
-    for (i = 0; i < 80; i++) { var mid = 0.5 * (lo + hi); if (inside(mid)) { lo = mid; } else { hi = mid; } }
-    return lo;
+    return x;
   }
-  // rates over problem sets on the 0-1 scale; one set: its plain rate and the Wilson interval. The interval inverts the
-  // estimating equation (every eta whose score stays within t sqrt(V)), see the reference's combine_rates
+  function rateBand(sets, eta, lam, t2) {
+    var m = sig(eta), s = Math.exp(lam), a = m * s, b = (1 - m) * s, j, kk;
+    var dgA = digamma(a), dgB = digamma(b), tgA = trigamma(a), tgB = trigamma(b), tgS = trigamma(s), g = 0, hMs = 0, hSs = 0;
+    for (j = 0; j < sets.length; j++) {
+      var n = sets[j].n, k = sets[j].s1;
+      var A = k > 0 ? digamma(k + a) - dgA : 0, Bt = n - k > 0 ? digamma(n - k + b) - dgB : 0;
+      var A1 = k > 0 ? trigamma(k + a) - tgA : 0, B1 = n - k > 0 ? trigamma(n - k + b) - tgB : 0;
+      g += A - Bt; hMs += (A - Bt) + s * (m * A1 - (1 - m) * B1); hSs += m * m * A1 + (1 - m) * (1 - m) * B1 - (trigamma(n + s) - tgS);
+    }
+    g *= s;
+    if (!isFinite(g)) { return false; }
+    var c = hSs !== 0 && isFinite(hMs / hSs) ? hMs / hSs : 0, ca = s - c * m, cb = s + c * (1 - m), v = 0;
+    for (j = 0; j < sets.length; j++) {
+      var nn = sets[j].n, kj = sets[j].s1, p = (kj + a) / (nn + s);
+      if (!(p > 0 && p < 1)) { continue; }
+      var sd = Math.sqrt(nn * p * (1 - p)), lo = Math.max(0, Math.floor(nn * p - RATE_K_SPAN * sd) - 4), hi = Math.min(nn, Math.ceil(nn * p + RATE_K_SPAN * sd) + 4);
+      var ratio = p / (1 - p), Ak = lo > 0 ? digamma(lo + a) - dgA : 0, Bk = nn - lo > 0 ? digamma(nn - lo + b) - dgB : 0, w = 1, ws = [], xs = [];
+      for (kk = lo; kk <= hi; kk++) {
+        ws.push(w); xs.push(ca * Ak - cb * Bk);
+        Ak += 1 / (kk + a);
+        Bk = nn - kk - 1 > 0 ? Bk - 1 / (nn - kk - 1 + b) : 0;
+        w *= (nn - kk) / (kk + 1) * ratio;
+      }
+      var tot = 0, sx = 0, i; for (i = 0; i < ws.length; i++) { tot += ws[i]; } for (i = 0; i < ws.length; i++) { sx += ws[i] * xs[i]; }
+      var mean = sx / tot, sv = 0; for (i = 0; i < ws.length; i++) { sv += ws[i] * (xs[i] - mean) * (xs[i] - mean); }
+      v += sv / tot;
+    }
+    return g * g <= t2 * v;
+  }
+  function rateInterval(sets, eta, lam, t2) {
+    var lam0 = Math.min(lam, LAM_MAX), ends = [], d, i;
+    eta = Math.max(-RATE_ETA_MAX, Math.min(RATE_ETA_MAX, eta));
+    for (d = 0; d < 2; d++) {
+      var direction = d === 0 ? -1 : 1, points = [[eta, lam0, true]], x = eta, warm = lam0;
+      while (Math.abs(x) < RATE_ETA_MAX) {
+        x = x + direction * RATE_SCAN_STEP;
+        if (Math.abs(x) >= RATE_ETA_MAX) { x = direction * RATE_ETA_MAX; }
+        warm = profileLam(sets, sig(x), warm);
+        points.push([x, warm, rateBand(sets, x, warm, t2)]);
+      }
+      var last = 0; for (i = 0; i < points.length; i++) { if (points[i][2]) { last = i; } }
+      if (last === points.length - 1) { ends.push(direction * Infinity); continue; }
+      var inner = points[last][0], outer = points[last + 1][0]; warm = points[last][1];
+      for (i = 0; i < 45; i++) {
+        var mid = 0.5 * (inner + outer), lamMid = profileLam(sets, sig(mid), warm);
+        if (rateBand(sets, mid, lamMid, t2)) { inner = mid; warm = lamMid; } else { outer = mid; }
+      }
+      ends.push(inner);
+    }
+    return [ends[0] === -Infinity ? 0 : sig(ends[0]), ends[1] === Infinity ? 1 : sig(ends[1])];
+  }
+  // rates over problem sets on the 0-1 scale; one set: its plain rate and the Wilson interval. The interval inverts Rao's
+  // score test (see the reference's combine_rates)
   function combineRates(sets) {
     var S = sets.length, N = 0, K = 0, df = 0, j;
     for (j = 0; j < S; j++) { N += sets[j].n; K += sets[j].s1; df += sets[j].n - 1; }
@@ -705,17 +763,13 @@
       return { mu: K / N, lo: wi[0], hi: wi[1], piLo: null, piHi: null, tau2: 0, w: sets.map(function (st) { return st.n / N; }), S: S, p: null };
     }
     var lam = Math.min(f.lam, LAM_MAX), m = 1 / (1 + Math.exp(-f.eta)), s = Math.exp(lam), a = m * s, b = (1 - m) * s, q = m * (1 - m);
-    var tgA = trigamma(a), tgB = trigamma(b), num = 0, info = [], tot = 0;
+    var tgA = trigamma(a), tgB = trigamma(b), info = [], tot = 0;
     for (j = 0; j < S; j++) {
-      var n = sets[j].n, k = sets[j].s1, tka = trigamma(k + a), tnb = trigamma(n - k + b);
-      var fisher = -Math.pow(s * q, 2) * (tka - tgA + tnb - tgB);
+      var fisher = -Math.pow(s * q, 2) * (trigamma(sets[j].s1 + a) - tgA + trigamma(sets[j].n - sets[j].s1 + b) - tgB);
       info.push(fisher); tot += fisher;
-      var dudk = s * q * (tka + tnb), pt = (k + a) / (n + s);
-      num += dudk * dudk * n * pt * (1 - pt);
     }
-    var bound = tq975(Math.max(1, df)) * Math.sqrt(num), loEta = rateEdge(sets, f.eta, s, bound, -1), hiEta = rateEdge(sets, f.eta, s, bound, 1);
-    return { mu: m, lo: loEta === -Infinity ? 0 : sig(loEta), hi: hiEta === Infinity ? 1 : sig(hiEta),
-             piLo: S >= 3 ? betaPpf(0.025, a, b) : null, piHi: S >= 3 ? betaPpf(0.975, a, b) : null,
+    var tq = tq975(Math.max(1, df)), ci = rateInterval(sets, f.eta, f.lam, tq * tq);
+    return { mu: m, lo: Math.min(ci[0], m), hi: Math.max(ci[1], m), piLo: S >= 3 ? betaPpf(0.025, a, b) : null, piHi: S >= 3 ? betaPpf(0.975, a, b) : null,
              tau2: isFinite(f.lam) ? 1 / s : 0, w: info.map(function (x) { return x / tot; }), S: S, p: null };
   }
   // sets: [{n, s1, s2, ...}]; a rate ("logit") comes back on its own 0-1 scale. Also: the problems behind it, and n0,

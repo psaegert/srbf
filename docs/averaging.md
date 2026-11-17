@@ -96,14 +96,20 @@ $$
 \hat{\theta} \pm t_{0.975}\, \frac{\sqrt{\sum_s w_s^2\, \sigma_s^2 / n_s}}{\sum_s w_s},
 $$
 
-with \(t\) on \(\sum_s (n_s - 1)\) degrees of freedom. For rates the same rule goes through the model's estimating
-equation (Huber 1967): the estimate of \(m\) solves \(\sum_s U_s(m) = 0\) for the sets' scores \(U_s\), and the
-score's variance from the problems' sampling is \(V = \sum_s (\partial U_s / \partial k_s)^2 \operatorname{Var}(k_s)\),
-with \(\operatorname{Var}(k_s)\) the binomial variance at the set's posterior rate. The interval is every \(m\) whose
-score stays within \(t \sqrt{V}\): the estimating equation inverted rather than linearised around the estimate, so it
-stays between 0 and 100 % and stays sensible where many sets sit at 0 % or 100 %, where a linearised (delta-method)
-interval can span almost the whole range. Where sets sit at both ends, the fitted beta is U-shaped and its mean
-responds little to the data, and the interval can still be wide.
+with \(t\) on \(\sum_s (n_s - 1)\) degrees of freedom. For rates the interval inverts a score test, as Wilson's
+interval does for a single rate: it holds every mean rate \(m\) that Rao's score test
+([Rao 1948](https://doi.org/10.1017/S0305004100023987)) does not reject at that level. At each tested \(m\) the
+concentration \(\nu\) is fitted anew, and the score for \(m\) is taken with \(\nu\)'s share projected out. Its
+variance comes from the sampling of problems within each set: every set's count \(k_s\) is binomial at the set's
+posterior rate under the tested \(m\), and the variance is summed exactly over the possible counts, not linearised.
+
+Both choices matter where many sets sit at 0 % or 100 %. A linearised (delta-method) interval, the sandwich variance
+of Huber (1967) on the log-odds, spanned 0 % to 88 % for one success in 6,660 problems on the 2026-09 release; this
+interval gives 0.006 % to 1.5 % there. Testing at each \(m\) keeps the interval between 0 and 100 %. The test is run
+on a grid of step 0.5 on the log-odds scale, outward from the estimate, and the outermost kept point is refined by
+bisection. Where the kept values come in more than one piece, the interval spans them all. This happens when \(\nu\),
+fitted anew far from the estimate, is small enough that the test loses power: 3 of the release's 1,147 rate averages
+over two or more sets, all within 0.2 points of 0 % or 100 %.
 
 ## One more problem set
 
@@ -118,9 +124,21 @@ precisely the average is known, the range how far single problem sets spread aro
 A simulation on srbf's own set sizes (the 29 catalogs of the 2026-09 release and the 192 problem sets of the next
 release) fixed the sets' true rates in 96 settings (mean rates of 5, 30, 70 and 95 %, three spreads, four draws of
 the sets) and drew the problems anew 100 times in each. The beta-binomial average missed by 0.7 to 1.1 points on
-average and its interval held the true value 93 to 96 % of the time; the log-odds average with the continuity
-correction missed by 5 to 6 points and held it 6 to 32 % of the time; the logit-normal model missed by 0.6 to
-1.3 points and held it 88 to 89 % of the time.
+average; the log-odds average with the continuity correction missed by 5 to 6 points, and its interval held the true
+value only 6 to 32 % of the time; the logit-normal model missed by 0.6 to 1.3 points and held it 88 to 89 % of the
+time.
+
+A second simulation tested the rate interval near the edges: mean rates of 0.2, 1, 5, 30, 95, 99 and 99.8 %, three
+spreads and three draws of the sets on both set sizes, 60 redraws of the problems each. There, the beta fitted to the
+sets' true rates depends on how small the smallest rates are, which no number of problems settles, so the interval was
+scored against what the average estimates for these sets: the value of \(m\) where the expected score is zero, given
+the sets' true rates and sizes ([White 1982](https://doi.org/10.2307/1912526)). The score-test interval held it 94 to
+98 % of the time at every mean rate on both set sizes, and in at least 82 % of the redraws in every one of the 126
+draws of the sets. The delta-method interval held it 91 to 99 % of the time, but at mean rates of 1 % or less and
+99 % or more it was 4 to 11 times wider: a median of 19 points at a mean rate of 0.2 % on 29 sets. A version that kept
+\(\nu\) fixed at its estimate held it 91 % of the time on average on 29 sets and as rarely as 86 % near the edges,
+and a bootstrap that redrew the problems from the sets' posterior rates held it 81 to 98 % of the time, its intervals
+too narrow.
 
 ## The explorer and `srbf analyze`
 
@@ -150,6 +168,9 @@ is the reference implementation, and the site's test suite checks that the two a
   [doi:10.1002/sim.6383](https://doi.org/10.1002/sim.6383)
 - Paule, R. C. and Mandel, J. (1982). Consensus values and weighting factors. *Journal of Research of the National
   Bureau of Standards* 87(5), 377–385. [doi:10.6028/jres.087.022](https://doi.org/10.6028/jres.087.022)
+- Rao, C. R. (1948). Large sample tests of statistical hypotheses concerning several parameters with applications to
+  problems of estimation. *Mathematical Proceedings of the Cambridge Philosophical Society* 44(1), 50–57.
+  [doi:10.1017/S0305004100023987](https://doi.org/10.1017/S0305004100023987)
 - Rice, K., Higgins, J. P. T. and Lumley, T. (2018). A re-evaluation of fixed effect(s) meta-analysis. *Journal of
   the Royal Statistical Society, Series A* 181(1), 205–227.
   [doi:10.1111/rssa.12275](https://doi.org/10.1111/rssa.12275)
@@ -162,6 +183,8 @@ is the reference implementation, and the site's test suite checks that the two a
 - Veroniki, A. A., Jackson, D., Viechtbauer, W. et al. (2016). Methods to estimate the between-study variance and its
   uncertainty in meta-analysis. *Research Synthesis Methods* 7(1), 55–79.
   [doi:10.1002/jrsm.1164](https://doi.org/10.1002/jrsm.1164)
+- White, H. (1982). Maximum likelihood estimation of misspecified models. *Econometrica* 50(1), 1–25.
+  [doi:10.2307/1912526](https://doi.org/10.2307/1912526)
 - Wilson, E. B. (1927). Probable inference, the law of succession, and statistical inference. *Journal of the
   American Statistical Association* 22(158), 209–212.
   [doi:10.1080/01621459.1927.10502953](https://doi.org/10.1080/01621459.1927.10502953)
