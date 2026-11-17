@@ -26,6 +26,9 @@ import math
 from dataclasses import dataclass
 from typing import Iterable, Mapping, Sequence
 
+import numpy as np
+from scipy import special as _sp
+
 PM_ITERATIONS = 80
 EPS_VAR = 1e-12
 
@@ -331,34 +334,44 @@ RATE_SCAN_STEP = 0.5    # ... on a grid of this step, outward from the estimate,
 RATE_K_SPAN = 12.0      # a set's count is summed over its mean +- (12 sd + 4)
 
 
-def _lam_slope(sets: Sequence[SetStat], m: float, lam: float) -> tuple[float, float]:
-    """d/dlam and d2/dlam2 of the log likelihood at mean m, lam = log s (a set at 0 % or 100 % has no k or n - k term)."""
+def _digamma_v(x: np.ndarray) -> np.ndarray:
+    """digamma for an array (scipy's; it agrees with digamma() to rounding)."""
+    return _sp.digamma(x)
+
+
+def _trigamma_v(x: np.ndarray) -> np.ndarray:
+    """trigamma for an array (scipy's; it agrees with trigamma() to rounding)."""
+    return _sp.polygamma(1, x)
+
+
+def _counts(sets: Sequence[SetStat]) -> tuple[np.ndarray, np.ndarray]:
+    return np.array([st.n for st in sets], dtype=float), np.array([st.s1 for st in sets], dtype=float)
+
+
+def _lam_slope_a(n: np.ndarray, k: np.ndarray, m: float, lam: float) -> tuple[float, float]:
     s = math.exp(lam)
     a, b = m * s, (1.0 - m) * s
-    dg_a, dg_b, dg_s, tg_a, tg_b, tg_s = digamma(a), digamma(b), digamma(s), trigamma(a), trigamma(b), trigamma(s)
-    d1 = d2 = 0.0
-    for st in sets:
-        n, k = st.n, st.s1
-        g = -(digamma(n + s) - dg_s)
-        h = -(trigamma(n + s) - tg_s)
-        if k > 0:
-            g += m * (digamma(k + a) - dg_a)
-            h += m * m * (trigamma(k + a) - tg_a)
-        if n - k > 0:
-            g += (1.0 - m) * (digamma(n - k + b) - dg_b)
-            h += (1.0 - m) * (1.0 - m) * (trigamma(n - k + b) - tg_b)
-        d1 += g
-        d2 += h
+    hit, miss = k > 0, n - k > 0
+    g = -(_digamma_v(n + s) - digamma(s))
+    h = -(_trigamma_v(n + s) - trigamma(s))
+    g += np.where(hit, m * (_digamma_v(k + a) - digamma(a)), 0.0)
+    h += np.where(hit, m * m * (_trigamma_v(k + a) - trigamma(a)), 0.0)
+    g += np.where(miss, (1.0 - m) * (_digamma_v(n - k + b) - digamma(b)), 0.0)
+    h += np.where(miss, (1.0 - m) * (1.0 - m) * (_trigamma_v(n - k + b) - trigamma(b)), 0.0)
+    d1, d2 = float(g.sum()), float(h.sum())
     return s * d1, s * d1 + s * s * d2
 
 
-def _profile_lam(sets: Sequence[SetStat], m: float, start: float) -> float:
-    """The lam = log s that maximises the likelihood at mean m, within [LAM_MIN, LAM_MAX]: Newton on the slope from
-    ``start``, steps of at most MAX_STEP, bisection where Newton would leave the bracket of a sign change."""
+def _lam_slope(sets: Sequence[SetStat], m: float, lam: float) -> tuple[float, float]:
+    """d/dlam and d2/dlam2 of the log likelihood at mean m, lam = log s (a set at 0 % or 100 % has no k or n - k term)."""
+    return _lam_slope_a(*_counts(sets), m, lam)
+
+
+def _profile_lam_a(n: np.ndarray, k: np.ndarray, m: float, start: float) -> float:
     lo, hi, lo_known, hi_known = LAM_MIN, LAM_MAX, False, False
     x = min(LAM_MAX, max(LAM_MIN, start))
     for _ in range(200):
-        d1, d2 = _lam_slope(sets, m, x)
+        d1, d2 = _lam_slope_a(n, k, m, x)
         if d1 > 0.0:
             if x >= LAM_MAX:
                 return LAM_MAX
@@ -382,56 +395,64 @@ def _profile_lam(sets: Sequence[SetStat], m: float, start: float) -> float:
     return x
 
 
+def _profile_lam(sets: Sequence[SetStat], m: float, start: float) -> float:
+    """The lam = log s that maximises the likelihood at mean m, within [LAM_MIN, LAM_MAX]: Newton on the slope from
+    ``start``, steps of at most MAX_STEP, bisection where Newton would leave the bracket of a sign change."""
+    return _profile_lam_a(*_counts(sets), m, start)
+
+
+def _rate_band_a(n: np.ndarray, k: np.ndarray, eta: float, lam: float, t2: float) -> bool:
+    m = _sig(eta)
+    s = math.exp(lam)
+    a, b = m * s, (1.0 - m) * s
+    dg_a, dg_b, tg_a, tg_b, tg_s = digamma(a), digamma(b), trigamma(a), trigamma(b), trigamma(s)
+    hit, miss = k > 0, n - k > 0
+    A = np.where(hit, _digamma_v(k + a) - dg_a, 0.0)
+    Bt = np.where(miss, _digamma_v(n - k + b) - dg_b, 0.0)
+    A1 = np.where(hit, _trigamma_v(k + a) - tg_a, 0.0)
+    B1 = np.where(miss, _trigamma_v(n - k + b) - tg_b, 0.0)
+    g = s * float((A - Bt).sum())
+    if not math.isfinite(g):
+        return False
+    h_ms = float(((A - Bt) + s * (m * A1 - (1.0 - m) * B1)).sum())
+    h_ss = float((m * m * A1 + (1.0 - m) * (1.0 - m) * B1 - (_trigamma_v(n + s) - tg_s)).sum())
+    c = h_ms / h_ss if h_ss != 0.0 and math.isfinite(h_ms / h_ss) else 0.0
+    ca, cb = s - c * m, s + c * (1.0 - m)        # U_m - c U_s = ca A - cb Bt + constant
+    p = (k + a) / (n + s)
+    keep = (p > 0.0) & (p < 1.0)
+    if not keep.any():
+        return g * g <= 0.0
+    nk, pk = n[keep], p[keep]
+    sd = np.sqrt(nk * pk * (1.0 - pk))
+    lo = np.maximum(0.0, np.floor(nk * pk - RATE_K_SPAN * sd) - 4)
+    hi = np.minimum(nk, np.ceil(nk * pk + RATE_K_SPAN * sd) + 4)
+    lens = (hi - lo + 1).astype(int)
+    starts = np.cumsum(lens) - lens
+    seg = np.repeat(np.arange(len(lens)), lens)
+    ks = lo[seg] + (np.arange(int(lens.sum())) - starts[seg])
+    nn = nk[seg]
+    x = ca * np.where(ks > 0, _digamma_v(ks + a) - dg_a, 0.0) - cb * np.where(nn - ks > 0, _digamma_v(nn - ks + b) - dg_b, 0.0)
+    # the binomial weights relative to each set's first count: w(k + 1) / w(k) = (n - k) / (k + 1) * p / (1 - p)
+    with np.errstate(divide="ignore"):
+        step = np.where(nn - ks > 0, np.log(np.maximum(nn - ks, 1.0)) - np.log(ks + 1.0) + np.log(pk / (1.0 - pk))[seg], 0.0)
+    cs = np.cumsum(step)
+    logw = (cs - step) - (cs - step)[starts][seg]
+    logw -= np.maximum.reduceat(logw, starts)[seg]
+    w = np.exp(logw)
+    tot = np.add.reduceat(w, starts)
+    mean = np.add.reduceat(w * x, starts) / tot
+    var = float((np.add.reduceat(w * (x - mean[seg]) ** 2, starts) / tot).sum())
+    return g * g <= t2 * var
+
+
 def _rate_band(sets: Sequence[SetStat], eta: float, lam: float, t2: float) -> bool:
     """Whether Rao's score test at mean m = expit(eta), with s refitted at m (lam = log s), keeps m.
 
     The statistic is the efficient score for m, sum_i (U_m,i - c U_s,i) with c = H_ms / H_ss (the nuisance s projected
     out; at s's own maximum sum_i U_s,i = 0, so it is the plain score sum_i U_m,i), against t^2 times its variance from
     the problems' sampling: every set's count k_i ~ Binomial(n_i, p_i) at its posterior rate p_i = (k_i + a)/(n_i + s),
-    the variance summed exactly over k_i, not linearised."""
-    m = _sig(eta)
-    s = math.exp(lam)
-    a, b = m * s, (1.0 - m) * s
-    dg_a, dg_b = digamma(a), digamma(b)
-    tg_a, tg_b, tg_s = trigamma(a), trigamma(b), trigamma(s)
-    g = h_ms = h_ss = 0.0
-    for st in sets:
-        n, k = st.n, st.s1
-        A = digamma(k + a) - dg_a if k > 0 else 0.0
-        Bt = digamma(n - k + b) - dg_b if n - k > 0 else 0.0
-        A1 = trigamma(k + a) - tg_a if k > 0 else 0.0
-        B1 = trigamma(n - k + b) - tg_b if n - k > 0 else 0.0
-        g += A - Bt
-        h_ms += (A - Bt) + s * (m * A1 - (1.0 - m) * B1)
-        h_ss += m * m * A1 + (1.0 - m) * (1.0 - m) * B1 - (trigamma(n + s) - tg_s)
-    g *= s
-    if not math.isfinite(g):
-        return False
-    c = h_ms / h_ss if h_ss != 0.0 and math.isfinite(h_ms / h_ss) else 0.0
-    ca, cb = s - c * m, s + c * (1.0 - m)        # U_m - c U_s = ca A - cb Bt + constant
-    var = 0.0
-    for st in sets:
-        n, k = st.n, st.s1
-        p = (k + a) / (n + s)
-        if not 0.0 < p < 1.0:
-            continue
-        sd = math.sqrt(n * p * (1.0 - p))
-        lo = max(0, math.floor(n * p - RATE_K_SPAN * sd) - 4)
-        hi = min(int(n), math.ceil(n * p + RATE_K_SPAN * sd) + 4)
-        ratio = p / (1.0 - p)
-        A = digamma(lo + a) - dg_a if lo > 0 else 0.0
-        Bt = digamma(n - lo + b) - dg_b if n - lo > 0 else 0.0
-        w, ws, xs = 1.0, [], []
-        for kk in range(lo, hi + 1):
-            ws.append(w)
-            xs.append(ca * A - cb * Bt)
-            A += 1.0 / (kk + a)
-            Bt = Bt - 1.0 / (n - kk - 1 + b) if n - kk - 1 > 0 else 0.0
-            w *= (n - kk) / (kk + 1) * ratio
-        tot = sum(ws)
-        mean = sum(wi * xi for wi, xi in zip(ws, xs)) / tot
-        var += sum(wi * (xi - mean) ** 2 for wi, xi in zip(ws, xs)) / tot
-    return g * g <= t2 * var
+    the variance summed exactly over k_i, not linearised. Computed over all sets at once (numpy)."""
+    return _rate_band_a(*_counts(sets), eta, lam, t2)
 
 
 def _rate_interval(sets: Sequence[SetStat], eta: float, lam: float, t2: float) -> tuple[float, float]:
@@ -439,6 +460,7 @@ def _rate_interval(sets: Sequence[SetStat], eta: float, lam: float, t2: float) -
     the estimate outward to +-RATE_ETA_MAX, refitting s along the way; the outermost kept point is refined by bisection
     against its outer neighbour. Where the kept points come in more than one piece (s refitted far from the estimate can
     be small enough that the test loses power), the interval spans them."""
+    n, k = _counts(sets)
     lam0 = min(lam, LAM_MAX)
     eta = max(-RATE_ETA_MAX, min(RATE_ETA_MAX, eta))
     ends = []
@@ -449,8 +471,8 @@ def _rate_interval(sets: Sequence[SetStat], eta: float, lam: float, t2: float) -
             x = x + direction * RATE_SCAN_STEP
             if abs(x) >= RATE_ETA_MAX:
                 x = direction * RATE_ETA_MAX
-            warm = _profile_lam(sets, _sig(x), warm)
-            points.append((x, warm, _rate_band(sets, x, warm, t2)))
+            warm = _profile_lam_a(n, k, _sig(x), warm)
+            points.append((x, warm, _rate_band_a(n, k, x, warm, t2)))
         last = max(i for i, pt in enumerate(points) if pt[2])
         if last == len(points) - 1:
             ends.append(direction * math.inf)
@@ -458,8 +480,8 @@ def _rate_interval(sets: Sequence[SetStat], eta: float, lam: float, t2: float) -
         inner, outer, warm = points[last][0], points[last + 1][0], points[last][1]
         for _ in range(45):
             mid = 0.5 * (inner + outer)
-            lam_mid = _profile_lam(sets, _sig(mid), warm)
-            if _rate_band(sets, mid, lam_mid, t2):
+            lam_mid = _profile_lam_a(n, k, _sig(mid), warm)
+            if _rate_band_a(n, k, mid, lam_mid, t2):
                 inner, warm = mid, lam_mid
             else:
                 outer = mid
