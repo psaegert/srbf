@@ -326,62 +326,158 @@ def wilson(k: float, n: float) -> tuple[float, float]:
     return max(0.0, c - h), min(1.0, c + h)
 
 
-def _rate_score(sets: Sequence[SetStat], eta: float, s: float) -> float:
-    """The score in eta of all sets, s held fixed: sum_i s q (psi(k_i + a) - psi(a) - psi(n_i - k_i + b) + psi(b)),
-    q = m (1 - m). A difference psi(x + c) - psi(c) is exactly 0 for x = 0, where c may underflow."""
-    m = 1.0 / (1.0 + math.exp(-eta))
+RATE_ETA_MAX = 30.0     # the interval is searched for eta in [-30, 30]: expit(+-30) is 1e-13 from 0 and 1
+RATE_SCAN_STEP = 0.5    # ... on a grid of this step, outward from the estimate, then by bisection at the outermost edge
+RATE_K_SPAN = 12.0      # a set's count is summed over its mean +- (12 sd + 4)
+
+
+def _lam_slope(sets: Sequence[SetStat], m: float, lam: float) -> tuple[float, float]:
+    """d/dlam and d2/dlam2 of the log likelihood at mean m, lam = log s (a set at 0 % or 100 % has no k or n - k term)."""
+    s = math.exp(lam)
     a, b = m * s, (1.0 - m) * s
-    total = 0.0
+    dg_a, dg_b, dg_s, tg_a, tg_b, tg_s = digamma(a), digamma(b), digamma(s), trigamma(a), trigamma(b), trigamma(s)
+    d1 = d2 = 0.0
     for st in sets:
-        k, rest = st.s1, st.n - st.s1
-        total += (digamma(k + a) - digamma(a) if k > 0 else 0.0) - (digamma(rest + b) - digamma(b) if rest > 0 else 0.0)
-    return s * m * (1.0 - m) * total
+        n, k = st.n, st.s1
+        g = -(digamma(n + s) - dg_s)
+        h = -(trigamma(n + s) - tg_s)
+        if k > 0:
+            g += m * (digamma(k + a) - dg_a)
+            h += m * m * (trigamma(k + a) - tg_a)
+        if n - k > 0:
+            g += (1.0 - m) * (digamma(n - k + b) - dg_b)
+            h += (1.0 - m) * (1.0 - m) * (trigamma(n - k + b) - tg_b)
+        d1 += g
+        d2 += h
+    return s * d1, s * d1 + s * s * d2
 
 
-def _rate_edge(sets: Sequence[SetStat], eta: float, s: float, bound: float, direction: float) -> float:
-    """The last eta, going from the estimate in ``direction``, whose score stays within ``bound``: steps that grow by
-    half each time until the score leaves it (or eta reaches +-RATE_ETA_MAX, an end of 0 or 1), then bisection."""
-    def inside(e: float) -> bool:
-        u = _rate_score(sets, e, s)
-        return math.isfinite(u) and abs(u) <= bound
-    last, step = eta, 0.25
-    while True:
-        e = last + direction * step
-        if abs(e) >= RATE_ETA_MAX:
-            e = direction * RATE_ETA_MAX
-            if inside(e):
-                return direction * math.inf
-            break
-        if not inside(e):
-            break
-        last, step = e, step * 1.5
-    lo, hi = last, e
-    for _ in range(80):
-        mid = 0.5 * (lo + hi)
-        if inside(mid):
-            lo = mid
+def _profile_lam(sets: Sequence[SetStat], m: float, start: float) -> float:
+    """The lam = log s that maximises the likelihood at mean m, within [LAM_MIN, LAM_MAX]: Newton on the slope from
+    ``start``, steps of at most MAX_STEP, bisection where Newton would leave the bracket of a sign change."""
+    lo, hi, lo_known, hi_known = LAM_MIN, LAM_MAX, False, False
+    x = min(LAM_MAX, max(LAM_MIN, start))
+    for _ in range(200):
+        d1, d2 = _lam_slope(sets, m, x)
+        if d1 > 0.0:
+            if x >= LAM_MAX:
+                return LAM_MAX
+            lo, lo_known = x, True
+        elif d1 < 0.0:
+            if x <= LAM_MIN:
+                return LAM_MIN
+            hi, hi_known = x, True
         else:
-            hi = mid
-    return lo
+            return x
+        step = -d1 / d2 if d2 < 0.0 else math.copysign(MAX_STEP, d1)
+        step = max(-MAX_STEP, min(MAX_STEP, step))
+        xn = x + step
+        if xn >= hi:
+            xn = 0.5 * (lo + hi) if hi_known else LAM_MAX
+        elif xn <= lo:
+            xn = 0.5 * (lo + hi) if lo_known else LAM_MIN
+        if abs(xn - x) <= 1e-12 * max(1.0, abs(x)) or (lo_known and hi_known and hi - lo <= 1e-12 * max(1.0, abs(x))):
+            return xn
+        x = xn
+    return x
 
 
-RATE_ETA_MAX = 30.0   # the interval's search ends at expit(+-30), 1e-13 from 0 and 1
+def _rate_band(sets: Sequence[SetStat], eta: float, lam: float, t2: float) -> bool:
+    """Whether Rao's score test at mean m = expit(eta), with s refitted at m (lam = log s), keeps m.
+
+    The statistic is the efficient score for m, sum_i (U_m,i - c U_s,i) with c = H_ms / H_ss (the nuisance s projected
+    out; at s's own maximum sum_i U_s,i = 0, so it is the plain score sum_i U_m,i), against t^2 times its variance from
+    the problems' sampling: every set's count k_i ~ Binomial(n_i, p_i) at its posterior rate p_i = (k_i + a)/(n_i + s),
+    the variance summed exactly over k_i, not linearised."""
+    m = _sig(eta)
+    s = math.exp(lam)
+    a, b = m * s, (1.0 - m) * s
+    dg_a, dg_b = digamma(a), digamma(b)
+    tg_a, tg_b, tg_s = trigamma(a), trigamma(b), trigamma(s)
+    g = h_ms = h_ss = 0.0
+    for st in sets:
+        n, k = st.n, st.s1
+        A = digamma(k + a) - dg_a if k > 0 else 0.0
+        Bt = digamma(n - k + b) - dg_b if n - k > 0 else 0.0
+        A1 = trigamma(k + a) - tg_a if k > 0 else 0.0
+        B1 = trigamma(n - k + b) - tg_b if n - k > 0 else 0.0
+        g += A - Bt
+        h_ms += (A - Bt) + s * (m * A1 - (1.0 - m) * B1)
+        h_ss += m * m * A1 + (1.0 - m) * (1.0 - m) * B1 - (trigamma(n + s) - tg_s)
+    g *= s
+    if not math.isfinite(g):
+        return False
+    c = h_ms / h_ss if h_ss != 0.0 and math.isfinite(h_ms / h_ss) else 0.0
+    ca, cb = s - c * m, s + c * (1.0 - m)        # U_m - c U_s = ca A - cb Bt + constant
+    var = 0.0
+    for st in sets:
+        n, k = st.n, st.s1
+        p = (k + a) / (n + s)
+        if not 0.0 < p < 1.0:
+            continue
+        sd = math.sqrt(n * p * (1.0 - p))
+        lo = max(0, math.floor(n * p - RATE_K_SPAN * sd) - 4)
+        hi = min(int(n), math.ceil(n * p + RATE_K_SPAN * sd) + 4)
+        ratio = p / (1.0 - p)
+        A = digamma(lo + a) - dg_a if lo > 0 else 0.0
+        Bt = digamma(n - lo + b) - dg_b if n - lo > 0 else 0.0
+        w, ws, xs = 1.0, [], []
+        for kk in range(lo, hi + 1):
+            ws.append(w)
+            xs.append(ca * A - cb * Bt)
+            A += 1.0 / (kk + a)
+            Bt = Bt - 1.0 / (n - kk - 1 + b) if n - kk - 1 > 0 else 0.0
+            w *= (n - kk) / (kk + 1) * ratio
+        tot = sum(ws)
+        mean = sum(wi * xi for wi, xi in zip(ws, xs)) / tot
+        var += sum(wi * (xi - mean) ** 2 for wi, xi in zip(ws, xs)) / tot
+    return g * g <= t2 * var
+
+
+def _rate_interval(sets: Sequence[SetStat], eta: float, lam: float, t2: float) -> tuple[float, float]:
+    """The smallest interval holding every m the score test keeps (_rate_band). The test is run on a grid of eta from
+    the estimate outward to +-RATE_ETA_MAX, refitting s along the way; the outermost kept point is refined by bisection
+    against its outer neighbour. Where the kept points come in more than one piece (s refitted far from the estimate can
+    be small enough that the test loses power), the interval spans them."""
+    lam0 = min(lam, LAM_MAX)
+    eta = max(-RATE_ETA_MAX, min(RATE_ETA_MAX, eta))
+    ends = []
+    for direction in (-1.0, 1.0):
+        points = [(eta, lam0, True)]
+        x, warm = eta, lam0
+        while abs(x) < RATE_ETA_MAX:
+            x = x + direction * RATE_SCAN_STEP
+            if abs(x) >= RATE_ETA_MAX:
+                x = direction * RATE_ETA_MAX
+            warm = _profile_lam(sets, _sig(x), warm)
+            points.append((x, warm, _rate_band(sets, x, warm, t2)))
+        last = max(i for i, pt in enumerate(points) if pt[2])
+        if last == len(points) - 1:
+            ends.append(direction * math.inf)
+            continue
+        inner, outer, warm = points[last][0], points[last + 1][0], points[last][1]
+        for _ in range(45):
+            mid = 0.5 * (inner + outer)
+            lam_mid = _profile_lam(sets, _sig(mid), warm)
+            if _rate_band(sets, mid, lam_mid, t2):
+                inner, warm = mid, lam_mid
+            else:
+                outer = mid
+        ends.append(inner)
+    return (0.0 if ends[0] == -math.inf else _sig(ends[0])), (1.0 if ends[1] == math.inf else _sig(ends[1]))
 
 
 def combine_rates(sets: Sequence[SetStat]) -> Combined:
     """Rates over problem sets by the beta-binomial model: the mean rate m of a problem set, on the 0-1 scale.
 
     One set is its plain rate k / n with the Wilson interval; so is a group in which every set is at 0 % (or 100 %).
-    The interval covers these problem sets, as for every other metric: s held at its estimate, the sets' rates fixed,
-    only the sampling of problems within each set. eta solves sum_i U_i(eta; k_i) = 0, U_i = s q (psi(k_i + a) - psi(a)
-    - psi(n_i - k_i + b) + psi(b)) with q = m (1 - m), and the score's variance from the problems' sampling is
-    V = sum_i (dU_i/dk_i)^2 Var(k_i), with dU_i/dk_i = s q (psi'(k_i + a) + psi'(n_i - k_i + b)) and Var(k_i) = n_i p_i
-    (1 - p_i) at the set's posterior rate p_i = (k_i + a) / (n_i + s), all at the estimate. The interval is every eta
-    whose score stays within t sqrt(V), t on sum (n - 1): the estimating equation inverted, not linearised around the
-    estimate, so it stays sensible where many sets sit at 0 % or 100 % (there the linearised, delta-method interval on
-    the log-odds reached 0 % to 100 % for one success in 6,660 problems). Where sets sit at both 0 % or 100 % and far from
-    them, the fitted beta is U-shaped and its mean responds little to the data, so the interval can still be wide. The
-    range for one more set is the 2.5 % to 97.5 % quantiles of Beta(a, b). The weights are each set's share of the information about eta; tau2 carries 1 / s
+    The interval covers these problem sets, as for every other metric: the sets' rates fixed, only the sampling of
+    problems within each set. It inverts Rao's score test for m with s as a nuisance (_rate_band): every m whose score,
+    with s refitted at m and projected out, stays within t times its standard deviation, the variance at the tested m
+    and summed exactly over the sets' binomial counts; t on sum (n - 1). Testing at each m, as Wilson's interval does
+    for one rate, keeps the interval inside 0-100 % and sensible where many sets sit at 0 % or 100 %, where a
+    delta-method interval on the log-odds spanned almost the whole range. The range for one more set is the 2.5 % to
+    97.5 % quantiles of Beta(a, b). The weights are each set's share of the information about eta; tau2 carries 1 / s
     (0 for the pooled rate)."""
     S = len(sets)
     N = sum(s.n for s in sets)
@@ -395,23 +491,14 @@ def combine_rates(sets: Sequence[SetStat]) -> Combined:
     s = math.exp(min(lam, LAM_MAX))
     a, b, q = m * s, (1.0 - m) * s, m * (1.0 - m)
     tg_a, tg_b = trigamma(a), trigamma(b)
-    num = 0.0
-    info = []
-    for st in sets:
-        n, k = st.n, st.s1
-        tka, tnb = trigamma(k + a), trigamma(n - k + b)
-        info.append(-(s * q) ** 2 * (tka - tg_a + tnb - tg_b))
-        du_dk = s * q * (tka + tnb)
-        p_i = (k + a) / (n + s)
-        num += du_dk * du_dk * n * p_i * (1.0 - p_i)
-    bound = t_ppf(0.975, max(1, sum(st.n - 1 for st in sets))) * math.sqrt(num)
-    lo_eta, hi_eta = _rate_edge(sets, eta, s, bound, -1.0), _rate_edge(sets, eta, s, bound, 1.0)
+    info = [-(s * q) ** 2 * (trigamma(st.s1 + a) - tg_a + trigamma(st.n - st.s1 + b) - tg_b) for st in sets]
+    tq = t_ppf(0.975, max(1, sum(st.n - 1 for st in sets)))
+    lo, hi = _rate_interval(sets, eta, lam, tq * tq)
     pi_lo = pi_hi = None
     if S >= 3:
         pi_lo, pi_hi = beta_ppf(0.025, a, b), beta_ppf(0.975, a, b)
     tot = sum(info)
-    return Combined(m, 0.0 if lo_eta == -math.inf else _sig(lo_eta), 1.0 if hi_eta == math.inf else _sig(hi_eta),
-                    pi_lo, pi_hi, 0.0 if pooled else 1.0 / s, [x / tot for x in info], S, None)
+    return Combined(m, min(lo, m), max(hi, m), pi_lo, pi_hi, 0.0 if pooled else 1.0 / s, [x / tot for x in info], S, None)
 
 
 def combine(sets: Sequence[SetStat], scale: str = "normal") -> Combined | None:
