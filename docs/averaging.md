@@ -96,10 +96,13 @@ $$
 $$
 
 with \(t\) on \(\sum_s (n_s - 1)\) degrees of freedom. For rates the same rule goes through the model's estimating
-equation, as a sandwich variance (Huber 1967): the estimate of \(m\) solves \(\sum_s U_s = 0\) for the sets' scores
-\(U_s\), so its variance is \(\sum_s (\partial U_s / \partial k_s)^2 \operatorname{Var}(k_s) / (\sum_s \partial U_s /
-\partial m)^2\), with \(\operatorname{Var}(k_s)\) the binomial variance at the set's posterior rate. The interval is
-formed on the log-odds scale, so it stays between 0 and 100 %.
+equation (Huber 1967): the estimate of \(m\) solves \(\sum_s U_s(m) = 0\) for the sets' scores \(U_s\), and the
+score's variance from the problems' sampling is \(V = \sum_s (\partial U_s / \partial k_s)^2 \operatorname{Var}(k_s)\),
+with \(\operatorname{Var}(k_s)\) the binomial variance at the set's posterior rate. The interval is every \(m\) whose
+score stays within \(t \sqrt{V}\): the estimating equation inverted rather than linearised around the estimate, so it
+stays between 0 and 100 % and stays sensible where many sets sit at 0 % or 100 %, where a linearised (delta-method)
+interval can span almost the whole range. Where sets sit at both ends, the fitted beta is U-shaped and its mean
+responds little to the data, and the interval can still be wide.
 
 ## One more problem set
 

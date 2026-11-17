@@ -326,16 +326,63 @@ def wilson(k: float, n: float) -> tuple[float, float]:
     return max(0.0, c - h), min(1.0, c + h)
 
 
+def _rate_score(sets: Sequence[SetStat], eta: float, s: float) -> float:
+    """The score in eta of all sets, s held fixed: sum_i s q (psi(k_i + a) - psi(a) - psi(n_i - k_i + b) + psi(b)),
+    q = m (1 - m). A difference psi(x + c) - psi(c) is exactly 0 for x = 0, where c may underflow."""
+    m = 1.0 / (1.0 + math.exp(-eta))
+    a, b = m * s, (1.0 - m) * s
+    total = 0.0
+    for st in sets:
+        k, rest = st.s1, st.n - st.s1
+        total += (digamma(k + a) - digamma(a) if k > 0 else 0.0) - (digamma(rest + b) - digamma(b) if rest > 0 else 0.0)
+    return s * m * (1.0 - m) * total
+
+
+def _rate_edge(sets: Sequence[SetStat], eta: float, s: float, bound: float, direction: float) -> float:
+    """The last eta, going from the estimate in ``direction``, whose score stays within ``bound``: steps that grow by
+    half each time until the score leaves it (or eta reaches +-RATE_ETA_MAX, an end of 0 or 1), then bisection."""
+    def inside(e: float) -> bool:
+        u = _rate_score(sets, e, s)
+        return math.isfinite(u) and abs(u) <= bound
+    last, step = eta, 0.25
+    while True:
+        e = last + direction * step
+        if abs(e) >= RATE_ETA_MAX:
+            e = direction * RATE_ETA_MAX
+            if inside(e):
+                return direction * math.inf
+            break
+        if not inside(e):
+            break
+        last, step = e, step * 1.5
+    lo, hi = last, e
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if inside(mid):
+            lo = mid
+        else:
+            hi = mid
+    return lo
+
+
+RATE_ETA_MAX = 30.0   # the interval's search ends at expit(+-30), 1e-13 from 0 and 1
+
+
 def combine_rates(sets: Sequence[SetStat]) -> Combined:
     """Rates over problem sets by the beta-binomial model: the mean rate m of a problem set, on the 0-1 scale.
 
     One set is its plain rate k / n with the Wilson interval; so is a group in which every set is at 0 % (or 100 %).
     The interval covers these problem sets, as for every other metric: s held at its estimate, the sets' rates fixed,
     only the sampling of problems within each set. eta solves sum_i U_i(eta; k_i) = 0, U_i = s q (psi(k_i + a) - psi(a)
-    - psi(n_i - k_i + b) + psi(b)) with q = m (1 - m), so Var(eta) = sum_i (dU_i/dk_i)^2 Var(k_i) / (sum_i dU_i/deta)^2,
-    with dU_i/dk_i = s q (psi'(k_i + a) + psi'(n_i - k_i + b)) and Var(k_i) = n_i p_i (1 - p_i) at the set's posterior
-    rate p_i = (k_i + a) / (n_i + s); t on sum (n - 1). The range for one more set is the 2.5 % to 97.5 % quantiles of
-    Beta(a, b). The weights are each set's share of the information about eta; tau2 carries 1 / s (0 for the pooled rate)."""
+    - psi(n_i - k_i + b) + psi(b)) with q = m (1 - m), and the score's variance from the problems' sampling is
+    V = sum_i (dU_i/dk_i)^2 Var(k_i), with dU_i/dk_i = s q (psi'(k_i + a) + psi'(n_i - k_i + b)) and Var(k_i) = n_i p_i
+    (1 - p_i) at the set's posterior rate p_i = (k_i + a) / (n_i + s), all at the estimate. The interval is every eta
+    whose score stays within t sqrt(V), t on sum (n - 1): the estimating equation inverted, not linearised around the
+    estimate, so it stays sensible where many sets sit at 0 % or 100 % (there the linearised, delta-method interval on
+    the log-odds reached 0 % to 100 % for one success in 6,660 problems). Where sets sit at both 0 % or 100 % and far from
+    them, the fitted beta is U-shaped and its mean responds little to the data, so the interval can still be wide. The
+    range for one more set is the 2.5 % to 97.5 % quantiles of Beta(a, b). The weights are each set's share of the information about eta; tau2 carries 1 / s
+    (0 for the pooled rate)."""
     S = len(sets)
     N = sum(s.n for s in sets)
     K = sum(s.s1 for s in sets)
@@ -347,27 +394,24 @@ def combine_rates(sets: Sequence[SetStat]) -> Combined:
     m = 1.0 / (1.0 + math.exp(-eta))
     s = math.exp(min(lam, LAM_MAX))
     a, b, q = m * s, (1.0 - m) * s, m * (1.0 - m)
-    dg_a, dg_b, tg_a, tg_b = digamma(a), digamma(b), trigamma(a), trigamma(b)
-    num = den = 0.0
+    tg_a, tg_b = trigamma(a), trigamma(b)
+    num = 0.0
     info = []
     for st in sets:
         n, k = st.n, st.s1
         tka, tnb = trigamma(k + a), trigamma(n - k + b)
-        u = s * q * (digamma(k + a) - dg_a - digamma(n - k + b) + dg_b)
-        fisher = -(s * q) ** 2 * (tka - tg_a + tnb - tg_b)
-        info.append(fisher)
+        info.append(-(s * q) ** 2 * (tka - tg_a + tnb - tg_b))
         du_dk = s * q * (tka + tnb)
         p_i = (k + a) / (n + s)
         num += du_dk * du_dk * n * p_i * (1.0 - p_i)
-        den += -fisher + u * (1.0 - 2.0 * m)
-    se = math.sqrt(num) / abs(den)
-    tq = t_ppf(0.975, max(1, sum(st.n - 1 for st in sets)))
+    bound = t_ppf(0.975, max(1, sum(st.n - 1 for st in sets))) * math.sqrt(num)
+    lo_eta, hi_eta = _rate_edge(sets, eta, s, bound, -1.0), _rate_edge(sets, eta, s, bound, 1.0)
     pi_lo = pi_hi = None
     if S >= 3:
         pi_lo, pi_hi = beta_ppf(0.025, a, b), beta_ppf(0.975, a, b)
     tot = sum(info)
-    return Combined(m, _sig(eta - tq * se), _sig(eta + tq * se), pi_lo, pi_hi, 0.0 if pooled else 1.0 / s,
-                    [x / tot for x in info], S, None)
+    return Combined(m, 0.0 if lo_eta == -math.inf else _sig(lo_eta), 1.0 if hi_eta == math.inf else _sig(hi_eta),
+                    pi_lo, pi_hi, 0.0 if pooled else 1.0 / s, [x / tot for x in info], S, None)
 
 
 def combine(sets: Sequence[SetStat], scale: str = "normal") -> Combined | None:

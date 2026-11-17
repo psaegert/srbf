@@ -670,7 +670,32 @@
     var p = k / n, z2 = Z975 * Z975, den = 1 + z2 / n, c = (p + z2 / (2 * n)) / den, h = Z975 * Math.sqrt(p * (1 - p) / n + z2 / (4 * n * n)) / den;
     return [Math.max(0, c - h), Math.min(1, c + h)];
   }
-  // rates over problem sets on the 0-1 scale; one set: its plain rate and the Wilson interval
+  // the score in eta of all sets, s held fixed (a difference psi(x + c) - psi(c) is exactly 0 for x = 0)
+  var RATE_ETA_MAX = 30;
+  function rateScore(sets, eta, s) {
+    var m = 1 / (1 + Math.exp(-eta)), a = m * s, b = (1 - m) * s, total = 0, j;
+    for (j = 0; j < sets.length; j++) {
+      var k = sets[j].s1, rest = sets[j].n - sets[j].s1;
+      total += (k > 0 ? digamma(k + a) - digamma(a) : 0) - (rest > 0 ? digamma(rest + b) - digamma(b) : 0);
+    }
+    return s * m * (1 - m) * total;
+  }
+  // the last eta, from the estimate in `direction`, whose score stays within `bound` (the reference's _rate_edge)
+  function rateEdge(sets, eta, s, bound, direction) {
+    var inside = function (e) { var u = rateScore(sets, e, s); return isFinite(u) && Math.abs(u) <= bound; };
+    var last = eta, step = 0.25, e, i;
+    while (true) {
+      e = last + direction * step;
+      if (Math.abs(e) >= RATE_ETA_MAX) { e = direction * RATE_ETA_MAX; if (inside(e)) { return direction * Infinity; } break; }
+      if (!inside(e)) { break; }
+      last = e; step *= 1.5;
+    }
+    var lo = last, hi = e;
+    for (i = 0; i < 80; i++) { var mid = 0.5 * (lo + hi); if (inside(mid)) { lo = mid; } else { hi = mid; } }
+    return lo;
+  }
+  // rates over problem sets on the 0-1 scale; one set: its plain rate and the Wilson interval. The interval inverts the
+  // estimating equation (every eta whose score stays within t sqrt(V)), see the reference's combine_rates
   function combineRates(sets) {
     var S = sets.length, N = 0, K = 0, df = 0, j;
     for (j = 0; j < S; j++) { N += sets[j].n; K += sets[j].s1; df += sets[j].n - 1; }
@@ -680,16 +705,17 @@
       return { mu: K / N, lo: wi[0], hi: wi[1], piLo: null, piHi: null, tau2: 0, w: sets.map(function (st) { return st.n / N; }), S: S, p: null };
     }
     var lam = Math.min(f.lam, LAM_MAX), m = 1 / (1 + Math.exp(-f.eta)), s = Math.exp(lam), a = m * s, b = (1 - m) * s, q = m * (1 - m);
-    var dgA = digamma(a), dgB = digamma(b), tgA = trigamma(a), tgB = trigamma(b), num = 0, den = 0, info = [], tot = 0;
+    var tgA = trigamma(a), tgB = trigamma(b), num = 0, info = [], tot = 0;
     for (j = 0; j < S; j++) {
       var n = sets[j].n, k = sets[j].s1, tka = trigamma(k + a), tnb = trigamma(n - k + b);
-      var u = s * q * (digamma(k + a) - dgA - digamma(n - k + b) + dgB), fisher = -Math.pow(s * q, 2) * (tka - tgA + tnb - tgB);
+      var fisher = -Math.pow(s * q, 2) * (tka - tgA + tnb - tgB);
       info.push(fisher); tot += fisher;
       var dudk = s * q * (tka + tnb), pt = (k + a) / (n + s);
-      num += dudk * dudk * n * pt * (1 - pt); den += -fisher + u * (1 - 2 * m);
+      num += dudk * dudk * n * pt * (1 - pt);
     }
-    var se = Math.sqrt(num) / Math.abs(den), tq = tq975(Math.max(1, df));
-    return { mu: m, lo: sig(f.eta - tq * se), hi: sig(f.eta + tq * se), piLo: S >= 3 ? betaPpf(0.025, a, b) : null, piHi: S >= 3 ? betaPpf(0.975, a, b) : null,
+    var bound = tq975(Math.max(1, df)) * Math.sqrt(num), loEta = rateEdge(sets, f.eta, s, bound, -1), hiEta = rateEdge(sets, f.eta, s, bound, 1);
+    return { mu: m, lo: loEta === -Infinity ? 0 : sig(loEta), hi: hiEta === Infinity ? 1 : sig(hiEta),
+             piLo: S >= 3 ? betaPpf(0.025, a, b) : null, piHi: S >= 3 ? betaPpf(0.975, a, b) : null,
              tau2: isFinite(f.lam) ? 1 / s : 0, w: info.map(function (x) { return x / tot; }), S: S, p: null };
   }
   // sets: [{n, s1, s2, ...}]; a rate ("logit") comes back on its own 0-1 scale. Also: the problems behind it, and n0,
