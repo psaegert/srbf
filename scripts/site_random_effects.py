@@ -8,7 +8,15 @@ mu is estimated with weights 1 / (tau^2 + noise), tau^2 by Paule-Mandel. The int
 2026-09-27: a score is a claim about srbf's suite): the weights are held fixed and only the sampling of problems within
 each set counts, Var(mu) = sum w^2 noise / (sum w)^2, with t on the problems' degrees of freedom, sum (n - 1). How far
 single problem sets spread is the prediction interval for one more set, t with S - 2 (Higgins et al. 2009).
-Rates are combined on the logit scale, with a continuity-corrected rate (x n + 0.5) / (n + 1).
+
+Rates are combined by the beta-binomial model (owner 2026-11-17: "use what is more sound"; Skellam 1948): a set's sum
+k of n problem values is binomial with its set's rate, and the sets' rates follow a beta distribution with mean m, the
+mean rate of a problem set. Its likelihood is closed-form, so sets at 0 % and 100 % enter as they are (Kuss 2015),
+where the logit of an observed rate needs a correction ((k + 0.5) / (n + 1) until 2026-11-17) that pulls small sets
+towards 50 %. The interval follows the same rule as above: s held at its estimate, only the
+problems' sampling within each set, t on sum (n - 1). One set is its plain rate k / n with the Wilson score interval.
+Chosen over the binomial-normal (logit-normal) model by a simulation on srbf's own set sizes (bias, coverage, and the
+quadrature the logit-normal likelihood needs at 0 % and 100 %); CHANGELOG.md has the numbers.
 
 results-site/explorer_v2.js implements the same arithmetic, step for step (the t distribution below is the same
 continued fraction), so the two agree to rounding; tests/test_site_random_effects.py and the site suite check that.
@@ -110,10 +118,11 @@ def expit(x: float) -> float:
 
 
 def set_estimates(sets: Sequence[SetStat], scale: str) -> tuple[list[float], list[float]]:
-    """Each set's estimate on the scale the sets are combined on, and its squared standard error.
+    """Each set's mean and its squared standard error, for a metric that is not a rate (rates: combine_rates).
 
-    A set whose problems all have the same value, or that has one problem, has no usable variance of its own: a rate then
-    takes its continuity-corrected binomial variance p(1 - p), any other metric the variance pooled over the sets."""
+    A set whose problems all have the same value, or that has one problem, has no usable variance of its own: it takes
+    the variance pooled over the sets."""
+    assert scale == "normal", scale
     sets = [s for s in sets if s.n > 0]
     num = sum((s.n - 1) * s.var for s in sets if s.var is not None)
     den = sum(s.n - 1 for s in sets if s.var is not None)
@@ -121,15 +130,9 @@ def set_estimates(sets: Sequence[SetStat], scale: str) -> tuple[list[float], lis
     ys, vs = [], []
     for s in sets:
         own = s.var if s.var is not None and s.var > 0 else None
-        if scale == "logit":
-            p = (s.n * s.mean + 0.5) / (s.n + 1.0)
-            v = own if own is not None else p * (1.0 - p)
-            ys.append(logit(p))
-            vs.append(max(EPS_VAR, v / s.n / (p * (1.0 - p)) ** 2))
-        else:
-            v = own if own is not None else pooled
-            ys.append(s.mean)
-            vs.append(max(EPS_VAR, v / s.n))
+        v = own if own is not None else pooled
+        ys.append(s.mean)
+        vs.append(max(EPS_VAR, v / s.n))
     return ys, vs
 
 
@@ -166,7 +169,7 @@ class Combined:
     tau2: float
     weights: list[float]
     S: int
-    p: float
+    p: float | None
 
 
 def combine_scale(y: Sequence[float], v: Sequence[float], df: int = 1) -> Combined:
@@ -189,18 +192,195 @@ def combine_scale(y: Sequence[float], v: Sequence[float], df: int = 1) -> Combin
     return Combined(mu, mu - tq * se, mu + tq * se, pi_lo, pi_hi, tau2, [wi / sw for wi in w], S, p)
 
 
+# ---- rates: the beta-binomial model ----------------------------------------------------------------------------------
+# A set's sum k of n problem values (a value is the share of its runs that succeeded, so k may be fractional) is
+# binomial with the set's rate p, and the sets' rates follow Beta(m s, (1 - m) s): m is the mean rate of a problem set,
+# s how tightly the sets cluster around it (s -> inf: no spread beyond the binomial; s -> 0: every set at 0 % or 100 %).
+# A set's likelihood is B(k + a, n - k + b) / B(a, b) with a = m s, b = (1 - m) s: closed-form, so 0 % and 100 % enter
+# as they are. m and s by maximum likelihood, Newton in (eta, lam) = (logit m, log s) with the exact gradient and Hessian.
+LAM_MIN, LAM_MAX = -20.0, 15.0   # s from 2e-9 to 3.3e6 (within 0.03 % of the binomial for sets of up to 1,024 problems)
+MAX_STEP = 2.0                   # Newton moves at most this far in one step
+Z975 = 1.959963984540054
+
+
+def digamma(x: float) -> float:
+    """psi(x), x > 0: the recurrence psi(x) = psi(x + 1) - 1/x up to x >= 10, then the asymptotic series."""
+    r = 0.0
+    while x < 10.0:
+        r -= 1.0 / x
+        x += 1.0
+    f = 1.0 / (x * x)
+    return r + math.log(x) - 0.5 / x - f * (1.0 / 12 - f * (1.0 / 120 - f * (1.0 / 252 - f * (1.0 / 240 - f * (1.0 / 132)))))
+
+
+def trigamma(x: float) -> float:
+    """psi'(x), x > 0: psi'(x) = psi'(x + 1) + 1/x^2 up to x >= 10, then the asymptotic series."""
+    r = 0.0
+    while x < 10.0:
+        r += 1.0 / (x * x)
+        x += 1.0
+    f = 1.0 / (x * x)
+    return r + 1.0 / x + 0.5 * f + (1.0 / x) * f * (1.0 / 6 - f * (1.0 / 30 - f * (1.0 / 42 - f * (1.0 / 30 - f * (5.0 / 66)))))
+
+
+def _sig(x: float) -> float:
+    """expit(x), without overflow."""
+    if x >= 0:
+        return 1.0 / (1.0 + math.exp(-x))
+    e = math.exp(x)
+    return e / (1.0 + e)
+
+
+def _bb(sets: Sequence[SetStat], eta: float, lam: float) -> tuple[float, float, float, float, float, float]:
+    """The log likelihood of all sets (without the binomial coefficients), its gradient (d/deta, d/dlam) and Hessian
+    (eta eta, eta lam, lam lam): the derivatives in (a, b) are digamma and trigamma terms, carried over by the chain rule
+    (da/deta = s m (1 - m) = -db/deta, da/dlam = a, db/dlam = b)."""
+    m = 1.0 / (1.0 + math.exp(-eta))
+    s = math.exp(lam)
+    a, b, q = m * s, (1.0 - m) * s, m * (1.0 - m)
+    ll = da = db = haa = hbb = hab = 0.0
+    lg_s, dg_s, tg_s = math.lgamma(s), digamma(s), trigamma(s)
+    lg_a, lg_b, dg_a, dg_b, tg_a, tg_b = math.lgamma(a), math.lgamma(b), digamma(a), digamma(b), trigamma(a), trigamma(b)
+    for st in sets:
+        n, k = st.n, st.s1
+        ll += math.lgamma(k + a) + math.lgamma(n - k + b) - math.lgamma(n + s) - lg_a - lg_b + lg_s
+        dns, tns = digamma(n + s), trigamma(n + s)
+        da += digamma(k + a) - dns - dg_a + dg_s
+        db += digamma(n - k + b) - dns - dg_b + dg_s
+        haa += trigamma(k + a) - tns - tg_a + tg_s
+        hbb += trigamma(n - k + b) - tns - tg_b + tg_s
+        hab += -tns + tg_s
+    ae, be, al, bl = s * q, -s * q, a, b
+    return (ll, ae * da + be * db, al * da + bl * db,
+            ae * ae * haa + 2 * ae * be * hab + be * be * hbb + (da - db) * s * q * (1.0 - 2.0 * m),
+            ae * al * haa + (ae * bl + be * al) * hab + be * bl * hbb + (da - db) * s * q,
+            al * al * haa + 2 * al * bl * hab + bl * bl * hbb + da * a + db * b)
+
+
+def rate_fit(sets: Sequence[SetStat]) -> tuple[float, float]:
+    """Maximum likelihood (eta, lam) = (logit m, log s) by Newton on |H|, from the pooled rate and s = 1.
+
+    The step is V diag(1 / |ev|) V^T g for the Hessian's eigen-decomposition V diag(ev) V^T: an ascent step along every
+    direction, long where the likelihood is flat. A step is at most MAX_STEP long and halved until the likelihood does
+    not fall; lam stays within [LAM_MIN, LAM_MAX] (at a bound, eta moves alone). The pooled rate (s = inf, lam returned as
+    inf) is kept when it is at least as likely. eta = -inf / +inf when every set is at 0 % / 100 %."""
+    if all(s.s1 <= 0 for s in sets):
+        return -math.inf, math.inf
+    if all(s.s1 >= s.n for s in sets):
+        return math.inf, math.inf
+    p0 = sum(s.s1 for s in sets) / sum(s.n for s in sets)
+    l0 = sum(s.s1 * math.log(p0) + (s.n - s.s1) * math.log(1.0 - p0) for s in sets)
+    eta, lam = math.log(p0 / (1.0 - p0)), 0.0
+    ll, ge, gl, hee, hel, hll = _bb(sets, eta, lam)
+    for _ in range(100):
+        if (lam >= LAM_MAX and gl > 0) or (lam <= LAM_MIN and gl < 0):
+            de, dl = (-ge / hee if hee < 0 else ge), 0.0
+        else:
+            half_tr, rad = 0.5 * (hee + hll), math.sqrt((0.5 * (hee - hll)) ** 2 + hel * hel)
+            ev1, ev2 = half_tr + rad, half_tr - rad
+            if rad == 0.0:
+                v1, v2 = (1.0, 0.0), (0.0, 1.0)
+            elif abs(hel) > 0.0:
+                nrm = math.hypot(ev1 - hll, hel)
+                v1 = ((ev1 - hll) / nrm, hel / nrm)
+                v2 = (-v1[1], v1[0])
+            else:
+                v1, v2 = ((1.0, 0.0), (0.0, 1.0)) if hee >= hll else ((0.0, 1.0), (1.0, 0.0))
+            floor = 1e-10 * max(1.0, abs(ev1), abs(ev2))
+            c1 = (v1[0] * ge + v1[1] * gl) / max(abs(ev1), floor)
+            c2 = (v2[0] * ge + v2[1] * gl) / max(abs(ev2), floor)
+            de, dl = c1 * v1[0] + c2 * v2[0], c1 * v1[1] + c2 * v2[1]
+        big = max(abs(de), abs(dl))
+        if big > MAX_STEP:
+            de, dl = de * MAX_STEP / big, dl * MAX_STEP / big
+        step = 1.0
+        while True:
+            eta_n, lam_n = eta + step * de, min(LAM_MAX, max(LAM_MIN, lam + step * dl))
+            res = _bb(sets, eta_n, lam_n)
+            if res[0] >= ll - 1e-12 * abs(ll) or step < 1e-12:
+                break
+            step *= 0.5
+        moved = max(abs(eta_n - eta), abs(lam_n - lam))
+        eta, lam = eta_n, lam_n
+        ll, ge, gl, hee, hel, hll = res
+        if moved <= 1e-10 or max(abs(ge), abs(gl)) <= 1e-9:
+            break
+    if l0 >= ll:
+        return math.log(p0 / (1.0 - p0)), math.inf
+    return eta, lam
+
+
+def beta_ppf(q: float, a: float, b: float) -> float:
+    """The q-quantile of Beta(a, b), by bisection on the regularised incomplete beta function."""
+    lo, hi = 0.0, 1.0
+    for _ in range(100):
+        mid = 0.5 * (lo + hi)
+        lo, hi = (mid, hi) if betai(a, b, mid) < q else (lo, mid)
+    return 0.5 * (lo + hi)
+
+
+def wilson(k: float, n: float) -> tuple[float, float]:
+    """The Wilson score interval (95 %) of the rate k / n."""
+    p, z2 = k / n, Z975 * Z975
+    den = 1.0 + z2 / n
+    c = (p + z2 / (2.0 * n)) / den
+    h = Z975 * math.sqrt(p * (1.0 - p) / n + z2 / (4.0 * n * n)) / den
+    return max(0.0, c - h), min(1.0, c + h)
+
+
+def combine_rates(sets: Sequence[SetStat]) -> Combined:
+    """Rates over problem sets by the beta-binomial model: the mean rate m of a problem set, on the 0-1 scale.
+
+    One set is its plain rate k / n with the Wilson interval; so is a group in which every set is at 0 % (or 100 %).
+    The interval covers these problem sets, as for every other metric: s held at its estimate, the sets' rates fixed,
+    only the sampling of problems within each set. eta solves sum_i U_i(eta; k_i) = 0, U_i = s q (psi(k_i + a) - psi(a)
+    - psi(n_i - k_i + b) + psi(b)) with q = m (1 - m), so Var(eta) = sum_i (dU_i/dk_i)^2 Var(k_i) / (sum_i dU_i/deta)^2,
+    with dU_i/dk_i = s q (psi'(k_i + a) + psi'(n_i - k_i + b)) and Var(k_i) = n_i p_i (1 - p_i) at the set's posterior
+    rate p_i = (k_i + a) / (n_i + s); t on sum (n - 1). The range for one more set is the 2.5 % to 97.5 % quantiles of
+    Beta(a, b). The weights are each set's share of the information about eta; tau2 carries 1 / s (0 for the pooled rate)."""
+    S = len(sets)
+    N = sum(s.n for s in sets)
+    K = sum(s.s1 for s in sets)
+    eta, lam = rate_fit(sets) if S > 1 else (0.0, 0.0)
+    if S == 1 or not math.isfinite(eta):
+        lo, hi = wilson(K, N)
+        return Combined(K / N, lo, hi, None, None, 0.0, [s.n / N for s in sets], S, None)
+    pooled = not math.isfinite(lam)
+    m = 1.0 / (1.0 + math.exp(-eta))
+    s = math.exp(min(lam, LAM_MAX))
+    a, b, q = m * s, (1.0 - m) * s, m * (1.0 - m)
+    dg_a, dg_b, tg_a, tg_b = digamma(a), digamma(b), trigamma(a), trigamma(b)
+    num = den = 0.0
+    info = []
+    for st in sets:
+        n, k = st.n, st.s1
+        tka, tnb = trigamma(k + a), trigamma(n - k + b)
+        u = s * q * (digamma(k + a) - dg_a - digamma(n - k + b) + dg_b)
+        fisher = -(s * q) ** 2 * (tka - tg_a + tnb - tg_b)
+        info.append(fisher)
+        du_dk = s * q * (tka + tnb)
+        p_i = (k + a) / (n + s)
+        num += du_dk * du_dk * n * p_i * (1.0 - p_i)
+        den += -fisher + u * (1.0 - 2.0 * m)
+    se = math.sqrt(num) / abs(den)
+    tq = t_ppf(0.975, max(1, sum(st.n - 1 for st in sets)))
+    pi_lo = pi_hi = None
+    if S >= 3:
+        pi_lo, pi_hi = beta_ppf(0.025, a, b), beta_ppf(0.975, a, b)
+    tot = sum(info)
+    return Combined(m, _sig(eta - tq * se), _sig(eta + tq * se), pi_lo, pi_hi, 0.0 if pooled else 1.0 / s,
+                    [x / tot for x in info], S, None)
+
+
 def combine(sets: Sequence[SetStat], scale: str = "normal") -> Combined | None:
-    """Combine problem sets; a rate (scale "logit") comes back on its own 0-1 scale."""
+    """Combine problem sets; a rate (scale "logit") comes back on its own 0-1 scale (combine_rates)."""
     sets = [s for s in sets if s.n > 0]
     if not sets:
         return None
-    y, v = set_estimates(sets, scale)
-    c = combine_scale(y, v, sum(s.n - 1 for s in sets))
     if scale == "logit":
-        f = expit
-        return Combined(f(c.mu), f(c.lo), f(c.hi), None if c.pi_lo is None else f(c.pi_lo),
-                        None if c.pi_hi is None else f(c.pi_hi), c.tau2, c.weights, c.S, c.p)
-    return c
+        return combine_rates(sets)
+    y, v = set_estimates(sets, scale)
+    return combine_scale(y, v, sum(s.n - 1 for s in sets))
 
 
 def holm(pvalues: Iterable[float]) -> list[float]:
