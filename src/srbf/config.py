@@ -242,6 +242,12 @@ def _build_flash_ansr_adapter(config: Mapping[str, Any]) -> FlashANSRAdapter:
         # driver stays a plain serial loop regardless -- the overlap is the MODEL's, not ours.
         "persistent_pool": bool(config.get("persistent_refine_pool", eval_cfg.get("persistent_refine_pool", True))),
     }
+    # The transformer's inference precision (flash-ansr 0.20: 'auto' = bf16 where the GPU has it natively, 'bf16',
+    # 'fp32'). Forwarded only when the config names it, so a flash-ansr without the key keeps loading; either way the
+    # precision in force is recorded with every result (FlashANSRAdapter.inference_precision).
+    precision = config.get("precision", eval_cfg.get("precision"))
+    if precision is not None:
+        compute["precision"] = str(precision)
 
     model = FlashANSR.load(
         directory=substitute_root_path(str(model_path)),

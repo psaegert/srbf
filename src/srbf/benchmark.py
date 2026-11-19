@@ -291,6 +291,10 @@ class Benchmark:
         # every earlier flash_ansr run rank at 0.0 while its config said 0.05.
         ranking_fn = getattr(self.model_adapter, "ranking_config", None)
         meta["ranking"] = ranking_fn() if callable(ranking_fn) else None
+        # The transformer's inference precision (bf16 / fp32): pools drawn in different precisions never mix.
+        precision_fn = getattr(self.model_adapter, "inference_precision", None)
+        if callable(precision_fn):
+            meta["inference_precision"] = precision_fn()
 
         # Fall back to the parameters `from_config` resolved when the caller leaves them unset.
         limit = limit if limit is not None else self.limit
