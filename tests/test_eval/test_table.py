@@ -193,20 +193,24 @@ def test_tree_and_index_specs_parse_as_the_command_line_takes_them():
 
 
 def test_a_new_worker_does_not_change_the_judge(tmp_path, monkeypatch):
-    """The judge fingerprint names the srbf source the judge runs; the out-of-process workers are not part of it,
-    so adding a baseline worker keeps every cached judgment, while a change to judging code discards them."""
+    """The judge fingerprint names the srbf source the judge runs (srbf.table and what it imports); the
+    out-of-process workers and the rest of the package are not part of it, so adding a baseline worker or changing
+    the reports keeps every cached judgment, while a change to judging code discards them."""
     import srbf
     from srbf.table import judge_fingerprint
     pkg = tmp_path / "srbf"
     (pkg / "worker" / "models").mkdir(parents=True)
-    (pkg / "__init__.py").write_text("")
+    (pkg / "__init__.py").write_text("from srbf.reporting import REPORT\n")
+    (pkg / "table.py").write_text("def judge():\n    from srbf.result_processing import JUDGE\n    return JUDGE\n")
     (pkg / "result_processing.py").write_text("JUDGE = 1\n")
+    (pkg / "reporting.py").write_text("REPORT = 1\n")
     (pkg / "worker" / "models" / "one_worker.py").write_text("X = 1\n")
     monkeypatch.setattr(srbf, "__file__", str(pkg / "__init__.py"))
     before = judge_fingerprint("acj-5-4-llm")
     (pkg / "worker" / "models" / "another_worker.py").write_text("Y = 2\n")
     (pkg / "worker" / "models" / "one_worker.py").write_text("X = 3\n")
     (pkg / "rungs.py").write_text("RUNG_PREFIXES = ('choices', 'another_unit')\n")   # a new budget unit
+    (pkg / "reporting.py").write_text("REPORT = 2\n")                                   # not judging code
     assert judge_fingerprint("acj-5-4-llm") == before
     (pkg / "result_processing.py").write_text("JUDGE = 2\n")
     assert judge_fingerprint("acj-5-4-llm") != before
@@ -237,3 +241,43 @@ def test_a_prediction_the_spelling_cannot_walk_stays_as_written_and_the_file_is_
     path = _write(tmp_path, "toy", "choices_000001.pkl", snap)
     rows = judge_result_file(path, method="m", engine=engine)
     assert len(rows) == 2 and _col(rows, "symbolic_recovery")[0] == 1
+
+
+def test_a_problem_without_validation_points_has_no_validation_metrics(tmp_path, engine):
+    """A data catalog whose authors give no test split has no validation points (owner 2026-10-17: "if people fail to
+    tell us what to test on, we don't"): its validation metrics are empty -- neither a miss nor a perfect fit -- while
+    a problem with validation points next to it is judged as before."""
+    snap = _snapshot([["+", "x1", "x2"], ["+", "x1", "x2"], ["*", "x1", "x2"]])
+    for i in (1, 2):                                       # rows 1 and 2: no validation points
+        snap["y_val"][i] = np.empty((0,))
+        snap["y_pred_val"][i] = np.empty((0,))
+    rows = judge_result_file(_write(tmp_path, "toy", "choices_000008.pkl", snap), method="m", engine=engine)
+    assert _col(rows, "n_validation") == [16.0, 0.0, 0.0]
+    assert _col(rows, "numeric_recovery_val") == [1, "", ""]          # empty, not 0 (a miss) and not 1
+    assert _col(rows, "symbolic_recovery_mask_none") == [1, "", ""]
+    assert _col(rows, "numeric_recovery_fit") == [1, 1, 1]           # the fit split is judged as always (the toy
+    #                                                                  predictions all reproduce y numerically)
+    assert _col(rows, "symbolic_recovery") == [1, 1, 0]
+    lf = _col(rows, "log10_fvu_val")
+    assert np.isfinite(lf[0]) and all(isinstance(v, float) and np.isnan(v) for v in lf[1:])
+    assert np.isfinite(_col(rows, "log10_fvu_fit")[1])
+
+
+def test_a_target_without_variance_has_no_fit_quality(tmp_path, engine):
+    """A target that is the same number on every point (an ERBench window on which the formula saturates in float64)
+    has an FVU of 0/0 or x/0 whatever the prediction (owner 2026-11-03: "The FVU can be undefined then"): that split's
+    fit-quality metrics are empty, as without a test split, and the other split is judged as before."""
+    snap = _snapshot([["+", "x1", "x2"], ["+", "x1", "x2"], ["*", "x1", "x2"]])
+    snap["y_val"][1] = np.full(16, 7.0)                    # row 1: a constant test target, predicted exactly
+    snap["y_pred_val"][1] = np.full(16, 7.0)
+    snap["y_val"][2] = np.full(16, 7.0)                    # row 2: a constant test target, predicted wrongly
+    snap["y_pred_val"][2] = np.full(16, 3.0)
+    snap["y"][2] = np.full(16, 7.0)                        # ... and a constant fitting target
+    snap["y_pred"][2] = np.full(16, 3.0)
+    rows = judge_result_file(_write(tmp_path, "toy", "choices_000008.pkl", snap), method="m", engine=engine)
+    assert _col(rows, "numeric_recovery_val") == [1, "", ""]          # empty, not a perfect fit and not a miss
+    assert _col(rows, "numeric_recovery_fit") == [1, 1, ""]
+    lf = _col(rows, "log10_fvu_val")
+    assert np.isfinite(lf[0]) and all(isinstance(v, float) and np.isnan(v) for v in lf[1:])
+    assert np.isfinite(_col(rows, "log10_fvu_fit")[1]) and np.isnan(_col(rows, "log10_fvu_fit")[2])
+    assert _col(rows, "constant_target_val") == [0, 1, 1] and _col(rows, "constant_target_fit") == [0, 0, 1]

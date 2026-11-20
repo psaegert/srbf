@@ -2,8 +2,7 @@
 
 The [results explorer](https://psaegert.github.io/srbf/) reports every value as an average over problem sets
 (catalogs), with a 95 % interval. This page describes how, why, and what the method rests on.
-`srbf analyze` and `bootstrap_report` ([Results](results.md)) summarise differently, over all expressions of a run;
-the last section says how the two differ.
+`srbf analyze` ([Results](results.md)) averages the same way; [In the package](#in-the-package) says where the code is.
 
 ## Why average over problem sets
 
@@ -140,14 +139,15 @@ draws of the sets. The delta-method interval held it 91 to 99 % of the time, but
 and a bootstrap that redrew the problems from the sets' posterior rates held it 81 to 98 % of the time, its intervals
 too narrow.
 
-## The explorer and `srbf analyze`
+## In the package
 
-`srbf analyze`, `leaderboard` and `bootstrap_report` ([Results](results.md)) take every expression of a run alike,
-across its benchmarks, and give a bootstrap interval over the expressions. With benchmarks of very different sizes,
-their numbers are dominated by the largest benchmark and differ from the explorer's.
-
-The explorer's averages are computed in the browser by `results-site/explorer_v2.js`; `scripts/site_random_effects.py`
-is the reference implementation, and the site's test suite checks that the two agree.
+The averaging is `srbf.aggregate`: `average(problems, kind)` takes, for each problem set, the values of each problem's
+runs and a kind (`"mean"`, `"rate"`, `"ratio"` or `"median"`), and returns the average with its interval, the range
+for one more set and each set's weight; `combine` works from per-set sums. `srbf analyze` and its views
+(`leaderboard`, `scaling_table`, `per_benchmark_table`, `export_data`, [Results](results.md)) average over the
+benchmarks of a run with it, each benchmark a problem set, so their numbers are the explorer's. The explorer computes
+the same arithmetic in the browser (`results-site/explorer_v2.js`), and the site's test suite checks that the two agree.
+`bootstrap_report` remains for a bootstrap over the expressions of a single benchmark.
 
 ## Sources
 

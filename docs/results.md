@@ -119,10 +119,10 @@ not finite is left out, which for `log10_fvu_val` means the expressions that wer
 
 ## Averages over problem sets
 
-`bootstrap_report`, and `srbf analyze` below, take every expression of a run alike, across its benchmarks. The
-[results explorer](https://psaegert.github.io/srbf/) averages over problem sets (catalogs) instead, so that one large
-catalog does not decide the number: [How results are averaged](averaging.md) describes the method, why it was chosen,
-and the literature it rests on.
+`bootstrap_report` takes every expression it is given alike. `srbf analyze` below, like the
+[results explorer](https://psaegert.github.io/srbf/), averages over the benchmarks instead, each a problem set, so that
+one large catalog does not decide the number (`srbf.aggregate`): [How results are averaged](averaging.md) describes the
+method, why it was chosen, and the literature it rests on.
 
 ## One table for every problem
 
@@ -158,8 +158,9 @@ Every experiment and rung of a config whose result file exists becomes a run; th
 with a note, so the report can be built while an evaluation is still going. The experiment's name
 is the benchmark, a numeric sweep label is the budget, and the method's name comes from `--model`
 or from the adapter block. `report/results.md` holds one row per method at its largest budget,
-pooled over the benchmarks, each cell a bootstrap median with its 95 % interval, for numeric
-recovery, symbolic recovery, skeleton F1, the MDL ratio, log10 FVU and R². `report/figures/` holds the
+each cell the average over the benchmarks with its 95 % interval, as the results explorer averages
+([How results are averaged](averaging.md)): every benchmark counts about the same whatever its size,
+for numeric recovery, symbolic recovery, skeleton F1, the MDL ratio, log10 FVU and R². `report/figures/` holds the
 metric along the budget, per benchmark, and as a distribution over expressions.
 
 ### From Python
