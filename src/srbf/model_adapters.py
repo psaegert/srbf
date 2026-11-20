@@ -98,6 +98,12 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         as_dict = getattr(ranking, "as_dict", None)
         return dict(as_dict()) if callable(as_dict) else None
 
+    def inference_precision(self) -> str | None:
+        """The arithmetic the model's transformer runs in, ``'bf16'`` or ``'fp32'`` (flash-ansr >= 0.20; ``None``
+        before, which ran fp32/TF32). Recorded beside the ranking: pools drawn in different precisions are
+        different protocols and must not be mixed in one comparison."""
+        return getattr(self.model, "precision", None)
+
     def prepare(self, *, data_source: Any | None = None) -> None:  # type: ignore[override]
         self.model.to(self.device).eval()
 
@@ -123,6 +129,7 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         ``np.errstate`` restores the model's ``numpy_errors`` policy around the call."""
         record = sample.clone_metadata()
         record["ranking"] = self.ranking_config()
+        record["inference_precision"] = self.inference_precision()
 
         y_fit = sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support
         if getattr(self.model.generation_config, "method", None) == "oracle":
@@ -274,6 +281,7 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         `score`/`rank`, and the dialect `mdl` was priced in (mu moves up to 1.8x between dialects, so a
         bare number is unusable later)."""
         meta: dict[str, Any] = {"ranking": self.ranking_config(),
+                                "inference_precision": self.inference_precision(),
                                 "constant_ladder": self._constant_ladder_config(),
                                 "mdl_dialect": {"certified": True, "mode": "f64", "canon": "default", "unit": "milli-bits"}}
         try:
@@ -830,6 +838,9 @@ class FlashANSRHybridAdapter(EvaluationModelAdapter):
     def ranking_config(self) -> dict[str, Any] | None:
         return self.flash.ranking_config()
 
+    def inference_precision(self) -> str | None:
+        return self.flash.inference_precision()
+
     def prepare(self, *, data_source: Any | None = None) -> None:  # type: ignore[override]
         self.flash.prepare(data_source=data_source)
         self.regressor.prepare()
@@ -837,6 +848,7 @@ class FlashANSRHybridAdapter(EvaluationModelAdapter):
     def evaluate_sample(self, sample: EvaluationSample) -> EvaluationResult:
         record = sample.clone_metadata()
         record["ranking"] = self.ranking_config()
+        record["inference_precision"] = self.inference_precision()
         y_fit = sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support
         y_val = sample.y_validation_noisy if sample.y_validation_noisy is not None else sample.y_validation
         variables = list(record.get("variables") or record.get("variable_names") or [])
