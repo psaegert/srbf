@@ -56,9 +56,10 @@ def build_parser() -> argparse.ArgumentParser:
                                    "only files written by srbf versions that did not rename them at the source need it")
     table_parser.add_argument('--max-rung', type=int, default=None, help='Leave out the rungs above this one')
     table_parser.add_argument('--stall-timeout', type=float, default=1800.0,
-                              help='Seconds without a finished file before the workers are stopped and the table is written with what was judged')
+                              help='Seconds a file may run; a file still running is judged once more in a fresh worker, and left out '
+                                   '(STALLED) if it does not finish again')
     table_parser.add_argument('--progress', type=str, default=None, metavar='FILE',
-                              help='Record every file as it starts and finishes, so a stall names the files in flight')
+                              help='Record every file as it starts and finishes (default: a temporary file), so a file that runs too long is found')
 
     new_parser = subparsers.add_parser("new", help="Scaffold an adapter: a worker, its suite config, requirements and a smoke test")
     new_parser.add_argument('name', type=str, help='The method name, a lowercase identifier (e.g. mymethod)')
