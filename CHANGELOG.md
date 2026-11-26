@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Frozen draws: every method reads the same data** (`data_source.draws`, `srbf.frozen_draws`). With
+  `draws: {root, repeat}` a run reads each problem's data from a render made once by symbolic-data
+  (`symbolic-data render-draws`: fitting and held-out points, per-run values with their ground truth, a standard
+  normal noise vector per side; a data catalog's rows of one pool draw) instead of drawing it. A noise level scales
+  the stored vector (`y + s * std(y) * noise`, the definition of `noise`). The catalog is matched by the SHA-256 of
+  its file; an absent catalog or repeat, a draws file that differs from the manifest, sampling that differs from the
+  render, holdouts, or an output file holding rows of other draws are refused. Rows record `draws_sha256` and
+  `draws_repeat`, `__meta__` records `draws` and the input `catalog_draws` (checked by paired comparisons), and
+  `srbf merge` refuses shards of different draws. One draw per problem (`repeat: 1`) is the default.
 - **`srbf.aggregate`: the results site's averaging in the package.** `average(problems, kind)` averages per-problem
   run values over problem sets: `"mean"` (random-effects average, Paule-Mandel between-set variance), `"rate"`
   (beta-binomial), `"ratio"` (in log2, a geometric mean) or `"median"` (each set weighted as the average weighs it,

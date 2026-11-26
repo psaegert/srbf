@@ -12,9 +12,9 @@ variables are sampled from. A **problem** is one realization of a ground truth: 
 catalogs; the `srbf` suite holds all 29. See [Benchmarks](benchmarks.md).
 
 Problems are drawn when a run starts, and the draw is not seeded: two runs see the same expressions at
-different points. Numbers therefore come with intervals, and
-[Benchmarks](benchmarks.md#the-same-points-for-several-methods) shows how to give several methods
-identical points.
+different points. Numbers therefore come with intervals. With frozen draws, every problem is drawn once ahead of time
+and every run reads that draw; [Benchmarks](benchmarks.md#draws-the-same-data-for-every-method) shows how to give
+several methods identical data.
 
 ## Method, adapter, worker
 
