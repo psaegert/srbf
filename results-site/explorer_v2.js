@@ -8,7 +8,8 @@
  * <base>ranks/<metric>.js, and at any position they are computed here from <base>pv/ (pairstats.js).
  * The overlays in window.RESULTS_V2_PRIVATE_UNITS, if a LOCAL build provides them, are merged in (results-site/README.md,
  * "Local-only methods"); the public page never references such a file.
- * Views: Curves (every plotted metric vs budget or time) | Table (rungs, or catalogs at one rung) | Catalogs (matrix
+ * Views: Curves (every plotted metric vs budget or time) | Over the years (each method at one time per problem, against
+ * the date it was first made public: data/publication_dates.js) | Table (rungs, or catalogs at one rung) | Catalogs (matrix
  * of one metric at one rung) | Distribution (per-method histograms, cumulative curves, a box per catalog, quartiles
  * along the ladder; per-catalog rates for rate metrics) | Ranks (average places from the pairwise chances to beat,
  * pairwise tests, head-to-head table) | Paired Δ (each method against a baseline, problem by
@@ -129,6 +130,7 @@
     predat: "A formula cannot be blended between two budgets, so each method shows the formula from its last budget at or below the position: the largest budget it was run at that is no larger than the budget set here, or, by time, the largest whose measured time per problem fits within the time set here. The budget column names it, with its time. Slide to any time or budget, or type one into the box; the arrows step to the next time limit or budget.",
     worstrank: "For every pair of methods and every problem: the chance that one does better than the other on the chosen metric, setting every run of one against every run of the other, with ties counting half. A method without a usable formula counts as worst, and on log10 FVU two predictions that both meet Numeric Recovery tie. These chances are averaged over problem sets like any value. A method's average place is 1 plus the chances that each other method does better than it: the place it takes on average. Only who is better counts, so a narrow win counts as much as a wide one.",
     winshare: "The chance that a method does better than another method on a problem, averaged over the other methods; a tie counts as half. 100 % means it beats every other method on every problem, and 50 % means it wins as often as it loses. Unlike the average place, it stays on the same 0 to 100 % scale when the number of methods changes; its value still depends on which methods are compared.",
+    pubdate: "The day the world could first learn of a method: its first preprint, paper, public code, package or model, whichever came first. The table under the charts names it for every method and links to it. Where only the month is known, the point sits in the middle of the month.",
     provenance: "Who chose each method's settings. Upstream defaults: the settings the method's own release ships with; nothing was tuned. Author-blessed: the settings the method's authors use when they benchmark it themselves; for Flash-ANSR, these are also the authors of this benchmark. Maintainer-chosen: settings chosen, in whole or in part, by the benchmark's maintainers."
   };
   var COOKIE = "srbf_colors";
@@ -170,6 +172,8 @@
     return { view: "curves", cats: CATS.slice(), methods: D.methods.filter(function (m) { return withData(m) && !m.off && HIDDEN_DEFAULT.indexOf(m.key) < 0; }).map(function (m) { return m.key; }),
       dim: D.methods.filter(function (m) { return withData(m) && !m.off && FULL_DEFAULT.indexOf(m.key) < 0 && HIDDEN_DEFAULT.indexOf(m.key) < 0; }).map(function (m) { return m.key; }), fade: FADE_DEFAULT,
       plots: D.metrics.filter(function (m) { return m.tier === "main"; }).map(function (m) { return { x: defaultAxis(), y: m.key }; }),
+      // the Over the years view: its own plots, one metric each (the x axis is always the publication date)
+      yplots: D.metrics.filter(function (m) { return m.tier === "main"; }).map(function (m) { return m.key; }),
       focus: "numeric_recovery_val", stat: "mean", band: true, cross: false, xaxis: anyTime() ? "time" : "rung", rung: 64, base: null, tier: "main", q: "", rows: "rungs", pset: null, prun: 1, pprob: 0,
       // the Distribution view reads a continuous metric by default (a rate has no distribution over problems), the Ranks
       // view the primary ranking metric; each display remembers its own
@@ -197,6 +201,7 @@
     }
     if (q.has("fa")) { var fa = parseFloat(q.get("fa")); if (fa > 0 && fa < 1) { state.fade = fa; } any = true; }
     if (q.has("p")) { state.plots = q.get("p").split(",").map(asPlot).filter(Boolean); any = true; }
+    if (q.has("yp")) { state.yplots = q.get("yp").split(",").filter(function (k) { return METRIC[k]; }); any = true; }
     if (q.has("f") && METRIC[q.get("f")]) { state.focus = q.get("f"); any = true; }
     if (q.has("s")) { state.stat = q.get("s") === "median" ? "median" : "mean"; any = true; }
     if (q.has("ci")) { state.band = q.get("ci") !== "0"; state.cross = false; any = true; }   // the old single flag
@@ -223,7 +228,7 @@
     if (q.has("pr")) { state.prun = q.get("pr") === "2" ? 2 : 1; any = true; }
     if (q.has("pn")) { state.pprob = Math.max(0, (parseInt(q.get("pn"), 10) || 1) - 1); any = true; }
     ["cx", "cy", "cv", "ca", "cb"].forEach(function (k) { if (q.has(k)) { state[k] = q.get(k); any = true; } });
-    if (["curves", "table", "matrix", "dist", "corr", "ranks", "paired", "preds"].indexOf(state.view) < 0) { state.view = "curves"; }
+    if (["curves", "years", "table", "matrix", "dist", "corr", "ranks", "paired", "preds"].indexOf(state.view) < 0) { state.view = "curves"; }
     var isPP = function (k) { return !!(METRIC[k] && METRIC[k].pp); };
     if (!isPP(state.cx)) { state.cx = isPP("mdl_ratio") ? "mdl_ratio" : (D.metrics.filter(function (m) { return m.pp; })[0] || {}).key || null; }
     if (!isPP(state.cy)) { state.cy = isPP("log10_fvu_val") ? "log10_fvu_val" : state.cx; }
@@ -236,6 +241,8 @@
     if (!Array.isArray(state.cats)) { state.cats = CATS.slice(); }
     if (!Array.isArray(state.methods)) { state.methods = DEFAULTS().methods; }
     if (!Array.isArray(state.plots)) { state.plots = DEFAULTS().plots; }
+    if (!Array.isArray(state.yplots)) { state.yplots = DEFAULTS().yplots; }
+    state.yplots = state.yplots.filter(function (k) { return METRIC[k]; });
     state.cats = state.cats.filter(function (x) { return CAT[x]; });
     state.plots = state.plots.map(asPlot).filter(Boolean);   // from a link, from storage, or from an older shape
     state.methods = state.methods.filter(function (x) { return D.methods.some(function (mm) { return mm.key === x; }); });
@@ -270,7 +277,8 @@
     q.set("release", REL); q.set("v", state.view); q.set("c", catsParam()); q.set("m", sharedMethods().map(function (k) { return (state.dim.indexOf(k) >= 0 ? "~" : "") + k; }).join(",")); q.delete("fa"); if (state.fade !== FADE_DEFAULT) { q.set("fa", String(state.fade)); } q.set("p", state.plots.map(plotKey).join(","));
     q.set("f", state.focus); q.set("s", state.stat); q.delete("pool"); q.delete("thin"); q.set("band", state.band ? "1" : "0"); q.set("cross", state.cross ? "1" : "0");
     q.set("x", state.xaxis); q.set("r", String(state.rung)); q.set("pm", state.pm); q.delete("pt"); if (state.pm === "time" && state.pt) { q.set("pt", String(state.pt)); } if (state.base) { q.set("b", state.base); } q.set("rows", state.rows); q.set("ok", String(state.valid)); q.set("imp", state.impute ? "1" : "0");
-    ["dm", "dv", "dn", "rm", "t", "ps", "pr", "pn", "pp", "cx", "cy", "cv", "ca", "cb"].forEach(function (k) { q.delete(k); });   // a link carries only what its display reads
+    ["dm", "dv", "dn", "rm", "t", "ps", "pr", "pn", "pp", "cx", "cy", "cv", "ca", "cb", "yp"].forEach(function (k) { q.delete(k); });   // a link carries only what its display reads
+    if (state.view === "years") { q.set("yp", state.yplots.join(",")); }
     if (state.view === "preds") { if (state.pset) { q.set("ps", state.pset); } q.set("pr", String(state.prun)); q.set("pn", String(state.pprob + 1)); }
     if (state.view === "dist") { q.set("dm", state.dmetric); q.set("dv", state.dmode); q.set("dn", state.dnorm); }
     if (state.view === "ranks") { q.set("rm", state.rmetric); }
@@ -1274,6 +1282,138 @@
     return note + '<div class="v2charts">' + cards + add + "</div>";
   }
 
+  // ---- Over the years: every method at one time per problem, against the date it was first made public ------------
+  // A plot per metric, as in Curves, but its x axis is always the publication date (data/publication_dates.js: the
+  // method's earliest preprint, paper, public code, package or model) and each method is ONE point: its value at the
+  // time set on the display, read as every display that reads at a position reads it (cell(): measured at a budget whose
+  // time it is, blended between the two budgets around it in the logarithm of the time, nothing outside its timed
+  // budgets; poolCats(): only once every selected problem set is finished there). Budgets are not comparable between
+  // methods, so this display reads at a time only. A method without a date (the Oracle, a method opened with a key) is
+  // named under the charts, and so is one without a value at that time.
+  var DATES = window.PUBLICATION_DATES || {}, PUBMEMO = {};
+  var MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  // {x: the date in years (the day's middle; a date known only to the month is placed on its first day), text, event, url}, or null
+  function pubDate(m) {
+    if (!m || m.overlay || byKey[m.key]) { return null; }
+    if (PUBMEMO[m.key] !== undefined) { return PUBMEMO[m.key]; }
+    var e = DATES[m.key], p = e && typeof e.date === "string" ? /^(\d{4})-(\d{2})(?:-(\d{2}))?$/.exec(e.date) : null, out = null;
+    if (p && +p[2] >= 1 && +p[2] <= 12) {
+      var yr = +p[1], mo = +p[2] - 1, day = p[3] ? +p[3] : 0;
+      var t = Date.UTC(yr, mo, day || 1) + 43200000;
+      out = { x: yr + (t - Date.UTC(yr, 0, 1)) / (Date.UTC(yr + 1, 0, 1) - Date.UTC(yr, 0, 1)), text: (day ? day + " " : "") + MONTHS[mo] + " " + yr,
+        event: String(e.event || ""), url: /^https:\/\//.test(e.url || "") ? e.url : "", key: e.date };
+    }
+    return (PUBMEMO[m.key] = out);
+  }
+  function dated(shown) { return shown.filter(function (m) { return !!pubDate(m); }); }
+  // the budget a method is read at, at this time: one it was run at, or the two around it
+  function readAt(m, r, use, st) {
+    if (st.between) { return "≈ " + tweenText(st.between); }
+    var b = bracket(m.key, use[0], r); return b ? "budget " + fmtBudget(b.r1) : "";
+  }
+  // the points of one metric: {series, missing (no value on this metric), pending, range}
+  function yearsData(metric, present, r) {
+    var series = [], missing = [], pending = false, ymin = Infinity, ymax = -Infinity, xmin = Infinity, xmax = -Infinity;
+    present.forEach(function (m) {
+      var use = poolCats(m.key, r); if (!use.length) { return; }
+      var st = stat(metric, m.key, r, use); if (st && st.pending) { pending = true; return; }
+      if (!st || !isFinite(st.v)) { missing.push(m); return; }
+      var e = pubDate(m), where = readAt(m, r, use, st);
+      var title = m.label + ", first made public " + e.text + " (" + e.event + "), at " + posText(r) + (where ? " (" + where + ")" : "") + ": " + fmt(metric, st.v, st.edge) +
+        " (95 % interval " + fmt(metric, st.lo) + " to " + fmt(metric, st.hi) + rangeText(metric, st) + "). " + problemsText(st, use) + (st.share < 1 ? "; " + shareText(st) : "") + ".";
+      if (thin(st)) { thinDrawn = true; }
+      series.push({ key: m.key, label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), dash: !!m.dash, pts: [{ x: e.x, v: st.v, lo: st.lo, hi: st.hi, hollow: thin(st), title: title }] });
+      [st.v, anyCI() ? st.lo : st.v, anyCI() ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
+      xmin = Math.min(xmin, e.x); xmax = Math.max(xmax, e.x);
+    });
+    return { series: series, missing: missing, pending: pending, ymin: ymin, ymax: ymax, xmin: xmin, xmax: xmax };
+  }
+  function yearsChart(metric, present, r, aria) {
+    var d = yearsData(metric, present, r), ylabel = axisName(metric) + (metric.median_via && state.stat === "mean" ? ", median" : "");
+    if (d.pending && !d.series.length) { return { svg: yearsSVG({ aria: aria, series: [], empty: "loading the distribution…" }), missing: [] }; }
+    if (!d.series.length) { return { svg: yearsSVG({ aria: aria, series: [], empty: state.cats.length ? "no method shown has a value here" : "no problem set selected" }), missing: d.missing }; }
+    var ymin = d.ymin, ymax = d.ymax, pad = (ymax - ymin) * 0.06 || 0.05;   // the y range as Curves takes it
+    if (metric.kind === "rate") { var floor0 = nearRange(ymin, ymax, 0, 0.6); ymin = floor0 ? 0 : Math.max(0, ymin - pad); ymax = Math.min(1, Math.max(ymin + 0.02, ymax + pad)); }
+    else { if (tfOf(metric) === "log2" && nearRange(ymin, ymax, 0, 0.35)) { ymin = Math.min(ymin, 0); ymax = Math.max(ymax, 0); } ymin -= pad; ymax += pad; }
+    var xpad = Math.max(0.35, 0.05 * (d.xmax - d.xmin));
+    return { svg: yearsSVG({ aria: aria, series: d.series, ymin: ymin, ymax: ymax, xmin: d.xmin - xpad, xmax: d.xmax + xpad, ticks: ticksFor(metric, ymin, ymax), tick: function (g) { return tickLabel(metric, g); },
+      ylabel: ylabel, zero: tfOf(metric) === "log2" ? 0 : undefined }), missing: d.missing };
+  }
+  // a chart of one point per method: the frame, the ticks and the legend of chartSVG, a calendar x axis, and the 95 %
+  // interval of each point as a bar (bands: a shaded bar, crosses: a line through it)
+  function yearsSVG(opts) {
+    var series = opts.series, nr = narrow(), W = opts.width || hostWidth(), L = 76, T = 18;
+    var R = nr ? 18 : legendRight(series.map(function (sr) { return sr.label; }));
+    var B = nr ? 60 + 20 * Math.max(1, series.length) : 58, H = plotHeight(W) + B;
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" class="v2chart v2yearschart" role="img" aria-label="' + esc(opts.aria || "") + '">';
+    if (opts.empty) { return s + '<text x="' + W / 2 + '" y="' + H / 2 + '" class="tick" text-anchor="middle">' + esc(opts.empty) + "</text></svg>"; }
+    var ymin = opts.ymin, ymax = opts.ymax, xmin = opts.xmin, xmax = opts.xmax; if (!(ymax > ymin)) { ymax = ymin + 1; } if (!(xmax > xmin)) { xmax = xmin + 1; }
+    var xs = function (x) { return L + (x - xmin) / (xmax - xmin) * (W - L - R); };
+    var y = function (v) { return T + (1 - (v - ymin) / (ymax - ymin)) * (H - T - B); };
+    var cl = function (v) { return Math.min(ymax, Math.max(ymin, v)); };
+    thinTicks(opts.ticks, y, 20, roundness).forEach(function (g) { s += '<line x1="' + L + '" y1="' + y(g).toFixed(1) + '" x2="' + (W - R) + '" y2="' + y(g).toFixed(1) + '" class="grid"/><text x="' + (L - 6) + '" y="' + (y(g) + 4).toFixed(1) + '" class="tick" text-anchor="end">' + esc(opts.tick(g)) + "</text>"; });
+    if (opts.zero !== undefined && opts.zero >= ymin && opts.zero <= ymax) { s += '<line x1="' + L + '" y1="' + y(opts.zero).toFixed(1) + '" x2="' + (W - R) + '" y2="' + y(opts.zero).toFixed(1) + '" class="grid zero" stroke-dasharray="4 4"/>'; }
+    // the years: a short mark where each begins, a line and its number every 1, 2, 5 or 10 years, whatever leaves room
+    var perYear = (W - L - R) / (xmax - xmin), step = [1, 2, 5, 10, 20, 50].filter(function (k) { return k * perYear >= (nr ? 40 : 48); })[0] || 100;
+    for (var yr = Math.ceil(xmin); yr <= xmax; yr++) {
+      var px = xs(yr).toFixed(1);
+      s += '<line x1="' + px + '" y1="' + (H - B) + '" x2="' + px + '" y2="' + (H - B + 4) + '" class="grid"/>';
+      if (yr % step === 0) { s += '<line x1="' + px + '" y1="' + T + '" x2="' + px + '" y2="' + (H - B) + '" class="grid"/><text x="' + px + '" y="' + (H - B + 16) + '" class="tick" text-anchor="middle">' + yr + "</text>"; }
+    }
+    s += '<text x="' + ((L + W - R) / 2).toFixed(0) + '" y="' + (H - B + 32) + '" class="tick" text-anchor="middle">' + (nr ? "first made public" : "date the method was first made public") + "</text>";
+    if (opts.ylabel) { s += '<text transform="translate(' + YLABEL_X + "," + ((T + H - B) / 2).toFixed(0) + ') rotate(-90)" class="tick" text-anchor="middle">' + esc(opts.ylabel) + "</text>"; }
+    // methods made public within a few pixels of each other stand side by side, in the legend's order, so that their
+    // bars do not cover each other; the tooltip gives the exact date
+    var at = {}, order = {}; D.methods.forEach(function (m, i) { order[m.key] = i; });
+    var byX = series.slice().sort(function (a, b) { return a.pts[0].x - b.pts[0].x || order[a.key] - order[b.key]; }), group = [];
+    var flush = function () { group.forEach(function (sr, i) { at[sr.key] = xs(group[0].pts[0].x) + (i - (group.length - 1) / 2) * 9; }); group = []; };
+    byX.forEach(function (sr) { if (group.length && xs(sr.pts[0].x) - xs(group[group.length - 1].pts[0].x) > 9) { flush(); } group.push(sr); }); flush();
+    behind(series).forEach(function (sr) {
+      var p = sr.pts[0], col = sr.color, cx = at[sr.key], ok = isFinite(p.lo) && isFinite(p.hi);
+      if (ok && state.band) { s += '<rect x="' + (cx - 4).toFixed(1) + '" y="' + y(cl(p.hi)).toFixed(1) + '" width="8" height="' + Math.max(1, y(cl(p.lo)) - y(cl(p.hi))).toFixed(1) + '" rx="2" fill="' + col + '" opacity="0.22"/>'; }
+      if (ok && state.cross) { s += '<line x1="' + cx.toFixed(1) + '" y1="' + y(cl(p.hi)).toFixed(1) + '" x2="' + cx.toFixed(1) + '" y2="' + y(cl(p.lo)).toFixed(1) + '" stroke="' + col + '" stroke-width="1.5" stroke-opacity="0.45"/>'; }
+      s += markerSVG(cx, y(cl(p.v)), p, col);
+    });
+    var ly = nr ? H - B + 46 : T + 6, lx = nr ? L : W - R + LEG_GAP;
+    legendEntries(series, []).forEach(function (e) { s += legendItem(e.sr, lx, ly, false, false); ly += 20; });
+    return s + "</svg>";
+  }
+  function yearsCard(k, i, present, r) {
+    var ym = METRIC[k], c = yearsChart(ym, present, r, mname(ym) + " at " + posText(r) + " against the date each method was first made public");
+    return '<figure class="v2plot">' +
+      '<div class="v2plothead">' + pickButton("v2ysel", 'data-i="' + i + '" data-axis="yp" aria-label="metric on the y axis"', k) +
+      '<span class="v2vs">vs</span><span class="v2xfix">publication date</span>' +
+      '<button type="button" class="v2rmplot" data-list="yp" data-i="' + i + '" aria-label="Remove this plot" title="Remove this plot">×</button></div>' +
+      c.svg + (c.missing.length ? '<p class="v2hint v2yearsgone">No value on this metric: ' + esc(c.missing.map(function (m) { return m.label; }).join(", ")) + ".</p>" : "") + "</figure>";
+  }
+  function datesTable() {
+    var ms = D.methods.filter(function (m) { return withData(m) && pubDate(m); }).sort(function (a, b) { return pubDate(a).x - pubDate(b).x; });
+    if (!ms.length) { return ""; }
+    return '<details class="v2dates"><summary>When each method was first made public, and where to check it</summary><div class="v2table-wrap"><table class="v2table"><thead><tr><th>method</th><th>first made public</th><th>as</th></tr></thead><tbody>' +
+      ms.map(function (m) { var e = pubDate(m); return '<tr><td><span class="v2sw" style="background:' + colorOf(m) + '"></span>' + esc(m.label) + "</td><td>" + esc(e.text) + "</td><td>" +
+        (e.url ? '<a href="' + esc(e.url) + '" target="_blank" rel="noopener">' + esc(e.event) + "</a>" : esc(e.event)) + "</td></tr>"; }).join("") + "</tbody></table></div></details>";
+  }
+  function renderYears(shown) {
+    if (!anyTime()) { return '<p class="v2hint">No method has been timed on our timing workstation yet, so the methods cannot be compared at one time.</p>'; }
+    var withDate = dated(shown), r = curPos(), bar = '<div class="v2viewbar">' + posControl(withDate, undefined, true) + "</div>";
+    var undated = shown.filter(function (m) { return !pubDate(m); });
+    var noDate = undated.length ? '<p class="v2hint">' + undated.map(function (m) {
+      return esc(m.label) + (m.group === "reference" ? " is a reference that is given the true formula, not a published method, so it has no publication date and is not drawn." : " has no publication date here, so it is not drawn.");
+    }).join(" ") + "</p>" : "";
+    if (!withDate.length) { return bar + noDate + '<p class="v2hint">Select at least one published method in the side panel.</p>'; }
+    if (!state.cats.length) { return bar + noDate + '<p class="v2hint">Select at least one problem set in the side panel.</p>'; }
+    var present = withDate.filter(function (m) { return poolCats(m.key, r).length; });
+    var gone = missingNote(withDate, present, "all selected problem sets at the budgets around " + posText(r), r, true);
+    var add = '<button type="button" class="v2addplot" data-act="add-yplot" aria-label="Add a plot"><span class="v2plus" aria-hidden="true">+</span><span>add plot</span></button>';
+    var about = '<p class="v2hint">Each point is one method at ' + esc(posText(r)) + ", placed at the date it was " + term("pubdate", "first made public") + ". Its value is averaged over the selected problem sets like everywhere else, and its bar is the " + term("interval", "95 % interval") + ".</p>";
+    if (!state.yplots.length) { return bar + about + gone + noDate + '<div class="v2charts">' + add + '</div><p class="v2hint">No plot yet: add one, then choose its metric.</p>' + datesTable(); }
+    thinDrawn = false;
+    var cards = inBlock(root.querySelector(".v2main"), state.yplots.length + 1, function () { return state.yplots.map(function (k, i) { return yearsCard(k, i, present, r); }).join(""); });
+    var hollow = thinDrawn ? '<p class="v2hint v2hollownote">' + term("valid", thinNote()) + ": on the others this metric has no value, because the method returned no usable formula or the value could not be computed.</p>" : "";
+    // like Curves, the methods a chart leaves out are named above the charts, where they are seen before the first one
+    return bar + about + gone + noDate + '<div class="v2charts">' + cards + add + "</div>" + tweenNote(present, r) + hollow + datesTable();
+  }
+
   // ---- Headline ---------------------------------------------------------------------------------------------------
   // Two charts that are the same for every visitor: what a method recovers, and how long its answer is, against
   // what it costs. They are deliberately not wired to the controls below -- everything adjustable is the explorer.
@@ -1442,9 +1582,11 @@
   // the number in the box: grouped the same way in every locale, so that it reads back as the number it shows
   function posNum(x, time) { return time ? (x >= 100 ? Math.round(x).toLocaleString("en-US") : fmtSec(x)) : x >= 10 ? Math.round(x).toLocaleString("en-US") : String(+x.toPrecision(3)); }
   function parsePos(text) { var x = parseFloat(String(text).replace(/[,\s]/g, "").replace(/s(ec(onds?)?)?$/i, "")); return isFinite(x) && x > 0 ? x : null; }
-  function posControl(shown, why) {
+  // timeOnly: a display that compares methods only at a time (Over the years) has no switch to a budget
+  function posControl(shown, why, timeOnly) {
     var time = state.pm === "time", rg = posRange(shown, time);
-    var mode = anyTime() ? seg("pm", state.pm, [["time", "time", "Each method at the same time per problem on our timing workstation"], ["budget", "budget", "Each method at the same budget, in its own unit"]], "at", "read every method at a time or at a budget")
+    var mode = timeOnly ? '<span class="v2segwrap"><span class="v2lab">at a time per problem of</span></span>'
+      : anyTime() ? seg("pm", state.pm, [["time", "time", "Each method at the same time per problem on our timing workstation"], ["budget", "budget", "Each method at the same budget, in its own unit"]], "at", "read every method at a time or at a budget")
       : '<span class="v2segwrap"><span class="v2lab">at budget</span></span>';
     var tip = why || help(time ? TERMS.postime : TERMS.posbudget, time ? "How is a method read at a time?" : "How is a method read at a budget?");
     if (!rg) { return mode + tip + '<span class="v2hint">' + (time ? "No shown method has a measured time yet." : "No shown method has finished a selected problem set yet.") + "</span>"; }
@@ -2697,7 +2839,7 @@
   }
 
   // ---- shell -----------------------------------------------------------------------------------------------------
-  var VIEWS = [["curves", "Curves"], ["table", "Tables"], ["matrix", "Problem sets"], ["dist", "Distribution"], ["corr", "Correlations"], ["ranks", "Ranks"], ["paired", "Paired differences"], ["preds", "Predictions"]];
+  var VIEWS = [["curves", "Curves"], ["years", "Over the years"], ["table", "Tables"], ["matrix", "Problem sets"], ["dist", "Distribution"], ["corr", "Correlations"], ["ranks", "Ranks"], ["paired", "Paired differences"], ["preds", "Predictions"]];
   // the metric a single-metric display shows: each of them keeps its own
   function focusKey() { return state.view === "dist" ? "dmetric" : state.view === "ranks" ? "rmetric" : "focus"; }
   // Each display carries its own controls. A control that cannot change what is on screen is not shown, and a
@@ -2705,6 +2847,7 @@
   // (its bar), so the side panel never repeats them.
   var USES = {
     curves: { stat: 1, ci: 1, valid: 1 },
+    years: { stat: 1, ci: 1, valid: 1 },
     table: { plots: 1, stat: 1, ci: 1, valid: 1 },
     matrix: { stat: 1, valid: 1 },
     dist: {},
@@ -2713,7 +2856,7 @@
     paired: { plots: 1, base: 1, ci: 1 },
     preds: {}
   };
-  function shownMetricKeys(view) { return view === "matrix" ? [state.focus] : view === "dist" ? [state.dmetric] : view === "corr" ? (state.cv === "matrix" ? D.metrics.filter(function (m) { return m.pp; }).map(function (m) { return m.key; }) : state.cv === "vs" ? [state.cy] : [state.cx, state.cy]) : view === "ranks" || view === "preds" ? [] : plotAxes(); }
+  function shownMetricKeys(view) { return view === "matrix" ? [state.focus] : view === "dist" ? [state.dmetric] : view === "corr" ? (state.cv === "matrix" ? D.metrics.filter(function (m) { return m.pp; }).map(function (m) { return m.key; }) : state.cv === "vs" ? [state.cy] : [state.cx, state.cy]) : view === "ranks" || view === "preds" ? [] : view === "years" ? state.yplots.slice() : plotAxes(); }
   function usesFor(view) {
     var u = {}, src = USES[view] || {};
     Object.keys(src).forEach(function (k) { u[k] = src[k]; });
@@ -2830,7 +2973,7 @@
       var shown = shownMethods(), view = root.querySelector(".v2view");
       if (!rungChosen) { rungChosen = true; var br = bestRung(shown); if (br) { state.rung = br; } syncControls(); }
       if (state.view !== "dist" && state.view !== "paired" && state.view !== "corr") {   // histograms the current view needs
-        (state.view === "matrix" ? [METRIC[state.focus]] : D.metrics.filter(function (m) { return plotAxes().indexOf(m.key) >= 0; })).forEach(function (m) { if (needsHist(m)) { ensureHists(m); } });
+        (state.view === "matrix" ? [METRIC[state.focus]] : D.metrics.filter(function (m) { return (state.view === "years" ? state.yplots : plotAxes()).indexOf(m.key) >= 0; })).forEach(function (m) { if (needsHist(m)) { ensureHists(m); } });
       }
       renderHeadline();
       // Every display but Curves reads every method at one position (between its budgets too): a table by problem set,
@@ -2838,11 +2981,12 @@
       // charts along the budgets, a table by budget and a distribution along the budgets stay on budgets a method was
       // run at, and so do Ranks and Paired differences until they turn BETWEEN on for their snapshot.
       var atPos = state.view === "matrix" || (state.view === "table" && state.rows === "cats") || (state.view === "dist" && !(METRIC[state.dmetric].kind !== "rate" && state.dmode === "rungs")) ||
-        state.view === "corr" || state.view === "preds" || state.view === "ranks" || state.view === "paired";
-      if (atPos) { settlePos(shown); }
+        state.view === "corr" || state.view === "preds" || state.view === "ranks" || state.view === "paired" || state.view === "years";
+      if (state.view === "years" && anyTime()) { state.pm = "time"; }   // Over the years compares the methods at a time only: budgets differ in unit
+      if (atPos) { settlePos(state.view === "years" ? dated(shown) : shown); }
       BETWEEN = atPos && state.view !== "ranks" && state.view !== "paired";
       try {
-      view.innerHTML = state.view === "table" ? renderTable(shown) : state.view === "matrix" ? renderMatrix(shown) : state.view === "dist" ? renderDist(shown) : state.view === "corr" ? renderCorr(shown) : state.view === "ranks" ? renderRanks(shown) : state.view === "paired" ? renderPaired(shown) : state.view === "preds" ? renderPreds(shown) : renderCurves(shown);
+      view.innerHTML = state.view === "table" ? renderTable(shown) : state.view === "matrix" ? renderMatrix(shown) : state.view === "dist" ? renderDist(shown) : state.view === "corr" ? renderCorr(shown) : state.view === "ranks" ? renderRanks(shown) : state.view === "paired" ? renderPaired(shown) : state.view === "preds" ? renderPreds(shown) : state.view === "years" ? renderYears(shown) : renderCurves(shown);
       } finally { BETWEEN = false; }
       // A redraw replaces the button an open menu hangs on (a histogram that arrives, a container that settles).
       // The menu moves to the button's successor; it closes only when the control itself is gone.
@@ -2908,7 +3052,7 @@
     if (b.dataset.view) { state.view = b.dataset.view; render(); return; }
     if (b.dataset.set) { var kv = b.dataset.set.split(":"); setState(kv[0], kv.slice(1).join(":")); render(); return; }
     if (b.classList.contains("v2reset")) { delete userColors[b.dataset.m]; writeCookie(userColors); render(); return; }
-    if (b.classList.contains("v2rmplot")) { state.plots.splice(+b.dataset.i, 1); render(); return; }
+    if (b.classList.contains("v2rmplot")) { (b.dataset.list === "yp" ? state.yplots : state.plots).splice(+b.dataset.i, 1); render(); return; }
     if (b.dataset.act === "corr-swap") { var cxy = state.cx; state.cx = state.cy; state.cy = cxy; render(); return; }
     if (b.dataset.act === "corr-clear") { csel = null; render(); return; }
     if (b.dataset.act === "corr-open" && csel) { state.view = "preds"; state.pset = csel.c; state.pprob = csel.row; if (state.pm === "time" && refTime(csel.m, csel.r)) { state.pt = refTime(csel.m, csel.r); } else { state.pm = "budget"; state.rung = csel.r; } state.prun = csel.d === 2 ? 2 : 1; if (state.cats.indexOf(csel.c) < 0) { state.cats.push(csel.c); } render(); return; }
@@ -2919,6 +3063,11 @@
       var next = D.metrics.filter(function (m) { return m.tier === "main" && taken.indexOf(m.key) < 0; })[0]
         || D.metrics.filter(function (m) { return taken.indexOf(m.key) < 0; })[0] || D.metrics[0];
       state.plots.push({ x: lastAxis(), y: next.key }); render(); return;
+    }
+    if (act === "add-yplot") {   // Over the years: a metric it does not show yet
+      var nextY = D.metrics.filter(function (m) { return m.tier === "main" && state.yplots.indexOf(m.key) < 0; })[0]
+        || D.metrics.filter(function (m) { return state.yplots.indexOf(m.key) < 0; })[0] || D.metrics[0];
+      state.yplots.push(nextY.key); render(); return;
     }
     if (act === "add-method") {
       var box = root.querySelector(".v2addmbox"), open = root.querySelector(".v2addmopen");
@@ -2989,6 +3138,7 @@
       if (!it || it.disabled) { return; }
       if (axis === "focus") { state[focusKey()] = it.dataset.k; }
       else if (axis === "cx" || axis === "cy") { state[axis] = it.dataset.k; }
+      else if (axis === "yp") { state.yplots[+btn.dataset.i] = it.dataset.k; }
       else if (btn.dataset.i !== undefined) { state.plots[+btn.dataset.i][axis] = it.dataset.k; }
       closePicker(); render();
     });

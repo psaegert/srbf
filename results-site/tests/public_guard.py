@@ -24,7 +24,9 @@ Fatal checks, run before the Playwright suite in CI and locally:
      descriptions of metrics, methods and catalogs) matches a banned pattern. The page lint reads index.html and the
      explorer's strings; a payload is written by the exporter from files outside this repository, so it is read here,
      where a release is checked before it is published. The patterns are copy_lint's, the maintainer's local ones
-     included (results-site/private/banned_patterns.json, git-ignored and absent in CI).
+     included (results-site/private/banned_patterns.json, git-ignored and absent in CI);
+  8. data/publication_dates.js (the dates of the "Over the years" view, kept by hand) names public methods only, and
+     its texts pass the same patterns.
 """
 import base64
 import gzip
@@ -438,6 +440,16 @@ def main() -> int:
         extra = sorted(set(payload.get("pv") or {}) - PUBLIC_METHODS)
         if extra:
             failures.append(f"{js}: non-public method keys in the per-problem pair index {extra}")
+    pd_js = SITE / "data" / "publication_dates.js"   # one entry per public method: a date, what it was, a link
+    if pd_js.exists():
+        dates = payload_of(pd_js.read_text(encoding="utf-8").split("*/", 1)[-1].strip(), "PUBLICATION_DATES")
+        if not isinstance(dates, dict):
+            failures.append(f"{pd_js}: not a PUBLICATION_DATES payload")
+        else:
+            extra = sorted(set(dates) - PUBLIC_METHODS)
+            if extra:
+                failures.append(f"{pd_js}: non-public method keys {extra}")
+            failures.extend(check_payload_texts(dates, str(pd_js.relative_to(SITE)), banned))
     for pub in sorted((SITE / "data").rglob("*.js")):
         if pub.name != "sealed.js":     # the sealed payload is encrypted and is not a published number
             failures.extend(check_no_as_run_time(pub))
