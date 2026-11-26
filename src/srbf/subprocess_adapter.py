@@ -10,6 +10,11 @@ same fields the in-process adapters produce. A worker that ends with several can
 rule of its own for picking one (a hall of fame) gets one picked here when the config sets
 ``selection`` (see :func:`check_selection`). Every candidate a worker returns, and its expression,
 goes on to the run, which judges and stores them (:mod:`srbf.candidates`).
+
+Setup before the clock (docs/fairness.md): a worker's ``load`` and ``setup`` run when it starts, and
+when the run asks for it (``runner.warmup``) srbf's warm-up problem (:mod:`srbf.warmup`) goes through
+the worker's fit before the first timed problem, in every worker process, after every restart too.
+Their seconds are recorded per worker start (:attr:`SubprocessAdapter.setup_events`), never in a fit time.
 """
 from __future__ import annotations
 
@@ -25,6 +30,7 @@ import subprocess
 import sys
 import threading
 import time
+import warnings
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -36,6 +42,7 @@ from srbf.core import EvaluationModelAdapter, EvaluationResult, EvaluationSample
 from srbf.model_adapters import _compute_fvu_from_predictions
 from srbf.pricing import pricer
 from srbf.variable_renaming import skeleton_variable_names
+from srbf.warmup import warmup_outcome
 from srbf.worker import MODELS_DIR, RUNNER_PATH
 
 BUILTIN_WORKERS: dict[str, Path] = {
@@ -219,6 +226,8 @@ class WorkerProcess:
         self.startup_timeout = float(startup_timeout)
         self.log_path = log_path
         self.info: dict[str, Any] = {}
+        self.load_time: float | None = None    # seconds of the worker's load(), as it reported them
+        self.setup_time: float | None = None   # seconds of its setup(); None without one
         self._proc: subprocess.Popen[str] | None = None
         self._listener: socket.socket | None = None
         self._sock: socket.socket | None = None
@@ -256,6 +265,8 @@ class WorkerProcess:
         self.info = dict(reply.get("info") or {})
         self.info["python"] = reply.get("python")
         self.info["python_version"] = reply.get("version")
+        self.load_time = None if reply.get("load_time") is None else float(reply["load_time"])
+        self.setup_time = None if reply.get("setup_time") is None else float(reply["setup_time"])
 
     def _accept(self, timeout: float) -> None:
         """Wait for the runner to connect, noticing a worker that dies before it does."""
@@ -473,6 +484,11 @@ class SubprocessAdapter(EvaluationModelAdapter):
     Every candidate the worker returns goes into the record's ``candidate_expressions`` (as the worker wrote it, within
     the protocol's limits), with the expression the record judges among them (``candidate_prediction``), for the run to
     judge and store (:class:`srbf.candidates.CandidateRecorder`).
+
+    :meth:`warm_up` arms srbf's warm-up problem: it runs at once and then in every worker the adapter starts, before
+    that worker's first timed problem. :attr:`setup_events` records every worker start: why it started (``start``,
+    ``restart``, ``restart after a hang``), the seconds of its ``load`` and ``setup``, and its warm-up's seconds and
+    error, if any.
     """
 
     def __init__(
@@ -530,6 +546,9 @@ class SubprocessAdapter(EvaluationModelAdapter):
         self._process: WorkerProcess | None = None
         self._restarts = 0
         self._dead_reason: str | None = None
+        self._warmup: EvaluationSample | None = None   # srbf's warm-up problem, once warm_up() armed it
+        self._info: dict[str, Any] = {}                # what the last worker reported at start-up
+        self.setup_events: list[dict[str, Any]] = []
 
     def get_simplipy_engine(self) -> Any:  # pragma: no cover - trivial accessor
         """Return this adapter's SimpliPy engine."""
@@ -537,11 +556,23 @@ class SubprocessAdapter(EvaluationModelAdapter):
 
     def worker_info(self) -> dict[str, Any]:
         """What the worker reported at start-up (interpreter, versions), for provenance."""
-        return dict(self._process.info) if self._process is not None else {}
+        return dict(self._process.info) if self._process is not None else dict(self._info)
+
+    def ranking_config(self) -> dict[str, Any] | None:
+        """The candidate ranking a worker reports in its ``info`` under ``ranking`` (a model that ranks its own
+        candidates, as Flash-ANSR does), recorded beside the run's provenance; None when it reports none."""
+        ranking = self.worker_info().get("ranking")
+        return dict(ranking) if isinstance(ranking, Mapping) else None
+
+    def inference_precision(self) -> str | None:
+        """The arithmetic a worker reports in its ``info`` under ``inference_precision`` (``bf16``, ``fp32``); None
+        when it reports none."""
+        precision = self.worker_info().get("inference_precision")
+        return None if precision is None else str(precision)
 
     # -- lifecycle ---------------------------------------------------------------------------
     def prepare(self, *, data_source: Any | None = None) -> None:  # type: ignore[override]
-        self._spawn()
+        self._spawn("start")
 
     def close(self) -> None:
         if self._process is not None:
@@ -554,7 +585,9 @@ class SubprocessAdapter(EvaluationModelAdapter):
         except Exception:  # noqa: BLE001
             pass
 
-    def _spawn(self) -> None:
+    def _spawn(self, reason: str) -> None:
+        """Start a worker, and warm it up when the warm-up is armed; raises :class:`WorkerError` when the worker does
+        not start, or when the warm-up problem takes it down (the event is recorded either way)."""
         process = WorkerProcess(
             python=self.python, worker=self.worker, options=self.options, env=self.env, cwd=self.cwd,
             startup_timeout=self.startup_timeout, log_path=self.worker_log,
@@ -562,6 +595,51 @@ class SubprocessAdapter(EvaluationModelAdapter):
         )
         process.start()
         self._process = process
+        self._info = dict(process.info)
+        self.setup_events.append({"reason": reason, "time": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                                  "load_time": process.load_time, "setup_time": process.setup_time})
+        if self._warmup is not None:
+            self._warm()
+
+    def warm_up(self, sample: EvaluationSample) -> dict[str, Any]:
+        """Arm srbf's warm-up problem (:func:`srbf.warmup.warmup_sample`) and run it through the worker that is up:
+        from now on every worker the adapter starts, after a crash, a timeout or a hang, is warmed up the same way
+        before its first timed problem. Returns the last worker start's record (:attr:`setup_events`). A warm-up that
+        takes the worker down counts as a crash: the worker is restarted within ``max_restarts``, and warmed up again."""
+        self._warmup = sample
+        if self._process is not None:
+            try:
+                self._warm()
+            except WorkerError as exc:
+                self._recover(str(exc))
+        return dict(self.setup_events[-1]) if self.setup_events else {}
+
+    def _warm(self) -> None:
+        """Send the warm-up problem through the current worker, untimed, and record the outcome in the last
+        ``setup_events`` entry. A method-side failure (an error, no expression) is recorded and warned about; one
+        that takes the worker down raises :class:`WorkerError` after the worker has been killed."""
+        assert self._process is not None and self._warmup is not None
+        payload, *_ = self._payload(self._warmup, {"warmup": True})
+        started = time.perf_counter()
+        crashed: WorkerError | None = None
+        try:
+            reply = self._process.request(payload, self.timeout)
+        except WorkerError as exc:
+            crashed, reply = exc, {}
+        outcome = warmup_outcome(time.perf_counter() - started, {
+            "fit_time": reply.get("fit_time"),
+            "prediction_success": bool(reply.get("expression") or reply.get("candidates")) and not reply.get("error"),
+            "error": str(reply["error"]).rstrip().splitlines()[-1] if reply.get("error") else None,
+        }, None if crashed is None else f"{type(crashed).__name__}: {str(crashed).splitlines()[0]}")
+        self.setup_events[-1].update(outcome)
+        if outcome["warmup_error"] is not None:
+            warnings.warn(f"the warm-up problem failed in the worker {self.worker.name}: {outcome['warmup_error']}",
+                          RuntimeWarning)
+        if crashed is not None:
+            if self._process is not None:
+                self._process.kill()
+                self._process = None
+            raise WorkerCrashed(f"the warm-up problem took the worker down: {crashed}") from crashed
 
     def _recover(self, reason: str) -> None:
         """After a crash or timeout: restart within the budget (failures in a row), else mark the worker dead
@@ -574,7 +652,7 @@ class SubprocessAdapter(EvaluationModelAdapter):
             return
         self._restarts += 1
         try:
-            self._spawn()
+            self._spawn("restart")
         except WorkerError as exc:
             self._dead_reason = str(exc)
 
@@ -584,7 +662,7 @@ class SubprocessAdapter(EvaluationModelAdapter):
             self._process.kill()
             self._process = None
         try:
-            self._spawn()
+            self._spawn("restart after a hang")
         except WorkerError as exc:
             self._dead_reason = str(exc)
 
@@ -623,18 +701,7 @@ class SubprocessAdapter(EvaluationModelAdapter):
                 return EvaluationResult(record)
             raise RuntimeError("SubprocessAdapter.prepare must be called before evaluation")
 
-        X_support = np.asarray(sample.x_support, dtype=float)
-        X_val = np.asarray(sample.x_validation, dtype=float)
-        if X_val.ndim != 2:
-            X_val = X_val.reshape(0, X_support.shape[1])
-        y_support = np.asarray(
-            sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support, dtype=float).reshape(-1)
-        variables = list(record.get("variables") or record.get("variable_names") or [])
-        if len(variables) != X_support.shape[1]:
-            variables = [f"x{i + 1}" for i in range(X_support.shape[1])]
-
-        payload = {"x": X_support.tolist(), "y": y_support.tolist(), "x_val": X_val.tolist(),
-                   "variables": variables, "meta": {**_json_meta(record), **dict(extra_meta or {})}}
+        payload, X_support, X_val, y_support, variables = self._payload(sample, extra_meta)
         hangs = 0
         policy = self.hang_after_idle_s is not None or self.hang_overdue_factor is not None
         while True:
@@ -762,6 +829,24 @@ class SubprocessAdapter(EvaluationModelAdapter):
             record["validation_fvu"] = _compute_fvu_from_predictions(validation_targets, y_pred_val)
         record["prediction_success"] = True
         return EvaluationResult(record)
+
+    @staticmethod
+    def _payload(sample: EvaluationSample, extra_meta: Mapping[str, Any] | None
+                 ) -> tuple[dict[str, Any], np.ndarray, np.ndarray, np.ndarray, list[str]]:
+        """The ``fit`` request for a sample, with the arrays it was built from and the column names it hands over."""
+        record = sample.metadata
+        X_support = np.asarray(sample.x_support, dtype=float)
+        X_val = np.asarray(sample.x_validation, dtype=float)
+        if X_val.ndim != 2:
+            X_val = X_val.reshape(0, X_support.shape[1])
+        y_support = np.asarray(
+            sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support, dtype=float).reshape(-1)
+        variables = list(record.get("variables") or record.get("variable_names") or [])
+        if len(variables) != X_support.shape[1]:
+            variables = [f"x{i + 1}" for i in range(X_support.shape[1])]
+        payload = {"x": X_support.tolist(), "y": y_support.tolist(), "x_val": X_val.tolist(),
+                   "variables": variables, "meta": {**_json_meta(record), **dict(extra_meta or {})}}
+        return payload, X_support, X_val, y_support, variables
 
     # -- reading and picking expressions -------------------------------------------------------
     @staticmethod

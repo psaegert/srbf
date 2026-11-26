@@ -23,7 +23,7 @@ The [Quickstart](quickstart.md) runs these commands with the placeholder that `s
 
 ## The worker
 
-A worker defines one function and, if it wants, two more:
+A worker defines one function and, if it wants, three more:
 
 ```python
 # worker.py: runs in YOUR environment; srbf is not installed there and need not be
@@ -31,8 +31,12 @@ import numpy as np
 from mymethod import Model
 
 
-def load(options):                                   # optional, once per run
+def load(options):                                   # optional, once per worker process
     return {"model": Model.load(options["checkpoint"], device=options.get("device", "cuda"))}
+
+
+def setup(state, options):                           # optional, after load: compile, warm up
+    state["model"].compile()
 
 
 def info(state):                                     # optional: what identifies this method
@@ -52,9 +56,9 @@ def fit(x, y, *, x_val, variables, meta, options, state):
 | `y` | their targets, a list of floats; the noisy ones when the run adds noise |
 | `x_val` | the validation points, or an empty list. Their targets are never handed over |
 | `variables` | the names of the columns of `x`, in order, as the catalog writes them (`v1, v2, ...` in the srbf catalogs). Write the expression in these names |
-| `meta` | identifiers of the problem for your logs: `catalog`, `benchmark_eq_id`, `eq_id`, `eval_row_index`, `n_support`, `noise_level`. The ground truth itself never reaches the worker |
+| `meta` | identifiers of the problem for your logs: `catalog`, `benchmark_eq_id`, `eq_id`, `eval_row_index`, `n_support`, `noise_level`, and `warmup: true` on srbf's warm-up problem (below). The ground truth itself never reaches the worker |
 | `options` | the `options` block of the config, with `{{ROOT}}` replaced in its strings |
-| `state` | whatever `load` returned; `None` without a `load` |
+| `state` | whatever `load` returned (or `setup`, when it returns something); `None` without a `load` |
 
 Arguments are plain Python lists and numbers. The worker side of the protocol uses the standard
 library only and runs on Python 3.8 and newer.
@@ -76,6 +80,22 @@ A dict with at least `expression`, `candidates` or `error`:
 An exception in `fit` is recorded as that problem's error, with its traceback, and the worker stays
 up. Whatever the worker prints goes to its log file and never into the protocol. What `info`
 returns is stored with every result file.
+
+### Before the clock
+
+Anything that does not depend on the data may happen before the clock starts: loading weights,
+compiling, warming up on a fixed synthetic problem. This happens once per worker process and again
+after every worker restart. Everything after the problem's data arrives counts toward fit time. The
+same rule applies to every method ([Fairness](fairness.md#setup-before-the-clock)).
+
+For a worker, that is `load`, then `setup` (a returned object other than `None` replaces the state),
+then, when the run sets `runner.warmup: true`, srbf's warm-up problem: an ordinary call of `fit` whose
+`meta` says `warmup: true`, at the run's options and budget, whose answer srbf discards. All three
+run in every worker process srbf starts, after a crash, a timeout or a hang too, before that
+process's next timed problem. srbf records their seconds in the result file's `__meta__['setup']`,
+never in a `fit_time`. Put into `setup` what your method would otherwise do on its first fit; the
+warm-up problem catches what is left. A warm-up that fails is recorded with its reason and reported
+as a warning, and one that takes the worker down counts as a crash.
 
 ### How an expression is read
 
@@ -226,7 +246,7 @@ complete config and the job array that runs it.
 | `env` | `{}` | environment variables for the worker, added to the environment srbf runs in, for example `{CUDA_VISIBLE_DEVICES: "0"}` |
 | `cwd` | none | the worker's working directory |
 | `worker_log` | none | a file that receives everything the worker prints |
-| `startup_timeout` | `600` | seconds the worker may take to start and run `load` |
+| `startup_timeout` | `600` | seconds the worker may take to start and run `load` and `setup` |
 | `timeout` | none | seconds one `fit` may take. When it passes, the worker is stopped, the problem is recorded as an error and a new worker is started |
 | `max_restarts` | `1` | how many crashes or timeouts in a row a run survives; the count starts over whenever the worker answers a problem. After that every remaining problem is recorded as an error, without being tried |
 | `selection` | none | how to pick one of a worker's `candidates`. `{mode: mdl}` takes the shortest two-part code, the rule Flash-ANSR ranks its own candidates by (below) |
@@ -291,7 +311,11 @@ class EvaluationModelAdapter(Protocol):
     def evaluate_sample(self, sample: EvaluationSample) -> EvaluationResult: ...
 ```
 
-An optional `close()` is called when the run ends, however it ends. An adapter hands its
+`prepare` is the adapter's setup before the clock: whatever does not depend on the data, such as
+loading or compiling, belongs there or in the constructor. With `runner.warmup: true` the run then
+passes srbf's warm-up problem through `evaluate_sample` once and discards the record; its
+`metadata` says `warmup: True` and has no `eval_row_index`
+([Before the clock](#before-the-clock)). An optional `close()` is called when the run ends, however it ends. An adapter hands its
 [candidates](#candidates) over in its record: `candidate_expressions` (a list of strings),
 `candidate_notation` (`infix` in the column names it was handed, the default, or `prefix` tokens
 joined by spaces in the names `x1, x2, ...`), `candidate_prediction` (the index of its answer among

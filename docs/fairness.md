@@ -15,8 +15,10 @@ carries a label for who chose it, and the labels are shown wherever methods are 
   that returns no prediction has failed the problem on every success metric, for every method alike
   ([Metrics](metrics.md#success-metrics-and-analysis-metrics)).
 - **The same timing conditions.** The driver fits one problem at a time, so a fit never competes
-  with another. One-time costs, such as loading weights or compiling a Julia backend, are paid
-  before the first problem and are not part of any fit time.
+  with another. Anything that does not depend on the data may happen before the clock starts:
+  loading weights, compiling, warming up on a fixed synthetic problem. This happens once per worker
+  process and again after every worker restart. Everything after the problem's data arrives counts
+  toward fit time. The same rule applies to every method ([Setup before the clock](#setup-before-the-clock)).
 - **The same comparison rules.** Methods are compared at equal budgets or at equal time, expression by
   expression, with exact tests on the expressions they disagree on; several methods at once are compared by
   their ranks, with a critical difference that accounts for how many methods there are
@@ -51,6 +53,38 @@ a rung is placed on the axis only once every catalog has all of its problems.
 
 Recovery metrics do not depend on the machine: a config gives the same numbers, up to sampling
 noise, wherever it runs.
+
+### Setup before the clock
+
+Anything that does not depend on the data may happen before the clock starts: loading weights,
+compiling, warming up on a fixed synthetic problem. This happens once per worker process and again
+after every worker restart. Everything after the problem's data arrives counts toward fit time. The
+same rule applies to every method.
+
+srbf applies it in three steps before a method's first timed problem:
+
+1. **Loading.** A worker's `load` runs when its process starts; an in-process adapter loads its
+   model when it is built and moves it to its device in `prepare`.
+2. **Preparing.** A worker may define `setup`, which runs after `load`: compiling, or warming up on
+   a problem of the worker's own ([The worker](adapters.md#the-worker)).
+3. **The warm-up problem.** With `runner.warmup: true`, srbf sends one fixed problem through the
+   method's fit: \(1.5\,x_1 \sin(x_2) + 0.5\) on 512 support and 512 validation points drawn
+   uniformly from \([-5, 5]^2\) with seed 0, without noise. Its answer is discarded: it is never
+   judged, stored or counted. It runs through the whole fit, at the run's budget, so whatever the
+   method compiles or caches on its first fit is ready before the first timed problem.
+
+A worker that crashes, times out or hangs is restarted, and the new process goes through the same
+steps before its next timed problem. The seconds of each step go into the result file's
+`__meta__['setup']`, one record per start of the method, and never into a `fit_time`
+([Results](results.md#what-a-result-file-records)). A warm-up the method fails is recorded there with
+the reason and reported as a warning; the run goes on. A warm-up that takes a worker down counts as
+a crash of the worker (`max_restarts`).
+
+The timing runs turn the warm-up on: `scripts/run_timing_ladder.py` sets `runner.warmup: true` in
+every unit it runs, unless the config sets the key itself. The other runs leave it off by default.
+Their times are not published, the warm-up does not change what a method can answer, and it costs one
+fit at the run's budget per worker start, in every shard and after every restart. Set
+`runner.warmup: true` in a run whose times you want to read the way the published ones are measured.
 
 ## Baselines run at their upstream defaults
 

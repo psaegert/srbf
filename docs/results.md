@@ -82,7 +82,8 @@ are left out of every summary, for every method alike.
 | `draws` | with frozen draws: the catalog, its file's SHA-256, the repeat, the draws file's path and SHA-256, the manifest's SHA-256, the render's settings and the noise level |
 | `system` | hostname, platform, CPU count and GPU |
 | `worker` | what a worker's `info()` returned: its interpreter and versions |
-| `ranking` | the resolved ranking of a Flash-ANSR run |
+| `ranking`, `inference_precision` | the resolved ranking of a Flash-ANSR run and the arithmetic its transformer ran in |
+| `setup` | the setup before the clock ([Fairness](fairness.md#setup-before-the-clock)): `warmup` (whether the warm-up problem ran), `build_time` and `prepare_time` (seconds spent building and preparing the adapter), and `events`, one record per start of the method: `reason` (`start`, `restart`, `restart after a hang`), a worker's `load_time` and `setup_time`, and the warm-up's `warmup_time`, `warmup_fit_time` and `warmup_error` |
 | `shard`, `shards` | for a shard file, its index and count; for a merged file, what was merged |
 | `timestamp` | when the run was started |
 

@@ -71,7 +71,10 @@ def test_the_flash_ansr_builder_checks_both_layers() -> None:
 
     from srbf import config as config_module
 
-    source = inspect.getsource(config_module._build_flash_ansr_adapter)
+    # Both flash_ansr types (in-process and in a worker) resolve their block through flash_ansr_settings.
+    for builder in (config_module._build_flash_ansr_adapter, config_module._build_flash_ansr_worker_adapter):
+        assert "flash_ansr_settings(config)" in inspect.getsource(builder)
+    source = inspect.getsource(config_module.flash_ansr_settings)
     assert source.count("reject_retired_ranking_keys") == 2, (
         "both the adapter config and the resolved evaluation config must be checked"
     )

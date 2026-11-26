@@ -53,6 +53,7 @@ run:
 | `resume` | `true` | continue an existing result file instead of starting over |
 | `limit` | `null` | the number of problems to evaluate |
 | `candidates` | `true` | where every problem's [candidates](adapters.md#candidates) are judged and stored: next to `output` (`true`), in a directory you name, or nowhere (`false`) |
+| `warmup` | `false` | send srbf's warm-up problem through the method before the first timed problem, and again after every worker restart ([Setup before the clock](fairness.md#setup-before-the-clock)). The timing runs turn it on |
 
 The number of problems of a run is the first of these that is set: `--limit` on the command line,
 `runner.limit`, `data_source.target_size`, the size of the catalog. Saves are atomic: a run that is
