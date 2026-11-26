@@ -73,6 +73,7 @@ model_adapter:
 | `refiner_workers` | flash-ansr's default | processes that fit constants in parallel |
 | `emission`, `refine_scope` | `fittable` | which constants the model spells itself and which the refiner fits |
 | `constant_ladder` | on | re-spell fitted constants as integers, fractions and multiples of \(\pi\) and \(e\), and let the ranking choose |
+| `seed` | none | seeds every fit (the draws and each candidate's restarts), so that the same problem gives the same answer; without it every fit draws fresh entropy |
 | `complexity` | `none` | condition the model on a target complexity: `none`, `ground_truth` or a number |
 | `candidate_store_dir` | none | a directory that receives every candidate of every problem, one compressed `.npz` per problem, readable with `srbf.candidate_store.CandidateStoreReader` |
 

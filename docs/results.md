@@ -34,7 +34,7 @@ frame = pd.DataFrame({key: snapshot[key] for key in ("benchmark_eq_id", "predict
 | `x`, `y`, `x_val`, `y_val` | the support and validation points, without noise |
 | `y_noisy`, `y_noisy_val` | the targets with the run's noise. A method is given `y_noisy` when the run adds noise, and never any validation target |
 | `n_support`, `noise_level` | the sampling parameters of the problem |
-| `draws_sha256`, `draws_repeat` | with [frozen draws](benchmarks.md#draws-the-same-data-for-every-method): the SHA-256 of the draws file the problem was read from, and its repeat |
+| `draws_sha256`, `draws_repeat`, `draws_attempt`, `draws_formula_inherent` | with [frozen draws](benchmarks.md#draws-the-same-data-for-every-method): the SHA-256 of the draws file the problem was read from, its repeat, the attempt the problem keeps, and whether no attempt let its formula be recognized |
 | `complexity` | the number of tokens of the ground truth's skeleton |
 | `predicted_expression` | the prediction as an infix string, in the names `x1, x2, ...` |
 | `predicted_expression_prefix`, `predicted_skeleton_prefix` | the prediction in prefix notation, with its constants and with constants masked |
@@ -72,7 +72,7 @@ are left out of every summary, for every method alike.
 | `env` | versions of Python, torch, numpy, scipy, srbf, flash-ansr, simplipy and symbolic-data |
 | `git`, `git_flash_ansr` | commit, branch and dirty state, when installed from a checkout |
 | `inputs` | size and SHA-256 of the model weights, the tokenizer, a local catalog file and the frozen draws file (`catalog_draws`) |
-| `draws` | with frozen draws: the catalog, its file's SHA-256, the repeat, the draws file's path and SHA-256, the manifest's SHA-256, the render's settings and the noise level |
+| `draws` | with frozen draws: the catalog, its file's SHA-256, the repeat, the draws file's path and SHA-256, the manifest's SHA-256, the render's settings, the noise level and the acceptance the attempts were chosen by |
 | `system` | hostname, platform, CPU count and GPU |
 | `worker` | what a worker's `info()` returned: its interpreter and versions |
 | `ranking` | the resolved ranking of a Flash-ANSR run |

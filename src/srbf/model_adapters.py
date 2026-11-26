@@ -69,9 +69,13 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         device: str = "cpu",
         complexity: str | list[int | float] | int | float = "none",
         candidate_store_dir: str | None = None,
+        seed: int | None = None,
     ) -> None:
         self.model = model
         self.device = device
+        # A seed makes every fit reproducible (flash-ansr derives each candidate's restarts from it and the candidate);
+        # None keeps fresh entropy per fit.
+        self.seed = None if seed is None else int(seed)
         # Fail fast on an unknown mode: a bad string would otherwise only surface on the first problem,
         # AFTER the (slow) model load. Keep the accepted strings in sync with `_resolve_complexity`.
         if isinstance(complexity, str) and complexity not in ("none", "ground_truth"):
@@ -156,6 +160,7 @@ class FlashANSRAdapter(EvaluationModelAdapter):
                     sample.x_support, y_fit,
                     variable_names=variable_names if variable_names is not None else "auto",
                     complexity=complexity_value,
+                    **({} if self.seed is None else {"seed": self.seed}),
                 )
         except (ConvergenceError, OverflowError, TypeError, ValueError) as exc:
             record["error"] = str(exc)

@@ -281,6 +281,7 @@ def _build_flash_ansr_adapter(config: Mapping[str, Any]) -> FlashANSRAdapter:
         candidate_store_dir=(
             substitute_root_path(str(_csd)) if (_csd := config.get("candidate_store_dir")) is not None else None
         ),
+        seed=None if config.get("seed") is None else coerce_int(config["seed"], "model_adapter.seed"),
     )
 
 

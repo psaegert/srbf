@@ -177,6 +177,19 @@ catalog of another version is not mistaken for this one. `{{ROOT}}` and `~` are 
 A noise level `s` gives the targets `y + s * std(y) * noise` per side from the stored vector, the same definition as
 `noise` without draws, so every noise level of a sweep scales the same vector. Data problems are not noised.
 
+**Every draw lets its own formula be recognized.** With one draw per problem, a draw on which the true formula
+cannot be recovered would waste the problem for every method. So each problem's draw is the first of a fixed,
+seeded sequence of attempts on which (a) every target is finite and the FVU is defined on the fitting and on the
+held-out points, (b) the oracle (the `flash_ansr` adapter in oracle mode: the ground truth is the only candidate and
+its constants are refitted, here with 1,024 seeded restarts) reaches numeric recovery on the held-out points, and (c)
+the judge recognizes the refitted formula symbolically. Attempts differ only in what the benchmark leaves to chance
+(input points, random constants, per-run values), never in the formula or its fixed constants. This is a deviation
+from every benchmark with random values: the points are conditioned on the formula being recoverable from them. A
+problem on which no attempt within `max_trials` passes keeps its first attempt and is flagged formula-inherent: what
+defeats recovery there is the formula, not the draw. Formulas that are constants by construction and data catalogs are
+not checked. `scripts/accept_frozen_draws.py` (`srbf.draw_acceptance`) chooses the attempts and writes the document
+symbolic-data renders with.
+
 A run is refused, before the model loads, when:
 
 - `root` has no `manifest.json`, or `manifest_sha256` is given and differs;
@@ -190,8 +203,8 @@ A run is refused, before the model loads, when:
   shards that read different draws.
 
 Shards address the problems by their position in the render, which is the catalog's order, so `--shard K/N` and a
-subset of rows pick the same problems on every machine. Every row records `draws_sha256` (the draws file's SHA-256)
-and `draws_repeat`, and `__meta__` records the draws under `draws` and as the input `catalog_draws`, so a paired
+subset of rows pick the same problems on every machine. Every row records `draws_sha256` (the draws file's SHA-256),
+`draws_repeat`, `draws_attempt` (the attempt the problem keeps) and `draws_formula_inherent`, and `__meta__` records the draws under `draws` and as the input `catalog_draws`, so a paired
 comparison verifies that both sides read the same file ([Paired comparisons](paired.md#pairing-is-checked)).
 
 Another way to share points is a frozen catalog file: draw the problems once with symbolic-data, save them with

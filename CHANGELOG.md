@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   render, holdouts, or an output file holding rows of other draws are refused. Rows record `draws_sha256` and
   `draws_repeat`, `__meta__` records `draws` and the input `catalog_draws` (checked by paired comparisons), and
   `srbf merge` refuses shards of different draws. One draw per problem (`repeat: 1`) is the default.
+- **Frozen draws are accepted draws** (`srbf.draw_acceptance`, `scripts/accept_frozen_draws.py`). Each problem keeps
+  the first seeded attempt (symbolic-data's `CatalogDraws`) on which its targets are finite with a defined FVU on both
+  sides, the oracle (ground truth, constants refitted with 1,024 seeded restarts) reaches numeric recovery on the
+  held-out points, and the judge recognizes the refitted formula; attempt 1 with the flag `formula_inherent` when none
+  within `max_trials` does. Constant formulas and data problems are not checked. The script writes the attempts
+  document symbolic-data renders with; rows record `draws_attempt` and `draws_formula_inherent`, `__meta__.draws` the
+  acceptance. `srbf.table.judge_snapshot` is the judge on one snapshot (what `judge_result_file` runs).
+- **`model_adapter.seed` (flash_ansr)**: seeds every fit, so that the same problem gives the same answer.
 - **`srbf.aggregate`: the results site's averaging in the package.** `average(problems, kind)` averages per-problem
   run values over problem sets: `"mean"` (random-effects average, Paule-Mandel between-set variance), `"rate"`
   (beta-binomial), `"ratio"` (in log2, a geometric mean) or `"median"` (each set weighted as the average weighs it,
