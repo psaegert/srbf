@@ -19,7 +19,7 @@ async function pick(page, trigger, key) {
   await page.locator(`.v2picker .v2pickitem[data-k="${key}"]`).click();
   await expect(page.locator('.v2picker')).toHaveCount(0);
 }
-const VIEWS = ['curves', 'table', 'matrix', 'dist', 'corr', 'ranks', 'paired'];
+const VIEWS = ['curves', 'years', 'table', 'matrix', 'dist', 'corr', 'ranks', 'paired'];
 // the metric floor: the 20 metrics every release carries (those of the site's first release, under schema-2 keys)
 const LEGACY_METRICS = ['numeric_recovery_val', 'expr_length_ratio', 'log10_fvu_val', 'log10_fvu_fit', 'numeric_recovery_fit', 'success',
   'skeleton_match_raw', 'f1_score', 'precision_score', 'recall_score', 'edit_distance_norm', 'zss_edit_distance', 'expr_length_ratio_abserr',
@@ -1374,7 +1374,7 @@ test('the text of an option selects the option: hints never sit inside a label',
 
 test('axis ticks are round values with room between their labels', async ({ page }) => {
   await page.setViewportSize({ width: 1360, height: 1000 });
-  for (const view of ['curves', 'dist', 'ranks', 'paired']) {
+  for (const view of ['curves', 'years', 'dist', 'ranks', 'paired']) {
     await page.goto(`/explorer.html?release=2026-09&v=${view}&c=all`);
     await expect(page.locator(V2 + ' .v2tab.active')).toHaveAttribute('data-view', view);
     await expect(page.locator('.explorer-v2 svg.v2chart').first()).toBeVisible({ timeout: 15000 });
@@ -1408,7 +1408,7 @@ test('axis ticks are round values with room between their labels', async ({ page
 
 test('a chart hugs its data: neither a reference line nor a snapped axis leaves it mostly empty', async ({ page }) => {
   await page.setViewportSize({ width: 1360, height: 1000 });
-  for (const view of ['curves', 'paired']) {
+  for (const view of ['curves', 'years', 'paired']) {
     await page.goto(`/explorer.html?release=2026-09&v=${view}&c=all`);
     await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toBeVisible({ timeout: 15000 });
     await page.waitForTimeout(800);
@@ -1836,7 +1836,8 @@ test('every text of the 2026-09 explorer uses the reader\'s words', async ({ pag
   test.setTimeout(120_000);
   const urls = ['v=curves&x=time', 'v=curves&x=rung', 'v=table&rows=rungs', 'v=table&rows=cats', 'v=matrix', 'v=matrix&r=1448', 'v=table&rows=cats&r=1448', 'v=dist&pm=time&pt=2', 'v=matrix&pm=time&pt=0.5',
     'v=dist&dm=log10_fvu_val&dv=hist', 'v=dist&dm=log10_fvu_val&dv=ecdf', 'v=dist&dm=log10_fvu_val&dv=cats',
-    'v=dist&dm=log10_fvu_val&dv=rungs', 'v=dist&dm=numeric_recovery_val&dv=cats', 'v=ranks&x=rung&r=16', 'v=ranks&x=time', 'v=paired', 'v=preds'];
+    'v=dist&dm=log10_fvu_val&dv=rungs', 'v=dist&dm=numeric_recovery_val&dv=cats', 'v=ranks&x=rung&r=16', 'v=ranks&x=time', 'v=paired', 'v=preds',
+    'v=years', 'v=years&pt=0.2&m=e2e,PySR,T8-120M,oracle'];
   const found = [];
   for (const u of [...urls, 'home']) {   // every display of the explorer, then the home page's headline
     if (u === 'home') {
@@ -2038,3 +2039,199 @@ test('one metric under two methods: the diagonal, and the problems both solve ex
   await expect(page.locator(V2 + ' .v2view')).toContainText('Paired differences');
 });
 
+
+// ---- Over the years: every method at one time per problem, against the date it was first made public ---------------
+// data/publication_dates.js dates the published methods; the view reads every method at the time set on its bar (the
+// same reading as every display at a position: between two budgets by blending them, nothing outside its timed budgets,
+// only once every selected problem set is finished), one point per method and plot.
+const ALL_PUBLIC = 'e2e,nesymres-100M,PySR,operon,gpgomea,dsr,udsr,rilsrols,qlattice,T8-3M,T8-20M,T8-120M,T8-120M-pysr,oracle';
+const YEARS = '/explorer.html?release=2026-09&v=years&m=' + ALL_PUBLIC;
+// the first word of a point's tooltip is its method's name, then ", first made public"
+const pointNames = (svg) => svg.locator('circle title').evaluateAll((ts) => ts.map((t) => t.textContent.split(', first made public')[0]));
+const notDrawn = (page) => page.locator(V2 + ' .v2view > p.v2hint').allTextContents();
+
+test('Over the years: the tab opens a view whose x axis is the publication date, one point per dated method', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/explorer.html?release=2026-09&v=curves&m=' + ALL_PUBLIC + '&pm=time&pt=9');
+  const tab = page.locator(V2 + ' .v2tab[data-view="years"]');
+  await expect(tab).toHaveText('Over the years');
+  await tab.click();
+  await expect(page.locator(V2 + ' .v2tab.active')).toHaveAttribute('data-view', 'years');
+  expect(new URL(page.url()).searchParams.get('v')).toBe('years');
+  const charts = page.locator(V2 + ' .v2view svg.v2yearschart');
+  await expect(charts.first()).toBeVisible({ timeout: 15000 });
+  const dates = await page.evaluate(() => window.PUBLICATION_DATES);
+  const labels = await page.evaluate(() => Object.fromEntries(window.RESULTS_V2.methods.map((m) => [m.key, m.label])));
+  expect(Object.keys(dates).length).toBe(13);
+  expect(dates.oracle).toBeUndefined();   // a reference, not a published method
+  for (const [k, e] of Object.entries(dates)) {
+    expect(labels[k], k).toBeTruthy();
+    expect(e.date, k).toMatch(/^\d{4}-\d{2}(-\d{2})?$/); expect(e.precision, k).toBe(e.date.length === 10 ? 'day' : 'month');
+    expect(e.event.length, k).toBeGreaterThan(5); expect(e.url, k).toMatch(/^https:\/\//);
+  }
+  const first = charts.first();
+  const texts = await first.locator('text').allTextContents();
+  expect(texts.some((t) => /first made public/.test(t)), 'x label').toBe(true);   // never a budget or a time
+  expect(texts.some((t) => /budget|time per problem|\(s/.test(t)), 'no budget or time axis').toBe(false);
+  const years = texts.filter((t) => /^20\d\d$/.test(t)).map(Number);
+  expect(years.length).toBeGreaterThanOrEqual(3);
+  expect(years).toEqual([...years].sort((a, b) => a - b));
+  expect(years[0]).toBeLessThanOrEqual(2019); expect(years[years.length - 1]).toBeGreaterThanOrEqual(2025);
+  // every dated method that has an answer at this time is exactly one point on every chart; every other one is named
+  const notes = (await notDrawn(page)).join(' ');
+  expect(notes).toContain('Oracle is a reference that is given the true formula, not a published method, so it has no publication date and is not drawn.');
+  const n = await charts.count();
+  expect(n).toBe(await page.evaluate(() => window.RESULTS_V2.metrics.filter((m) => m.tier === 'main').length));
+  for (let i = 0; i < n; i++) {
+    const names = await pointNames(charts.nth(i));
+    const card = page.locator(V2 + ' .v2plot').nth(i), gone = (await card.locator('.v2yearsgone').allTextContents()).join(' ');
+    expect(new Set(names).size, `chart ${i}: one point per method`).toBe(names.length);
+    expect(names).not.toContain('Oracle');
+    for (const k of Object.keys(dates)) {
+      const drawn = names.includes(labels[k]);
+      expect(drawn || notes.includes(labels[k] + ' ha') || notes.includes(labels[k] + ',') || gone.includes(labels[k]), `chart ${i}: ${labels[k]} drawn or named`).toBe(true);
+    }
+  }
+  // at 9 s per problem every dated method of this release has an answer (E2E's budgets take up to 9.75 s, uDSR*'s from 8.54 s)
+  const names0 = await pointNames(first);
+  expect(names0.length).toBe(13);
+  for (const k of Object.keys(dates)) { expect(names0, k).toContain(labels[k]); }
+  const tip = await first.locator('circle title').first().textContent();
+  expect(tip).toMatch(/, first made public (\d{1,2} )?[A-Z][a-z]+ 20\d\d \(.+\), at 9 s per problem \((budget [\d,]+|≈ interpolated between budgets [\d,]+ and [\d,]+)\): [\d.]+ % \(95 % interval [\d.]+ % to [\d.]+ %/);
+  expect(tip).toMatch(/From [\d,]+ problems in 29 problem sets/);
+  // the x of a point is its date: the earliest method sits furthest left
+  const xOf = (label) => first.evaluate((svg, lab) => { const t = [...svg.querySelectorAll('circle title')].find((x) => x.textContent.startsWith(lab + ', first')); return t ? +t.parentElement.getAttribute('cx') : null; }, label);
+  expect(await xOf('GP-GOMEA')).toBeLessThan(await xOf('PySR'));
+  expect(await xOf('PySR')).toBeLessThan(await xOf('E2E 93M'));
+  expect(await xOf('E2E 93M')).toBeLessThan(await xOf('Flash-ANSR T8-120M'));
+  // where each date comes from: a table, oldest first, each event linked
+  await page.locator(V2 + ' .v2dates summary').click();
+  const rows = page.locator(V2 + ' .v2dates tbody tr');
+  await expect(rows).toHaveCount(13);
+  await expect(rows.first()).toContainText('GP-GOMEA');
+  expect(await rows.locator('a[href^="https://"]').count()).toBe(13);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+  expect(errors).toEqual([]);
+});
+
+test('Over the years reads every method at the time set on its bar, never at a budget', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto(YEARS + '&yp=numeric_recovery_val&pm=time&pt=9');
+  const chart = page.locator(V2 + ' .v2view svg.v2yearschart').first(), val = page.locator(V2 + ' .v2viewbar .v2posval');
+  await expect(chart).toBeVisible({ timeout: 15000 });
+  await expect(val).toHaveValue('9');
+  await expect(page.locator(V2 + ' .v2viewbar .v2posunit')).toHaveText('s');
+  await expect(page.locator(V2 + ' .v2viewbar button[data-set^="pm:"]')).toHaveCount(0);   // budgets are not comparable between methods
+  const tips = async () => Object.fromEntries((await chart.locator('circle title').allTextContents()).map((t) => [t.split(', first made public')[0], t]));
+  const before = await tips();
+  await page.locator(V2 + ' .v2viewbar .v2stepbtn[aria-label="longer time"]').click();
+  await expect(val).toHaveValue('10');
+  expect(new URL(page.url()).searchParams.get('pt')).toBe('10');
+  await expect.poll(async () => Object.values(await tips()).every((t) => t.includes('at 10 s per problem'))).toBe(true);
+  const after = await tips();
+  const value = (t) => t.match(/\): ([\d.]+ %)/)[1];
+  const moved = Object.keys(after).filter((k) => before[k] && value(before[k]) !== value(after[k]));
+  expect(moved.length, 'values move with the time').toBeGreaterThan(5);
+  // E2E's budgets take at most 9.75 s per problem: at 10 s it has no answer, and the view says so
+  expect(Object.keys(after)).not.toContain('E2E 93M');
+  expect((await notDrawn(page)).join(' ')).toMatch(/E2E 93M has no value at 10 s per problem \(its budgets take [\d.]+ to [\d.]+ s per problem\)\./);
+  // a time between two budgets is read by blending them, and the view names the two
+  await expect(page.locator(V2 + ' .v2view')).toContainText(/≈ Interpolated: .*PySR between budgets [\d,]+ and [\d,]+/);
+  // a link that asks for a budget still opens this display at a time
+  await page.goto(YEARS + '&yp=numeric_recovery_val&pm=budget&r=64');
+  await expect(chart).toBeVisible({ timeout: 15000 });
+  await expect(page.locator(V2 + ' .v2viewbar .v2posunit')).toHaveText('s');
+  expect(new URL(page.url()).searchParams.get('pm')).toBe('time');
+  expect(+new URL(page.url()).searchParams.get('pt')).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});
+
+test('Over the years: plots are added, removed and given another metric, and the link carries them', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto(YEARS + '&yp=numeric_recovery_val&pt=3');
+  const cards = page.locator(V2 + ' .v2plot'), yp = () => new URL(page.url()).searchParams.get('yp');
+  await expect(cards).toHaveCount(1, { timeout: 15000 });
+  await expect(cards.first().locator('.v2ysel')).toHaveAttribute('data-k', 'numeric_recovery_val');
+  await expect(cards.first().locator('.v2xfix')).toHaveText('publication date');
+  await expect(cards.first().locator('.v2xsel')).toHaveCount(0);   // the x axis is always the date
+  await page.locator(V2 + ' .v2addplot').click();
+  await expect(cards).toHaveCount(2);
+  expect(yp().split(',').length).toBe(2);
+  await pick(page, cards.nth(1).locator('.v2ysel'), 'mdl_ratio');
+  await expect(cards.nth(1).locator('.v2ysel')).toHaveAttribute('data-k', 'mdl_ratio');
+  expect(yp()).toBe('numeric_recovery_val,mdl_ratio');
+  await expect(cards.nth(1).locator('svg.v2yearschart')).toContainText(/MDL/);
+  await page.locator(V2 + ' .v2rmplot').first().click();
+  await expect(cards).toHaveCount(1);
+  expect(yp()).toBe('mdl_ratio');
+  // the link opens the same view, plots and time; the Curves plots are left as they were
+  const p = new URL(page.url()).searchParams.get('p');
+  await page.goto(YEARS + '&yp=log10_fvu_val,mdl_ratio&pm=time&pt=3');
+  await expect(cards).toHaveCount(2, { timeout: 15000 });
+  await page.reload();
+  await expect(page.locator(V2 + ' .v2tab.active')).toHaveAttribute('data-view', 'years');
+  await expect(cards).toHaveCount(2, { timeout: 15000 });
+  expect([await cards.nth(0).locator('.v2ysel').getAttribute('data-k'), await cards.nth(1).locator('.v2ysel').getAttribute('data-k')]).toEqual(['log10_fvu_val', 'mdl_ratio']);
+  await expect(page.locator(V2 + ' .v2viewbar .v2posval')).toHaveValue('3');
+  expect(new URL(page.url()).searchParams.get('p')).toBe(p);
+  // the last plot removed: the tile to add one stays
+  await page.locator(V2 + ' .v2rmplot').first().click();
+  await page.locator(V2 + ' .v2rmplot').first().click();
+  await expect(cards).toHaveCount(0);
+  await expect(page.locator(V2 + ' .v2addplot')).toBeVisible();
+  await expect(page.locator(V2 + ' .v2view')).toContainText('No plot yet');
+  expect(yp()).toBe('');
+  await page.reload();
+  await expect(page.locator(V2 + ' .v2addplot')).toBeVisible();
+  await expect(cards).toHaveCount(0);
+  // another display's link carries no plots of this one
+  await page.locator(V2 + ' .v2tab[data-view="curves"]').click();
+  expect(new URL(page.url()).searchParams.has('yp')).toBe(false);
+  expect(errors).toEqual([]);
+});
+
+test('Over the years names every method it does not draw, and why', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto(YEARS + '&yp=numeric_recovery_val&pm=time&pt=0.2');
+  const chart = page.locator(V2 + ' .v2view svg.v2yearschart').first();
+  await expect(chart).toBeVisible({ timeout: 15000 });
+  const notes = (await notDrawn(page)).join(' ');
+  expect(notes).toMatch(/E2E 93M has no value at 0\.2 s per problem \(its budgets take [\d.]+ to [\d.]+ s per problem\)\./);
+  expect(notes).toMatch(/PySR has no value at 0\.2 s per problem/);
+  expect(notes).toContain('Oracle is a reference that is given the true formula, not a published method, so it has no publication date and is not drawn.');
+  const names = await pointNames(chart);
+  for (const gone of ['E2E 93M', 'PySR', 'Oracle']) { expect(names).not.toContain(gone); }
+  expect(names.length).toBeGreaterThan(0);
+  // a method without an entry in the dates (here a fixture added to the release) is named, not drawn
+  await withHalfAnswered(page);
+  await page.goto('/explorer.html?release=2026-09&v=years&m=fixture-half,T8-120M&yp=numeric_recovery_val&pt=3');
+  await expect(page.locator(V2 + ' .v2view svg.v2yearschart').first()).toBeVisible({ timeout: 15000 });
+  expect((await notDrawn(page)).join(' ')).toContain('Fixture half answered has no publication date here, so it is not drawn.');
+  expect(await pointNames(page.locator(V2 + ' .v2view svg.v2yearschart').first())).toEqual(['Flash-ANSR T8-120M']);
+  // no problem set selected: nothing to average, and the view says what to do
+  await page.locator(V2 + ' button[data-act="none"]').click();
+  await expect(page.locator(V2 + ' .v2view')).toContainText('Select at least one problem set in the side panel.');
+  await expect(page.locator(V2 + ' .v2view svg.v2yearschart')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('Over the years carries only the controls it can use, and its points follow the interval switches', async ({ page }) => {
+  const shown = () => page.evaluate(() => [...document.querySelectorAll('#results-explorer-v2 [data-uses]')]
+    .filter((e) => !e.hidden).flatMap((e) => e.dataset.uses.split(' ')));
+  await page.goto(YEARS + '&yp=numeric_recovery_val&pt=9&band=1&cross=0');
+  const chart = page.locator(V2 + ' .v2view svg.v2yearschart').first();
+  await expect(chart).toBeVisible({ timeout: 15000 });
+  const uses = await shown();
+  for (const k of ['stat', 'ci', 'valid']) { expect(uses, k).toContain(k); }
+  for (const k of ['plots', 'xaxis', 'focus', 'rung', 'base', 'rows']) { expect(uses, k).not.toContain(k); }
+  const n = await chart.locator('circle').count();
+  expect(await chart.locator('rect[opacity]').count()).toBe(n);   // a band: one shaded bar per point
+  await page.locator(V2 + ' .v2cross').check();
+  await expect(chart.locator('line[stroke-opacity]')).toHaveCount(n);   // a cross: one line per point
+  await page.locator(V2 + ' .v2band').uncheck();
+  await expect(chart.locator('rect[opacity]')).toHaveCount(0);
+  await page.locator(V2 + ' .v2cross').uncheck();
+  await expect(chart.locator('line[stroke-opacity]')).toHaveCount(0);
+  await expect(chart.locator('circle')).toHaveCount(n);
+});
