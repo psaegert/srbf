@@ -38,17 +38,25 @@ jobs:
         working-directory: results-site/tests
         run: npx playwright test --config playwright.config.mjs
 
-  deploy:
+  # The upload and the deployment run in separate jobs, as in GitHub's Pages starter workflow: deploy-pages looks the
+  # artifact up once, and in the same job it can run before the upload is listed ("No artifacts named github-pages",
+  # three times on 2026-11-26 with the artifact registered within the same second).
+  build:
     needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: results-site
+
+  deploy:
+    needs: build
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: results-site
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
