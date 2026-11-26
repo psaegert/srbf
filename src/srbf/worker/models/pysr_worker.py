@@ -10,9 +10,9 @@ Runs in whichever interpreter has ``pysr`` (and its Julia backend); imports pysr
   first timed fit starts warm.
 
 The result carries PySR's own predictions (``y_pred``/``y_pred_val`` from ``predict``), the best
-equation as ``expression`` (in the variable names srbf handed over) and the full Pareto hall of
-fame under ``extra["equations"]``: plain columns only, so every selection rule stays an offline
-re-score against the stored raw arrays.
+equation as ``expression`` (in the variable names srbf handed over), PySR's hall of fame (its
+Pareto front of loss against complexity, ``equations_``) as ``candidates``, which srbf judges and
+stores, and the hall of fame with PySR's own measures under ``extra["equations"]``.
 """
 import numpy as np
 
@@ -127,8 +127,10 @@ def fit(x, y, *, x_val, variables, meta, options, state):
     y_pred = np.asarray(model.predict(X), dtype=float).ravel()
     y_pred_val = np.asarray(model.predict(X_val), dtype=float).ravel() if X_val.shape[0] else []
     extra = {}
+    candidates = None
     try:
         hof = model.equations_
+        candidates = [str(equation) for equation in hof["equation"]]
         extra["equations"] = hof[["complexity", "loss", "score", "equation"]].to_dict("records")
     except Exception:  # noqa: BLE001 - persistence is best-effort
         pass
@@ -136,4 +138,5 @@ def fit(x, y, *, x_val, variables, meta, options, state):
         extra["n_guesses"] = len(overrides.get("guesses") or [])
         extra["niterations_used"] = int(overrides.get("niterations", options.get("niterations", 100)))
     best = model.get_best()
-    return {"expression": str(best["equation"]), "y_pred": y_pred, "y_pred_val": y_pred_val, "extra": extra}
+    return {"expression": str(best["equation"]), "candidates": candidates, "y_pred": y_pred, "y_pred_val": y_pred_val,
+            "extra": extra}

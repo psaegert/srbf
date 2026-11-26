@@ -31,7 +31,9 @@ budget. The results explorer averages each catalog's mean time over the catalogs
 number it shows (a random-effects average, see
 [How results are averaged](averaging.md)), so no catalog decides the
 time on its own. A fit that returns no prediction does not enter the mean time; how often that happens
-is a metric of its own, the success rate.
+is a metric of its own, the success rate. A fit's time includes producing every expression the
+method returns, its front with its answer, and leaves out srbf's judging of them
+([Candidates](adapters.md#candidates)).
 
 Three scripts in the repository implement the protocol. They expect a config with one experiment
 per catalog and a sweep named `ladder`, like the configs under `configs/evaluation/scaling/`:

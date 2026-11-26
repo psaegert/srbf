@@ -146,6 +146,10 @@ def test_brute_force_adapter_identity(simplipy_engine: SimpliPyEngine) -> None:
     np.testing.assert_allclose(values["y_pred_val"].squeeze(), sample.y_validation.squeeze(), atol=1e-3)
     assert values["predicted_expression"]
     assert values["predicted_skeleton_prefix"] is not None
+    # every expression it fitted goes to the run as a candidate, constants at full precision, the best first
+    assert len(values["candidate_expressions"]) == len(model._results) >= 1
+    assert values["candidate_notation"] == "prefix" and values["candidate_prediction"] == 0
+    assert values["candidate_expressions"][0].split() == list(model.get_expression(nth_best=0, return_prefix=True, precision=None))
 
 # ---- a failed fit is NOT a timed fit -----------------------------------------------------------------------------
 # Failures do not count towards the time. The compute axis is the cost of the problems a method

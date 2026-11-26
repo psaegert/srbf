@@ -3,7 +3,8 @@
 Walks the path a run takes -- config, sweep rung, provenance label, output directory, worker and
 interpreter, engine, catalog, adapter, fit, derived metrics -- one step at a time, so the failure a
 run would hit after hours shows in a minute with the fix beside it. Each step prints ``ok`` or
-``FAIL`` with its detail; each fit prints the expression, its time and its validation FVU.
+``FAIL`` with its detail; each fit prints the expression, its time and its validation FVU, and the
+candidates the method returned are judged as the run judges them (``srbf.candidates``).
 """
 from __future__ import annotations
 
@@ -62,6 +63,28 @@ def _metrics_text(record: Mapping[str, Any], engine: Any) -> str:
     if symbolic:
         parts.append("symbolic match")
     return " | ".join(parts)
+
+
+def _candidates_step(record: Mapping[str, Any], sample: Any, engine: Any) -> tuple[bool, str] | None:
+    """The method's candidates judged as a run judges them: (whether every one could be read, what came of them), or
+    None when the method handed none over."""
+    from srbf.candidates import STATUS_NAMES, STATUS_UNREADABLE, judge_candidates
+
+    expressions = record.get("candidate_expressions")
+    if not expressions or engine is None:
+        return None
+    variables = record.get("candidate_variables") or record.get("variables") or record.get("variable_names") or []
+    if len(variables) != sample.x_support.shape[1]:
+        variables = [f"x{i + 1}" for i in range(sample.x_support.shape[1])]
+    judged = judge_candidates([str(e) for e in expressions], engine=engine, variables=list(variables),
+                              x_fit=sample.x_support, y_fit=sample.y_support, x_val=sample.x_validation,
+                              y_val=sample.y_validation, notation=str(record.get("candidate_notation") or "infix"))
+    counts = {STATUS_NAMES[code]: int((judged.status == code).sum()) for code in sorted(set(judged.status.tolist()))}
+    detail = f"{len(expressions)} candidates: " + ", ".join(f"{n} {name}" for name, n in counts.items())
+    unreadable = [i for i, code in enumerate(judged.status) if code == STATUS_UNREADABLE]
+    if unreadable:
+        detail += f"; e.g. {_short(expressions[unreadable[0]], 60)}: {_short(judged.reasons[unreadable[0]], 160)}"
+    return not unreadable, detail
 
 
 def check_config(
@@ -250,6 +273,11 @@ def _check_experiment(raw: Mapping[str, Any], name: str | None, *, n_problems: i
                 continue
             wall = time.time() - started
             report.records.append(record)
+            judged = _candidates_step(record, sample, engine)
+            if judged is not None:
+                step("candidates", judged[0], f"{eq_id}: {judged[1]}",
+                     "" if judged[0] else "a candidate the judge cannot read is stored as unreadable: write every candidate "
+                     "in the engine's operators, with its fitted constants (docs/adapters.md#candidates)")
             if not record.get("prediction_success"):
                 step("fit", False, f"{eq_id}: {_short(record.get('error', 'prediction_success is False'), 400)}",
                      "an unparseable expression means the operator vocabulary differs from the engine's (respell_legacy_prefix for the old mult2/pow1_3 tokens); see the worker log for tracebacks")

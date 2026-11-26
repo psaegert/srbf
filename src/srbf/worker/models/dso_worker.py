@@ -619,7 +619,14 @@ def fit_here(x, y, *, x_val, variables, meta, options, state):
                 break
         best = trainer.p_r_best
         expression = infix(best.traversal, names)
-        fit_time = time.perf_counter() - started   # the search and its answer; the bookkeeping below is not timed
+        # DSO's own front (its logger's ``save_pareto_front``) is part of what the method returns, so it is timed
+        candidates, front = None, None
+        try:
+            front = pareto_front(list(Program.cache.values()), names)
+            candidates = [member["expression"] for member in front]
+        except Exception:  # noqa: BLE001 - persistence is best-effort
+            pass
+        fit_time = time.perf_counter() - started   # the search, its answer and its front; the bookkeeping below is not timed
 
         extra = {"arm": state["arm"], "seed": seed, "n_samples": state["n_samples"], "threads": threads,
                  "nevals": int(trainer.nevals),
@@ -639,12 +646,10 @@ def fit_here(x, y, *, x_val, variables, meta, options, state):
             degree = int(config["task"]["poly_optimizer_params"]["degree"])
             # DSO's least squares needs a row per monomial; with fewer rows LINEAR is the constant 1
             extra["linear_underdetermined"] = _comb(X.shape[1] + degree, degree) > X.shape[0]
-        try:
-            extra["front"] = pareto_front(list(Program.cache.values()), names)
-        except Exception:  # noqa: BLE001 - persistence is best-effort
-            pass
+        if front is not None:
+            extra["front"] = front
 
-        return {"expression": expression, "fit_time": fit_time, "extra": extra}
+        return {"expression": expression, "candidates": candidates, "fit_time": fit_time, "extra": extra}
     finally:
         # Whatever the search raises, its processes and session go with it: a pool left behind outlives the fit, one per
         # failed problem, and its children keep the worker's socket open if the worker dies.

@@ -71,7 +71,7 @@ A dict with at least `expression`, `candidates` or `error`:
 | `fit_time` | seconds. Without it, the time around the call to `fit` is taken; the protocol and srbf's own work are never part of it |
 | `extra` | a dict of anything JSON can hold, merged into the result row: a Pareto front, diagnostics. A key that a row already has is kept under `worker_extra` instead |
 | `error` | a message. The problem counts as failed and the worker goes on with the next one |
-| `candidates` | instead of `expression`, for a method that ends with several expressions and no rule of its own for picking one, such as a hall of fame: a list of infix strings. srbf picks one only when the config sets `selection`; otherwise the problem counts as failed |
+| `candidates` | every expression the method ends with: its own front (a hall of fame, a Pareto front) or the expressions it fitted (samples, beams), each an infix string like `expression` with its fitted constants written in. srbf judges and stores them all ([Candidates](#candidates)). Without `expression`, srbf picks one of them only when the config sets `selection`; otherwise the problem counts as failed |
 
 An exception in `fit` is recorded as that problem's error, with its traceback, and the worker stays
 up. Whatever the worker prints goes to its log file and never into the protocol. What `info`
@@ -101,6 +101,84 @@ If your method writes prefix notation, `import srbf_worker_helpers` inside the w
 on the path) gives you `prefix_to_infix(tokens)` and
 `substitute_placeholders(tokens, values)`, which fills `<constant>` placeholders with fitted
 values.
+
+## Candidates
+
+A method answers each problem with one expression and often ends with more: a hall of fame, a
+Pareto front, the samples or beams it fitted. srbf keeps every one of them and judges each the way
+it judges a prediction, so that a method's whole front can be compared, not only its answer.
+
+**What a worker returns.** A method that keeps a diverse front of its own returns that front as
+`candidates`, not its whole population. A method that fits several expressions returns those. A
+method with one model returns no candidates, and its answer is its only one. `expression` stays the
+answer; srbf adds it to the candidates when the list does not hold it. Each candidate carries its
+fitted constants: a `<constant>` placeholder makes it unreadable. Per problem, srbf keeps the first
+100,000 candidates of at most 10,000 characters each and counts the rest in the row's
+`candidates_dropped`.
+
+**Time.** Producing the candidates is part of what the method returns, so it counts in `fit_time`;
+a worker that reports its own `fit_time` includes it. srbf judges them after the method has
+answered, outside `fit_time`, and records the seconds in `candidates_judge_time`.
+
+**Judging.** Each candidate is read by the run's engine like an expression (above), priced by
+`srbf.table.mdl_bits`, the description length in bits that the table reports as `predicted_mdl`,
+and evaluated on the support and validation points. Its FVU is `srbf.metrics.numeric.fvu` against
+the noiseless targets, as the table judges a prediction; a value that is not finite at some point
+gives an FVU of infinity. Every candidate gets a status: `judged` (read, evaluated and priced),
+`unreadable`, `unevaluable` or `unpriced`, with the reason. Nothing a method reports about its
+candidates is used.
+
+**Storage.** The candidates of `results/.../fastsrb/niter_000064.pkl` go to the directory
+`results/.../fastsrb/niter_000064.candidates/`, into the log `niter_000064.log`: one compressed
+record per problem, appended when the problem is done, so a run of thousands of problems adds two
+files, not thousands. A record holds the problem's `eval_row_index`, each candidate as the method
+wrote it and as the judge read it, its price, both FVUs, its status, which candidate is the method's
+answer, and the fingerprint of the judge; a checksum ends the log at a record that a killed run left
+unfinished. Each shard of a run writes a log of its own into the same directory. A problem that is
+fitted again on resume appends a newer record, and readers take the newest one. `niter_000064.json`
+beside the log names the judge, its engine and versions. `runner.candidates` switches the store off
+(`false`) or moves it to another directory ([Running](running.md#the-config)). Stored, a candidate
+takes about 70 bytes (constants at full precision, written twice).
+
+**Reading.** A run's judged candidates come back as arrays, one problem at a time:
+
+```python
+from srbf.candidates import iter_candidates
+
+for problem in iter_candidates("results/evaluation/scaling/pysr/fastsrb/niter_000064.pkl"):
+    keep = problem.valid                                   # read, evaluated and priced
+    bits, fvu_val = problem.bits[keep], problem.fvu_val[keep]
+    answer = problem.predicted                             # index of the method's own answer, or None
+    texts = problem.expressions                            # as the method wrote them
+```
+
+`load_candidates` returns the same as a mapping from `eval_row_index` to the problem's candidates.
+
+**Where the judging runs.** In the run, after each problem: the points, the column names the method
+was handed and the engine are at hand there, and a run's store is complete when the run is. Judging
+takes about half a millisecond per candidate (two variables, 512 support and 512 validation points:
+reading 0.06 ms, evaluating and both FVUs 0.32 ms, pricing 0.05 ms), about two seconds for a problem
+with the 5,000 candidates Flash-ANSR can fit. The table's judge stays apart: its fingerprint covers
+every module it reaches, and a change there does not judge thousands of candidates per problem
+again. Each record keeps the fingerprint of the candidate judge that judged it
+(`CandidateSet.current`); when the judge changes, for example to another price,
+`srbf.candidates.rejudge_candidates(result_file, engine=engine)` judges a stored run again from the
+stored strings and the points the result file keeps.
+
+**The shipped methods.**
+
+| method | candidates |
+|---|---|
+| Flash-ANSR | every candidate it fitted, best first |
+| PySR | its hall of fame (`equations_`) |
+| Operon | its Pareto front (`pareto_front_`) |
+| DSO | its Pareto front of complexity against reward over every expression it evaluated |
+| Bingo | the Pareto front of the equations it refits at the end (`get_pareto_front`) |
+| QLattice | the models `get_diverse_models` returns |
+| TiSR | its hall of fame; it has no answer of its own, and `selection` picks one |
+| GP-GOMEA, RILS-ROLS | none: each ends with one model |
+| the sampling and enumeration baselines | every expression they fitted, best first |
+| E2E, NeSymReS, Flash-ANSR + PySR | their answer only |
 
 ## The config
 
@@ -212,7 +290,14 @@ class EvaluationModelAdapter(Protocol):
     def evaluate_sample(self, sample: EvaluationSample) -> EvaluationResult: ...
 ```
 
-An optional `close()` is called when the run ends, however it ends. A sample carries `x_support`,
+An optional `close()` is called when the run ends, however it ends. An adapter hands its
+[candidates](#candidates) over in its record: `candidate_expressions` (a list of strings),
+`candidate_notation` (`infix` in the column names it was handed, the default, or `prefix` tokens
+joined by spaces in the names `x1, x2, ...`), `candidate_prediction` (the index of its answer among
+them, or `None`) and, optionally, `candidate_variables` (the column names, default the record's
+`variables`). The run takes them out of the record, judges them with the adapter's engine
+(`get_simplipy_engine()`, or a `simplipy_engine` attribute) and stores them; an adapter that hands
+none over has its answer as its only candidate. A sample carries `x_support`,
 `y_support`, `y_support_noisy` (or `None`), `x_validation`, `y_validation` and `metadata`. The
 result is a dict started from `sample.clone_metadata()`, so that the ground truth travels with the prediction.
 An in-process adapter writes its expression in the names `x1, x2, ...`, by column position:

@@ -196,6 +196,12 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         record["predicted_typed_frozen"] = int(getattr(best, "typed_frozen", 0) or 0)
         record["predicted_typed_thaw"] = getattr(best, "typed_thaw", None)
         record["predicted_spelling"] = getattr(best, "spelling", None)
+        # Every candidate the model fitted, its constants substituted, for the run to judge and store
+        # (srbf.candidates): the prefix speaks x1..xN by column, and the best is the prediction.
+        record["candidate_expressions"] = [" ".join(map(str, c.expression_prefix)) for c in result.candidates]
+        record["candidate_notation"] = "prefix"
+        record["candidate_variables"] = [f"x{i + 1}" for i in range(np.asarray(sample.x_support).shape[1])]
+        record["candidate_prediction"] = 0
 
         # The prediction's curves, evaluated through the result (a candidate carries no predictions):
         # the support set as fitted and the validation split when the sample has one.
@@ -357,6 +363,18 @@ def _evaluate_refiner_baseline(model: Any, sample: EvaluationSample) -> Evaluati
         record["error"] = f"Failed to extract expression: {exc}"
         record["prediction_success"] = False
         return EvaluationResult(record)
+
+    # Every expression the baseline fitted, its constants at full precision, for the run to judge and store
+    # (srbf.candidates); the best is the prediction. Without them the run falls back to the prediction alone.
+    try:
+        record["candidate_expressions"] = [
+            " ".join(map(str, model.get_expression(nth_best=k, return_prefix=True, precision=None)))
+            for k in range(len(model._results))]
+        record["candidate_notation"] = "prefix"
+        record["candidate_prediction"] = 0
+    except Exception:  # noqa: BLE001 - the candidates are auxiliary to the answer recorded above
+        for key in ("candidate_expressions", "candidate_notation", "candidate_prediction"):
+            record.pop(key, None)
 
     best_result = model._results[0]
     fits = best_result.get("fits")

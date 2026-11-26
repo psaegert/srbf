@@ -46,8 +46,10 @@ def fit(x, y, *, x_val, variables, meta, options, state):
     them); meta: the problem's metadata (eq_id, ...); options and state: see load().
 
     Return {"expression": "<infix string>"} at least. Optional keys: y_pred and y_pred_val (your
-    own predictions), constants, fit_time (seconds), extra (a JSON-able dict), or
-    {"error": "<message>"} to fail this problem and go on with the next.
+    own predictions), constants, fit_time (seconds), extra (a JSON-able dict), candidates (the
+    other expressions your method ends with, e.g. its Pareto front, as infix strings with their
+    fitted constants; srbf judges and stores them), or {"error": "<message>"} to fail this problem
+    and go on with the next.
     """
     X = np.asarray(x, dtype=float)
     Y = np.asarray(y, dtype=float).reshape(-1)

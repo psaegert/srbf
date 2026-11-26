@@ -42,9 +42,15 @@ frame = pd.DataFrame({key: snapshot[key] for key in ("benchmark_eq_id", "predict
 | `fit_time` | seconds for the problem |
 | `predicted_constants`, `predicted_score`, `predicted_log_prob` | what the method reports about its prediction, where it does |
 | `placeholder`, `placeholder_reason` | see below |
+| `n_candidates`, `candidates_judge_time`, `candidates_dropped`, `candidates_error` | how many [candidates](adapters.md#candidates) of the problem were stored, the seconds srbf took to judge them (not part of `fit_time`), how many the method returned beyond the limits, and why none were stored if that failed |
 
 An adapter may add columns of its own; the Flash-ANSR adapter records `generation_time` and
 `refinement_time`, and a worker's `extra` dict is merged into the row.
+
+Every expression a method ends with, its answer among them, is stored next to the result file in
+`<name>.candidates/`, one record per problem, with srbf's judgement of each: its price in bits and its
+FVU on the support and validation points. `srbf.candidates.iter_candidates(path)` reads them back
+([Candidates](adapters.md#candidates)).
 
 ### Failures and placeholders
 

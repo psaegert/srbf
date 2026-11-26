@@ -27,6 +27,10 @@ Operon has them) and the budget, a count of evaluations. See docs/models.md.
 Operon searches in float32 and always wraps its model in a fitted scale and offset (``a * f(x) + b``) with a weight
 on every variable; the returned string carries every digit of those float32 constants. Operon's own predictions
 are float32, so they are not returned: srbf evaluates the string.
+
+The answer is the model Operon picks from its Pareto front (``model_``); the whole front (``pareto_front_``) is
+returned as ``candidates``, each member written like the answer, which srbf judges and stores. ``extra["front"]``
+keeps the front with Operon's own measures.
 """
 import hashlib
 import os
@@ -185,6 +189,7 @@ def fit(x, y, *, x_val, variables, meta, options, state):
             extra[key] = int(stats[key])
     extra["generation_limit"] = generation_limit(state["max_evaluations"], state.get("config"))
     extra["hit_generation_cap"] = bool(extra.get("generations", 0) >= extra["generation_limit"])
+    candidates = None
     try:
         extra["front"] = [
             {"expression": rootn_spelling(model.get_model_string(m["tree"], 40, names)), "length": int(m["length"]),
@@ -193,6 +198,7 @@ def fit(x, y, *, x_val, variables, meta, options, state):
              "bayesian_information_criterion": float(m["bayesian_information_criterion"]),
              "akaike_information_criterion": float(m["akaike_information_criterion"])}
             for m in model.pareto_front_]
+        candidates = [member["expression"] for member in extra["front"]]
     except Exception:  # noqa: BLE001 - persistence is best-effort
         pass
-    return {"expression": expression, "extra": extra}
+    return {"expression": expression, "candidates": candidates, "extra": extra}
