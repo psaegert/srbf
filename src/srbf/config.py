@@ -76,6 +76,9 @@ def build_catalog_source(
             - exclude: lample-charton-v23
             - filter: {finite: true}
           target_size: 1000           # cap (also honoured as the run total_limit upstream)
+          draws:                      # optional: read the catalog's frozen draws instead of drawing (srbf.frozen_draws)
+            root: '{{ROOT}}/data/draws'
+            repeat: 1
 
     ``target_size`` / ``skip`` are the resume-aware bounds the runner computes; they override any
     ``data_source.target_size`` here. ``shard`` = (index, count) keeps every count-th problem
@@ -95,7 +98,15 @@ def build_catalog_source(
         skip=skip,
         tokenizer_oov=str(config.get("tokenizer_oov", "unk")),
         shard=shard,
+        draws=_draws_config(config.get("draws")),
     )
+
+
+def _draws_config(value: Any) -> Any:
+    """``data_source.draws`` with ``{{ROOT}}`` and ``~`` expanded in its root (other values pass to the reader's checks)."""
+    if isinstance(value, Mapping) and isinstance(value.get("root"), str):
+        return {**value, "root": os.path.expanduser(substitute_root_path(value["root"]))}
+    return value
 
 
 def _substitute_root(value: Any) -> Any:

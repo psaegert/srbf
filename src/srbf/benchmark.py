@@ -155,6 +155,11 @@ class Benchmark:
 
         source_kwargs = {"shard": shard} if shard is not None else {}  # unsharded calls keep the old signature
         source = run_config.build_catalog_source(data_cfg, target_size=target_override, skip=existing, **source_kwargs)
+        draws_identity = getattr(source, "draws_identity", None)
+        if callable(draws_identity):
+            # rows read from other draws (or drawn afresh) are never continued with these
+            from srbf.frozen_draws import check_resume
+            check_resume(store.snapshot(), draws_identity())
 
         size_hint = getattr(source, "size_hint", None)
         pending = size_hint() if callable(size_hint) else None
@@ -295,6 +300,13 @@ class Benchmark:
         precision_fn = getattr(self.model_adapter, "inference_precision", None)
         if callable(precision_fn):
             meta["inference_precision"] = precision_fn()
+        # The frozen draws the problems were read from; as a data input, a paired comparison checks both sides read them.
+        draws_fn = getattr(self.source, "draws_identity", None)
+        draws = draws_fn() if callable(draws_fn) else None
+        if draws is not None:
+            meta["draws"] = draws
+            meta["inputs"] = {**(meta.get("inputs") or {}),
+                              "catalog_draws": {"path": draws["path"], "size": draws["size"], "sha256": draws["sha256"]}}
 
         # Fall back to the parameters `from_config` resolved when the caller leaves them unset.
         limit = limit if limit is not None else self.limit
