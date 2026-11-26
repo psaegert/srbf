@@ -1292,14 +1292,14 @@
   // named under the charts, and so is one without a value at that time.
   var DATES = window.PUBLICATION_DATES || {}, PUBMEMO = {};
   var MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-  // {x: the date in years (the day's middle, or the month's), text, event, url}, or null
+  // {x: the date in years (the day's middle; a date known only to the month is placed on its first day), text, event, url}, or null
   function pubDate(m) {
     if (!m || m.overlay || byKey[m.key]) { return null; }
     if (PUBMEMO[m.key] !== undefined) { return PUBMEMO[m.key]; }
     var e = DATES[m.key], p = e && typeof e.date === "string" ? /^(\d{4})-(\d{2})(?:-(\d{2}))?$/.exec(e.date) : null, out = null;
     if (p && +p[2] >= 1 && +p[2] <= 12) {
       var yr = +p[1], mo = +p[2] - 1, day = p[3] ? +p[3] : 0;
-      var t = day ? Date.UTC(yr, mo, day) + 43200000 : (Date.UTC(yr, mo, 1) + Date.UTC(yr, mo + 1, 1)) / 2;
+      var t = Date.UTC(yr, mo, day || 1) + 43200000;
       out = { x: yr + (t - Date.UTC(yr, 0, 1)) / (Date.UTC(yr + 1, 0, 1) - Date.UTC(yr, 0, 1)), text: (day ? day + " " : "") + MONTHS[mo] + " " + yr,
         event: String(e.event || ""), url: /^https:\/\//.test(e.url || "") ? e.url : "", key: e.date };
     }
