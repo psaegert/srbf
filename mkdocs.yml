@@ -59,6 +59,7 @@ nav:
       - Running evaluations: running.md
       - Results: results.md
       - How results are averaged: averaging.md
+      - The headline index: headline.md
       - Paired comparisons: paired.md
   - Reference:
       - Command line: cli.md

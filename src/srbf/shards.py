@@ -61,7 +61,8 @@ def merge_shards(paths: Sequence[str], output: str, *, allow_partial: bool = Fal
 
     Every input must carry ``__meta__.shard`` with one common ``count``; indices must be distinct
     and, unless ``allow_partial``, complete. Rows are concatenated and ordered by
-    ``eval_row_index`` (which must be disjoint across shards); the columns must agree.
+    ``eval_row_index`` (which must be disjoint across shards); the columns must agree, and shards
+    that read frozen draws must have read the same file (``draws_sha256``).
     """
     if not paths:
         raise ValueError("merge_shards: no shard files given")
@@ -96,6 +97,8 @@ def merge_shards(paths: Sequence[str], output: str, *, allow_partial: bool = Fal
     for index, rows, _, _ in sorted(filled, key=lambda item: item[0]):
         for column, values in rows.items():
             merged[column].extend(values)
+    if "draws_sha256" in merged and len(set(merged["draws_sha256"])) > 1:
+        raise ValueError("shards read different frozen draws (draws_sha256 differs across the inputs)")
     if "eval_row_index" in merged:
         order = merged["eval_row_index"]
         if len(set(order)) != len(order):

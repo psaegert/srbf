@@ -59,10 +59,11 @@ which `derive_metrics` carries along) is checked: where both record a local data
 frozen catalog, it has to be the same file, and a mismatch raises `PairingContractError`. A
 snapshot without `__meta__` needs `allow_unverified=True`. Comparisons are made per benchmark.
 
-Two runs on a named catalog share the expressions and not the points
-([Benchmarks](benchmarks.md#the-same-points-for-several-methods)). The report then measures the
+Two runs on a named catalog without frozen draws share the expressions and not the points
+([Benchmarks](benchmarks.md#draws-the-same-data-for-every-method)). The report then measures the
 difference between the methods plus the difference between two draws of the data, and its interval
-covers both.
+covers both. Two runs that read the same frozen draws share the points as well, and both record the draws file as
+the input `catalog_draws`, which the check compares.
 
 ## Verdicts against the benchmark's own noise
 

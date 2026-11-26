@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`srbf.headline`: the front area and the time index.** `front_area(bits, fvu, l_lo=, l_hi=)` is the share of a
+  problem's box that a run's candidates dominate: lengths on a log2 axis from the price of the support targets' mean
+  (`lower_edge_bits`) to 26 bits per support point (`upper_edge_bits`), FVU on a log10 axis from 2^-52 to 1, computed
+  from the staircase of the front. `time_index(budgets, times, areas)` is the front area averaged over log10 time from
+  1 ms to 1000 s, linear between the budgets that every larger budget outlasts (`kept_budgets`); `budget_time` is the
+  geometric mean of a budget's per-problem times, and `average_over_problems` averages the problems' values (one run
+  per problem) over problem sets with `srbf.aggregate.average`. A new docs page, "The headline index", gives the definitions, the
+  derivation of the edges and the sources.
+- **Frozen draws: every method reads the same data** (`data_source.draws`, `srbf.frozen_draws`). With
+  `draws: {root, repeat}` a run reads each problem's data from a render made once by symbolic-data
+  (`symbolic-data render-draws`: fitting and held-out points, per-run values with their ground truth, a standard
+  normal noise vector per side; a data catalog's rows of one pool draw) instead of drawing it. A noise level scales
+  the stored vector (`y + s * std(y) * noise`, the definition of `noise`). The catalog is matched by the SHA-256 of
+  its file; an absent catalog or repeat, a draws file that differs from the manifest, sampling that differs from the
+  render, holdouts, or an output file holding rows of other draws are refused. Rows record `draws_sha256` and
+  `draws_repeat`, `__meta__` records `draws` and the input `catalog_draws` (checked by paired comparisons), and
+  `srbf merge` refuses shards of different draws. One draw per problem (`repeat: 1`) is the default.
 - **Every candidate of every method, stored and judged by srbf.** A worker returns its own front (PySR's hall of fame,
   Operon's, DSO's and Bingo's Pareto fronts, QLattice's diverse models, TiSR's hall of fame) as `candidates` beside its
   `expression`, which stays the answer; Flash-ANSR and the sampling and enumeration baselines hand over every
@@ -32,6 +49,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its mean over problems is the Mean Improvability.
 
 ### Changed
+- **One price for every expression, in bits.** `srbf.pricing.price_bits(engine, prefix)` is the only place srbf
+  calls the engine's `complexity`: the table's MDL columns (`srbf.table.mdl_bits`), the `selection: {mode: mdl}` rule,
+  `scripts/catalog_mu.py` and the headline box all price through it. `derive_metrics(..., engine=...)` without an
+  `mdl_fn` now reports `predicted_mdl` and `ground_truth_mdl` in bits, as the table does (it reported thousandths of a
+  bit); `mdl_ratio` is unchanged.
 - **`srbf analyze` averages over benchmarks as the results site does.** `leaderboard`, `scaling_table`,
   `per_benchmark_table`, `export_data` and `build_report` no longer pool every expression of a run across its benchmarks
   with a bootstrap; each benchmark is a problem set, a problem's value is the mean of its runs (a problem is a catalog
