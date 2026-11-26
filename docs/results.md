@@ -42,10 +42,17 @@ frame = pd.DataFrame({key: snapshot[key] for key in ("benchmark_eq_id", "predict
 | `prediction_success`, `error` | whether a prediction could be parsed and evaluated, and why not |
 | `fit_time` | seconds for the problem |
 | `predicted_constants`, `predicted_score`, `predicted_log_prob` | what the method reports about its prediction, where it does |
+| `predicted_mdl` | the prediction's description length in bits, as the method priced it (Flash-ANSR); `derive_metrics` and `srbf table` price it again with the judge's engine, in bits |
 | `placeholder`, `placeholder_reason` | see below |
+| `n_candidates`, `candidates_judge_time`, `candidates_dropped`, `candidates_error` | how many [candidates](adapters.md#candidates) of the problem were stored, the seconds srbf took to judge them (not part of `fit_time`), how many the method returned beyond the limits, and why none were stored if that failed |
 
 An adapter may add columns of its own; the Flash-ANSR adapter records `generation_time` and
 `refinement_time`, and a worker's `extra` dict is merged into the row.
+
+Every expression a method ends with, its answer among them, is stored next to the result file in
+`<name>.candidates/`, one record per problem, with srbf's judgement of each: its price in bits and its
+FVU on the support and validation points. `srbf.candidates.iter_candidates(path)` reads them back
+([Candidates](adapters.md#candidates)).
 
 ### Failures and placeholders
 
@@ -144,7 +151,8 @@ srbf table --tree mymethod:1:results/evaluation/scaling/mymethod -o table.csv
 | `skeleton_length`, `ground_truth_mdl`, `n_constants`, `total_nestedness`, `n_variables`, `n_support` | about the ground truth, for every problem |
 | `fit_time`, `generation_time` | seconds as the run recorded them |
 
-Description lengths are in bits. From Python, `srbf.table.build_table` does the same and
+Description lengths are in bits, everywhere srbf states one: the result file, the derived metrics,
+the table and the candidate stores. From Python, `srbf.table.build_table` does the same and
 `srbf.table.judge_result_file` judges a single file.
 
 ## The standard report

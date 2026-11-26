@@ -15,7 +15,7 @@ Protocol, one JSON object per line (``NaN``/``Infinity`` allowed: both ends are 
         "variables": ["x1", ...], "meta": {...}}
     <- {"type": "result", "id": 7, "expression": "...", "fit_time": 1.23,
         "y_pred": [...] | null, "y_pred_val": [...] | null, "constants": [...] | null,
-        "candidates": ["...", ...] | null, "extra": {...}, "error": null | "..."}
+        "candidates": ["...", ...] | null, "candidates_dropped": 0, "extra": {...}, "error": null | "..."}
     -> {"type": "close"}
     <- {"type": "closed"}
 
@@ -32,10 +32,16 @@ Worker contract -- a Python file (or module) defining:
     predictions; srbf evaluates the expression itself when they are absent), ``constants``,
     ``fit_time`` (seconds; measured around the call when absent), ``extra`` (a JSON-serializable
     dict merged into the result record), ``error`` (a message; the sample counts as failed).
-    A method that ends with several expressions and no rule for picking one (a hall of fame) may
-    return ``"candidates"``, a list of infix strings like ``expression``, instead of
-    ``"expression"``; srbf then picks one only if the config sets ``selection``, and records the
-    problem as failed otherwise.
+    ``"candidates"``: every expression the method ends with, a list of infix strings like
+    ``expression`` (each with its fitted constants written in): a method that keeps a diverse front
+    of its own (a hall of fame, a Pareto front) returns that front, not its whole population; one
+    that fits several expressions (samples, beams) returns those; a method with one model returns
+    none. srbf judges and stores every candidate and the expression with them; ``expression``
+    stays the answer. A method that ends with candidates and no rule of its own for picking one
+    returns ``"candidates"`` without ``"expression"``; srbf then picks one only if the config sets
+    ``selection``, and records the problem as failed otherwise. At most ``MAX_CANDIDATES``
+    candidates of at most ``MAX_CANDIDATE_CHARS`` characters each are kept (the first ones); the
+    rest are dropped and counted in ``candidates_dropped``.
 ``load(options) -> state``
     Optional. Called once after ``init`` with the config's ``options``; the returned object is
     passed to every ``fit`` as ``state``.
@@ -53,6 +59,10 @@ import traceback
 
 USAGE = ("usage: python runner.py --connect HOST:PORT <worker.py>\n"
          "       python runner.py --connect HOST:PORT --module <importable.module>")
+
+# The protocol's limits on a fit's candidates (srbf.candidates holds the same numbers).
+MAX_CANDIDATES = 100000
+MAX_CANDIDATE_CHARS = 10000
 
 
 def _jsonable(value):
@@ -89,7 +99,20 @@ def _load_worker(target, as_module):
 
 def _result(msg_id):
     return {"type": "result", "id": msg_id, "expression": None, "fit_time": None, "y_pred": None,
-            "y_pred_val": None, "constants": None, "candidates": None, "extra": {}, "error": None}
+            "y_pred_val": None, "constants": None, "candidates": None, "candidates_dropped": 0, "extra": {},
+            "error": None}
+
+
+def _limited(candidates):
+    """The candidates within the protocol's limits, and how many were dropped (a missing entry counts)."""
+    kept, dropped = [], 0
+    for candidate in candidates:
+        text = None if candidate is None else str(candidate)
+        if text is None or len(text) > MAX_CANDIDATE_CHARS or len(kept) >= MAX_CANDIDATES:
+            dropped += 1
+            continue
+        kept.append(text)
+    return kept, dropped
 
 
 def serve(worker, target, rfile, wfile):
@@ -142,7 +165,7 @@ def serve(worker, target, rfile, wfile):
                 if reply["expression"] is not None:
                     reply["expression"] = str(reply["expression"])
                 if out.get("candidates") is not None:
-                    reply["candidates"] = [str(c) for c in out["candidates"]]
+                    reply["candidates"], reply["candidates_dropped"] = _limited(out["candidates"])
                 reply["fit_time"] = float(out.get("fit_time", elapsed))
                 reply["extra"] = _jsonable(out.get("extra") or {})
                 if out.get("error") is not None:

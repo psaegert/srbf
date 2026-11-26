@@ -24,6 +24,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   render, holdouts, or an output file holding rows of other draws are refused. Rows record `draws_sha256` and
   `draws_repeat`, `__meta__` records `draws` and the input `catalog_draws` (checked by paired comparisons), and
   `srbf merge` refuses shards of different draws. One draw per problem (`repeat: 1`) is the default.
+- **Every candidate of every method, stored and judged by srbf.** A worker returns its own front (PySR's hall of fame,
+  Operon's, DSO's and Bingo's Pareto fronts, QLattice's diverse models, TiSR's hall of fame) as `candidates` beside its
+  `expression`, which stays the answer; Flash-ANSR and the sampling and enumeration baselines hand over every
+  expression they fitted, and a method with one model has its answer as its only candidate. After each problem, outside `fit_time`, the run judges every candidate itself
+  (price in bits by `srbf.pricing.price_bits`, FVU on the support and validation points by `srbf.metrics.numeric.fvu`,
+  and a status) and appends them to `<result file>.candidates/<result file>.log`, one record per problem
+  (`runner.candidates` moves the store or switches it off). `srbf.candidates.iter_candidates` and `load_candidates`
+  read a run's judged candidates back as arrays; `rejudge_candidates` judges a stored run again when the judge
+  changes. The worker protocol keeps at most 100,000 candidates of at most 10,000 characters per problem. Producing
+  the front is part of `fit_time` for DSO and Bingo, which report their own.
 - **`srbf.aggregate`: the results site's averaging in the package.** `average(problems, kind)` averages per-problem
   run values over problem sets: `"mean"` (random-effects average, Paule-Mandel between-set variance), `"rate"`
   (beta-binomial), `"ratio"` (in log2, a geometric mean) or `"median"` (each set weighted as the average weighs it,
@@ -39,6 +49,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its mean over problems is the Mean Improvability.
 
 ### Changed
+- **One MDL unit, bits, everywhere.** The Flash-ANSR adapter's raw `predicted_mdl` and the `mdl` column of its
+  `candidate_store_dir` store were flash-ansr's thousandths of a bit; both are bits now, as `derive_metrics` and the
+  table report them, and the store's `run_meta.mdl_dialect.unit` says `bits`. `CandidateStoreReader.mdl_bits(block)`
+  reads a store in bits whatever unit it states (a store without the statement holds thousandths of a bit).
 - **One price for every expression, in bits.** `srbf.pricing.price_bits(engine, prefix)` is the only place srbf
   calls the engine's `complexity`: the table's MDL columns (`srbf.table.mdl_bits`), the `selection: {mode: mdl}` rule,
   `scripts/catalog_mu.py` and the headline box all price through it. `derive_metrics(..., engine=...)` without an

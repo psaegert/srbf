@@ -19,7 +19,7 @@ from srbf.core import EvaluationModelAdapter, EvaluationResult, EvaluationSample
 from srbf.spelling import engine_spelling
 from srbf.variable_renaming import (
     E2E_FIRST_INDEX, NESYMRES_FIRST_INDEX, rename_variable_tokens, rename_variables_in_infix, skeleton_variable_names)
-from srbf.candidate_store import CandidateStoreWriter
+from srbf.candidate_store import MDL_UNIT, CandidateStoreWriter, milli_bits_to_bits
 from srbf.metrics.numeric import fvu as _fvu
 
 PySRRegressor: type[Any] | None  # pragma: no cover - assigned lazily
@@ -186,7 +186,8 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         record["predicted_constants"] = list(best.constants) if best.constants is not None else None
         record["predicted_score"] = best.score
         record["predicted_log_prob"] = best.log_prob
-        record["predicted_mdl"] = best.mdl
+        # flash-ansr prices in thousandths of a bit; srbf states every description length in bits
+        record["predicted_mdl"] = milli_bits_to_bits(best.mdl)
         record["predicted_n_nodes"] = best.n_nodes
         record["predicted_pareto_rank"] = best.pareto_rank
         # Provenance of the prediction (flash-ansr >= 0.16.1): how many predicted typed literals it kept
@@ -196,6 +197,12 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         record["predicted_typed_frozen"] = int(getattr(best, "typed_frozen", 0) or 0)
         record["predicted_typed_thaw"] = getattr(best, "typed_thaw", None)
         record["predicted_spelling"] = getattr(best, "spelling", None)
+        # Every candidate the model fitted, its constants substituted, for the run to judge and store
+        # (srbf.candidates): the prefix speaks x1..xN by column, and the best is the prediction.
+        record["candidate_expressions"] = [" ".join(map(str, c.expression_prefix)) for c in result.candidates]
+        record["candidate_notation"] = "prefix"
+        record["candidate_variables"] = [f"x{i + 1}" for i in range(np.asarray(sample.x_support).shape[1])]
+        record["candidate_prediction"] = 0
 
         # The prediction's curves, evaluated through the result (a candidate carries no predictions):
         # the support set as fitted and the validation split when the sample has one.
@@ -238,7 +245,8 @@ class FlashANSRAdapter(EvaluationModelAdapter):
             for col in ("n_nodes", "n_constants", "mdl", "score", "pareto_rank", "rank", "spelling", "parent"):
                 values = getattr(led, col, None)
                 if values is not None and len(values) == len(led):
-                    extra[col] = values
+                    # the ledger's mdl is flash-ansr's thousandths of a bit; the store holds bits (its mdl_dialect says so)
+                    extra[col] = [milli_bits_to_bits(v) for v in values] if col == "mdl" else values
             result_index = getattr(led, "result_index", None)
             candidates = getattr(result, "candidates", None)
             if sample is not None and result_index is not None and candidates is not None and len(result_index) == len(led):
@@ -279,11 +287,12 @@ class FlashANSRAdapter(EvaluationModelAdapter):
     def _store_run_meta(self) -> dict[str, Any]:
         """What a later reader of the candidate store needs once per run: the ranking that produced
         `score`/`rank`, and the dialect `mdl` was priced in (mu moves up to 1.8x between dialects, so a
-        bare number is unusable later)."""
+        bare number is unusable later) and its unit, bits (stores written before said milli-bits;
+        ``CandidateStoreReader.mdl_bits`` reads either)."""
         meta: dict[str, Any] = {"ranking": self.ranking_config(),
                                 "inference_precision": self.inference_precision(),
                                 "constant_ladder": self._constant_ladder_config(),
-                                "mdl_dialect": {"certified": True, "mode": "f64", "canon": "default", "unit": "milli-bits"}}
+                                "mdl_dialect": {"certified": True, "mode": "f64", "canon": "default", "unit": MDL_UNIT}}
         try:
             import simplipy
             meta["simplipy"] = simplipy.__version__
@@ -357,6 +366,18 @@ def _evaluate_refiner_baseline(model: Any, sample: EvaluationSample) -> Evaluati
         record["error"] = f"Failed to extract expression: {exc}"
         record["prediction_success"] = False
         return EvaluationResult(record)
+
+    # Every expression the baseline fitted, its constants at full precision, for the run to judge and store
+    # (srbf.candidates); the best is the prediction. Without them the run falls back to the prediction alone.
+    try:
+        record["candidate_expressions"] = [
+            " ".join(map(str, model.get_expression(nth_best=k, return_prefix=True, precision=None)))
+            for k in range(len(model._results))]
+        record["candidate_notation"] = "prefix"
+        record["candidate_prediction"] = 0
+    except Exception:  # noqa: BLE001 - the candidates are auxiliary to the answer recorded above
+        for key in ("candidate_expressions", "candidate_notation", "candidate_prediction"):
+            record.pop(key, None)
 
     best_result = model._results[0]
     fits = best_result.get("fits")

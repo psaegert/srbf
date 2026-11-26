@@ -8,17 +8,16 @@ it hands each problem to the worker, reads the expression back, parses it with t
 SimpliPy engine, evaluates it where the worker did not, and fills the result record with the
 same fields the in-process adapters produce. A worker that ends with several candidates and no
 rule of its own for picking one (a hall of fame) gets one picked here when the config sets
-``selection`` (see :func:`check_selection`).
+``selection`` (see :func:`check_selection`). Every candidate a worker returns, and its expression,
+goes on to the run, which judges and stores them (:mod:`srbf.candidates`).
 """
 from __future__ import annotations
 
 import atexit
 import collections
-import importlib
 import json
 import math
 import os
-import re
 import queue
 import signal
 import socket
@@ -30,15 +29,13 @@ from pathlib import Path
 from typing import Any, Mapping
 
 import numpy as np
-import simplipy
-import simplipy.operators  # noqa: F401 - operator realizations reference it by dotted name
-from simplipy.utils import codify, safe_f
-from symbolic_data.token_ops import desugar_sqrt, normalize_expression, normalize_skeleton
+from symbolic_data.token_ops import normalize_expression, normalize_skeleton
 
+from srbf.candidates import evaluate_prefix, limit_candidates, read_spelled, spell_expression
 from srbf.core import EvaluationModelAdapter, EvaluationResult, EvaluationSample
 from srbf.model_adapters import _compute_fvu_from_predictions
-from srbf.table import mdl_bits
-from srbf.variable_renaming import rename_named_variables, rename_named_variables_in_infix, skeleton_variable_names
+from srbf.pricing import pricer
+from srbf.variable_renaming import skeleton_variable_names
 from srbf.worker import MODELS_DIR, RUNNER_PATH
 
 BUILTIN_WORKERS: dict[str, Path] = {
@@ -140,31 +137,6 @@ def resolve_worker(worker: str | Path) -> Path:
     return path.resolve()
 
 
-def evaluate_prefix(engine: Any, prefix: list[str], variables: list[str], *arrays: np.ndarray) -> tuple[np.ndarray, ...]:
-    """Evaluate a prefix expression (numeric constants inlined) on each array of rows with the
-    engine's own operator realizations; one ``(n, 1)`` column per array, empty for empty input."""
-    realized = engine.operators_to_realizations(list(prefix))
-    code_string = engine.prefix_to_infix(realized, realization=True)
-    code = codify(code_string, list(variables))
-    namespace: dict[str, Any] = {"np": np, "numpy": np, "math": math, "simplipy": simplipy}
-    for root in getattr(engine, "_realization_roots", {}) or {}:
-        try:
-            namespace.setdefault(root, importlib.import_module(root))
-        except Exception:  # noqa: BLE001 - an unimportable root surfaces as NameError below
-            pass
-    function = eval(code, namespace)  # noqa: S307 - the engine's own realization code
-    outputs = []
-    for array in arrays:
-        rows = np.asarray(array, dtype=float)
-        if rows.ndim != 2 or rows.shape[0] == 0:
-            outputs.append(np.empty((0, 1), dtype=float))
-            continue
-        with np.errstate(all="ignore"):
-            values = safe_f(function, rows)
-        outputs.append(np.asarray(values, dtype=float).reshape(-1, 1))
-    return tuple(outputs)
-
-
 #: The rules ``selection`` can name for a worker that returns candidates instead of one expression.
 SELECTION_MODES = ("mdl",)
 
@@ -217,23 +189,6 @@ def _json_meta(record: Mapping[str, Any]) -> dict[str, Any]:
         elif isinstance(value, (list, tuple)) and all(isinstance(item, str) for item in value):
             meta[key] = list(value)
     return meta
-
-
-# SymPy's printer, and with it most methods, spells two things differently from the engine's reader.
-_PRINTER_SPELLINGS = ((re.compile(r"\bAbs\("), "abs("), (re.compile(r"(?<![\w.])E(?![\w.(])"), "e"))
-
-
-def _unknown_symbols(prefix: list[str], operator_arity: Mapping[str, int]) -> list[str]:
-    """Tokens the judge cannot read: not an operator, a variable, a number or a named constant."""
-    def known(token: str) -> bool:
-        if token in operator_arity or token in ("sqrt", "np.pi", "np.e", "<constant>") or re.fullmatch(r"x\d+", token):
-            return True
-        try:
-            float(token)
-            return True
-        except ValueError:
-            return False
-    return sorted({token for token in prefix if not known(token)})
 
 
 class WorkerProcess:
@@ -514,6 +469,10 @@ class SubprocessAdapter(EvaluationModelAdapter):
     selection : mapping, optional
         How to pick one answer when the worker returns ``candidates`` and no ``expression`` (see
         :func:`check_selection`). Without it such a problem is recorded as failed, the candidates kept.
+
+    Every candidate the worker returns goes into the record's ``candidate_expressions`` (as the worker wrote it, within
+    the protocol's limits), with the expression the record judges among them (``candidate_prediction``), for the run to
+    judge and store (:class:`srbf.candidates.CandidateRecorder`).
     """
 
     def __init__(
@@ -736,7 +695,10 @@ class SubprocessAdapter(EvaluationModelAdapter):
 
         expression = reply.get("expression")
         names = skeleton_variable_names(variables)
-        candidates = reply.get("candidates")
+        candidates, dropped = limit_candidates(reply.get("candidates"))
+        dropped += int(reply.get("candidates_dropped") or 0)
+        # From here on the record carries the worker's candidates and, once there is one, the answer it judges.
+        self._hand_over(record, candidates, None, variables, dropped)
         if not expression and candidates:
             if self.selection is None:
                 record["error"] = (f"the worker returned {len(candidates)} candidates and no single answer; "
@@ -744,7 +706,7 @@ class SubprocessAdapter(EvaluationModelAdapter):
                 record["prediction_success"] = False
                 return EvaluationResult(record)
             started = time.perf_counter()
-            chosen, summary = self._select([str(c) for c in candidates], variables, names, X_support, y_support)
+            chosen, summary = self._select(candidates, variables, names, X_support, y_support)
             record["selection"] = summary
             record["selection_time"] = time.perf_counter() - started
             # Picking the answer is part of the method: its time counts, the worker's own stays on record.
@@ -755,12 +717,13 @@ class SubprocessAdapter(EvaluationModelAdapter):
                 record["error"] = f"none of the worker's {len(candidates)} candidates has a finite two-part code"
                 record["prediction_success"] = False
                 return EvaluationResult(record)
-            expression = str(candidates[chosen])
+            expression = candidates[chosen]
             reply = {**reply, "y_pred": None, "y_pred_val": None, "constants": None}   # the worker's, if any, are no member's
         if not expression:
             record["error"] = "worker returned no expression"
             record["prediction_success"] = False
             return EvaluationResult(record)
+        self._hand_over(record, candidates, str(expression), variables, dropped)
         expression = self._spelling(str(expression), variables)
         record["predicted_expression"] = expression
         try:
@@ -803,29 +766,33 @@ class SubprocessAdapter(EvaluationModelAdapter):
     # -- reading and picking expressions -------------------------------------------------------
     @staticmethod
     def _spelling(expression: str, variables: list[str]) -> str:
-        """A worker predicts in the column names it was handed (PySR spells them v1, v2 on a catalog that calls its
-        columns that); the ground truth spells the same columns x1, x2, ..., so the expression is mapped back before
-        anything is judged, and the printers' constant names are written as the engine reads them."""
-        expression = rename_named_variables_in_infix(expression, variables)
-        for pattern, spelling in _PRINTER_SPELLINGS:      # after the renaming: a variable named E stays a variable
-            expression = pattern.sub(spelling, expression)
-        return expression
+        """The expression in the ground truth's variable names and the engine's spellings
+        (:func:`srbf.candidates.spell_expression`)."""
+        return spell_expression(expression, variables)
 
     def _prefix(self, expression: str, variables: list[str]) -> list[str]:
-        """The engine's prefix of a (respelled) infix expression; raises when the judge cannot read it."""
-        # read_infix, not the raw infix_to_prefix: the reader's own tokens ('**', 'neg' on a
-        # literal) are not the engine grammar, and simplify/complexity refuse them. The reader
-        # takes any identifier as a variable, so the map runs FIRST: everything downstream --
-        # the canonical form, the price, the judge -- then sees one spelling.
-        prefix = rename_named_variables(list(self.simplipy_engine.read_infix(expression)), variables) or []
-        # SymPy and most methods print the square root as sqrt(...); the engine's vocabulary spells it
-        # rootn(u, 2), and its lenient reader would pass the bare token on to a walk that rejects it.
-        prefix = [str(token) for token in prefix]
-        unknown = _unknown_symbols(prefix, self.simplipy_engine.operator_arity)
-        if unknown:
-            raise ValueError(f"the judge does not read {', '.join(unknown)}; it reads + - * / ** and the functions "
-                             f"{' '.join(sorted(k for k, n in self.simplipy_engine.operator_arity.items() if k.isalpha()))} and sqrt")
-        return list(desugar_sqrt(prefix, dict(self.simplipy_engine.operator_arity)))
+        """The engine's prefix of a (respelled) infix expression; raises when the judge cannot read it
+        (:func:`srbf.candidates.read_spelled`)."""
+        return read_spelled(self.simplipy_engine, expression, variables)
+
+    @staticmethod
+    def _hand_over(record: dict[str, Any], candidates: list[str], expression: str | None, variables: list[str],
+                   dropped: int) -> None:
+        """Put the worker's candidates into the record for the run to judge and store: as the worker wrote them, and
+        the answer the record judges among them (added when the worker did not list it)."""
+        listed = list(candidates)
+        prediction = None
+        if expression is not None:
+            if expression in listed:
+                prediction = listed.index(expression)
+            else:
+                listed.append(expression)
+                prediction = len(listed) - 1
+        record["candidate_expressions"] = listed
+        record["candidate_notation"] = "infix"
+        record["candidate_variables"] = list(variables)
+        record["candidate_prediction"] = prediction
+        record["candidates_dropped"] = int(dropped)
 
     def _select(self, candidates: list[str], variables: list[str], names: list[str], X_support: np.ndarray,
                 y_support: np.ndarray) -> tuple[int | None, dict[str, Any]]:
@@ -835,7 +802,7 @@ class SubprocessAdapter(EvaluationModelAdapter):
         last, then the shorter prefix, then the prefix's tokens."""
         finite = np.isfinite(np.asarray(y_support, dtype=float).reshape(-1))
         n_points = int(finite.sum())
-        price = mdl_bits(self.simplipy_engine)
+        price = pricer(self.simplipy_engine)
         rows: list[dict[str, Any]] = []
         keys: list[tuple[Any, ...]] = []
         for candidate in candidates:

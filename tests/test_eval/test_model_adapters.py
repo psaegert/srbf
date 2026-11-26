@@ -155,6 +155,41 @@ def test_pysr_worker_warmup_can_be_disabled(monkeypatch):
     assert created[0].n_fits == 0
 
 
+class _FittedPySRModel:
+    """PySRRegressor after fit, as far as the worker reads it: ``equations_`` (a DataFrame with the columns
+    ``complexity``, ``loss``, ``score``, ``equation``, ...), ``get_best()`` (one of its rows) and ``predict``."""
+
+    def __init__(self) -> None:
+        import pandas as pd
+        self.equations_ = pd.DataFrame({
+            "complexity": [1, 3, 5], "loss": [1.0, 0.1, 1e-12], "score": [0.0, 1.1, 5.0],
+            "equation": ["v1", "(v1 * 2.0)", "((v1 * 2.0) - (v2 * 0.5)) + 1.0"],
+            "sympy_format": [None, None, None], "lambda_format": [None, None, None]})
+
+    def fit(self, X, y, variable_names=None):
+        self.variable_names = variable_names
+
+    def get_best(self):
+        return self.equations_.iloc[2]
+
+    def predict(self, X):
+        import numpy as np
+        X = np.asarray(X)
+        return 2.0 * X[:, 0] - 0.5 * X[:, 1] + 1.0
+
+
+def test_pysr_worker_returns_the_hall_of_fame_as_candidates():
+    import numpy as np
+    from srbf.worker.models import pysr_worker
+    model = _FittedPySRModel()
+    X = np.arange(12.0).reshape(-1, 2)
+    out = pysr_worker.fit(X.tolist(), list(2.0 * X[:, 0] - 0.5 * X[:, 1] + 1.0), x_val=[[1.0, 2.0]], variables=["v1", "v2"],
+                          meta={}, options={}, state={"model": model})
+    assert out["expression"] == "((v1 * 2.0) - (v2 * 0.5)) + 1.0" and model.variable_names == ["v1", "v2"]
+    assert out["candidates"] == list(model.equations_["equation"]) and out["expression"] in out["candidates"]
+    assert [e["equation"] for e in out["extra"]["equations"]] == out["candidates"]
+
+
 def test_pysr_config_builds_a_worker_backed_adapter(monkeypatch):
     # type: pysr takes its own keys and runs the shipped worker in a subprocess.
     from srbf import config as run_config
@@ -298,6 +333,7 @@ class TestAnswerProvenanceColumns:
         assert record["predicted_typed_frozen"] == 0
         assert record["predicted_typed_thaw"] == "2"
         assert record["predicted_spelling"] == "c0=/ 231 100"
+        assert record["predicted_mdl"] == 19.443          # flash-ansr's thousandths of a bit, stated in bits
 
 
 class _SplitEngine:

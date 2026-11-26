@@ -54,7 +54,9 @@ precision (``repr``) in the variable names srbf hands over:
 ``extra`` records the seed, the epochs run, the models tried, the answer's loss, criterion and edge count, the largest
 deviation of the string from the model's own predictions on the support and validation points
 (``string_deviation``, ``string_deviation_val``; relative to ``max(1, max |prediction|)``) and the other models the
-method returned (``diverse``). The model's own predictions are not returned: srbf evaluates the string.
+method returned (``diverse``). The model's own predictions are not returned: srbf evaluates the string. Every model
+the method returns (``get_diverse_models``, the answer first) is returned as ``candidates``, written like the answer,
+for srbf to judge and store.
 """
 import hashlib
 import logging
@@ -426,12 +428,14 @@ def fit(x, y, *, x_val, variables, meta, options, state):
                  string_deviation=string_deviation(internal, len(columns), X, own[:n]),
                  string_deviation_val=string_deviation(internal, len(columns), XV, own[n:]))
     diverse = []
+    candidates = [expression]
     for other in best[1:]:
         try:
             text = model_expression(other, points, columns, names, state["limits"])[0]
+            candidates.append(text)
         except Exception as exc:  # noqa: BLE001 - persistence is best-effort
             text = "unstated: %s" % exc
         diverse.append({"expression": text, "loss": float(other.loss_value),
                         "wide_parsimony": float(other.wide_parsimony), "edge_count": int(other.edge_count)})
     extra["diverse"] = diverse
-    return {"expression": expression, "fit_time": seconds, "extra": extra}
+    return {"expression": expression, "candidates": candidates, "fit_time": seconds, "extra": extra}

@@ -74,7 +74,7 @@ model_adapter:
 | `emission`, `refine_scope` | `fittable` | which constants the model spells itself and which the refiner fits |
 | `constant_ladder` | on | re-spell fitted constants as integers, fractions and multiples of \(\pi\) and \(e\), and let the ranking choose |
 | `complexity` | `none` | condition the model on a target complexity: `none`, `ground_truth` or a number |
-| `candidate_store_dir` | none | a directory that receives every candidate of every problem, one compressed `.npz` per problem, readable with `srbf.candidate_store.CandidateStoreReader` |
+| `candidate_store_dir` | none | a directory that receives every candidate of every problem, one compressed `.npz` per problem, readable with `srbf.candidate_store.CandidateStoreReader` (its `mdl` column in bits; `mdl_bits(block)` also reads the stores that hold thousandths of a bit) |
 
 **Ranking.** `mode` is required and takes one of three values.
 
@@ -86,6 +86,10 @@ ranking: {mode: pareto, metrics: [fvu, n_nodes], tie_break: fvu}
 ```
 
 The resolved ranking is stored in every result file. Unknown keys in the block are an error.
+
+Every candidate the model fits, with its fitted constants, goes to the run as one of the problem's candidates,
+judged by srbf like every method's ([Candidates](adapters.md#candidates)). `candidate_store_dir` is a store of its own: the model's
+record of every candidate (token ids, its own FVU and ranking columns) for re-ranking offline.
 
 **The prior reference.** With `generation_config.method: prior_sampling` the model is not used: the
 candidates are drawn from the training prior that ships beside the checkpoint
@@ -154,7 +158,8 @@ model_adapter:
 
 PySR searches over the operators the expressions are written in: `+ - * / ^`, `rootn`, and the unary
 operators `neg abs inv sin cos tan asin acos atan sinh cosh tanh asinh acosh atanh exp log`. The
-worker returns PySR's own predictions and stores the whole hall of fame in the `equations` column.
+worker returns PySR's own predictions and the whole hall of fame as the problem's candidates
+([Candidates](adapters.md#candidates)), and keeps PySR's measures of each equation in the `equations` column.
 `configs/evaluation/scaling/pysr_fastsrb.yaml` sweeps the iterations from 1 to 16,384.
 
 ## Operon
@@ -204,7 +209,8 @@ and division.
   benchmark's configs set `threads: all`, so Operon gets the whole machine, as every method does. With more than one
   thread the evaluation budget is counted in parallel and a run is not reproducible exactly.
 
-The worker stores the whole Pareto front in the `front` column. `configs/evaluation/scaling/operon_fastsrb.yaml`
+The worker returns the whole Pareto front as the problem's candidates ([Candidates](adapters.md#candidates)) and keeps
+Operon's measures of each member in the `front` column. `configs/evaluation/scaling/operon_fastsrb.yaml`
 sweeps the evaluations in doublings from 2^10 to 2^27, about 100 s per problem on the reference machine. The author's
 configuration also limits a search to 1,000 generations, as a backstop rather than a budget: his SRBench 2021
 configuration sets it only high enough for the evaluation budget to end a search first, and at his 10^6 evaluations a
@@ -287,6 +293,8 @@ same data and seed, the changed and the unchanged build take the same steps and 
 - Every fit runs in a process forked for it. RILS-ROLS has no parallelism, so a fit runs on one thread; the
   benchmark's configs set `threads: all` as for every method, and the worker caps no library's thread pool. The same
   data and seed give the same answer on the same machine.
+
+RILS-ROLS ends with one model, so its answer is the problem's only candidate ([Candidates](adapters.md#candidates)).
 
 `configs/evaluation/scaling/rilsrols_fastsrb.yaml` sweeps the fitness evaluations in doublings from 2^6, the first
 power of two above the method's first step (scoring the perturbations of its starting model), up to 2^22, about
@@ -371,7 +379,8 @@ and srbf picks one only when the config sets `selection` ([Picking among candida
 `{mode: mdl}`, the two-part code srbf ranks Flash-ANSR's candidates with, is srbf's rule and not TiSR's. Without it
 every problem is recorded as failed. Either way the row carries the whole hall of fame in the `hall_of_fame` column,
 each member written in the benchmark's syntax with every constant at full precision, with TiSR's measures of it and
-with its `string_deviation`, how far the string's values are from TiSR's own.
+with its `string_deviation`, how far the string's values are from TiSR's own, and srbf judges and stores every member
+as one of the problem's candidates ([Candidates](adapters.md#candidates)).
 
 **What to know when reading the results:**
 - The weights 1/|y| make the search fit relative errors. TiSR replaces the infinite weight of a zero target by
@@ -558,7 +567,8 @@ method; its docstring gives the details.
   whose worker stops using the CPU for 60 seconds, or runs 30 times longer than the run's median problem, is tried
   once more in a fresh worker, and a second hang fails it. Every hang is logged.
 
-The worker stores the Pareto front of complexity against reward over every expression evaluated in the `front`
+The worker returns the Pareto front of complexity against reward over every expression evaluated as the problem's
+candidates ([Candidates](adapters.md#candidates)), computed within `fit_time`, keeps it with DSO's rewards in the `front`
 column, and the expressions and iterations used in `nevals` and `iterations`.
 `configs/evaluation/scaling/dso_dsr_fastsrb.yaml` sweeps DSR's budget in doublings of an iteration, from 1,000 to
 16,000 expressions, up to about 100 s per problem on the reference machine.
@@ -661,6 +671,7 @@ powers and roots, `abs`, `tan`, or the inverse and hyperbolic functions. It expr
   stall, ten seconds or more on the reference machine. Between 2^16 and 2^18 evaluations more and more runs stall, and the time per
   problem grows about tenfold per doubling of the budget.
 
+GP-GOMEA ends with one model, so its answer is the problem's only candidate ([Candidates](adapters.md#candidates)).
 The worker also stores GP-GOMEA's own printed model in the `model_string` column.
 `configs/evaluation/scaling/gpgomea_fastsrb.yaml` sweeps the evaluations in doublings, from 2^14,
 the first power of two above the cost of one generation, up to about 100 s per problem on the
@@ -735,7 +746,8 @@ empty mapping there, which states the same thing, every input numerical.
 - The option `threads` sets the threads feyn fits its models on (the authors' "auto" is the cores minus one). The
   benchmark's configs set `threads: all`, so QLattice gets the whole machine, as every method does.
 
-The worker stores the other models the method returned in the `diverse` column, and the largest deviation of the
+The worker returns every model the method returned, the answer first, as the problem's candidates
+([Candidates](adapters.md#candidates)), stores the other models with QLattice's measures in the `diverse` column, and the largest deviation of the
 expression from the model's own predictions in `string_deviation` and `string_deviation_val`.
 `configs/evaluation/scaling/qlattice_fastsrb.yaml` sweeps the epochs in doublings from 1 to 256, about 100 s per
 problem on the reference machine.
@@ -813,8 +825,10 @@ each is written as the function it computes, so that srbf evaluates what Bingo e
   use.
 - Every fit runs in one process on one thread. The same data and seed give the same answer.
 
-The worker also stores Bingo's own printed equation in the `bingo_string` column and its Pareto
-front in the `front` column. `configs/evaluation/scaling/bingo_fastsrb.yaml` sweeps the
+The worker returns the Pareto front of the equations Bingo refits at the end, on which the answer
+lies, as the problem's candidates ([Candidates](adapters.md#candidates)), computed within `fit_time`. It also
+stores Bingo's own printed equation in the `bingo_string` column and the front with Bingo's fitness in
+the `front` column. `configs/evaluation/scaling/bingo_fastsrb.yaml` sweeps the
 evaluations in doublings from 2^14 up to about 100 s per problem on the reference machine.
 
 ## Sampling and enumeration baselines
@@ -841,3 +855,6 @@ model_adapter:
 | `n_restarts`, `refiner_method`, `refiner_p0_noise` | `8`, `curve_fit_lm`, `normal` | the constant fit |
 | `node_penalty` | `0.05` | the prediction minimizes log10 FVU plus this penalty per node |
 | `unique`, `seed` (`lample_charton`) | `true`, none | skip duplicate samples; seed the sampler |
+
+Every expression either baseline fits, with its constants at full precision, goes to the run as one of the problem's
+candidates ([Candidates](adapters.md#candidates)), the prediction first.

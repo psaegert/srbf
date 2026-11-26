@@ -52,6 +52,7 @@ run:
 | `save_every` | none | write the file every N problems; needs `output`. A final save always happens when the run completes |
 | `resume` | `true` | continue an existing result file instead of starting over |
 | `limit` | `null` | the number of problems to evaluate |
+| `candidates` | `true` | where every problem's [candidates](adapters.md#candidates) are judged and stored: next to `output` (`true`), in a directory you name, or nowhere (`false`) |
 
 The number of problems of a run is the first of these that is set: `--limit` on the command line,
 `runner.limit`, `data_source.target_size`, the size of the catalog. Saves are atomic: a run that is
@@ -147,7 +148,9 @@ srbf check -c config.yaml --all --sweep-filter ladder=128   # every experiment a
 
 `srbf check` walks the path a run takes, step by step: the config, the sweep rung, the provenance
 label, the output directory, the worker file, its interpreter and options, the judge's engine, the
-catalog, the adapter's start, and then real fits with their metrics. Each step prints `ok` or
+catalog, the adapter's start, and then real fits with their metrics and the method's
+[candidates](adapters.md#candidates), judged as a run judges them; a candidate the judge cannot read
+fails the check. Each step prints `ok` or
 `FAIL` with the fix beside it, and the walk ends at a step that the later ones depend on. It writes
 no result file, and its exit code is non-zero when a step failed, so the error a run would hit
 after hours shows up within a minute. The [Quickstart](quickstart.md) shows its output.

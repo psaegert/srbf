@@ -9,6 +9,10 @@ own per-problem inference, not here).
 The source and adapter are duck-typed (the source yields problems and may expose ``size_hint`` /
 ``prepare``; the adapter exposes ``prepare`` and ``evaluate_sample(problem) -> record``), so this
 driver is model- and data-layer-agnostic.
+
+After each problem the driver takes the method's candidates out of the record, judges them and
+stores them next to the result file (:class:`srbf.candidates.CandidateRecorder`), outside the time
+the method is measured for.
 """
 from __future__ import annotations
 
@@ -20,9 +24,17 @@ from typing import Any, Callable, Iterable, Mapping, Optional
 
 from tqdm import tqdm
 
+from srbf.candidates import CANDIDATE_FIELDS, CandidateRecorder, candidate_store_path
 from srbf.store import ResultStore
 from srbf.shards import shard_output_path, shard_share
 from srbf.paths import substitute_root_path
+
+
+def check_candidates_setting(value: Any) -> bool | str:
+    """``runner.candidates``: true (the default: next to the output file), false (not stored) or a directory."""
+    if isinstance(value, bool) or (isinstance(value, str) and value):
+        return value
+    raise ValueError(f"runner.candidates is true, false or a directory, got {value!r}")
 
 
 class Benchmark:
@@ -43,6 +55,8 @@ class Benchmark:
         label: Optional[Mapping[str, Any]] = None,
         config_provenance: Optional[str] = None,
         shard: Optional[tuple[int, int]] = None,
+        candidates: bool | str = True,
+        engine_name: Optional[str] = None,
     ) -> None:
         self.source = source
         # (index, count) when this run is one shard of a unit (`srbf run --shard`); stamped into __meta__.
@@ -67,6 +81,10 @@ class Benchmark:
         self.completed = completed
         self.total_limit = total_limit
         self.existing_results = existing_results
+        # Where every problem's candidates are judged and stored (srbf.candidates): True = next to the output file
+        # (<output stem>.candidates), a path = there, False = nowhere. `engine_name` names the judge's engine in the store.
+        self.candidates = check_candidates_setting(candidates)
+        self.engine_name = engine_name
 
     @classmethod
     def from_config(
@@ -121,6 +139,10 @@ class Benchmark:
         resume_flag = runner_cfg.get("resume", True)
         if resume is not None:
             resume_flag = resume
+        candidates = check_candidates_setting(runner_cfg.get("candidates", True))
+        if isinstance(candidates, str):
+            candidates = substitute_root_path(candidates)
+        engine_name = model_cfg.get("simplipy_engine")
 
         initial_results = None
         if resume_flag and output_path:
@@ -180,7 +202,8 @@ class Benchmark:
 
         return built(cls(source, adapter, result_store=store, output_path=output_path, save_every=save_every,
                          limit=remaining, completed=False, total_limit=total_limit, existing_results=existing,
-                         config_provenance=config_provenance, shard=shard))
+                         config_provenance=config_provenance, shard=shard, candidates=candidates,
+                         engine_name=None if engine_name is None else str(engine_name)))
 
     @classmethod
     def runs_from_config(
@@ -334,6 +357,8 @@ class Benchmark:
         if callable(prepare_source):
             prepare_source(adapter=self.model_adapter)
 
+        recorder = self._candidate_recorder(resolved_output, meta)
+
         existing_results = self.result_store.size
         pending_target = limit if limit is not None else getattr(self.source, "size_hint", lambda: None)()
         if pending_target is not None:
@@ -369,6 +394,7 @@ class Benchmark:
                         result = self._evaluate(problem)
                 except Exception as exc:  # pragma: no cover - defensive guard
                     result = self._handle_exception(problem, exc)
+                self._record_candidates(recorder, problem, result)
 
                 self.result_store.append(result)
                 if tracker is not None:
@@ -398,6 +424,8 @@ class Benchmark:
             close_adapter = getattr(self.model_adapter, "close", None)
             if callable(close_adapter):
                 close_adapter()
+            if recorder is not None:
+                recorder.close()
 
         final_snapshot = self.result_store.snapshot()
 
@@ -408,6 +436,48 @@ class Benchmark:
             tracker.print_summary("Final summary")
 
         return final_snapshot
+
+    def _candidate_recorder(self, output: Optional[Path], meta: Optional[Mapping[str, Any]]) -> Any:
+        """The run's candidate store (``self.candidates``), or None: switched off, no output to put it next to, or an
+        adapter without an engine to judge with."""
+        if self.candidates is False:
+            return None
+        if isinstance(self.candidates, str):
+            directory: Optional[Path] = Path(substitute_root_path(self.candidates))
+        else:
+            directory = None if output is None else candidate_store_path(output)
+        if directory is None:
+            return None
+        get_engine = getattr(self.model_adapter, "get_simplipy_engine", None)
+        engine = get_engine() if callable(get_engine) else getattr(self.model_adapter, "simplipy_engine", None)
+        if engine is None:
+            warnings.warn("the adapter has no SimpliPy engine (get_simplipy_engine() or simplipy_engine) to judge "
+                          "candidates with: they are not stored", RuntimeWarning)
+            return None
+        run_meta = {key: (meta or {}).get(key) for key in ("config_provenance", "ranking", "inference_precision", "shard",
+                                                           "draws")}
+        try:
+            return CandidateRecorder(directory, engine=engine, tag=output.stem if output is not None else "run",
+                                     engine_name=self.engine_name, run_meta={**run_meta, **self.label})
+        except OSError as exc:       # the run goes on without its candidates rather than not at all
+            warnings.warn(f"the candidate store {directory} cannot be opened ({exc}): candidates are not stored", RuntimeWarning)
+            return None
+
+    @staticmethod
+    def _record_candidates(recorder: Any, problem: Any, record: dict[str, Any]) -> None:
+        """Judge and store the problem's candidates, or drop them from the record when there is no store. A store
+        that fails warns and leaves the reason in the record's ``candidates_error``; the problem's row stays."""
+        if recorder is None or getattr(problem, "is_placeholder", False):
+            for key in CANDIDATE_FIELDS:
+                record.pop(key, None)
+            return
+        try:
+            recorder.record(problem, record)
+        except Exception as exc:  # noqa: BLE001 - the method's answer is recorded whatever happens to its candidates
+            for key in CANDIDATE_FIELDS:
+                record.pop(key, None)
+            record["candidates_error"] = f"{type(exc).__name__}: {exc}"
+            warnings.warn(f"the candidates of this problem were not stored ({type(exc).__name__}: {exc})", RuntimeWarning)
 
     def _evaluate(self, problem: Any) -> dict[str, Any]:
         result = self.model_adapter.evaluate_sample(problem)
