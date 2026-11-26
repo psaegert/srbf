@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`srbf.headline`: the front area and the time index.** `front_area(bits, fvu, l_lo=, l_hi=)` is the share of a
+  problem's box that a run's candidates dominate: lengths on a log2 axis from the price of the support targets' mean
+  (`lower_edge_bits`) to 26 bits per support point (`upper_edge_bits`), FVU on a log10 axis from 2^-52 to 1, computed
+  from the staircase of the front. `time_index(budgets, times, areas)` is the front area averaged over log10 time from
+  1 ms to 1000 s, linear between the budgets that every larger budget outlasts (`kept_budgets`); `budget_time` is the
+  geometric mean of a budget's per-problem times, and `average_over_problems` averages the problems' values (one run
+  per problem) over problem sets with `srbf.aggregate.average`. A new docs page, "The headline index", gives the definitions, the
+  derivation of the edges and the sources.
 - **`srbf.aggregate`: the results site's averaging in the package.** `average(problems, kind)` averages per-problem
   run values over problem sets: `"mean"` (random-effects average, Paule-Mandel between-set variance), `"rate"`
   (beta-binomial), `"ratio"` (in log2, a geometric mean) or `"median"` (each set weighted as the average weighs it,
@@ -22,6 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its mean over problems is the Mean Improvability.
 
 ### Changed
+- **One price for every expression, in bits.** `srbf.pricing.price_bits(engine, prefix)` is the only place srbf
+  calls the engine's `complexity`: the table's MDL columns (`srbf.table.mdl_bits`), the `selection: {mode: mdl}` rule,
+  `scripts/catalog_mu.py` and the headline box all price through it. `derive_metrics(..., engine=...)` without an
+  `mdl_fn` now reports `predicted_mdl` and `ground_truth_mdl` in bits, as the table does (it reported thousandths of a
+  bit); `mdl_ratio` is unchanged.
 - **`srbf analyze` averages over benchmarks as the results site does.** `leaderboard`, `scaling_table`,
   `per_benchmark_table`, `export_data` and `build_report` no longer pool every expression of a run across its benchmarks
   with a bootstrap; each benchmark is a problem set, a problem's value is the mean of its runs (a problem is a catalog
