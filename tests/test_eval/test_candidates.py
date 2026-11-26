@@ -18,7 +18,7 @@ from srbf.core import EvaluationResult, EvaluationSample
 from srbf.metrics.numeric import fvu
 from srbf.store import ResultStore
 from srbf.subprocess_adapter import SubprocessAdapter
-from srbf.table import mdl_bits
+from srbf.pricing import price_bits
 from srbf.testing import toy_sample
 from srbf.worker import runner
 
@@ -55,9 +55,9 @@ class TestJudgement:
         assert j.fvu_fit[0] == 0.0 and j.fvu_val[0] == 0.0
         x, xv = sample.x_support, sample.x_validation
         assert j.fvu_fit[1] == fvu(sample.y_support, 2.0 * x[:, 0]) and j.fvu_val[1] == fvu(sample.y_validation, 2.0 * xv[:, 0])
-        # the price is the table's: mdl_bits of the prefix the judge read, in the ground truth's names
+        # the price is srbf's one price (srbf.pricing), of the prefix the judge read, in the ground truth's names
         assert j.prefixes[1] == "* 2.0 x1"
-        assert j.bits[1] == mdl_bits(engine)(["*", "2.0", "x1"]) and j.bits[0] > j.bits[1] > 0
+        assert j.bits[1] == price_bits(engine, ["*", "2.0", "x1"]) and j.bits[0] > j.bits[1] > 0
 
     def test_what_the_judge_cannot_read_evaluate_or_price_says_so(self, engine, monkeypatch):
         j = _judge(engine, ["erf(v1)", "", "x9 + 1.0", "v1 + v2"], notation="infix")
@@ -66,8 +66,7 @@ class TestJudgement:
         # a variable the problem does not have is read, priced, and cannot be evaluated
         assert j.status[2] == STATUS_UNEVALUABLE and np.isfinite(j.bits[2]) and np.isnan(j.fvu_val[2])
         assert j.status[3] == STATUS_JUDGED
-        real = cand.mdl_bits
-        monkeypatch.setattr(cand, "mdl_bits", lambda e: (lambda prefix: float("nan") if "x2" in prefix else real(e)(prefix)))
+        monkeypatch.setattr(cand, "pricer", lambda e: (lambda prefix: float("nan") if "x2" in prefix else price_bits(e, prefix)))
         j = _judge(engine, ["v1 + v2", "v1"])
         assert list(j.status) == [STATUS_UNPRICED, STATUS_JUDGED] and np.isfinite(j.fvu_fit[0])
 
@@ -107,7 +106,7 @@ class TestJudgement:
             adapter.close()
         j = _judge(engine, record["candidate_expressions"], sample)
         assert j.prefixes[0].split() == list(engine.convert_expression(record["predicted_expression_prefix"]))
-        assert j.bits[0] == mdl_bits(engine)(record["predicted_expression_prefix"])
+        assert j.bits[0] == price_bits(engine, record["predicted_expression_prefix"])
         assert j.fvu_fit[0] == fvu(sample.y_support, record["y_pred"])
         assert j.fvu_val[0] == fvu(sample.y_validation, record["y_pred_val"])
 
@@ -324,6 +323,7 @@ class TestRun:
         problems = load_candidates(out)
         assert list(problems) == [0, 1]
         assert problems[1].predicted == 1 and problems[1].fvu_val[1] == 0.0 and problems[1].current
+        assert problems[1].meta["prediction_success"] is True
         manifest = read_manifests(out)["choices_000004"]
         assert manifest["judge"]["engine"] == "acj-4-3" and manifest["judge"]["fingerprint"] == cand.candidate_judge_fingerprint()
         assert manifest["run_meta"]["ladder"] == 4 and manifest["problems"] == 2
@@ -384,6 +384,15 @@ class TestRun:
         recorder.close()
         assert "candidate_expressions" not in record and not load_candidates(tmp_path / "s.candidates")
 
+    def test_a_problem_read_from_frozen_draws_keeps_their_identity(self, engine, tmp_path):
+        recorder = CandidateRecorder(tmp_path / "s.candidates", engine=engine)
+        record = dict(_toy(4).metadata, candidate_expressions=["v1"], draws_sha256="ab" * 32, draws_repeat=3)
+        assert recorder.record(_toy(4), record) == 1
+        recorder.close()
+        (c,) = load_candidates(tmp_path / "s.candidates").values()
+        assert c.meta["draws_sha256"] == "ab" * 32 and c.meta["draws_repeat"] == 3
+        assert record["draws_sha256"] == "ab" * 32 and record["draws_repeat"] == 3    # the row keeps them too
+
     def test_the_config_key_is_true_false_or_a_directory(self):
         from srbf.benchmark import check_candidates_setting
         assert check_candidates_setting(True) is True and check_candidates_setting("d") == "d"
@@ -406,7 +415,7 @@ class TestRun:
         Benchmark(_ListSource([_toy(0), _toy(1)]), _HandingAdapter(engine)).run(
             output_path=str(out), progress=False, verbose=False, summary_interval=None)
         before = load_candidates(out)
-        monkeypatch.setattr(cand, "mdl_bits", lambda e: (lambda prefix: 42.0))
+        monkeypatch.setattr(cand, "pricer", lambda e: (lambda prefix: 42.0))
         monkeypatch.setattr(cand, "_FINGERPRINT", "another-judge")
         assert rejudge_candidates(out, engine=engine, engine_name="acj-4-3") == 2
         after = load_candidates(out)
@@ -423,7 +432,7 @@ class TestRun:
             Benchmark(_ListSource([_toy(seed)]), _HandingAdapter(engine), shard=(index, 2)).run(
                 output_path=str(tmp_path / f"choices_000008.shard-{index}-of-2.pkl"), progress=False, verbose=False,
                 summary_interval=None)
-        monkeypatch.setattr(cand, "mdl_bits", lambda e: (lambda prefix: 42.0))
+        monkeypatch.setattr(cand, "pricer", lambda e: (lambda prefix: 42.0))
         assert rejudge_candidates(tmp_path / "choices_000008.shard-1-of-2.pkl", engine=engine) == 1
         after = load_candidates(tmp_path / "choices_000008.pkl")
         assert (after[5].bits == 42.0).all() and not (after[2].bits == 42.0).any()
@@ -475,6 +484,6 @@ def test_the_judge_fingerprint_names_the_candidate_judge_and_not_the_table():
     root = Path(srbf.__file__).resolve().parent
     table_sources = {p.name for p in judge_dependencies(root)[0]}
     candidate_sources = {p.name for p in judge_dependencies(root, entry="srbf.candidates")[0]}
-    assert "candidates.py" not in table_sources and {"candidates.py", "table.py", "numeric.py"} <= candidate_sources
+    assert "candidates.py" not in table_sources and {"candidates.py", "pricing.py", "numeric.py"} <= candidate_sources
     assert len(cand.candidate_judge_fingerprint()) == 16
     json.dumps(cand.judge_identity("acj-4-3"))

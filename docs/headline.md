@@ -223,6 +223,10 @@ result = average_over_problems({"feynman": [0.41, 0.12, 0.27], "nguyen": [0.63, 
 print(result.value, result.lo, result.hi)
 ```
 
+A run's candidates and srbf's judgement of them come from its candidate store: `srbf.candidates.iter_candidates`
+gives, problem by problem, every candidate's `bits` and `fvu_val`, and `meta["prediction_success"]` says whether the
+run answered ([Candidates](adapters.md#candidates)).
+
 `front_coordinates` gives the candidates' \((u, v)\), `dominated_area` the area of points already in the unit box,
 `kept_budgets` the budgets that count, and `mean_prefix`, `lower_edge_bits` and `upper_edge_bits` the edges one at a
 time.

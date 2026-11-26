@@ -16,7 +16,7 @@ COMMON_PREDICTION_FIELDS: Mapping[str, Any] = {
     "predicted_skeleton_prefix": None,
     "predicted_constants": None,
     "predicted_score": None,        # scalar ranking score; nan under a pareto ranking
-    "predicted_mdl": None,          # milli-bits of the REALIZED expression; None if unpriced
+    "predicted_mdl": None,          # bits of the REALIZED expression (constants in); None if unpriced
     "predicted_n_nodes": None,
     "predicted_pareto_rank": None,  # -1 unless ranked by pareto
     "predicted_log_prob": None,

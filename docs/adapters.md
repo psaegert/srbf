@@ -121,7 +121,7 @@ a worker that reports its own `fit_time` includes it. srbf judges them after the
 answered, outside `fit_time`, and records the seconds in `candidates_judge_time`.
 
 **Judging.** Each candidate is read by the run's engine like an expression (above), priced by
-`srbf.table.mdl_bits`, the description length in bits that the table reports as `predicted_mdl`,
+`srbf.pricing.price_bits`, the description length in bits that the table reports as `predicted_mdl`,
 and evaluated on the support and validation points. Its FVU is `srbf.metrics.numeric.fvu` against
 the noiseless targets, as the table judges a prediction; a value that is not finite at some point
 gives an FVU of infinity. Every candidate gets a status: `judged` (read, evaluated and priced),
@@ -149,6 +149,7 @@ for problem in iter_candidates("results/evaluation/scaling/pysr/fastsrb/niter_00
     keep = problem.valid                                   # read, evaluated and priced
     bits, fvu_val = problem.bits[keep], problem.fvu_val[keep]
     answer = problem.predicted                             # index of the method's own answer, or None
+    answered = problem.meta["prediction_success"]          # False for a method that picked no answer
     texts = problem.expressions                            # as the method wrote them
 ```
 

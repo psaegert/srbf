@@ -34,7 +34,7 @@ from symbolic_data.token_ops import normalize_expression, normalize_skeleton
 from srbf.candidates import evaluate_prefix, limit_candidates, read_spelled, spell_expression
 from srbf.core import EvaluationModelAdapter, EvaluationResult, EvaluationSample
 from srbf.model_adapters import _compute_fvu_from_predictions
-from srbf.table import mdl_bits
+from srbf.pricing import pricer
 from srbf.variable_renaming import skeleton_variable_names
 from srbf.worker import MODELS_DIR, RUNNER_PATH
 
@@ -802,7 +802,7 @@ class SubprocessAdapter(EvaluationModelAdapter):
         last, then the shorter prefix, then the prefix's tokens."""
         finite = np.isfinite(np.asarray(y_support, dtype=float).reshape(-1))
         n_points = int(finite.sum())
-        price = mdl_bits(self.simplipy_engine)
+        price = pricer(self.simplipy_engine)
         rows: list[dict[str, Any]] = []
         keys: list[tuple[Any, ...]] = []
         for candidate in candidates:

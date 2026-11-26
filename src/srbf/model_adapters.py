@@ -19,7 +19,7 @@ from srbf.core import EvaluationModelAdapter, EvaluationResult, EvaluationSample
 from srbf.spelling import engine_spelling
 from srbf.variable_renaming import (
     E2E_FIRST_INDEX, NESYMRES_FIRST_INDEX, rename_variable_tokens, rename_variables_in_infix, skeleton_variable_names)
-from srbf.candidate_store import CandidateStoreWriter
+from srbf.candidate_store import MDL_UNIT, CandidateStoreWriter, milli_bits_to_bits
 from srbf.metrics.numeric import fvu as _fvu
 
 PySRRegressor: type[Any] | None  # pragma: no cover - assigned lazily
@@ -186,7 +186,8 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         record["predicted_constants"] = list(best.constants) if best.constants is not None else None
         record["predicted_score"] = best.score
         record["predicted_log_prob"] = best.log_prob
-        record["predicted_mdl"] = best.mdl
+        # flash-ansr prices in thousandths of a bit; srbf states every description length in bits
+        record["predicted_mdl"] = milli_bits_to_bits(best.mdl)
         record["predicted_n_nodes"] = best.n_nodes
         record["predicted_pareto_rank"] = best.pareto_rank
         # Provenance of the prediction (flash-ansr >= 0.16.1): how many predicted typed literals it kept
@@ -244,7 +245,8 @@ class FlashANSRAdapter(EvaluationModelAdapter):
             for col in ("n_nodes", "n_constants", "mdl", "score", "pareto_rank", "rank", "spelling", "parent"):
                 values = getattr(led, col, None)
                 if values is not None and len(values) == len(led):
-                    extra[col] = values
+                    # the ledger's mdl is flash-ansr's thousandths of a bit; the store holds bits (its mdl_dialect says so)
+                    extra[col] = [milli_bits_to_bits(v) for v in values] if col == "mdl" else values
             result_index = getattr(led, "result_index", None)
             candidates = getattr(result, "candidates", None)
             if sample is not None and result_index is not None and candidates is not None and len(result_index) == len(led):
@@ -285,11 +287,12 @@ class FlashANSRAdapter(EvaluationModelAdapter):
     def _store_run_meta(self) -> dict[str, Any]:
         """What a later reader of the candidate store needs once per run: the ranking that produced
         `score`/`rank`, and the dialect `mdl` was priced in (mu moves up to 1.8x between dialects, so a
-        bare number is unusable later)."""
+        bare number is unusable later) and its unit, bits (stores written before said milli-bits;
+        ``CandidateStoreReader.mdl_bits`` reads either)."""
         meta: dict[str, Any] = {"ranking": self.ranking_config(),
                                 "inference_precision": self.inference_precision(),
                                 "constant_ladder": self._constant_ladder_config(),
-                                "mdl_dialect": {"certified": True, "mode": "f64", "canon": "default", "unit": "milli-bits"}}
+                                "mdl_dialect": {"certified": True, "mode": "f64", "canon": "default", "unit": MDL_UNIT}}
         try:
             import simplipy
             meta["simplipy"] = simplipy.__version__

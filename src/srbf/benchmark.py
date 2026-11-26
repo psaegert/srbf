@@ -454,7 +454,8 @@ class Benchmark:
             warnings.warn("the adapter has no SimpliPy engine (get_simplipy_engine() or simplipy_engine) to judge "
                           "candidates with: they are not stored", RuntimeWarning)
             return None
-        run_meta = {key: (meta or {}).get(key) for key in ("config_provenance", "ranking", "inference_precision", "shard")}
+        run_meta = {key: (meta or {}).get(key) for key in ("config_provenance", "ranking", "inference_precision", "shard",
+                                                           "draws")}
         try:
             return CandidateRecorder(directory, engine=engine, tag=output.stem if output is not None else "run",
                                      engine_name=self.engine_name, run_meta={**run_meta, **self.label})

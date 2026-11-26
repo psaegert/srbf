@@ -2,7 +2,7 @@
 
 A method answers each problem with one expression, the record's prediction, and often ends with more: a hall of fame,
 a Pareto front, the samples or beams it fitted. A run keeps all of them, problem by problem, and judges every one the
-way it judges a prediction: its price in bits (:func:`srbf.table.mdl_bits`, the one price srbf reports), its FVU on the
+way it judges a prediction: its price in bits (:func:`srbf.pricing.price_bits`, the one price srbf computes), its FVU on the
 fitting and on the held-out points (:func:`srbf.metrics.numeric.fvu`, against the targets the table judges with) and
 whether it could be read, evaluated and priced at all (``status``). What a method reports about its own candidates is
 never used.
@@ -42,7 +42,8 @@ from typing import Any, Iterator, Mapping, Sequence
 import numpy as np
 
 from srbf.metrics.numeric import fvu
-from srbf.table import judge_dependencies, mdl_bits
+from srbf.pricing import pricer
+from srbf.table import judge_dependencies
 from srbf.variable_renaming import (
     rename_named_variables, rename_named_variables_in_infix, rename_prediction, skeleton_variable_names)
 
@@ -228,7 +229,7 @@ def judge_candidates(expressions: Sequence[str], *, engine: Any, variables: Sequ
 
     ``variables`` are the column names the method was handed; ``x_fit``/``y_fit`` and ``x_val``/``y_val`` the fitting
     and held-out points and the targets the table judges with (the noiseless ones). A candidate is read by the engine,
-    priced by :func:`srbf.table.mdl_bits` and evaluated with the engine's realizations; its FVU is
+    priced by :func:`srbf.pricing.price_bits` and evaluated with the engine's realizations; its FVU is
     :func:`srbf.metrics.numeric.fvu` on every point, so a non-finite value anywhere gives ``inf``. The held-out FVU is
     NaN for a problem without held-out points."""
     n = len(expressions)
@@ -243,7 +244,7 @@ def judge_candidates(expressions: Sequence[str], *, engine: Any, variables: Sequ
     has_val = X_val.shape[0] > 0 and Y_val.size == X_val.shape[0]
     variables = [str(v) for v in variables]
     names = skeleton_variable_names(variables)
-    price = mdl_bits(engine)
+    price = pricer(engine)
 
     prefixes = [""] * n
     reasons = [""] * n
@@ -310,7 +311,7 @@ def _fingerprint() -> str:
 
 def judge_identity(engine_name: str | None = None) -> dict[str, Any]:
     """What a store records about the judge that judged it."""
-    identity: dict[str, Any] = {"fingerprint": _fingerprint(), "engine": engine_name, "price": "srbf.table.mdl_bits",
+    identity: dict[str, Any] = {"fingerprint": _fingerprint(), "engine": engine_name, "price": "srbf.pricing.price_bits",
                                 "fvu": "srbf.metrics.numeric.fvu"}
     for package in ("srbf", "simplipy"):
         try:
@@ -527,7 +528,11 @@ class CandidateRecorder:
                                      y_fit=sample.y_support, x_val=x_val, y_val=sample.y_validation, notation=notation)
         seconds = time.perf_counter() - started
         meta = {"benchmark_eq_id": record.get("benchmark_eq_id"), "n_fit": int(x_fit.shape[0]),
-                "n_val": int(x_val.shape[0]) if x_val.ndim == 2 else 0, "judge_time": seconds}
+                "n_val": int(x_val.shape[0]) if x_val.ndim == 2 else 0, "judge_time": seconds,
+                # whether the record has an answer: a method can end with candidates and none (no selection)
+                "prediction_success": bool(record.get("prediction_success")),
+                # the frozen draws the problem's points were read from, when they were (pairs runs on the same data)
+                **{key: record[key] for key in ("draws_sha256", "draws_repeat") if record.get(key) is not None}}
         self.log.append(int(row), expressions=expressions, judgement=judgement, notation=notation, variables=variables,
                         prediction=prediction, meta=meta)
         record["n_candidates"] = len(expressions)
@@ -576,7 +581,9 @@ class CandidateSet:
 
     @property
     def meta(self) -> dict[str, Any]:
-        """What the run recorded with the problem: ``benchmark_eq_id``, ``n_fit``, ``n_val``, ``judge_time``."""
+        """What the run recorded with the problem: ``benchmark_eq_id``, ``n_fit``, ``n_val``, ``judge_time``,
+        ``prediction_success`` (whether the record has an answer), and ``draws_sha256``/``draws_repeat`` for a problem
+        read from frozen draws."""
         return dict(self.header.get("meta") or {})
 
     @property

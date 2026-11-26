@@ -259,3 +259,42 @@ def test_a_manifest_write_that_fails_is_a_warning_not_the_end_of_the_run(tmp_pat
         _warnings.simplefilter("always")
         w.close()
     assert any("manifest not refreshed" in str(c.message) for c in caught)
+
+
+# One MDL unit, bits: the adapter stores bits and says so; a store written in flash-ansr's thousandths of a bit
+# stays readable, the reader keying off the unit the store states.
+@pytest.mark.parametrize("run_meta, factor", [
+    ({"mdl_dialect": {"unit": "bits"}}, 1.0),
+    ({"mdl_dialect": {"unit": "milli-bits"}}, 1e-3),
+    (None, 1e-3),                                    # a store from before the unit was stated
+])
+def test_the_reader_gives_mdl_in_bits_whatever_the_stored_unit(tmp_path, run_meta, factor):
+    w = CandidateStoreWriter(tmp_path, vocab_size=83, run_meta=run_meta)
+    w.write_problem(0, [[1, 2], [3]], [0.1, 0.2], [-1.0, -2.0], mdl=[12345.0, float("nan")])
+    w.close()
+    reader = CandidateStoreReader(tmp_path)
+    got = reader.mdl_bits(next(iter(reader)))
+    assert got[0] == 12345.0 * factor and np.isnan(got[1])
+
+
+def test_a_store_in_an_unknown_unit_is_refused(tmp_path):
+    w = CandidateStoreWriter(tmp_path, vocab_size=83, run_meta={"mdl_dialect": {"unit": "nats"}})
+    w.write_problem(0, [[1]], [0.1], [-1.0], mdl=[1.0])
+    w.close()
+    reader = CandidateStoreReader(tmp_path)
+    with pytest.raises(ValueError, match="unknown unit"):
+        reader.mdl_bits(next(iter(reader)))
+
+
+def test_the_adapter_stores_the_ledger_mdl_in_bits(tmp_path):
+    adapter = FlashANSRAdapter(_mock_model(), candidate_store_dir=str(tmp_path))
+    result = types.SimpleNamespace(ledger=CandidateLedger(
+        token_lists=[[1, 2], [3, 4]], fvu=[0.1, float("nan")], log_prob=[-1.0, -2.0], valid=[1, 0],
+        fit_status=[FIT_OK, INVALID], constants=[[2.0], []], n_nodes=[2, -1], n_constants=[1, -1],
+        mdl=[19443.0, float("nan")], score=[-1.0, float("nan")], pareto_rank=[-1, -1], rank=[0, -1]))
+    adapter._capture_ledger({"eval_row_index": 2}, result)
+    reader = CandidateStoreReader(tmp_path)
+    assert reader.mdl_unit == "bits"
+    block = next(iter(reader))
+    assert block["mdl"][0] == 19.443 and np.isnan(block["mdl"][1])
+    np.testing.assert_array_equal(reader.mdl_bits(block), block["mdl"])

@@ -74,7 +74,7 @@ model_adapter:
 | `emission`, `refine_scope` | `fittable` | which constants the model spells itself and which the refiner fits |
 | `constant_ladder` | on | re-spell fitted constants as integers, fractions and multiples of \(\pi\) and \(e\), and let the ranking choose |
 | `complexity` | `none` | condition the model on a target complexity: `none`, `ground_truth` or a number |
-| `candidate_store_dir` | none | a directory that receives every candidate of every problem, one compressed `.npz` per problem, readable with `srbf.candidate_store.CandidateStoreReader` |
+| `candidate_store_dir` | none | a directory that receives every candidate of every problem, one compressed `.npz` per problem, readable with `srbf.candidate_store.CandidateStoreReader` (its `mdl` column in bits; `mdl_bits(block)` also reads the stores that hold thousandths of a bit) |
 
 **Ranking.** `mode` is required and takes one of three values.
 

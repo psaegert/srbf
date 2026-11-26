@@ -333,6 +333,7 @@ class TestAnswerProvenanceColumns:
         assert record["predicted_typed_frozen"] == 0
         assert record["predicted_typed_thaw"] == "2"
         assert record["predicted_spelling"] == "c0=/ 231 100"
+        assert record["predicted_mdl"] == 19.443          # flash-ansr's thousandths of a bit, stated in bits
 
 
 class _SplitEngine:
