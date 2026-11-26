@@ -117,16 +117,10 @@ def result_files(tree: ResultTree, *, max_rung: int | None = None) -> list[str]:
 
 
 def mdl_bits(engine: Any) -> Callable[[list[str]], float]:
-    """The description length the table reports, in bits: certified, f64 parse, the default canon (NaN on failure)."""
-    from simplipy.engine import Mode
+    """The description length the table reports, in bits (:func:`srbf.pricing.price_bits`; NaN on failure)."""
+    from srbf.pricing import pricer
 
-    def price(prefix: list[str]) -> float:
-        try:
-            return float(engine.complexity(list(prefix), certified=True, mode=Mode.f64, canon="default")) / 1000.0
-        except Exception:  # noqa: BLE001 - an expression the engine cannot price has no description length
-            return float("nan")
-
-    return price
+    return pricer(engine)
 
 
 def _number(x: Any) -> float | str:

@@ -665,8 +665,8 @@ def compute_derived_metrics(
                 ])
 
                 # ── MDL: the description length of the REALIZED expressions ──
-                # ``mdl_fn`` is the engine's complexity (milli-bits, simplipy's native unit; the
-                # same pricing the flash-ansr ranking modes score with). Priced on the realized
+                # ``mdl_fn`` is the price in bits (``srbf.pricing.price_bits`` unless the caller
+                # passes its own). Priced on the realized
                 # expressions, numeric constants inlined: a prefix that still carries a
                 # ``<constant>`` placeholder is not priced (a skeleton price would masquerade as a
                 # realized one), and an unpriceable expression is None, never a made-up number.
@@ -783,6 +783,9 @@ def derive_metrics(
     simplify_fn : callable, optional
         Skeleton simplifier; defaults to the engine's ``simplify`` when an ``engine`` is given, else
         ``None`` (simplified skeletons then fall back to the raw skeletons).
+    mdl_fn : callable, optional
+        The price of a realized prefix, for ``predicted_mdl``, ``ground_truth_mdl`` and ``mdl_ratio``; defaults to
+        :func:`srbf.pricing.price_bits` with the engine (bits) when an ``engine`` is given, else no price.
     convert_fn : callable, optional
         Converts the stored predicted prefixes into the engine grammar before they are judged or
         priced; defaults to the engine's ``convert_expression`` when an ``engine`` is given (the
@@ -805,9 +808,9 @@ def derive_metrics(
     if simplify_fn is None and engine is not None:
         simplify_fn = engine.simplify
     if mdl_fn is None and engine is not None:
-        # The price the flash-ansr ranking modes use: certified, f64 parse, the public Default canon.
-        def mdl_fn(tokens: list[str], _engine: Any = engine) -> float:
-            return float(_engine.complexity(list(tokens), certified=True, mode='f64', canon='default'))
+        from srbf.pricing import pricer
+
+        mdl_fn = pricer(engine)   # the price in bits, as the table reports it
 
     if convert_fn is None and engine is not None:
         convert_fn = engine.convert_expression
