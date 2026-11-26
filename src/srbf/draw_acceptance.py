@@ -136,10 +136,12 @@ def oracle_check(config: str, model_path: str, n_restarts: int = 1024, seed: int
 _WORKER: dict[str, Any] = {}
 
 
+#: The thread pools of the numerical libraries; a worker gets one core, the pool of workers is the parallelism.
+_THREAD_VARIABLES = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
+
+
 def _init_worker(check_factory: Callable[[], Callable[[Any], str]], settings: Any, one_thread: bool = True) -> None:
-    if one_thread:                                   # a worker process: one core each, the pool is the parallelism
-        for variable in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
-            os.environ.setdefault(variable, "1")
+    if one_thread:
         try:
             import torch
             torch.set_num_threads(1)
@@ -162,33 +164,37 @@ def _catalog(ref: str) -> Any:
     return cache[ref]
 
 
-def judge_attempts(ref: str, row: int, repeat: int) -> tuple[str, str, int, dict[str, Any] | None, float]:
+def judge_attempts(ref: str, row: int, repeat: int) -> tuple[str, str, int, dict[str, Any] | None, dict[str, float]]:
     """Problem ``row`` of catalog ``ref`` in ``repeat``: its accepted attempt, or None when the rule does not apply."""
     from symbolic_data.draws import needs_check
 
-    start = time.perf_counter()
+    start, cpu = time.perf_counter(), time.process_time()
+
+    def timing() -> dict[str, float]:
+        return {"seconds": time.perf_counter() - start, "cpu_seconds": time.process_time() - cpu}
+
     draws = _catalog(ref)
     check = _WORKER["check"]
     first = draws.draw(row, repeat, 1)
     if not needs_check(first.kind, first.problem):
-        return draws.name, draws.ids[row], repeat, None, time.perf_counter() - start
+        return draws.name, draws.ids[row], repeat, None, timing()
     reasons: Counter[str] = Counter()
     for attempt in range(1, int(draws.settings.max_trials) + 1):
         draw = first if attempt == 1 else draws.draw(row, repeat, attempt)
         verdict = check(draw.problem)
         if verdict == ACCEPTED:
             choice = {"attempt": attempt, "formula_inherent": False, "failed": dict(sorted(reasons.items()))}
-            return draws.name, draws.ids[row], repeat, choice, time.perf_counter() - start
+            return draws.name, draws.ids[row], repeat, choice, timing()
         reasons[verdict] += 1
     choice = {"attempt": 1, "formula_inherent": True, "failed": dict(sorted(reasons.items()))}
-    return draws.name, draws.ids[row], repeat, choice, time.perf_counter() - start
+    return draws.name, draws.ids[row], repeat, choice, timing()
 
 
-def _task(task: tuple[str, int, int]) -> tuple[str, str, int, dict[str, Any] | None, float]:
+def _task(task: tuple[str, int, int]) -> tuple[str, str, int, dict[str, Any] | None, dict[str, float]]:
     return judge_attempts(*task)
 
 
-def _journal(path: Path, header: dict[str, Any]) -> list[tuple[str, str, int, dict[str, Any] | None, float]]:
+def _journal(path: Path, header: dict[str, Any]) -> list[tuple[str, str, int, dict[str, Any] | None, dict[str, float]]]:
     """The results a journal already holds (after checking that it was written for this run), or none."""
     if not path.exists():
         path.write_text(json.dumps(header) + "\n", encoding="utf-8")
@@ -202,7 +208,7 @@ def _journal(path: Path, header: dict[str, Any]) -> list[tuple[str, str, int, di
             entry = json.loads(line)
         except json.JSONDecodeError:           # a line cut short when the run stopped
             continue
-        done.append((entry["catalog"], entry["eq_id"], int(entry["repeat"]), entry["choice"], float(entry["seconds"])))
+        done.append((entry["catalog"], entry["eq_id"], int(entry["repeat"]), entry["choice"], dict(entry["timing"])))
     return done
 
 
@@ -216,7 +222,7 @@ def accept_draws(refs: Sequence[str], out: str | os.PathLike[str], *, check_fact
     render will. The document lists every catalog, and in it every checked problem with the attempt it keeps, its flag
     and how many attempts failed for which reason. ``journal`` appends each problem's result as it is judged, and a run
     started again on the same journal judges only the problems it does not hold. The summary adds each problem's
-    seconds (not in the document, which a rerun with the same software reproduces).
+    seconds and CPU seconds (not in the document, which a rerun with the same software reproduces).
     """
     from symbolic_data.draws import ATTEMPTS_FORMAT, CatalogDraws, DrawsSettings
 
@@ -240,7 +246,7 @@ def accept_draws(refs: Sequence[str], out: str | os.PathLike[str], *, check_fact
             for row in rows:
                 tasks.append((ref, row, repeat))
                 keys[(ref, row, repeat)] = (draws.name, draws.ids[row], repeat)
-    results: list[tuple[str, str, int, dict[str, Any] | None, float]] = []
+    results: list[tuple[str, str, int, dict[str, Any] | None, dict[str, float]]] = []
     handle = None
     if journal is not None:
         header = {"settings": settings.record(), "repeats": list(settings.repeats), "rule": rule,
@@ -252,11 +258,11 @@ def accept_draws(refs: Sequence[str], out: str | os.PathLike[str], *, check_fact
         handle = open(journal, "a", encoding="utf-8")
         log(f"{len(done)} problems from the journal, {len(tasks)} to judge")
 
-    def record(result: tuple[str, str, int, dict[str, Any] | None, float]) -> None:
+    def record(result: tuple[str, str, int, dict[str, Any] | None, dict[str, float]]) -> None:
         results.append(result)
         if handle is not None:
-            name, eq_id, repeat, choice, elapsed = result
-            handle.write(json.dumps({"catalog": name, "eq_id": eq_id, "repeat": repeat, "choice": choice, "seconds": elapsed}) + "\n")
+            name, eq_id, repeat, choice, spent = result
+            handle.write(json.dumps({"catalog": name, "eq_id": eq_id, "repeat": repeat, "choice": choice, "timing": spent}) + "\n")
             handle.flush()
 
     started = time.perf_counter()
@@ -265,9 +271,17 @@ def accept_draws(refs: Sequence[str], out: str | os.PathLike[str], *, check_fact
             import multiprocessing
             from concurrent.futures import ProcessPoolExecutor, as_completed
 
+            # the workers read these when they import numpy and torch, before any initializer runs
+            saved = {variable: os.environ.get(variable) for variable in _THREAD_VARIABLES}
+            os.environ.update({variable: "1" for variable in _THREAD_VARIABLES})
             with ProcessPoolExecutor(max_workers=jobs, mp_context=multiprocessing.get_context("spawn"),
                                      initializer=_init_worker, initargs=(check_factory, settings)) as pool:
                 futures = [pool.submit(_task, task) for task in tasks]
+                for variable, value in saved.items():
+                    if value is None:
+                        os.environ.pop(variable, None)
+                    else:
+                        os.environ[variable] = value
                 for count, future in enumerate(as_completed(futures), 1):
                     record(future.result())
                     if count % 500 == 0:
@@ -279,9 +293,9 @@ def accept_draws(refs: Sequence[str], out: str | os.PathLike[str], *, check_fact
     finally:
         if handle is not None:
             handle.close()
-    seconds: dict[str, dict[str, float]] = {}
-    for name, eq_id, repeat, choice, elapsed in results:
-        seconds.setdefault(name, {})[eq_id] = elapsed
+    seconds: dict[str, dict[str, dict[str, float]]] = {}
+    for name, eq_id, repeat, choice, spent in results:
+        seconds.setdefault(name, {})[eq_id] = spent
         if choice is not None:
             catalogs[name]["attempts"][str(repeat)][eq_id] = choice
     for name, entry in catalogs.items():                  # the catalog's order, whatever order the workers finished in
