@@ -179,6 +179,7 @@ stored strings and the points the result file keeps.
 | TiSR | its hall of fame; it has no answer of its own, and `selection` picks one |
 | GP-GOMEA, RILS-ROLS | none: each ends with one model |
 | the sampling and enumeration baselines | every expression they fitted, best first |
+| the polynomial family | every degree it fitted, lowest first; the answer is the degree cross-validation picks |
 | E2E, NeSymReS, Flash-ANSR + PySR | their answer only |
 
 ## The config

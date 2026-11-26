@@ -1,5 +1,5 @@
 """srbf does not need flash-ansr (owner 2026-09-27). Only the adapters built on it and the two baselines that fit their
-constants with its refiner import it, when they are built. Checked in a subprocess in which flash-ansr cannot be
+constants with its refiner import it, when they are built; the polynomial baseline needs NumPy only. Checked in a subprocess in which flash-ansr cannot be
 imported, so the check holds whether or not flash-ansr is installed here."""
 import json
 import os
@@ -28,6 +28,7 @@ import srbf.config
 srbf.config.resolve_simplipy_engine = lambda cfg, adapter_name: object()   # no engine download for this check
 adapter = build_model_adapter({"type": "subprocess", "worker": "example", "python": sys.executable})
 out["subprocess_adapter"] = type(adapter).__name__
+out["polynomial_adapter"] = type(build_model_adapter({"type": "polynomial", "simplipy_engine": "x"})).__name__
 print(json.dumps(out))
 """
 
@@ -37,10 +38,13 @@ def test_srbf_imports_and_builds_a_worker_adapter_without_flash_ansr():
                           env={**os.environ, "SRBF_ROOT": os.getcwd()})
     assert proc.returncode == 0, proc.stderr[-2000:]
     out = json.loads(proc.stdout.strip().splitlines()[-1])
-    # the two refining baselines fit their constants with flash-ansr's refiner; nothing else may need it
-    assert all(m.startswith("srbf.baselines") for m in out["needs_flash_ansr"]), out["needs_flash_ansr"]
+    # the two refining baselines fit their constants with flash-ansr's refiner; nothing else may need it, the
+    # polynomial baseline and the package that holds the baselines included
+    refining = {"srbf.baselines._base", "srbf.baselines.brute_force_model", "srbf.baselines.lample_charton_model"}
+    assert set(out["needs_flash_ansr"]) <= refining, out["needs_flash_ansr"]
     assert "pip install 'srbf[flash-ansr]'" in out["flash_ansr_adapter"]
     assert out["subprocess_adapter"] == "SubprocessAdapter"
+    assert out["polynomial_adapter"] == "PolynomialAdapter"
 
 
 def test_no_file_names_flash_ansrs_root_variable():

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **The polynomial family as a built-in baseline** (`type: polynomial`, `srbf.baselines.PolynomialModel`). Polynomials
+  of total degree 0 to 10 in the problem's variables, each fitted by least squares on the fitting points, a degree
+  only while it has at most as many monomials as there are points. Every fitted degree is a candidate, written as the
+  expanded polynomial in `x1, x2, ...` with its coefficients at full double precision; the answer is the lowest degree
+  within one standard error of the best 5-fold CV error, fold errors below the double-precision epsilon times the
+  targets' variance counting as that floor. The fit solves scaled monomials by SVD; every scale is a power of two, so
+  the written coefficients are the fitted ones exactly. It needs NumPy only (`srbf.baselines` no longer imports
+  flash-ansr until a refining baseline is named); `configs/evaluation/scaling/polynomial_srbf.yaml` runs it on every
+  srbf catalog at its one rung, `degree_10.pkl` (the new rung prefix `degree_`).
 - **`srbf.headline`: the front area and the time index.** `front_area(bits, fvu, l_lo=, l_hi=)` is the share of a
   problem's box that a run's candidates dominate: lengths on a log2 axis from the price of the support targets' mean
   (`lower_edge_bits`) to 26 bits per support point (`upper_edge_bits`), FVU on a log10 axis from 2^-52 to 1, computed

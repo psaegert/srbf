@@ -2,7 +2,8 @@
 
 A rung's result file is named after the method's budget unit -- draws (``choices_``), iterations (``niter_``),
 evaluations (``evals_``), sampled expressions (``samples_``), refiner restarts (``restarts_``, the oracle),
-generations (``generations_``), epochs (``epochs_``) -- then the rung and, for a shard, its index and count. This
+generations (``generations_``), epochs (``epochs_``), the highest polynomial degree (``degree_``, the polynomial family's
+one rung) -- then the rung and, for a shard, its index and count. This
 list decides which files are read, not how a row is judged, so it is left out of the judge fingerprint
 (:func:`srbf.table.judge_fingerprint`): a new budget unit does not re-judge every cached file.
 """
@@ -10,7 +11,7 @@ from __future__ import annotations
 
 import re
 
-RUNG_PREFIXES = ("choices", "niter", "evals", "samples", "restarts", "generations", "epochs")
+RUNG_PREFIXES = ("choices", "niter", "evals", "samples", "restarts", "generations", "epochs", "degree")
 RESULT_FILE = re.compile(r"(?:" + "|".join(RUNG_PREFIXES) + r")_(\d+)(?:\.shard-(\d+)-of-(\d+))?\.pkl$")
 
 __all__ = ["RESULT_FILE", "RUNG_PREFIXES"]

@@ -17,6 +17,7 @@ block. To enter a method of your own, see [Adding your method](adapters.md).
 | `subprocess`, `worker: qlattice` | [QLattice](#qlattice) | `scripts/envs/build_qlattice_env.sh envs/qlattice`: a virtual environment with Python 3.12 |
 | `subprocess`, `worker: bingo` | [Bingo](#bingo) | `scripts/envs/build_bingo_env.sh`, a conda environment of its own |
 | `lample_charton`, `brute_force` | [prior sampling and enumeration](#sampling-and-enumeration-baselines) | `pip install "srbf[flash-ansr]"` (they fit constants with its refiner) |
+| `polynomial` | [the polynomial family](#polynomial-family) | nothing: it comes with srbf |
 | `subprocess` | [any method, in its own environment](adapters.md) | yours |
 
 Two keys are common to every block. `config_provenance` states who chose the configuration
@@ -858,3 +859,71 @@ model_adapter:
 
 Every expression either baseline fits, with its constants at full precision, goes to the run as one of the problem's
 candidates ([Candidates](adapters.md#candidates)), the prediction first.
+
+## Polynomial family
+
+The polynomials of total degree 0 to 10 in the problem's variables, each fitted by least squares. It is a
+standardized family that fits any data: it needs no training, no search and no operator vocabulary beyond `+ - *`
+and integer powers, so it marks what a fixed, well-understood function class reaches on each benchmark, a reference
+every method's answers and fronts can be held against. It needs NumPy only, no extra installation.
+
+**The family.** The polynomial of degree k has every monomial `x1**a1 * ... * xd**ad` of total degree at most k,
+C(d + k, k) of them for d variables. Each is fitted by least squares on the fitting points only. A degree is fitted
+only while it has at most as many monomials as there are fitting points; the higher degrees are skipped, so a
+problem with many variables stops early. On 512 fitting points, one to three variables reach degree 10, four
+variables degree 8, five degree 6, ten degree 3, and from 31 variables only degrees 0 and 1 are fitted.
+
+**The answer.** 5-fold cross-validation on the fitting points with the one-standard-error rule: the fitting points
+are shuffled (with a fixed seed) and split into five folds, each degree is fitted on four of them and its mean
+squared error taken on the fifth, and its CV error is the mean over the five folds, with the standard error of that
+mean. The answer is the lowest degree whose CV error is within one standard error of the best CV error. A fold's
+error below one rounding unit of the targets' variance (the double-precision epsilon times the variance, the floor
+of `log10_fvu` on the [metrics page](metrics.md)) counts as that floor: on noiseless data every degree from the
+law's own up fits to rounding noise, and on the floor they tie, so the answer is the law's degree.
+
+**The candidates.** Every fitted degree is a candidate ([Candidates](adapters.md#candidates)), written as the
+expanded polynomial in the original variables, the sum of each coefficient times its monomial, for example the
+answer on 64 noisy points of `x1**3 - 2*x1 + 0.5`:
+`0.4983740731925216 - 1.9732061118327087*x1 + 0.004685644507276265*x1**2 + 0.992863787742691*x1**3`. Every
+coefficient is written at full double precision, as the shortest decimal that reads back as the same number; a
+zero coefficient is left out. The variables are `x1, x2, ...` by column position, as for every adapter inside
+srbf's environment.
+
+**The fit.** The monomials of high degree on inputs of wide range are nearly collinear and differ in magnitude by
+many orders, so the fit never forms the normal equations. Each variable is divided by a power of two that brings it
+into (-1, 1), each monomial column by the power of two nearest its root-mean-square, and the least-squares problem
+is solved by a singular value decomposition (`numpy.linalg.lstsq`), which drops the directions whose singular
+value is below the largest times the double-precision epsilon times the larger dimension of the matrix, and
+returns the minimum-norm solution among numerically dependent columns. Every scale is a power of two, so the coefficients in the original variables are the
+solved weights times powers of two, exactly: the written polynomial is the fitted one. The fit is not centred,
+because a centred polynomial would have to be expanded into the original variables and rounded again. On inputs
+far from zero the terms of high degree cancel, and evaluating the expanded polynomial loses precision to that
+cancellation, in the fit as in the judge.
+
+```yaml
+model_adapter:
+  type: polynomial
+  config_provenance: harness_tuned
+  simplipy_engine: acj-5-4-llm
+```
+
+| key | default | meaning |
+|---|---|---|
+| `max_degree` | `10` | the highest degree fitted |
+| `n_folds` | `5` | the folds of the cross-validation |
+| `seed` | `0` | the shuffle of the fitting points into folds |
+
+Any other key is refused. A fit takes at most about a second, most of it in the cross-validation of the largest
+degrees, so the family has one budget and one rung, its highest degree: `configs/evaluation/scaling/polynomial_srbf.yaml`
+runs it on every srbf catalog into `degree_10.pkl`. The fits run on one BLAS thread: on matrices of a few hundred
+columns a thread pool costs more than it saves. `fit_time` covers the fits, the cross-validation and writing the
+candidates. Each row records the fitted degrees (`polynomial_degrees`), the answer's degree (`polynomial_degree`),
+each degree's CV error and standard error (`polynomial_cv_mse`, `polynomial_cv_se`) and the seconds spent fitting
+and cross-validating (`polynomial_timing`).
+
+**Long expressions.** The answer's predictions, from which its fit is judged, are the fitted polynomial's own, which
+its written expression computes up to rounding. On 512 fitting points, the highest degree with four, five, six or
+eight variables has more than 4,096 prefix tokens, more than the engine evaluates or prices: that candidate is stored
+as `unevaluable`, and as the answer it is judged on its predictions and has no description length. The tree edit
+distance (`zss_edit_distance`) grows steeply with the length of the answer: in `srbf table`, an answer of about 500
+prefix tokens takes seconds, one of a few thousand tokens minutes.

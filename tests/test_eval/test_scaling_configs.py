@@ -13,7 +13,7 @@ from srbf.sweep import Sweep, register_sweep_yaml, resolve_sweeps
 from srbf.config import select_experiment
 
 EVAL_CONFIG_DIR = Path(__file__).resolve().parents[2] / "configs" / "evaluation"
-VALID_ADAPTERS = {"flash_ansr", "pysr", "nesymres", "e2e", "lample_charton", "brute_force", "subprocess"}
+VALID_ADAPTERS = {"flash_ansr", "pysr", "nesymres", "e2e", "lample_charton", "brute_force", "polynomial", "subprocess"}
 VALID_CATALOGS = {
     "fastsrb", "feynman", "feynman-bonus", "srsd-dummy",
     "erbench-syneq", "erbench-densities", "erbench-phybench",
@@ -35,6 +35,8 @@ EXPECTED_PROVENANCE = {
     # upstream whose defaults could apply -- maintainer-assembled, like the brute-force reference
     "lample_charton": "harness_tuned",
     "brute_force": "harness_tuned",
+    # srbf's polynomial family: a definition the benchmark's maintainers chose, with no upstream to defer to
+    "polynomial": "harness_tuned",
     # a shipped worker whose configuration its first author published for benchmarking (GP-GOMEA: his SRBench
     # 2021 base configuration without the harness's hyperparameter grid), rather than the library's own defaults
     "subprocess:gpgomea": "author_blessed",

@@ -41,7 +41,7 @@ except Exception:  # pragma: no cover - optional dependency missing
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     # flash-ansr is an optional install: the adapters and baselines built on it import it when they are built
     from flash_ansr.flash_ansr import FlashANSR
-    from srbf.baselines import BruteForceModel, LampleChartonModel
+    from srbf.baselines import BruteForceModel, LampleChartonModel, PolynomialModel
     from nesymres.architectures.model import Model as NesymresModel  # type: ignore
 else:
     NesymresModel = Any
@@ -424,12 +424,84 @@ class BruteForceAdapter(EvaluationModelAdapter):
         return _evaluate_refiner_baseline(self.model, sample)
 
 
+class PolynomialAdapter(EvaluationModelAdapter):
+    """Adapter for the polynomial family (:class:`srbf.baselines.PolynomialModel`): every degree it fits is a
+    candidate, written out with its coefficients at full precision, and the degree cross-validation picks is the
+    answer. ``fit_time`` covers the fits, the cross-validation and writing the candidates. The answer's predictions
+    are the fitted polynomial's, which its written expression computes up to rounding (its coefficients are the
+    fitted ones exactly): an expression too long for the engine to evaluate still has its predictions judged."""
+
+    def __init__(self, model: PolynomialModel, simplipy_engine: Any) -> None:
+        self.model = model
+        self.simplipy_engine = simplipy_engine
+
+    def get_simplipy_engine(self) -> Any:  # pragma: no cover - trivial accessor
+        """Return the SimpliPy engine the candidates and the answer are read with."""
+        return self.simplipy_engine
+
+    def ranking_config(self) -> dict[str, Any]:
+        """How the answer is picked among the candidates, for the run's metadata."""
+        return {"mode": "cross_validation", "folds": int(self.model.n_folds), "rule": "one_standard_error",
+                "seed": int(self.model.seed)}
+
+    def prepare(self, *, data_source: Any | None = None) -> None:  # noqa: ARG002
+        return None
+
+    def evaluate_sample(self, sample: EvaluationSample) -> EvaluationResult:
+        record = sample.clone_metadata()
+        record["ranking"] = self.ranking_config()
+        y_fit = sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support
+        started = time.perf_counter()
+        try:
+            self.model.fit(sample.x_support, y_fit)
+            candidates = [self.model.get_expression(k, return_prefix=True) for k in self.model.degrees_]
+            expression = self.model.get_expression()
+            record["fit_time"] = time.perf_counter() - started
+        except Exception as exc:  # noqa: BLE001 - a failed fit is a result (shapes, non-finite data, LAPACK)
+            record["error"] = f"{type(exc).__name__}: {exc}"
+            record["prediction_success"] = False
+            return EvaluationResult(record)
+
+        pick = self.model.degrees_.index(self.model.degree_)
+        prefix = normalize_expression(list(candidates[pick]))
+        names = [f"x{i + 1}" for i in range(self.model.n_variables_)]
+        record["predicted_expression"] = expression
+        record["predicted_expression_prefix"] = prefix
+        record["predicted_skeleton_prefix"] = normalize_skeleton(list(candidates[pick]))
+        record["predicted_constants"] = [float(c) for c in self.model.coefficients_[self.model.degree_] if c != 0.0]
+        record["polynomial_degrees"] = list(self.model.degrees_)
+        record["polynomial_degree"] = int(self.model.degree_)
+        record["polynomial_cv_mse"] = [float(v) for v in self.model.cv_mse_]
+        record["polynomial_cv_se"] = [float(v) for v in self.model.cv_se_]
+        record["polynomial_timing"] = dict(self.model.timing_)
+        # every fitted degree, the answer among them, for the run to judge and store (srbf.candidates)
+        record["candidate_expressions"] = [" ".join(c) for c in candidates]
+        record["candidate_notation"] = "prefix"
+        record["candidate_variables"] = names
+        record["candidate_prediction"] = pick
+        try:
+            X_val = np.asarray(sample.x_validation, dtype=float)
+            if X_val.ndim != 2:
+                X_val = X_val.reshape(0, self.model.n_variables_)
+            y_pred = self.model.predict(sample.x_support).reshape(-1, 1)
+            y_pred_val = self.model.predict(X_val).reshape(-1, 1)
+        except Exception as exc:  # noqa: BLE001 - evaluation errors vary
+            record["error"] = f"Failed to evaluate the polynomial: {exc}"
+            record["prediction_success"] = False
+            return EvaluationResult(record)
+        record["y_pred"] = y_pred
+        record["y_pred_val"] = y_pred_val
+        record["prediction_success"] = True
+        return EvaluationResult(record)
+
+
 __all__ = [
     "FlashANSRAdapter",
     "E2EAdapter",
     "NeSymReSAdapter",
     "LampleChartonAdapter",
     "BruteForceAdapter",
+    "PolynomialAdapter",
 ]
 
 

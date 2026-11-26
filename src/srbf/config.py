@@ -31,6 +31,7 @@ from srbf.model_adapters import (
     FlashANSRHybridAdapter,
     LampleChartonAdapter,
     NeSymReSAdapter,
+    PolynomialAdapter,
 )
 from srbf.subprocess_adapter import BUILTIN_WORKERS, SubprocessAdapter
 from srbf.paths import load_config, substitute_root_path
@@ -488,6 +489,30 @@ def _build_brute_force_adapter(config: Mapping[str, Any]) -> BruteForceAdapter:
     return BruteForceAdapter(model)
 
 
+#: The keys of a ``polynomial`` block: anything else is refused, so that a misspelt knob never runs at its default.
+_POLYNOMIAL_KEYS = ("type", "config_provenance", "simplipy_engine", "max_degree", "n_folds", "seed")
+
+
+def _build_polynomial_adapter(config: Mapping[str, Any]) -> PolynomialAdapter:
+    """The polynomial family (:class:`srbf.baselines.PolynomialModel`): degrees 0 to ``max_degree`` (default 10), the
+    answer by ``n_folds``-fold (default 5) cross-validation with the one-standard-error rule, folds shuffled with
+    ``seed`` (default 0). Needs NumPy only, not flash-ansr."""
+    from srbf.baselines import PolynomialModel
+
+    unknown = sorted(set(config) - set(_POLYNOMIAL_KEYS))
+    if unknown:
+        raise ValueError(f"model_adapter (polynomial): unknown keys {unknown}; the keys are {list(_POLYNOMIAL_KEYS)}")
+    model = PolynomialModel(
+        max_degree=coerce_int(config.get("max_degree", 10), "model_adapter.max_degree"),
+        n_folds=coerce_int(config.get("n_folds", 5), "model_adapter.n_folds"),
+        seed=coerce_int(config.get("seed", 0), "model_adapter.seed"),
+    )
+    if model.max_degree < 0 or model.n_folds < 2:
+        raise ValueError(f"model_adapter (polynomial): max_degree must be at least 0 and n_folds at least 2; got "
+                         f"{model.max_degree} and {model.n_folds}")
+    return PolynomialAdapter(model, resolve_simplipy_engine(config, adapter_name="polynomial"))
+
+
 #: Keys that a ranking config must NOT carry any more, and where their meaning went. They are
 #: silent-default hazards: a config carrying one would be ignored and the run would rank at
 #: whatever the default happens to be -- which is exactly how every srbf run to date came to rank
@@ -635,6 +660,7 @@ _ADAPTER_REGISTRY: dict[str, AdapterBuilder] = {
     "nesymres": _build_nesymres_adapter,
     "lample_charton": _build_lample_charton_adapter,
     "brute_force": _build_brute_force_adapter,
+    "polynomial": _build_polynomial_adapter,
     "e2e": _build_e2e_adapter,
 }
 

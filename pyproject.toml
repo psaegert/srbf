@@ -16,7 +16,8 @@ dependencies = [
     "symbolic-data>=0.18,<0.19", # direct: catalog / ProblemSource data layer (CatalogSource wraps it), normalize_* (token_ops), the holdout family key the decontamination probes use
     "numpy>=1.24",
     "pandas>=1.3",       # runtime: analysis tables, the refining baselines
-    "scikit-learn>=1.0", # runtime: the refining baselines' BaseEstimator
+    "scikit-learn>=1.0", # runtime: the baselines' BaseEstimator
+    "threadpoolctl>=3.0", # runtime: the polynomial baseline fits on one BLAS thread (scikit-learn requires it too)
     "torch>=2.0",        # direct in provenance/model_adapters/token_prediction/result_processing/baselines
     "tqdm",
     "pyyaml",            # config loading
