@@ -65,7 +65,7 @@ uniformly here.
 `erbench-syneq` holds four fifths of all expressions. A number pooled over all expressions is therefore
 close to a number on that one catalog. The [results explorer](https://psaegert.github.io/srbf/) averages
 over catalogs instead, each weighted about equally
-([how](https://psaegert.github.io/srbf/guide.html#averaging)), lets you choose the catalogs, and shows
+([how](averaging.md)), lets you choose the catalogs, and shows
 per-catalog tables.
 
 The catalog specifications reproduce formulas, sampling ranges and variable names from the cited
@@ -145,37 +145,58 @@ Points are drawn from each variable's declared range (uniform, log-uniform or in
 declared sign) and rejected one by one where the ground truth is not finite, so the accepted points follow
 the declared distribution on the ground truth's valid domain.
 
-Sampling is not seeded: two runs of the same config see the same expressions at different points. A
-number therefore comes with an interval ([Results](results.md#summaries-with-intervals)), and
+Without `draws`, sampling is not seeded: two runs of the same config see the same expressions at different
+points. A number therefore comes with an interval ([Results](results.md#summaries-with-intervals)), and
 running a config again under another root is a genuine repeat.
 
-### The same points for several methods
+### `draws`: the same data for every method
 
-To give several methods identical points, draw the problems once, save them, and point every
-config at the file:
-
-```python
-from types import SimpleNamespace
-
-from simplipy import SimpliPyEngine
-from symbolic_data import ProblemCatalog
-from srbf.config import build_catalog_source
-
-engine = SimpliPyEngine.load("acj2-5-4-llm", install=True)
-source = build_catalog_source(
-    {"catalog": "nguyen", "sampling": {"n_support": 512, "n_validation": 512}}, target_size=None, skip=0)
-source.prepare(adapter=SimpleNamespace(get_simplipy_engine=lambda: engine))
-ProblemCatalog.from_problems(list(source.problem_source), name="nguyen-frozen").save("nguyen_frozen.npz")
-```
+`draws` reads each problem's data from a render of **frozen draws** instead of drawing it. The render is made once by
+symbolic-data (`symbolic-data render-draws`) and holds, for every problem of a catalog, one draw: the 512 fitting
+and 512 held-out points, the values the benchmark's authors draw anew in every run (with the ground truth written
+with them), and one standard normal noise vector per side; for a data catalog, the rows of one draw from its pools
+(a random split cut, a fold picked, at most `n_support` fitting and `n_validation` test rows; an authors' test split
+is used as it is). Every method, budget, shard and machine that reads the same render evaluates on the same data,
+and nothing is drawn while a run runs.
 
 ```yaml
 data_source:
-  catalog: "{{ROOT}}/data/nguyen_frozen.npz"
+  catalog: fastsrb
+  sampling: {n_support: 512, n_validation: 512, noise: 0.01}
+  draws:
+    root: "{{ROOT}}/data/draws"      # the folder holding the render's manifest.json
+    repeat: 1                        # the default: one draw per problem
+    manifest_sha256: null            # optional: pin the render
 ```
 
-Every run on that file sees the same points, its SHA-256 is stored with each result, and a paired
-comparison verifies that both sides used the same file
-([Paired comparisons](paired.md#pairing-is-checked)).
+The render's layout is `<root>/manifest.json` and `<root>/<catalog>/repeat-<r>.npz`; the manifest records the
+SHA-256 of each catalog file the draws were rendered from and of each draws file. The catalog is found by the
+SHA-256 of the file the run's `catalog` resolves to, so a name, a pinned version and a local path all work, and a
+catalog of another version is not mistaken for this one. `{{ROOT}}` and `~` are expanded in `root`.
+
+A noise level `s` gives the targets `y + s * std(y) * noise` per side from the stored vector, the same definition as
+`noise` without draws, so every noise level of a sweep scales the same vector. Data problems are not noised.
+
+A run is refused, before the model loads, when:
+
+- `root` has no `manifest.json`, or `manifest_sha256` is given and differs;
+- the render holds no draws of the catalog, or not the `repeat` asked for;
+- the draws file is missing, its SHA-256 differs from the manifest, or it names another catalog, repeat or settings;
+- `sampling` asks for something else than what was rendered: another `n_support`, `n_validation`, `layout` or
+  `max_trials`, more than one problem per expression, another `method` than `iterate`, a noise mixture, or keys
+  such as `size`;
+- `holdouts` are given (the render is the problem set) or `catalog` is a mapping;
+- the output file already holds rows read from other draws, or drawn without draws; `srbf merge` likewise refuses
+  shards that read different draws.
+
+Shards address the problems by their position in the render, which is the catalog's order, so `--shard K/N` and a
+subset of rows pick the same problems on every machine. Every row records `draws_sha256` (the draws file's SHA-256)
+and `draws_repeat`, and `__meta__` records the draws under `draws` and as the input `catalog_draws`, so a paired
+comparison verifies that both sides read the same file ([Paired comparisons](paired.md#pairing-is-checked)).
+
+Another way to share points is a frozen catalog file: draw the problems once with symbolic-data, save them with
+`ProblemCatalog.save`, and give the file as `catalog`. Its SHA-256 is stored with each result as well, but it holds
+no noise vector, so every noise level draws its own noise.
 
 ### `holdouts`
 

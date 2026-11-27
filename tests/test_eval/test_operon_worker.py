@@ -67,6 +67,8 @@ def test_the_answer_is_spelled_in_the_benchmark_vocabulary_and_carries_the_front
     extra = out["extra"]
     assert extra["generations"] == 3 and extra["evaluation_count"] == 4096 and not extra["hit_generation_cap"]
     assert extra["front"][0]["expression"].startswith("(0.5") and extra["front"][0]["length"] == 7
+    # the whole front goes to srbf as the candidates, written like the answer, which is among them
+    assert out["candidates"] == [m["expression"] for m in extra["front"]] and out["expression"] in out["candidates"]
 
 
 def test_a_problem_gets_one_seed_from_its_data_and_the_configured_seed(fake_operon):

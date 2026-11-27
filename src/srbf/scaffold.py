@@ -20,7 +20,8 @@ WORKER_TEMPLATE = '''"""%NAME%: an srbf worker. It runs in ITS OWN interpreter (
 imported here, so any torch / simplipy / numpy version goes.
 
 The contract (docs/adapters.md):
-    load(options) -> state      optional, once per run: load weights, start a backend
+    load(options) -> state      optional, once per worker process: load weights, start a backend
+    setup(state, options)       optional, after load: compile, warm up; before the clock, like load
     info(state)   -> dict       optional: versions and provenance, recorded with the run
     fit(x, y, *, x_val, variables, meta, options, state) -> {"expression": "<infix>", ...}
 """
@@ -46,8 +47,10 @@ def fit(x, y, *, x_val, variables, meta, options, state):
     them); meta: the problem's metadata (eq_id, ...); options and state: see load().
 
     Return {"expression": "<infix string>"} at least. Optional keys: y_pred and y_pred_val (your
-    own predictions), constants, fit_time (seconds), extra (a JSON-able dict), or
-    {"error": "<message>"} to fail this problem and go on with the next.
+    own predictions), constants, fit_time (seconds), extra (a JSON-able dict), candidates (the
+    other expressions your method ends with, e.g. its Pareto front, as infix strings with their
+    fitted constants; srbf judges and stores them), or {"error": "<message>"} to fail this problem
+    and go on with the next.
     """
     X = np.asarray(x, dtype=float)
     Y = np.asarray(y, dtype=float).reshape(-1)

@@ -252,11 +252,12 @@ one the ground truth needs.
 ### `predicted_mdl`, `ground_truth_mdl`, `mdl_ratio`
 
 The description length of an expression, with its constants, as priced by the SimpliPy engine
-(`engine.complexity`), in thousandths of a bit. Unlike a token count it charges a long constant
+(`engine.complexity`), in bits. Unlike a token count it charges a long constant
 more than a short one: with `acj2-5-4-llm`, `x1` costs 6 bits, `sin(x1)` 12 bits, `x1 + 1.5` 13.6
 bits and `x1 + 3.14159` 30.8 bits. `mdl_ratio` is the prediction's length over the ground truth's; 1 is as
 long as the ground truth. These columns need an engine and are added only when `derive_metrics` is given
-one.
+one. Every price srbf computes goes through one function, `srbf.pricing.price_bits`; the same price places a run's
+candidates in the box of the [headline index](headline.md).
 
 ## What the method reports itself
 

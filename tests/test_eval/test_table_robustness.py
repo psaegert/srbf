@@ -50,6 +50,12 @@ def _hanging_judge(job):
     return _judge_job(job)
 
 
+def _slow_start_judge(job):
+    """The real job, after 5 s in which nothing is in flight: workers that are slow to start, as on a busy machine."""
+    time.sleep(5)
+    return _judge_job(job)
+
+
 def _rows(path):
     with open(path) as fh:
         return list(csv.reader(fh))[1:]
@@ -79,6 +85,17 @@ def test_a_file_that_hangs_twice_is_left_out_and_the_rest_is_judged(tmp_path):
     assert report.stalled and len(report.errors) == 1 and "hang-always" in report.errors[0]
     assert report.rows == 6 and len(_rows(out)) == 6                    # every other file's rows
     assert [m for m in said if m.startswith("STALLED")] and "hang-always" in [m for m in said if m.startswith("STALLED")][0]
+
+
+def test_a_pool_that_is_slow_to_start_is_not_stalled(tmp_path):
+    # nothing in flight for 5 s with a stall timeout of 3 s: a fresh pool gets POOL_START_GRACE before its first file
+    _write(tmp_path, "toy", "choices_000001.pkl", _snapshot(2))
+    tree = ResultTree("m", 1, str(tmp_path / "tree"))
+    out, said = str(tmp_path / "t.csv"), []
+    report = build_table([tree], out, engine=ENGINE, workers=1, cache_dir=str(tmp_path / "cache"), stall_timeout=3,
+                         log=said.append, _judge=_slow_start_judge)
+    assert not report.stalled and report.errors == [] and report.rows == 2
+    assert not any(m.startswith(("STALLED", "RETRY")) for m in said)
 
 
 def test_the_rows_keep_the_files_order_whatever_order_they_finish_in(tmp_path):

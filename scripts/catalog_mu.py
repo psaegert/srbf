@@ -21,16 +21,15 @@ import numpy as np
 
 def describe(catalogs: list[str], engine_name: str, log: Callable[[str], None] = print) -> dict:
     from simplipy import SimpliPyEngine
-    from simplipy.engine import Mode
     from symbolic_data import ProblemSource
+
+    from srbf.pricing import price_bits
 
     engine = SimpliPyEngine.load(engine_name, install=True)
 
     def mu(prefix: list[str]) -> float | None:
-        try:
-            return float(engine.complexity(list(prefix), certified=True, mode=Mode.f64, canon="default")) / 1000.0
-        except Exception:  # noqa: BLE001 - an expression the engine cannot price has no description length
-            return None
+        bits = price_bits(engine, prefix)
+        return bits if np.isfinite(bits) else None   # an expression the engine cannot price has no description length
 
     per_catalog: dict[str, list[float | None]] = {}
     t0 = time.time()

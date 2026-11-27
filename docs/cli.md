@@ -1,7 +1,7 @@
 # Command line
 
 ```text
-srbf {new, check, run, status, merge, analyze, decontamination}
+srbf {new, check, run, status, merge, analyze, table, rejudge, decontamination}
 ```
 
 `python -m srbf` is the same program. Every command prints its own `--help`.
@@ -125,6 +125,24 @@ srbf table --tree mymethod:1:results/evaluation/scaling/mymethod \
 
 A file that cannot be read, such as one that is still being written, is reported and left out. See
 [Results](results.md#one-table-for-every-problem) for the columns.
+
+## `srbf rejudge`
+
+Judge the [candidates](adapters.md#candidates) a run stored again, with the candidate judge of the
+installed srbf, for example after the price changed:
+
+```bash
+srbf rejudge results/evaluation/scaling/mymethod/fastsrb/niter_*.pkl
+```
+
+| flag | meaning |
+|---|---|
+| `--engine` | the SimpliPy engine to judge with; by default the engine the store names |
+
+Each result file judges the candidates of its own problems, from the strings in the store and the
+points the result file keeps; a shard's file judges its shard. The store's logs are rewritten in
+place, and every record then carries the fingerprint of this judge. The exit code is 1 when a file
+has no stored candidates.
 
 ## `srbf decontamination`
 

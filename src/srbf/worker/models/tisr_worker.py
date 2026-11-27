@@ -61,8 +61,9 @@ that memory held. TiSR is used as it is; the worker does not patch it.
 * ``seed`` (int, 0): mixed with a hash of the problem's data into the seed TiSR's random number generator starts
   from (it does not make a run reproducible, see above).
 * ``time_guard`` (float, 3,600): TiSR's ``t_lim`` in seconds, the guard.
-* ``warmup`` (bool, true): a small throwaway fit in :func:`load`, so that compiling TiSR is no part of the first
-  problem's time.
+* ``warmup`` (bool, true): a small throwaway fit in :func:`setup`, before the clock, so that compiling TiSR is no
+  part of the first problem's time. It is skipped when srbf's own warm-up problem follows (``runner.warmup: true``):
+  that is a fit with the run's own settings, which compiles the same code.
 * ``threads`` (int or ``"all"``, 1): the threads Julia starts with -- a resource, not a setting of the method. With
   more than one, the worker switches on TiSR's own parallelism (``multithreading``, off by default: the islands of a
   generation are bred and fitted in parallel, ``Threads.@threads`` in src/main_loop.jl), as TiSR documents it: Julia
@@ -449,9 +450,13 @@ def load(options):
                            "its threads" % (int(jl.seval("Threads.nthreads()")), state["threads"]))
     state.update(jl=jl, run=jl.SrbfTiSR.run, julia=str(jl.seval("string(VERSION)")),
                  make=jl.seval("source -> SrbfTiSR.eval(Meta.parse(source))")(source))
-    if bool(options.get("warmup", True)):
-        warmup_fit(state)
     return state
+
+
+def setup(state, options, *, warmup):
+    """Before the clock: the throwaway fit (``options.warmup``), unless srbf's warm-up problem follows (``warmup``)."""
+    if bool(options.get("warmup", True)) and not warmup:
+        warmup_fit(state)
 
 
 def warmup_fit(state):

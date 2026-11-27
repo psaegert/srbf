@@ -1,13 +1,16 @@
-"""srbf command-line interface: ``run``, ``new``, ``check``, ``merge``, ``analyze``, ``table`` and ``decontamination``.
+"""srbf command-line interface: ``run``, ``new``, ``check``, ``status``, ``merge``, ``analyze``, ``table``, ``rejudge``
+and ``decontamination``.
 
 ``run`` executes an evaluation from a unified config (the raw stage); ``analyze`` renders the
 standardized results page from run outputs (the analysis stage); ``table`` judges result trees into one
-table, a row per problem and rung with every metric (what the results site is built from); ``decontamination`` verifies a
+table, a row per problem and rung with every metric (what the results site is built from); ``rejudge`` judges the
+candidates a run stored again with this srbf's candidate judge; ``decontamination`` verifies a
 training catalog's holdout covers the benchmark set (fail-closed; see ``srbf.decontamination``). flash-ansr keeps the rest of its
 CLI (train / import-data / install / ...); only these evaluation-bound commands live here. The
 benchmark imports are ``srbf.*``; the flash-ansr ``utils`` imports are the cross-repo contract.
 """
 import argparse
+import os
 import sys
 
 
@@ -60,6 +63,11 @@ def build_parser() -> argparse.ArgumentParser:
                                    '(STALLED) if it does not finish again')
     table_parser.add_argument('--progress', type=str, default=None, metavar='FILE',
                               help='Record every file as it starts and finishes (default: a temporary file), so a file that runs too long is found')
+
+    rejudge_parser = subparsers.add_parser("rejudge", help="Judge the candidates stored with result files again, with this srbf's judge")
+    rejudge_parser.add_argument('results', type=str, nargs='+', help='Result files whose stored candidates to judge again (a shard file judges its shard)')
+    rejudge_parser.add_argument('--engine', type=str, default=None,
+                                help='SimpliPy engine to judge with (default: the engine the store names)')
 
     new_parser = subparsers.add_parser("new", help="Scaffold an adapter: a worker, its suite config, requirements and a smoke test")
     new_parser.add_argument('name', type=str, help='The method name, a lowercase identifier (e.g. mymethod)')
@@ -203,6 +211,39 @@ def main(argv: list[str] | None = None) -> None:
             report = build_table(trees, args.out, engine=args.engine, workers=args.workers, cache_dir=args.cache,
                                  max_rung=args.max_rung, stall_timeout=args.stall_timeout, progress_path=args.progress)
             if report.stalled:
+                sys.exit(1)
+        case 'rejudge':
+            from simplipy import SimpliPyEngine
+
+            from srbf.candidates import candidate_store_path, read_manifests, rejudge_candidates
+            from srbf.paths import substitute_root_path
+
+            engines: dict[str, object] = {}
+            without = 0
+            for result_file in args.results:
+                path = substitute_root_path(result_file)
+                if not os.path.isfile(path):
+                    sys.exit(f"rejudge: no result file {result_file}")
+                store = candidate_store_path(path)
+                if not any(store.glob("*.log")):
+                    print(f"{result_file}: no stored candidates in {store}")
+                    without += 1
+                    continue
+                named = sorted({str(m["judge"]["engine"]) for m in read_manifests(path).values()
+                                if (m.get("judge") or {}).get("engine")})
+                if args.engine is None and len(named) != 1:
+                    what = f"names the engines {', '.join(named)}" if named else "names no engine"
+                    sys.exit(f"rejudge: the candidate store of {result_file} {what}; choose one with --engine")
+                name = args.engine or named[0]
+                if name not in engines:
+                    engines[name] = SimpliPyEngine.load(name, install=True)
+                judged = rejudge_candidates(path, engine=engines[name], engine_name=name)
+                if judged:
+                    print(f"{result_file}: judged the candidates of {judged} problem(s) again with {name} ({store})")
+                else:
+                    print(f"{result_file}: none of its problems has stored candidates in {store}")
+                    without += 1
+            if without:
                 sys.exit(1)
         case 'new':
             from srbf.scaffold import scaffold_adapter

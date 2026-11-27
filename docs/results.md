@@ -34,6 +34,7 @@ frame = pd.DataFrame({key: snapshot[key] for key in ("benchmark_eq_id", "predict
 | `x`, `y`, `x_val`, `y_val` | the support and validation points, without noise |
 | `y_noisy`, `y_noisy_val` | the targets with the run's noise. A method is given `y_noisy` when the run adds noise, and never any validation target |
 | `n_support`, `noise_level` | the sampling parameters of the problem |
+| `draws_sha256`, `draws_repeat` | with [frozen draws](benchmarks.md#draws-the-same-data-for-every-method): the SHA-256 of the draws file the problem was read from, and its repeat |
 | `complexity` | the number of tokens of the ground truth's skeleton |
 | `predicted_expression` | the prediction as an infix string, in the names `x1, x2, ...` |
 | `predicted_expression_prefix`, `predicted_skeleton_prefix` | the prediction in prefix notation, with its constants and with constants masked |
@@ -41,10 +42,17 @@ frame = pd.DataFrame({key: snapshot[key] for key in ("benchmark_eq_id", "predict
 | `prediction_success`, `error` | whether a prediction could be parsed and evaluated, and why not |
 | `fit_time` | seconds for the problem |
 | `predicted_constants`, `predicted_score`, `predicted_log_prob` | what the method reports about its prediction, where it does |
+| `predicted_mdl` | the prediction's description length in bits, as the method priced it (Flash-ANSR); `derive_metrics` and `srbf table` price it again with the judge's engine, in bits |
 | `placeholder`, `placeholder_reason` | see below |
+| `n_candidates`, `candidates_judge_time`, `candidates_dropped`, `candidates_error` | how many [candidates](adapters.md#candidates) of the problem were stored, the seconds srbf took to judge them (not part of `fit_time`), how many the method returned beyond the limits, and why none were stored if that failed |
 
 An adapter may add columns of its own; the Flash-ANSR adapter records `generation_time` and
 `refinement_time`, and a worker's `extra` dict is merged into the row.
+
+Every expression a method ends with, its answer among them, is stored next to the result file in
+`<name>.candidates/`, one record per problem, with srbf's judgement of each: its price in bits and its
+FVU on the support and validation points. `srbf.candidates.iter_candidates(path)` reads them back
+([Candidates](adapters.md#candidates)).
 
 ### Failures and placeholders
 
@@ -70,10 +78,12 @@ are left out of every summary, for every method alike.
 | `config_provenance` | who chose the configuration ([Fairness](fairness.md#configuration-provenance-labels)) |
 | `env` | versions of Python, torch, numpy, scipy, srbf, flash-ansr, simplipy and symbolic-data |
 | `git`, `git_flash_ansr` | commit, branch and dirty state, when installed from a checkout |
-| `inputs` | size and SHA-256 of the model weights, the tokenizer and a local catalog file |
+| `inputs` | size and SHA-256 of the model weights, the tokenizer, a local catalog file and the frozen draws file (`catalog_draws`) |
+| `draws` | with frozen draws: the catalog, its file's SHA-256, the repeat, the draws file's path and SHA-256, the manifest's SHA-256, the render's settings and the noise level |
 | `system` | hostname, platform, CPU count and GPU |
 | `worker` | what a worker's `info()` returned: its interpreter and versions |
-| `ranking` | the resolved ranking of a Flash-ANSR run |
+| `ranking`, `inference_precision` | the resolved ranking of a Flash-ANSR run and the arithmetic its transformer ran in |
+| `setup` | the setup before the clock ([Fairness](fairness.md#setup-before-the-clock)): `warmup` (whether the warm-up problem ran), `build_time` and `prepare_time` (seconds spent building and preparing the adapter), and `events`, one record per start of the method: `reason` (`start`, `restart`, `restart after a hang`), a worker's `load_time` and `setup_time`, and the warm-up's `warmup_time`, `warmup_fit_time` and `warmup_error` |
 | `shard`, `shards` | for a shard file, its index and count; for a merged file, what was merged |
 | `timestamp` | when the run was started |
 
@@ -117,6 +127,13 @@ resampling. Placeholder rows are dropped, and so are values that are `None`; an 
 not finite is left out, which for `log10_fvu_val` means the expressions that were fitted exactly
 (\(-\infty\)) and the failed predictions (\(+\infty\)). Read it next to the recovery rate.
 
+## Averages over problem sets
+
+`bootstrap_report` takes every expression it is given alike. `srbf analyze` below, like the
+[results explorer](https://psaegert.github.io/srbf/), averages over the benchmarks instead, each a problem set, so that
+one large catalog does not decide the number (`srbf.aggregate`): [How results are averaged](averaging.md) describes the
+method, why it was chosen, and the literature it rests on.
+
 ## One table for every problem
 
 `srbf table` judges the result files of any number of methods, draws and rungs at once and writes one
@@ -135,7 +152,8 @@ srbf table --tree mymethod:1:results/evaluation/scaling/mymethod -o table.csv
 | `skeleton_length`, `ground_truth_mdl`, `n_constants`, `total_nestedness`, `n_variables`, `n_support` | about the ground truth, for every problem |
 | `fit_time`, `generation_time` | seconds as the run recorded them |
 
-Description lengths are in bits. From Python, `srbf.table.build_table` does the same and
+Description lengths are in bits, everywhere srbf states one: the result file, the derived metrics,
+the table and the candidate stores. From Python, `srbf.table.build_table` does the same and
 `srbf.table.judge_result_file` judges a single file.
 
 ## The standard report
@@ -151,8 +169,9 @@ Every experiment and rung of a config whose result file exists becomes a run; th
 with a note, so the report can be built while an evaluation is still going. The experiment's name
 is the benchmark, a numeric sweep label is the budget, and the method's name comes from `--model`
 or from the adapter block. `report/results.md` holds one row per method at its largest budget,
-pooled over the benchmarks, each cell a bootstrap median with its 95 % interval, for numeric
-recovery, symbolic recovery, skeleton F1, the MDL ratio, log10 FVU and R². `report/figures/` holds the
+each cell the average over the benchmarks with its 95 % interval, as the results explorer averages
+([How results are averaged](averaging.md)): every benchmark counts about the same whatever its size,
+for numeric recovery, symbolic recovery, skeleton F1, the MDL ratio, log10 FVU and R². `report/figures/` holds the
 metric along the budget, per benchmark, and as a distribution over expressions.
 
 ### From Python

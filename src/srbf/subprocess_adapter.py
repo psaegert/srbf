@@ -8,17 +8,23 @@ it hands each problem to the worker, reads the expression back, parses it with t
 SimpliPy engine, evaluates it where the worker did not, and fills the result record with the
 same fields the in-process adapters produce. A worker that ends with several candidates and no
 rule of its own for picking one (a hall of fame) gets one picked here when the config sets
-``selection`` (see :func:`check_selection`).
+``selection`` (see :func:`check_selection`). Every candidate a worker returns, and its expression,
+goes on to the run, which judges and stores them (:mod:`srbf.candidates`).
+
+Setup before the clock (docs/fairness.md): a worker's ``load`` and ``setup`` run when it starts, and
+when the run asks for it (``runner.warmup``) srbf's warm-up problem (:mod:`srbf.warmup`) goes through
+the worker's fit before the first timed problem, in every worker process, after every restart too. A
+worker is told at its start whether the warm-up problem follows, so that its ``setup`` can leave a
+throwaway fit of its own to it. Their seconds are recorded per worker start
+(:attr:`SubprocessAdapter.setup_events`), never in a fit time.
 """
 from __future__ import annotations
 
 import atexit
 import collections
-import importlib
 import json
 import math
 import os
-import re
 import queue
 import signal
 import socket
@@ -26,19 +32,19 @@ import subprocess
 import sys
 import threading
 import time
+import warnings
 from pathlib import Path
 from typing import Any, Mapping
 
 import numpy as np
-import simplipy
-import simplipy.operators  # noqa: F401 - operator realizations reference it by dotted name
-from simplipy.utils import codify, safe_f
-from symbolic_data.token_ops import desugar_sqrt, normalize_expression, normalize_skeleton
+from symbolic_data.token_ops import normalize_expression, normalize_skeleton
 
+from srbf.candidates import evaluate_prefix, limit_candidates, read_spelled, spell_expression
 from srbf.core import EvaluationModelAdapter, EvaluationResult, EvaluationSample
 from srbf.model_adapters import _compute_fvu_from_predictions
-from srbf.table import mdl_bits
-from srbf.variable_renaming import rename_named_variables, rename_named_variables_in_infix, skeleton_variable_names
+from srbf.pricing import pricer
+from srbf.variable_renaming import skeleton_variable_names
+from srbf.warmup import warmup_outcome
 from srbf.worker import MODELS_DIR, RUNNER_PATH
 
 BUILTIN_WORKERS: dict[str, Path] = {
@@ -51,6 +57,10 @@ BUILTIN_WORKERS: dict[str, Path] = {
 #: Seconds between two looks at a worker while a request is in flight, and how long a worker that has exited is
 #: given to deliver a reply it may have written just before it went.
 _POLL_S = 2.0
+#: Seconds a worker whose socket has closed is given to finish exiting, so that its exit code can be read. A dying
+#: process's files, its socket among them, are closed before it can be reaped, so srbf can see the end of the stream
+#: while the process is not yet reaped (it takes milliseconds).
+_REAP_S = 2.0
 
 #: Process groups of the workers this interpreter started and has not reaped yet. A worker runs in a group of its
 #: own so that what it forked can be killed with it: a pool child that outlives its parent keeps the worker's socket
@@ -140,31 +150,6 @@ def resolve_worker(worker: str | Path) -> Path:
     return path.resolve()
 
 
-def evaluate_prefix(engine: Any, prefix: list[str], variables: list[str], *arrays: np.ndarray) -> tuple[np.ndarray, ...]:
-    """Evaluate a prefix expression (numeric constants inlined) on each array of rows with the
-    engine's own operator realizations; one ``(n, 1)`` column per array, empty for empty input."""
-    realized = engine.operators_to_realizations(list(prefix))
-    code_string = engine.prefix_to_infix(realized, realization=True)
-    code = codify(code_string, list(variables))
-    namespace: dict[str, Any] = {"np": np, "numpy": np, "math": math, "simplipy": simplipy}
-    for root in getattr(engine, "_realization_roots", {}) or {}:
-        try:
-            namespace.setdefault(root, importlib.import_module(root))
-        except Exception:  # noqa: BLE001 - an unimportable root surfaces as NameError below
-            pass
-    function = eval(code, namespace)  # noqa: S307 - the engine's own realization code
-    outputs = []
-    for array in arrays:
-        rows = np.asarray(array, dtype=float)
-        if rows.ndim != 2 or rows.shape[0] == 0:
-            outputs.append(np.empty((0, 1), dtype=float))
-            continue
-        with np.errstate(all="ignore"):
-            values = safe_f(function, rows)
-        outputs.append(np.asarray(values, dtype=float).reshape(-1, 1))
-    return tuple(outputs)
-
-
 #: The rules ``selection`` can name for a worker that returns candidates instead of one expression.
 SELECTION_MODES = ("mdl",)
 
@@ -219,23 +204,6 @@ def _json_meta(record: Mapping[str, Any]) -> dict[str, Any]:
     return meta
 
 
-# SymPy's printer, and with it most methods, spells two things differently from the engine's reader.
-_PRINTER_SPELLINGS = ((re.compile(r"\bAbs\("), "abs("), (re.compile(r"(?<![\w.])E(?![\w.(])"), "e"))
-
-
-def _unknown_symbols(prefix: list[str], operator_arity: Mapping[str, int]) -> list[str]:
-    """Tokens the judge cannot read: not an operator, a variable, a number or a named constant."""
-    def known(token: str) -> bool:
-        if token in operator_arity or token in ("sqrt", "np.pi", "np.e", "<constant>") or re.fullmatch(r"x\d+", token):
-            return True
-        try:
-            float(token)
-            return True
-        except ValueError:
-            return False
-    return sorted({token for token in prefix if not known(token)})
-
-
 class WorkerProcess:
     """One worker interpreter: spawn, handshake, request/reply with timeouts, shutdown."""
 
@@ -252,8 +220,10 @@ class WorkerProcess:
         stderr_tail: int = 200,
         hang_after_idle_s: float | None = None,
         hang_idle_cpu_s: float = 1.0,
+        warmup: bool = False,
     ) -> None:
         self.python = python
+        self.warmup = bool(warmup)             # whether srbf's warm-up problem follows the worker's setup (init tells it)
         self.hang_after_idle_s = None if hang_after_idle_s is None else float(hang_after_idle_s)
         self.hang_idle_cpu_s = float(hang_idle_cpu_s)
         self.last_window_cpu_s: float | None = None   # CPU seconds of the worker tree over the last idle window
@@ -264,6 +234,8 @@ class WorkerProcess:
         self.startup_timeout = float(startup_timeout)
         self.log_path = log_path
         self.info: dict[str, Any] = {}
+        self.load_time: float | None = None    # seconds of the worker's load(), as it reported them
+        self.setup_time: float | None = None   # seconds of its setup(); None without one
         self._proc: subprocess.Popen[str] | None = None
         self._listener: socket.socket | None = None
         self._sock: socket.socket | None = None
@@ -296,11 +268,13 @@ class WorkerProcess:
         threading.Thread(target=self._pump_output, daemon=True).start()
         self._accept(self.startup_timeout)
         threading.Thread(target=self._pump_socket, daemon=True).start()
-        self._send({"type": "init", "options": self.options})
+        self._send({"type": "init", "options": self.options, "warmup": self.warmup})
         reply = self._receive(self.startup_timeout, expect="ready")
         self.info = dict(reply.get("info") or {})
         self.info["python"] = reply.get("python")
         self.info["python_version"] = reply.get("version")
+        self.load_time = None if reply.get("load_time") is None else float(reply["load_time"])
+        self.setup_time = None if reply.get("setup_time") is None else float(reply["setup_time"])
 
     def _accept(self, timeout: float) -> None:
         """Wait for the runner to connect, noticing a worker that dies before it does."""
@@ -466,8 +440,7 @@ class WorkerProcess:
                                 f"no CPU activity: {self.last_window_cpu_s:.2f} CPU s in the last {window:.0f} s")) from None
                 continue
             if line is None:
-                code = self._proc.poll() if self._proc is not None else None
-                raise WorkerCrashed(self._describe(f"worker exited (returncode {code})"))
+                raise WorkerCrashed(self._describe(f"worker exited (returncode {self._exit_code()})"))
             try:
                 message = json.loads(line)
             except ValueError:
@@ -479,6 +452,16 @@ class WorkerProcess:
             if kind == expect:
                 return message
             self._output.append(f"[protocol] unexpected message {kind!r} while waiting for {expect!r}")
+
+    def _exit_code(self) -> int | None:
+        """The exit code of a worker whose socket has closed, once it has finished exiting (within :data:`_REAP_S`);
+        None for one that closed its socket and lives on."""
+        if self._proc is None:
+            return None
+        try:
+            return self._proc.wait(timeout=_REAP_S)
+        except subprocess.TimeoutExpired:
+            return None
 
     def request(self, payload: Mapping[str, Any], timeout: float | None, overdue_s: float | None = None) -> dict[str, Any]:
         """Send one ``fit`` request and return its ``result`` (a worker-side error is inside it)."""
@@ -514,6 +497,15 @@ class SubprocessAdapter(EvaluationModelAdapter):
     selection : mapping, optional
         How to pick one answer when the worker returns ``candidates`` and no ``expression`` (see
         :func:`check_selection`). Without it such a problem is recorded as failed, the candidates kept.
+
+    Every candidate the worker returns goes into the record's ``candidate_expressions`` (as the worker wrote it, within
+    the protocol's limits), with the expression the record judges among them (``candidate_prediction``), for the run to
+    judge and store (:class:`srbf.candidates.CandidateRecorder`).
+
+    :meth:`warm_up` arms srbf's warm-up problem: it runs at once and then in every worker the adapter starts, before
+    that worker's first timed problem. :attr:`setup_events` records every worker start: why it started (``start``,
+    ``restart``, ``restart after a hang``), the seconds of its ``load`` and ``setup``, and its warm-up's seconds and
+    error, if any.
     """
 
     def __init__(
@@ -571,6 +563,9 @@ class SubprocessAdapter(EvaluationModelAdapter):
         self._process: WorkerProcess | None = None
         self._restarts = 0
         self._dead_reason: str | None = None
+        self._warmup: EvaluationSample | None = None   # srbf's warm-up problem, once warm_up() armed it
+        self._info: dict[str, Any] = {}                # what the last worker reported at start-up
+        self.setup_events: list[dict[str, Any]] = []
 
     def get_simplipy_engine(self) -> Any:  # pragma: no cover - trivial accessor
         """Return this adapter's SimpliPy engine."""
@@ -578,11 +573,23 @@ class SubprocessAdapter(EvaluationModelAdapter):
 
     def worker_info(self) -> dict[str, Any]:
         """What the worker reported at start-up (interpreter, versions), for provenance."""
-        return dict(self._process.info) if self._process is not None else {}
+        return dict(self._process.info) if self._process is not None else dict(self._info)
+
+    def ranking_config(self) -> dict[str, Any] | None:
+        """The candidate ranking a worker reports in its ``info`` under ``ranking`` (a model that ranks its own
+        candidates, as Flash-ANSR does), recorded beside the run's provenance; None when it reports none."""
+        ranking = self.worker_info().get("ranking")
+        return dict(ranking) if isinstance(ranking, Mapping) else None
+
+    def inference_precision(self) -> str | None:
+        """The arithmetic a worker reports in its ``info`` under ``inference_precision`` (``bf16``, ``fp32``); None
+        when it reports none."""
+        precision = self.worker_info().get("inference_precision")
+        return None if precision is None else str(precision)
 
     # -- lifecycle ---------------------------------------------------------------------------
     def prepare(self, *, data_source: Any | None = None) -> None:  # type: ignore[override]
-        self._spawn()
+        self._spawn("start")
 
     def close(self) -> None:
         if self._process is not None:
@@ -595,14 +602,64 @@ class SubprocessAdapter(EvaluationModelAdapter):
         except Exception:  # noqa: BLE001
             pass
 
-    def _spawn(self) -> None:
+    def _spawn(self, reason: str) -> None:
+        """Start a worker, and warm it up when the warm-up is armed; raises :class:`WorkerError` when the worker does
+        not start, or when the warm-up problem takes it down (the event is recorded either way)."""
         process = WorkerProcess(
             python=self.python, worker=self.worker, options=self.options, env=self.env, cwd=self.cwd,
             startup_timeout=self.startup_timeout, log_path=self.worker_log,
             hang_after_idle_s=self.hang_after_idle_s, hang_idle_cpu_s=self.hang_idle_cpu_s,
+            warmup=self._warmup is not None,
         )
         process.start()
         self._process = process
+        self._info = dict(process.info)
+        self.setup_events.append({"reason": reason, "time": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                                  "load_time": process.load_time, "setup_time": process.setup_time})
+        if self._warmup is not None:
+            self._warm()
+
+    def warm_up(self, sample: EvaluationSample) -> dict[str, Any]:
+        """Arm srbf's warm-up problem (:func:`srbf.warmup.warmup_sample`): from now on every worker the adapter starts,
+        after a crash, a timeout or a hang too, is told at its start that the warm-up problem follows its ``setup`` and
+        runs it before its first timed problem. Armed before :meth:`prepare`, as the run arms it, the first worker is
+        told too; a worker that is already up is warmed up at once. Returns the last worker start's record
+        (:attr:`setup_events`; empty before the first start). A warm-up that takes the worker down counts as a crash:
+        the worker is restarted within ``max_restarts``, and warmed up again."""
+        self._warmup = sample
+        if self._process is not None:
+            try:
+                self._warm()
+            except WorkerError as exc:
+                self._recover(str(exc))
+        return dict(self.setup_events[-1]) if self.setup_events else {}
+
+    def _warm(self) -> None:
+        """Send the warm-up problem through the current worker, untimed, and record the outcome in the last
+        ``setup_events`` entry. A method-side failure (an error, no expression) is recorded and warned about; one
+        that takes the worker down raises :class:`WorkerError` after the worker has been killed."""
+        assert self._process is not None and self._warmup is not None
+        payload, *_ = self._payload(self._warmup, {"warmup": True})
+        started = time.perf_counter()
+        crashed: WorkerError | None = None
+        try:
+            reply = self._process.request(payload, self.timeout)
+        except WorkerError as exc:
+            crashed, reply = exc, {}
+        outcome = warmup_outcome(time.perf_counter() - started, {
+            "fit_time": reply.get("fit_time"),
+            "prediction_success": bool(reply.get("expression") or reply.get("candidates")) and not reply.get("error"),
+            "error": str(reply["error"]).rstrip().splitlines()[-1] if reply.get("error") else None,
+        }, None if crashed is None else f"{type(crashed).__name__}: {str(crashed).splitlines()[0]}")
+        self.setup_events[-1].update(outcome)
+        if outcome["warmup_error"] is not None:
+            warnings.warn(f"the warm-up problem failed in the worker {self.worker.name}: {outcome['warmup_error']}",
+                          RuntimeWarning)
+        if crashed is not None:
+            if self._process is not None:
+                self._process.kill()
+                self._process = None
+            raise WorkerCrashed(f"the warm-up problem took the worker down: {crashed}") from crashed
 
     def _recover(self, reason: str) -> None:
         """After a crash or timeout: restart within the budget (failures in a row), else mark the worker dead
@@ -615,7 +672,7 @@ class SubprocessAdapter(EvaluationModelAdapter):
             return
         self._restarts += 1
         try:
-            self._spawn()
+            self._spawn("restart")
         except WorkerError as exc:
             self._dead_reason = str(exc)
 
@@ -625,7 +682,7 @@ class SubprocessAdapter(EvaluationModelAdapter):
             self._process.kill()
             self._process = None
         try:
-            self._spawn()
+            self._spawn("restart after a hang")
         except WorkerError as exc:
             self._dead_reason = str(exc)
 
@@ -664,18 +721,7 @@ class SubprocessAdapter(EvaluationModelAdapter):
                 return EvaluationResult(record)
             raise RuntimeError("SubprocessAdapter.prepare must be called before evaluation")
 
-        X_support = np.asarray(sample.x_support, dtype=float)
-        X_val = np.asarray(sample.x_validation, dtype=float)
-        if X_val.ndim != 2:
-            X_val = X_val.reshape(0, X_support.shape[1])
-        y_support = np.asarray(
-            sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support, dtype=float).reshape(-1)
-        variables = list(record.get("variables") or record.get("variable_names") or [])
-        if len(variables) != X_support.shape[1]:
-            variables = [f"x{i + 1}" for i in range(X_support.shape[1])]
-
-        payload = {"x": X_support.tolist(), "y": y_support.tolist(), "x_val": X_val.tolist(),
-                   "variables": variables, "meta": {**_json_meta(record), **dict(extra_meta or {})}}
+        payload, X_support, X_val, y_support, variables = self._payload(sample, extra_meta)
         hangs = 0
         policy = self.hang_after_idle_s is not None or self.hang_overdue_factor is not None
         while True:
@@ -736,7 +782,10 @@ class SubprocessAdapter(EvaluationModelAdapter):
 
         expression = reply.get("expression")
         names = skeleton_variable_names(variables)
-        candidates = reply.get("candidates")
+        candidates, dropped = limit_candidates(reply.get("candidates"))
+        dropped += int(reply.get("candidates_dropped") or 0)
+        # From here on the record carries the worker's candidates and, once there is one, the answer it judges.
+        self._hand_over(record, candidates, None, variables, dropped)
         if not expression and candidates:
             if self.selection is None:
                 record["error"] = (f"the worker returned {len(candidates)} candidates and no single answer; "
@@ -744,7 +793,7 @@ class SubprocessAdapter(EvaluationModelAdapter):
                 record["prediction_success"] = False
                 return EvaluationResult(record)
             started = time.perf_counter()
-            chosen, summary = self._select([str(c) for c in candidates], variables, names, X_support, y_support)
+            chosen, summary = self._select(candidates, variables, names, X_support, y_support)
             record["selection"] = summary
             record["selection_time"] = time.perf_counter() - started
             # Picking the answer is part of the method: its time counts, the worker's own stays on record.
@@ -755,12 +804,13 @@ class SubprocessAdapter(EvaluationModelAdapter):
                 record["error"] = f"none of the worker's {len(candidates)} candidates has a finite two-part code"
                 record["prediction_success"] = False
                 return EvaluationResult(record)
-            expression = str(candidates[chosen])
+            expression = candidates[chosen]
             reply = {**reply, "y_pred": None, "y_pred_val": None, "constants": None}   # the worker's, if any, are no member's
         if not expression:
             record["error"] = "worker returned no expression"
             record["prediction_success"] = False
             return EvaluationResult(record)
+        self._hand_over(record, candidates, str(expression), variables, dropped)
         expression = self._spelling(str(expression), variables)
         record["predicted_expression"] = expression
         try:
@@ -800,32 +850,54 @@ class SubprocessAdapter(EvaluationModelAdapter):
         record["prediction_success"] = True
         return EvaluationResult(record)
 
+    @staticmethod
+    def _payload(sample: EvaluationSample, extra_meta: Mapping[str, Any] | None
+                 ) -> tuple[dict[str, Any], np.ndarray, np.ndarray, np.ndarray, list[str]]:
+        """The ``fit`` request for a sample, with the arrays it was built from and the column names it hands over."""
+        record = sample.metadata
+        X_support = np.asarray(sample.x_support, dtype=float)
+        X_val = np.asarray(sample.x_validation, dtype=float)
+        if X_val.ndim != 2:
+            X_val = X_val.reshape(0, X_support.shape[1])
+        y_support = np.asarray(
+            sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support, dtype=float).reshape(-1)
+        variables = list(record.get("variables") or record.get("variable_names") or [])
+        if len(variables) != X_support.shape[1]:
+            variables = [f"x{i + 1}" for i in range(X_support.shape[1])]
+        payload = {"x": X_support.tolist(), "y": y_support.tolist(), "x_val": X_val.tolist(),
+                   "variables": variables, "meta": {**_json_meta(record), **dict(extra_meta or {})}}
+        return payload, X_support, X_val, y_support, variables
+
     # -- reading and picking expressions -------------------------------------------------------
     @staticmethod
     def _spelling(expression: str, variables: list[str]) -> str:
-        """A worker predicts in the column names it was handed (PySR spells them v1, v2 on a catalog that calls its
-        columns that); the ground truth spells the same columns x1, x2, ..., so the expression is mapped back before
-        anything is judged, and the printers' constant names are written as the engine reads them."""
-        expression = rename_named_variables_in_infix(expression, variables)
-        for pattern, spelling in _PRINTER_SPELLINGS:      # after the renaming: a variable named E stays a variable
-            expression = pattern.sub(spelling, expression)
-        return expression
+        """The expression in the ground truth's variable names and the engine's spellings
+        (:func:`srbf.candidates.spell_expression`)."""
+        return spell_expression(expression, variables)
 
     def _prefix(self, expression: str, variables: list[str]) -> list[str]:
-        """The engine's prefix of a (respelled) infix expression; raises when the judge cannot read it."""
-        # read_infix, not the raw infix_to_prefix: the reader's own tokens ('**', 'neg' on a
-        # literal) are not the engine grammar, and simplify/complexity refuse them. The reader
-        # takes any identifier as a variable, so the map runs FIRST: everything downstream --
-        # the canonical form, the price, the judge -- then sees one spelling.
-        prefix = rename_named_variables(list(self.simplipy_engine.read_infix(expression)), variables) or []
-        # SymPy and most methods print the square root as sqrt(...); the engine's vocabulary spells it
-        # rootn(u, 2), and its lenient reader would pass the bare token on to a walk that rejects it.
-        prefix = [str(token) for token in prefix]
-        unknown = _unknown_symbols(prefix, self.simplipy_engine.operator_arity)
-        if unknown:
-            raise ValueError(f"the judge does not read {', '.join(unknown)}; it reads + - * / ** and the functions "
-                             f"{' '.join(sorted(k for k, n in self.simplipy_engine.operator_arity.items() if k.isalpha()))} and sqrt")
-        return list(desugar_sqrt(prefix, dict(self.simplipy_engine.operator_arity)))
+        """The engine's prefix of a (respelled) infix expression; raises when the judge cannot read it
+        (:func:`srbf.candidates.read_spelled`)."""
+        return read_spelled(self.simplipy_engine, expression, variables)
+
+    @staticmethod
+    def _hand_over(record: dict[str, Any], candidates: list[str], expression: str | None, variables: list[str],
+                   dropped: int) -> None:
+        """Put the worker's candidates into the record for the run to judge and store: as the worker wrote them, and
+        the answer the record judges among them (added when the worker did not list it)."""
+        listed = list(candidates)
+        prediction = None
+        if expression is not None:
+            if expression in listed:
+                prediction = listed.index(expression)
+            else:
+                listed.append(expression)
+                prediction = len(listed) - 1
+        record["candidate_expressions"] = listed
+        record["candidate_notation"] = "infix"
+        record["candidate_variables"] = list(variables)
+        record["candidate_prediction"] = prediction
+        record["candidates_dropped"] = int(dropped)
 
     def _select(self, candidates: list[str], variables: list[str], names: list[str], X_support: np.ndarray,
                 y_support: np.ndarray) -> tuple[int | None, dict[str, Any]]:
@@ -835,7 +907,7 @@ class SubprocessAdapter(EvaluationModelAdapter):
         last, then the shorter prefix, then the prefix's tokens."""
         finite = np.isfinite(np.asarray(y_support, dtype=float).reshape(-1))
         n_points = int(finite.sum())
-        price = mdl_bits(self.simplipy_engine)
+        price = pricer(self.simplipy_engine)
         rows: list[dict[str, Any]] = []
         keys: list[tuple[Any, ...]] = []
         for candidate in candidates:

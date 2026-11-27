@@ -1,14 +1,15 @@
 """The random-effects average the results site uses (owner 2026-09-27): problem sets combined with weights
-1 / (tau^2 + noise), tau^2 by Paule-Mandel, rates on the logit scale, and an interval over these problem sets (the
-weights held fixed, only the problems' sampling within each set). The reference tau^2 and means come from statsmodels'
-combine_effects(method_re="pm") on the same inputs (checked 2026-09-27)."""
+1 / (tau^2 + noise), tau^2 by Paule-Mandel, and an interval over these problem sets (the weights held fixed, only the
+problems' sampling within each set). The reference tau^2 and means come from statsmodels' combine_effects(method_re="pm")
+on the same inputs (checked 2026-09-27). Rates by the beta-binomial model (owner 2026-11-17), checked against scipy's
+beta-binomial likelihood and a generic optimiser."""
 import importlib.util
 import os
 import sys
 
 import numpy as np
 import pytest
-from scipy import stats
+from scipy import optimize, special, stats
 
 _SPEC = importlib.util.spec_from_file_location(
     "site_random_effects", os.path.join(os.path.dirname(__file__), "..", "scripts", "site_random_effects.py"))
@@ -59,19 +60,103 @@ def test_a_large_set_counts_about_as_much_as_a_medium_one_and_a_tiny_set_less():
     assert c.pi_lo is not None and c.pi_lo < c.lo and c.pi_hi > c.hi
 
 
-def test_one_set_is_its_own_mean_with_a_t_interval_over_its_problems():
+def wilson_ci(k, n):
+    ci = stats.binomtest(int(k), int(n)).proportion_ci(0.95, "wilson")
+    return ci.low, ci.high
+
+
+def test_one_set_is_its_plain_rate_with_the_wilson_interval():
     c = re_.combine([re_.SetStat(20, 9.0, 9.0)], "logit")   # 9 of 20 problems recovered
-    assert c.S == 1 and c.mu == pytest.approx((9 + 0.5) / 21)
-    assert c.lo < c.mu < c.hi and c.pi_lo is None
+    lo, hi = wilson_ci(9, 20)
+    assert c.S == 1 and c.mu == pytest.approx(9 / 20) and (c.lo, c.hi) == pytest.approx((lo, hi), abs=1e-12)
+    assert c.pi_lo is None
 
 
-def test_sets_without_spread_of_their_own_borrow_one():
-    # every problem recovered in every set: rates take their continuity-corrected binomial variance, never zero
+@pytest.mark.parametrize("k, n", [(8.0, 8), (0.0, 8), (1.0, 1), (0.0, 1)])
+def test_a_set_at_0_or_100_percent_is_shown_as_it_is(k, n):
+    # the logit of an observed rate needed (k + 0.5) / (n + 1), which showed 8 of 8 as 94.4 % and 1 of 1 as 75 %
+    c = re_.combine([re_.SetStat(n, k, k)], "logit")
+    assert c.mu == k / n
+    lo, hi = wilson_ci(k, n)
+    assert (c.lo, c.hi) == pytest.approx((lo, hi), abs=1e-12)
+
+
+def test_sets_without_spread_of_their_own():
+    # every problem recovered in every set: 100 %, with the Wilson interval over all their problems
     c = re_.combine([re_.SetStat(10, 10.0, 10.0), re_.SetStat(30, 30.0, 30.0), re_.SetStat(1, 1.0, 1.0)], "logit")
-    assert 0.9 < c.mu < 1.0 and c.lo < c.mu
+    assert c.mu == 1.0 and c.lo == pytest.approx(wilson_ci(41, 41)[0], abs=1e-12)
     # a continuous metric with one problem per set borrows the pooled spread of the others
     y, v = re_.set_estimates([re_.SetStat(1, 3.0, 9.0), re_.SetStat(3, 3.0, 5.0)], "normal")
     assert v[0] == pytest.approx(1.0) and v[1] == pytest.approx(1.0 / 3)
+
+
+def test_sets_that_agree_give_the_pooled_rate_and_about_wilsons_interval():
+    # no spread beyond the binomial: the mean rate is the pooled one. At the estimate s is at its cap and the test is
+    # Wilson's (t for z); away from it s is refitted, and three sets cannot rule out a spread, so the interval holds
+    # Wilson's and is a little wider
+    c = re_.combine([re_.SetStat(100, 30.0, 30.0)] * 3, "logit")
+    assert c.mu == pytest.approx(0.3, abs=1e-12) and c.tau2 == 0.0
+    t, n, p = re_.t_ppf(0.975, 297), 300.0, 0.3
+    centre, half = (p + t * t / (2 * n)) / (1 + t * t / n), t * np.sqrt(p * (1 - p) / n + t * t / (4 * n * n)) / (1 + t * t / n)
+    assert c.lo <= centre - half and centre + half <= c.hi and c.hi - c.lo < 1.25 * 2 * half
+
+
+def test_one_success_among_sets_at_zero_keeps_a_narrow_interval():
+    # 28 sets at 0 % and one problem of 200 solved in one more: the linearised (delta-method) interval on the log-odds
+    # reached 0 % to 88 % here; the score test keeps it within a few percent, and above 0 (a problem was solved)
+    sizes = [5301, 200, 200, 150, 120, 120, 100, 90, 33, 25, 20, 15, 12, 12, 10, 8, 8, 8, 6, 6, 6, 2, 2, 2, 1, 1, 1, 1, 1]
+    sets = [re_.SetStat(n, 1.0 if i == 1 else 0.0, 1.0 if i == 1 else 0.0) for i, n in enumerate(sizes)]
+    c = re_.combine(sets, "logit")
+    assert 0.0 < c.lo < c.mu < c.hi < 0.05
+    # and the mirror image near 100 %, with many sets at 100 % and a few just below: the interval stays near the top
+    high = [re_.SetStat(n, float(n), float(n)) for n in sizes[2:]] + [re_.SetStat(5301, 5296.0, 5296.0), re_.SetStat(200, 199.5, 199.25)]
+    c = re_.combine(high, "logit")
+    assert 0.95 < c.lo < c.mu < c.hi < 1.0
+
+
+def test_the_rate_interval_is_the_score_tests_kept_means():
+    # the ends are where Rao's score test (s refitted) switches from keeping to rejecting the mean
+    sets = [re_.SetStat(n, k, k) for n, k in ((40, 12.0), (25, 3.0), (60, 30.0), (10, 0.0), (8, 8.0))]
+    c = re_.combine(sets, "logit")
+    eta, lam = re_.rate_fit(sets)
+    t2 = re_.t_ppf(0.975, sum(st.n - 1 for st in sets)) ** 2
+    for end, outward in ((c.lo, -1e-4), (c.hi, 1e-4)):
+        e = np.log(end / (1 - end))
+        kept = re_._rate_band(sets, e - outward, re_._profile_lam(sets, re_._sig(e - outward), lam), t2)
+        dropped = re_._rate_band(sets, e + outward, re_._profile_lam(sets, re_._sig(e + outward), lam), t2)
+        assert kept and not dropped
+
+
+def test_two_sets_at_opposite_ends_say_half_and_little_more():
+    c = re_.combine([re_.SetStat(1, 1.0, 1.0), re_.SetStat(8, 0.0, 0.0)], "logit")
+    assert c.mu == pytest.approx(0.5, abs=1e-6) and c.lo < 0.01 and c.hi > 0.99
+
+
+@pytest.mark.parametrize("x", [1e-9, 1e-4, 0.3, 1.0, 2.5, 9.99, 10.0, 123.4, 1e4, 3.3e6])
+def test_digamma_and_trigamma(x):
+    assert re_.digamma(x) == pytest.approx(special.digamma(x), rel=1e-12, abs=1e-12)
+    assert re_.trigamma(x) == pytest.approx(special.polygamma(1, x), rel=1e-11)
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3, 4, 5, 6])
+def test_the_rate_is_the_beta_binomial_maximum_likelihood(seed):
+    rng = np.random.default_rng(seed)
+    S = int(rng.choice([3, 8, 29]))
+    n = rng.choice([1, 2, 5, 20, 100, 1024], S)
+    k = rng.binomial(n, 1 / (1 + np.exp(-rng.normal(rng.normal(0, 1.5), rng.choice([0.3, 1.0, 2.5]), S))))
+    if k.sum() == 0 or (k == n).all():
+        k[0], n[0] = 1, max(2, n[0])
+    c = re_.combine([re_.SetStat(int(a), float(b), float(b)) for a, b in zip(n, k)], "logit")
+
+    def nll(x):
+        m, s = 1 / (1 + np.exp(-x[0])), np.exp(min(x[1], re_.LAM_MAX))
+        return -stats.betabinom.logpmf(k, n, m * s, (1 - m) * s).sum()
+    eta = np.log(c.mu / (1 - c.mu))
+    lam = np.log(1 / c.tau2) if c.tau2 > 0 else re_.LAM_MAX
+    best = min((optimize.minimize(nll, x0, method="Nelder-Mead", options={"xatol": 1e-10, "fatol": 1e-12, "maxiter": 20000})
+                for x0 in ([eta, lam], [0.0, 0.0], [eta, 5.0])), key=lambda r: r.fun)
+    assert nll([eta, lam]) <= best.fun + 1e-7
+    assert c.lo < c.mu < c.hi
 
 
 def test_holm():

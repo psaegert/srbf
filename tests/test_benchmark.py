@@ -73,7 +73,8 @@ def test_benchmark_can_resume_from_saved_results(tmp_path):
     output_path = tmp_path / "results.pkl"
 
     first_store = ResultStore()
-    first = Benchmark(source=_ListSource(problems), model_adapter=_FlakyAdapter(), result_store=first_store)
+    first = Benchmark(source=_ListSource(problems), model_adapter=_FlakyAdapter(), result_store=first_store,
+                      candidates=False)
     snapshot = first.run(limit=2, save_every=1, output_path=str(output_path),
                          progress=False, verbose=False, summary_interval=1)
 

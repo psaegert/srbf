@@ -112,8 +112,8 @@ def test_mdl_ratio_through_the_engine():
     snapshot['predicted_expression_prefix'] = [['+', 'x1', 'x1'], ['*', '2.5', 'x1'], ['+', 'x1', 'x1'], ['+', 'x1', 'x1']]
     snapshot['ground_truth_prefix'] = [['*', '2', 'x1']] * 4
     scored = derive_metrics(snapshot, engine=engine)
-    expected = float(engine.complexity(['*', '2', 'x1'], certified=True, mode='f64'))
-    assert list(scored['ground_truth_mdl']) == [expected] * 4
+    expected = float(engine.complexity(['*', '2', 'x1'], certified=True, mode='f64')) / 1000.0
+    assert list(scored['ground_truth_mdl']) == [expected] * 4     # in bits, as the table reports it
     assert scored['mdl_ratio'][1] > scored['mdl_ratio'][0] > 0  # a literal 2.5 costs more than the integer 2
 
 

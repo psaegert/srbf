@@ -528,9 +528,10 @@
   // The results are problem sets > problems > runs. A problem's value is the mean of its runs; a set is its number of
   // problems with a value, their sum and their sum of squares (the exporter's cells). Sets are combined by a random-
   // effects model: weights 1 / (tau^2 + the set's own noise), tau^2 by Paule-Mandel, the 95 % interval over these problem
-  // sets (combineScale), the prediction interval for a new problem set with t on S - 2. Rates on the logit
-  // scale, with the continuity-corrected rate (x n + 0.5) / (n + 1). scripts/site_random_effects.py is the reference:
-  // the same arithmetic, step for step, and the site suite checks that the two agree.
+  // sets (combineScale), the prediction interval for a new problem set with t on S - 2. Rates by the beta-binomial
+  // model (combineRates, owner 2026-11-17), one set as its plain rate with the Wilson interval.
+  // scripts/site_random_effects.py is the reference: the same arithmetic, step for step, and the site suite checks that
+  // the two agree.
   var EPS_VAR = 1e-12;
   function lgamma(x) { var g = 7, c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7]; if (x < 0.5) { return Math.log(Math.PI / Math.sin(Math.PI * x)) - lgamma(1 - x); } x -= 1; var a = c[0], t = x + g + 0.5; for (var i = 1; i < g + 2; i++) { a += c[i] / (x + i); } return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a); }
   function betacf(a, b, x) {
@@ -561,16 +562,15 @@
   function tP(t, df) { return Math.min(1, 2 * (1 - tCdf(Math.abs(t), df))); }
   function expit(x) { return 1 / (1 + Math.exp(-x)); }
   function setVar(st) { if (st.n < 2) { return null; } var m = st.s1 / st.n; return Math.max(0, (st.s2 - st.n * m * m) / (st.n - 1)); }
-  // each set's estimate on the combining scale and its squared standard error; a set with one problem, or whose problems
-  // all have the same value, borrows a spread: a rate its continuity-corrected p(1 - p), any other metric the pooled one
-  function setEstimates(sets, scale) {
+  // each set's mean and its squared standard error, for a metric that is not a rate (rates: combineRates); a set with
+  // one problem, or whose problems all have the same value, borrows the spread pooled over the sets
+  function setEstimates(sets) {
     var num = 0, den = 0, y = [], v = [];
     sets.forEach(function (st) { var vv = setVar(st); if (vv !== null) { num += (st.n - 1) * vv; den += st.n - 1; } });
     var pooled = den > 0 ? num / den : 0;
     sets.forEach(function (st) {
       var own = setVar(st), m = st.s1 / st.n; own = own !== null && own > 0 ? own : null;
-      if (scale === "logit") { var pc = (st.n * m + 0.5) / (st.n + 1), vr = own !== null ? own : pc * (1 - pc); y.push(Math.log(pc / (1 - pc))); v.push(Math.max(EPS_VAR, vr / st.n / Math.pow(pc * (1 - pc), 2))); }
-      else { y.push(m); v.push(Math.max(EPS_VAR, (own !== null ? own : pooled) / st.n)); }
+      y.push(m); v.push(Math.max(EPS_VAR, (own !== null ? own : pooled) / st.n));
     });
     return { y: y, v: v, pooled: pooled };
   }
@@ -598,13 +598,245 @@
     return { mu: mu, lo: mu - tq * se, hi: mu + tq * se, piLo: half === null ? null : mu - half, piHi: half === null ? null : mu + half,
              tau2: tau2, w: w.map(function (x) { return x / sw; }), S: S, p: se > 0 ? tP(mu / se, df) : (mu !== 0 ? 0 : 1) };
   }
+  // ---- rates: the beta-binomial model (owner 2026-11-17) -----------------------------------------------------------
+  // A set's sum k of n problem values is binomial with its set's rate, and the rates follow Beta(m s, (1 - m) s): m is
+  // the mean rate of a problem set, s how tightly the sets cluster. The likelihood is closed-form (log-gamma), so 0 %
+  // and 100 % enter as they are. m and s by maximum likelihood, Newton in (logit m, log s). The reference,
+  // scripts/site_random_effects.py (combine_rates), has the derivation of the interval.
+  var LAM_MIN = -20, LAM_MAX = 15, MAX_STEP = 2, Z975 = 1.959963984540054, RATEMEMO = {};
+  function digamma(x) {
+    var r = 0; while (x < 10) { r -= 1 / x; x += 1; }
+    var f = 1 / (x * x);
+    return r + Math.log(x) - 0.5 / x - f * (1 / 12 - f * (1 / 120 - f * (1 / 252 - f * (1 / 240 - f * (1 / 132)))));
+  }
+  function trigamma(x) {
+    var r = 0; while (x < 10) { r += 1 / (x * x); x += 1; }
+    var f = 1 / (x * x);
+    return r + 1 / x + 0.5 * f + (1 / x) * f * (1 / 6 - f * (1 / 30 - f * (1 / 42 - f * (1 / 30 - f * (5 / 66)))));
+  }
+  function sig(x) { if (x >= 0) { return 1 / (1 + Math.exp(-x)); } var e = Math.exp(x); return e / (1 + e); }
+  // log likelihood (without the binomial coefficients), gradient and Hessian in (eta, lam) = (logit m, log s)
+  function bbMoments(sets, eta, lam) {
+    var m = 1 / (1 + Math.exp(-eta)), s = Math.exp(lam), a = m * s, b = (1 - m) * s, q = m * (1 - m), j;
+    var ll = 0, Da = 0, Db = 0, Haa = 0, Hbb = 0, Hab = 0, lgS = lgamma(s), dgS = digamma(s), tgS = trigamma(s);
+    var lgA = lgamma(a), lgB = lgamma(b), dgA = digamma(a), dgB = digamma(b), tgA = trigamma(a), tgB = trigamma(b);
+    for (j = 0; j < sets.length; j++) {
+      var n = sets[j].n, k = sets[j].s1, dns = digamma(n + s), tns = trigamma(n + s);
+      ll += lgamma(k + a) + lgamma(n - k + b) - lgamma(n + s) - lgA - lgB + lgS;
+      Da += digamma(k + a) - dns - dgA + dgS; Db += digamma(n - k + b) - dns - dgB + dgS;
+      Haa += trigamma(k + a) - tns - tgA + tgS; Hbb += trigamma(n - k + b) - tns - tgB + tgS; Hab += -tns + tgS;
+    }
+    var ae = s * q, be = -s * q, al = a, bl = b;
+    return { ll: ll, ge: ae * Da + be * Db, gl: al * Da + bl * Db,
+             hee: ae * ae * Haa + 2 * ae * be * Hab + be * be * Hbb + (Da - Db) * s * q * (1 - 2 * m),
+             hel: ae * al * Haa + (ae * bl + be * al) * Hab + be * bl * Hbb + (Da - Db) * s * q,
+             hll: al * al * Haa + 2 * al * bl * Hab + bl * bl * Hbb + Da * a + Db * b };
+  }
+  // maximum likelihood (eta, lam) by Newton on |H| (the reference's rate_fit, step for step); lam = Infinity: no spread
+  // beyond the binomial (the pooled rate)
+  function rateFit(sets) {
+    if (sets.every(function (st) { return st.s1 <= 0; })) { return { eta: -Infinity, lam: Infinity }; }
+    if (sets.every(function (st) { return st.s1 >= st.n; })) { return { eta: Infinity, lam: Infinity }; }
+    var N = 0, K = 0, j, it; for (j = 0; j < sets.length; j++) { N += sets[j].n; K += sets[j].s1; }
+    var p0 = K / N, l0 = 0; for (j = 0; j < sets.length; j++) { l0 += sets[j].s1 * Math.log(p0) + (sets[j].n - sets[j].s1) * Math.log(1 - p0); }
+    var eta = Math.log(p0 / (1 - p0)), lam = 0, r = bbMoments(sets, eta, lam), res, etaN, lamN;
+    for (it = 0; it < 100; it++) {
+      var de, dl;
+      if ((lam >= LAM_MAX && r.gl > 0) || (lam <= LAM_MIN && r.gl < 0)) { de = r.hee < 0 ? -r.ge / r.hee : r.ge; dl = 0; }
+      else {
+        var halfTr = 0.5 * (r.hee + r.hll), rad = Math.sqrt(Math.pow(0.5 * (r.hee - r.hll), 2) + r.hel * r.hel), ev1 = halfTr + rad, ev2 = halfTr - rad, v1, v2;
+        if (rad === 0) { v1 = [1, 0]; v2 = [0, 1]; }
+        else if (Math.abs(r.hel) > 0) { var nrm = Math.hypot(ev1 - r.hll, r.hel); v1 = [(ev1 - r.hll) / nrm, r.hel / nrm]; v2 = [-v1[1], v1[0]]; }
+        else if (r.hee >= r.hll) { v1 = [1, 0]; v2 = [0, 1]; } else { v1 = [0, 1]; v2 = [1, 0]; }
+        var floor = 1e-10 * Math.max(1, Math.abs(ev1), Math.abs(ev2));
+        var c1 = (v1[0] * r.ge + v1[1] * r.gl) / Math.max(Math.abs(ev1), floor), c2 = (v2[0] * r.ge + v2[1] * r.gl) / Math.max(Math.abs(ev2), floor);
+        de = c1 * v1[0] + c2 * v2[0]; dl = c1 * v1[1] + c2 * v2[1];
+      }
+      var big = Math.max(Math.abs(de), Math.abs(dl)); if (big > MAX_STEP) { de = de * MAX_STEP / big; dl = dl * MAX_STEP / big; }
+      var step = 1;
+      while (true) {
+        etaN = eta + step * de; lamN = Math.min(LAM_MAX, Math.max(LAM_MIN, lam + step * dl));
+        res = bbMoments(sets, etaN, lamN);
+        if (res.ll >= r.ll - 1e-12 * Math.abs(r.ll) || step < 1e-12) { break; }
+        step *= 0.5;
+      }
+      var moved = Math.max(Math.abs(etaN - eta), Math.abs(lamN - lam)); eta = etaN; lam = lamN; r = res;
+      if (moved <= 1e-10 || Math.max(Math.abs(r.ge), Math.abs(r.gl)) <= 1e-9) { break; }
+    }
+    return l0 >= r.ll ? { eta: Math.log(p0 / (1 - p0)), lam: Infinity } : { eta: eta, lam: lam };
+  }
+  function betaPpf(q, a, b) { var lo = 0, hi = 1, i, mid; for (i = 0; i < 100; i++) { mid = 0.5 * (lo + hi); if (betai(a, b, mid) < q) { lo = mid; } else { hi = mid; } } return 0.5 * (lo + hi); }
+  function wilson(k, n) {
+    var p = k / n, z2 = Z975 * Z975, den = 1 + z2 / n, c = (p + z2 / (2 * n)) / den, h = Z975 * Math.sqrt(p * (1 - p) / n + z2 / (4 * n * n)) / den;
+    return [Math.max(0, c - h), Math.min(1, c + h)];
+  }
+  // the rate interval: Rao's score test for the mean m with s refitted at m, inverted (the reference's _lam_slope,
+  // _profile_lam, _rate_band and _rate_interval, step for step)
+  var RATE_ETA_MAX = 30, RATE_SCAN_STEP = 0.5, RATE_K_SPAN = 12;
+  function lamSlope(sets, m, lam) {
+    var s = Math.exp(lam), a = m * s, b = (1 - m) * s, j;
+    var dgA = digamma(a), dgB = digamma(b), dgS = digamma(s), tgA = trigamma(a), tgB = trigamma(b), tgS = trigamma(s), d1 = 0, d2 = 0;
+    for (j = 0; j < sets.length; j++) {
+      var n = sets[j].n, k = sets[j].s1, g = -(digamma(n + s) - dgS), h = -(trigamma(n + s) - tgS);
+      if (k > 0) { g += m * (digamma(k + a) - dgA); h += m * m * (trigamma(k + a) - tgA); }
+      if (n - k > 0) { g += (1 - m) * (digamma(n - k + b) - dgB); h += (1 - m) * (1 - m) * (trigamma(n - k + b) - tgB); }
+      d1 += g; d2 += h;
+    }
+    return [s * d1, s * d1 + s * s * d2];
+  }
+  function profileLam(sets, m, start) {
+    var lo = LAM_MIN, hi = LAM_MAX, loKnown = false, hiKnown = false, x = Math.min(LAM_MAX, Math.max(LAM_MIN, start)), it;
+    for (it = 0; it < 200; it++) {
+      var d = lamSlope(sets, m, x), d1 = d[0], d2 = d[1];
+      if (d1 > 0) { if (x >= LAM_MAX) { return LAM_MAX; } lo = x; loKnown = true; }
+      else if (d1 < 0) { if (x <= LAM_MIN) { return LAM_MIN; } hi = x; hiKnown = true; }
+      else { return x; }
+      var step = d2 < 0 ? -d1 / d2 : (d1 > 0 ? MAX_STEP : -MAX_STEP);
+      step = Math.max(-MAX_STEP, Math.min(MAX_STEP, step));
+      var xn = x + step;
+      if (xn >= hi) { xn = hiKnown ? 0.5 * (lo + hi) : LAM_MAX; }
+      else if (xn <= lo) { xn = loKnown ? 0.5 * (lo + hi) : LAM_MIN; }
+      if (Math.abs(xn - x) <= 1e-12 * Math.max(1, Math.abs(x)) || (loKnown && hiKnown && hi - lo <= 1e-12 * Math.max(1, Math.abs(x)))) { return xn; }
+      x = xn;
+    }
+    return x;
+  }
+  function rateBand(sets, eta, lam, t2) {
+    var m = sig(eta), s = Math.exp(lam), a = m * s, b = (1 - m) * s, j, kk;
+    var dgA = digamma(a), dgB = digamma(b), tgA = trigamma(a), tgB = trigamma(b), tgS = trigamma(s), g = 0, hMs = 0, hSs = 0;
+    for (j = 0; j < sets.length; j++) {
+      var n = sets[j].n, k = sets[j].s1;
+      var A = k > 0 ? digamma(k + a) - dgA : 0, Bt = n - k > 0 ? digamma(n - k + b) - dgB : 0;
+      var A1 = k > 0 ? trigamma(k + a) - tgA : 0, B1 = n - k > 0 ? trigamma(n - k + b) - tgB : 0;
+      g += A - Bt; hMs += (A - Bt) + s * (m * A1 - (1 - m) * B1); hSs += m * m * A1 + (1 - m) * (1 - m) * B1 - (trigamma(n + s) - tgS);
+    }
+    g *= s;
+    if (!isFinite(g)) { return false; }
+    var c = hSs !== 0 && isFinite(hMs / hSs) ? hMs / hSs : 0, ca = s - c * m, cb = s + c * (1 - m), v = 0;
+    for (j = 0; j < sets.length; j++) {
+      var nn = sets[j].n, kj = sets[j].s1, p = (kj + a) / (nn + s);
+      if (!(p > 0 && p < 1)) { continue; }
+      var sd = Math.sqrt(nn * p * (1 - p)), lo = Math.max(0, Math.floor(nn * p - RATE_K_SPAN * sd) - 4), hi = Math.min(nn, Math.ceil(nn * p + RATE_K_SPAN * sd) + 4);
+      var ratio = p / (1 - p), Ak = lo > 0 ? digamma(lo + a) - dgA : 0, Bk = nn - lo > 0 ? digamma(nn - lo + b) - dgB : 0, w = 1, ws = [], xs = [];
+      for (kk = lo; kk <= hi; kk++) {
+        ws.push(w); xs.push(ca * Ak - cb * Bk);
+        Ak += 1 / (kk + a);
+        Bk = nn - kk - 1 > 0 ? Bk - 1 / (nn - kk - 1 + b) : 0;
+        w *= (nn - kk) / (kk + 1) * ratio;
+      }
+      var tot = 0, sx = 0, i; for (i = 0; i < ws.length; i++) { tot += ws[i]; } for (i = 0; i < ws.length; i++) { sx += ws[i] * xs[i]; }
+      var mean = sx / tot, sv = 0; for (i = 0; i < ws.length; i++) { sv += ws[i] * (xs[i] - mean) * (xs[i] - mean); }
+      v += sv / tot;
+    }
+    return g * g <= t2 * v;
+  }
+  function rateInterval(sets, eta, lam, t2) {
+    var lam0 = Math.min(lam, LAM_MAX), ends = [], d, i;
+    eta = Math.max(-RATE_ETA_MAX, Math.min(RATE_ETA_MAX, eta));
+    for (d = 0; d < 2; d++) {
+      var direction = d === 0 ? -1 : 1, points = [[eta, lam0, true]], x = eta, warm = lam0;
+      while (Math.abs(x) < RATE_ETA_MAX) {
+        x = x + direction * RATE_SCAN_STEP;
+        if (Math.abs(x) >= RATE_ETA_MAX) { x = direction * RATE_ETA_MAX; }
+        warm = profileLam(sets, sig(x), warm);
+        points.push([x, warm, rateBand(sets, x, warm, t2)]);
+      }
+      var last = 0; for (i = 0; i < points.length; i++) { if (points[i][2]) { last = i; } }
+      if (last === points.length - 1) { ends.push(direction * Infinity); continue; }
+      var inner = points[last][0], outer = points[last + 1][0]; warm = points[last][1];
+      for (i = 0; i < 45; i++) {
+        var mid = 0.5 * (inner + outer), lamMid = profileLam(sets, sig(mid), warm);
+        if (rateBand(sets, mid, lamMid, t2)) { inner = mid; warm = lamMid; } else { outer = mid; }
+      }
+      ends.push(inner);
+    }
+    return [ends[0] === -Infinity ? 0 : sig(ends[0]), ends[1] === Infinity ? 1 : sig(ends[1])];
+  }
+  // rates over problem sets on the 0-1 scale; one set: its plain rate and the Wilson interval. The interval inverts Rao's
+  // score test (see the reference's combine_rates). rateCore is the fit without the interval; the interval is the part
+  // that costs (about 5 ms over 29 sets, up to 60 ms over 192), added by rateFinish
+  function rateCore(sets) {
+    var S = sets.length, N = 0, K = 0, df = 0, j;
+    for (j = 0; j < S; j++) { N += sets[j].n; K += sets[j].s1; df += sets[j].n - 1; }
+    var f = S > 1 ? rateFit(sets) : { eta: 0, lam: 0 };
+    if (S === 1 || !isFinite(f.eta)) {
+      var wi = wilson(K, N);
+      return { mu: K / N, lo: wi[0], hi: wi[1], piLo: null, piHi: null, tau2: 0, w: sets.map(function (st) { return st.n / N; }), S: S, p: null, ci: null };
+    }
+    var lam = Math.min(f.lam, LAM_MAX), m = 1 / (1 + Math.exp(-f.eta)), s = Math.exp(lam), a = m * s, b = (1 - m) * s, q = m * (1 - m);
+    var tgA = trigamma(a), tgB = trigamma(b), info = [], tot = 0;
+    for (j = 0; j < S; j++) {
+      var fisher = -Math.pow(s * q, 2) * (trigamma(sets[j].s1 + a) - tgA + trigamma(sets[j].n - sets[j].s1 + b) - tgB);
+      info.push(fisher); tot += fisher;
+    }
+    var tq = tq975(Math.max(1, df));
+    return { mu: m, lo: NaN, hi: NaN, piLo: S >= 3 ? betaPpf(0.025, a, b) : null, piHi: S >= 3 ? betaPpf(0.975, a, b) : null,
+             tau2: isFinite(f.lam) ? 1 / s : 0, w: info.map(function (x) { return x / tot; }), S: S, p: null, ci: { eta: f.eta, lam: f.lam, t2: tq * tq } };
+  }
+  function rateFinish(core, sets) {
+    var lo = core.lo, hi = core.hi;
+    if (core.ci) { var ci = rateInterval(sets, core.ci.eta, core.ci.lam, core.ci.t2); lo = Math.min(ci[0], core.mu); hi = Math.max(ci[1], core.mu); }
+    return { mu: core.mu, lo: lo, hi: hi, piLo: core.piLo, piHi: core.piHi, tau2: core.tau2, w: core.w, S: core.S, p: null };
+  }
+  function combineRates(sets) { return rateFinish(rateCore(sets), sets); }
+  // Rate intervals in idle time. A drawing computes the intervals it needs while it is within RATE_SYNC_MS of its start;
+  // the rest are drawn without one (no whisker, "…" for the numbers), queued, computed while the browser is idle, and
+  // drawn once they are all in (on a long queue, at most every RATE_REDRAW_MS). A new drawing drops the queue the last one left, so a
+  // selection that changes fast never waits on intervals no one sees any more. Outside a drawing, every interval is
+  // computed at once.
+  var RATECORE = {}, RATEQ = [], RATEQUEUED = {}, RATE_SYNC_MS = 40, RATE_REDRAW_MS = 1000, rateSyncEnd = Infinity, ratePumping = false, rateFresh = false, rateDrawnAt = 0;
+  function rateIdle(fn) { if (window.requestIdleCallback) { window.requestIdleCallback(fn, { timeout: 100 }); } else { setTimeout(function () { fn(null); }, 0); } }
+  function ratePump(deadline) {
+    var t0 = Date.now(), first = true;
+    while (RATEQ.length) {
+      var left = deadline && deadline.timeRemaining ? deadline.timeRemaining() : 12 - (Date.now() - t0);
+      if (!first && left < 2) { break; }
+      first = false;
+      var job = RATEQ.shift(); delete RATEQUEUED[job.key];
+      if (!(job.key in RATEMEMO)) { RATEMEMO[job.key] = rateFinish(job.core, job.sets); rateFresh = true; }
+    }
+    if (rateFresh && (!RATEQ.length || Date.now() - rateDrawnAt >= RATE_REDRAW_MS)) { rateFresh = false; ratePumping = false; rateRedraw(); return; }
+    if (RATEQ.length) { rateIdle(ratePump); } else { ratePumping = false; }
+  }
+  // the drawing that brings intervals in: the reader did nothing, so it waits while a picker or a help text is open,
+  // and a legend entry they had focused keeps the focus
+  function rateRedraw() {
+    if (document.querySelector(".v2picker, .v2pop:not(.v2ctip)")) { setTimeout(rateRedraw, 300); return; }   // never close what the reader opened
+    var a = document.activeElement, charts, keep = null;
+    if (a && a.getAttribute && a.getAttribute("data-cycle") !== null && a.closest("svg.v2chart")) {
+      charts = Array.prototype.slice.call(document.querySelectorAll("svg.v2chart"));
+      keep = { chart: charts.indexOf(a.closest("svg.v2chart")), cycle: a.getAttribute("data-cycle") };
+    }
+    render();
+    if (keep && keep.chart >= 0) {
+      var c = document.querySelectorAll("svg.v2chart")[keep.chart], el = c && c.querySelector('[data-cycle="' + keep.cycle + '"]');
+      if (el && el.focus) { el.focus({ preventScroll: true }); }
+    }
+  }
+  function rateDrawStart() { RATEQ = []; RATEQUEUED = {}; rateSyncEnd = Date.now() + RATE_SYNC_MS; rateDrawnAt = Date.now(); }
+  function rateDrawEnd() {
+    rateSyncEnd = Infinity;
+    document.documentElement.setAttribute("data-rate-intervals", RATEQ.length ? "pending" : "done");
+    if (RATEQ.length && !ratePumping) { ratePumping = true; rateIdle(ratePump); }
+  }
   // sets: [{n, s1, s2, ...}]; a rate ("logit") comes back on its own 0-1 scale. Also: the problems behind it, and n0,
-  // the number of problems at which a set counts half as much as a very large one (sigma^2 / tau^2)
+  // the number of problems at which a set counts half as much as a very large one (sigma^2 / tau^2; not for rates)
   function reCombine(sets, scale) {
     sets = sets.filter(function (st) { return st.n > 0; }); if (!sets.length) { return null; }
-    var e = setEstimates(sets, scale), c = combineScale(e.y, e.v, sets.reduce(function (a, st) { return a + st.n - 1; }, 0));
-    if (scale === "logit") { ["mu", "lo", "hi", "piLo", "piHi"].forEach(function (k) { if (c[k] !== null) { c[k] = expit(c[k]); } }); }
-    c.n = sets.reduce(function (a, st) { return a + st.n; }, 0); c.sets = sets; c.n0 = c.tau2 > 0 ? e.pooled / c.tau2 : Infinity;
+    var c, n0 = Infinity;
+    if (scale === "logit") {   // the same sets give the same fit: remembered, a chart asks for many
+      var key = sets.map(function (st) { return st.n + ":" + st.s1; }).join(",");
+      if (!(key in RATEMEMO)) {
+        var core = RATECORE[key] || (RATECORE[key] = rateCore(sets));
+        if (!core.ci || Date.now() < rateSyncEnd) { RATEMEMO[key] = rateFinish(core, sets); }
+        else if (!(key in RATEQUEUED)) { RATEQUEUED[key] = true; RATEQ.push({ key: key, core: core, sets: sets }); }
+      }
+      c = key in RATEMEMO ? Object.assign({}, RATEMEMO[key]) : Object.assign({}, rateFinish({ mu: RATECORE[key].mu, lo: NaN, hi: NaN, piLo: RATECORE[key].piLo, piHi: RATECORE[key].piHi, tau2: RATECORE[key].tau2, w: RATECORE[key].w, S: RATECORE[key].S, ci: null }, sets), { ciPending: true });
+    } else {
+      var e = setEstimates(sets); c = combineScale(e.y, e.v, sets.reduce(function (a, st) { return a + st.n - 1; }, 0));
+      n0 = c.tau2 > 0 ? e.pooled / c.tau2 : Infinity;
+    }
+    c.n = sets.reduce(function (a, st) { return a + st.n; }, 0); c.sets = sets; c.n0 = n0;
     return c;
   }
   function holm(ps) {
@@ -696,7 +928,7 @@
     var fit, out;
     if (metric.kind === "rate") {
       fit = reCombine(cells.map(function (c) { var t = c.m[metric.key]; return t ? { n: t[0], s1: t[1], s2: t[2] } : { n: 0 }; }), "logit");
-      return fit ? { v: fit.mu, lo: fit.lo, hi: fit.hi, piLo: fit.piLo, piHi: fit.piHi, n: fit.n, S: fit.S, share: 1 } : null;
+      return fit ? { v: fit.mu, lo: fit.lo, hi: fit.hi, piLo: fit.piLo, piHi: fit.piHi, n: fit.n, S: fit.S, share: 1, ciPending: !!fit.ciPending } : null;
     }
     var share = validShare(metric, cells);
     if (statOf(metric) === "mean") {
@@ -1008,7 +1240,7 @@
     shown.forEach(function (m) { var pts = [];
       D.rungs.forEach(function (r) { var use = poolCats(m.key, r, keys); if (!use.length) { return; } var x = xOf(m.key, r, use, src); if (x === null) { return; }
         var st = stat(metric, m.key, r, use); if (!st) { return; } if (st.pending) { pending = true; return; } if (!isFinite(st.v)) { return; }
-        var title = m.label + " at budget " + r + (state.xaxis === "time" ? " (" + x.toFixed(2) + " s per problem)" : "") + ": " + fmt(metric, st.v, st.edge) + " (95 % interval " + fmt(metric, st.lo) + " to " + fmt(metric, st.hi) + rangeText(metric, st) + "). " + problemsText(st, use) + (st.share < 1 ? "; " + shareText(st) : "") + ".";
+        var title = m.label + " at budget " + r + (state.xaxis === "time" ? " (" + x.toFixed(2) + " s per problem)" : "") + ": " + fmt(metric, st.v, st.edge) + " (95 % interval " + (st.ciPending ? "still being computed" : fmt(metric, st.lo) + " to " + fmt(metric, st.hi)) + rangeText(metric, st) + "). " + problemsText(st, use) + (st.share < 1 ? "; " + shareText(st) : "") + ".";
         if (thin(st)) { thinDrawn = true; }
         pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, hollow: thin(st), end: endsAt(m.key, r), title: withEnd(m.key, r, title) });   // a budget has no interval: the candidate count is exact, and the measured time is within a pixel of its mean (0.4-1.1 px, measured)
         [st.v, anyCI() ? st.lo : st.v, anyCI() ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
@@ -1167,7 +1399,7 @@
   var rangeShown = false, tweenShown = false;   // tweenShown: a table cell held a number between two budgets
   function cellText(st, p) { if (!st) { return ""; } if (st.pending) { return "…"; } if (thin(st)) { thinDrawn = true; } var pi = anyCI() && st.piLo !== null && st.piLo !== undefined; if (pi) { rangeShown = true; }
     if (st.between) { tweenShown = true; }
-    return (st.between ? '<span class="v2tween" title="' + esc(tweenText(st.between)) + '">\u2248</span>' : "") + (thin(st) ? '<span title="' + esc(shareText(st)) + '">' + THIN_MARK + "</span>" : "") + fmt(p, st.v, st.edge) + (anyCI() ? ' <span class="v2ci-txt">[' + fmt(p, st.lo) + ", " + fmt(p, st.hi) + "]</span>" : "") + (pi ? '<br><span class="v2ci-txt">one set: ' + fmt(p, st.piLo) + " to " + fmt(p, st.piHi) + "</span>" : ""); }
+    return (st.between ? '<span class="v2tween" title="' + esc(tweenText(st.between)) + '">\u2248</span>' : "") + (thin(st) ? '<span title="' + esc(shareText(st)) + '">' + THIN_MARK + "</span>" : "") + fmt(p, st.v, st.edge) + (anyCI() ? ' <span class="v2ci-txt">[' + (st.ciPending ? "\u2026" : fmt(p, st.lo) + ", " + fmt(p, st.hi)) + "]</span>" : "") + (pi ? '<br><span class="v2ci-txt">one set: ' + fmt(p, st.piLo) + " to " + fmt(p, st.piHi) + "</span>" : ""); }
   function renderTable(shown) {
     var plots = plotMetrics().map(function (k) { return METRIC[k]; }); var keys = shown.map(function (m) { return m.key; });
     if (!plots.length || !shown.length) { return '<p class="v2hint">Select at least one method and one metric.</p>'; }
@@ -1384,8 +1616,8 @@
     cats.forEach(function (c, i) { var yy = T + (i + 0.5) * rowH; s += '<text x="' + (Lw - 8) + '" y="' + (yy + 4) + '" class="tick" text-anchor="end">' + esc(c) + " · " + CAT[c].laws + "</text>";
       if (i % 2) { s += '<rect x="' + Lw + '" y="' + (yy - rowH / 2) + '" width="' + (W - Lw - R) + '" height="' + rowH + '" class="v2stripe"/>'; }
       present.forEach(function (m, j) { var st = cell(m.key, c, r) ? stat(p, m.key, r, [c]) : null; if (!st) { return; } var yj = yy + (j - (present.length - 1) / 2) * 7, col = colorOf(m);
-        s += '<line x1="' + xs(st.lo).toFixed(1) + '" y1="' + yj.toFixed(1) + '" x2="' + xs(st.hi).toFixed(1) + '" y2="' + yj.toFixed(1) + '" stroke="' + col + '" stroke-width="2" stroke-opacity="0.4"/>';
-        s += '<circle cx="' + xs(st.v).toFixed(1) + '" cy="' + yj.toFixed(1) + '" r="3.2" fill="' + col + '"><title>' + esc(m.label + " on " + c + ": " + fmt(p, st.v) + ", 95 % interval " + fmt(p, st.lo) + " to " + fmt(p, st.hi) + ", from " + Math.round(st.n).toLocaleString() + " problems") + "</title></circle>"; }); });
+        if (isFinite(st.lo) && isFinite(st.hi)) { s += '<line x1="' + xs(st.lo).toFixed(1) + '" y1="' + yj.toFixed(1) + '" x2="' + xs(st.hi).toFixed(1) + '" y2="' + yj.toFixed(1) + '" stroke="' + col + '" stroke-width="2" stroke-opacity="0.4"/>'; }
+        s += '<circle cx="' + xs(st.v).toFixed(1) + '" cy="' + yj.toFixed(1) + '" r="3.2" fill="' + col + '"><title>' + esc(m.label + " on " + c + ": " + fmt(p, st.v) + ", 95 % interval " + (st.ciPending ? "still being computed" : fmt(p, st.lo) + " to " + fmt(p, st.hi)) + ", from " + Math.round(st.n).toLocaleString() + " problems") + "</title></circle>"; }); });
     var ly = Hh - B1 + 34; present.forEach(function (m) { s += '<circle cx="' + (Lw + 6) + '" cy="' + ly + '" r="4" fill="' + colorOf(m) + '"/><text x="' + (Lw + 16) + '" y="' + (ly + 4) + '" class="leg">' + esc(m.label + (m.local ? " (local)" : "")) + "</text>"; ly += 18; });
     return swap + s + "</svg>" + '<p class="v2hint">One row per problem set, largest first; one dot per method with its ' + term("interval", "95 % interval") + ".</p>" + missingNote(shown, present, "any selected problem set at " + posText(r), r, true) + tweenNote(present, r);
   }
@@ -2635,7 +2867,8 @@
   }
   var rt = null;
   function scheduleRender() { clearTimeout(rt); rt = setTimeout(render, 30); }
-  function render() {
+  function render() { rateDrawStart(); try { renderNow(); } finally { rateDrawEnd(); } }
+  function renderNow() {
     if (!root) {   // the home page: the headline, and the release's line of progress where the page has a place for it
       renderHeadline();
       var pl = document.getElementById("results-progress-v2");

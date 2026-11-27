@@ -120,3 +120,19 @@ def test_a_run_records_what_the_worker_reports_about_itself(tmp_path, toy_catalo
     # a run driven from Python documents itself like `srbf run`: the config, its hash, the code and the machine
     assert meta["config"].endswith(".yaml") and meta["config_sha"]
     assert {"git", "system", "env", "inputs", "timestamp"} <= set(meta)
+
+
+def test_the_candidates_are_judged_and_an_unreadable_one_is_named(tmp_path, toy_catalog):
+    report = check_config(_write(tmp_path, options={"nested": True}), log=lambda _: None)
+    assert report.ok
+    steps = [step for step in report.steps if step.name == "candidates"]
+    assert len(steps) == 2 and all("3 candidates: 3 judged" in step.detail for step in steps)
+    worker = tmp_path / "worker.py"
+    worker.write_text(textwrap.dedent('''
+        def fit(x, y, *, x_val, variables, meta, options, state):
+            return {"expression": "2.0*x1 - 0.5*x2 + 1.0", "candidates": ["zeta(x1)", "x1"]}
+    '''))
+    report = check_config(_write(tmp_path, worker=str(worker)), log=lambda _: None)
+    assert [step.name for step in report.failed] == ["candidates", "candidates"]
+    assert "3 candidates: 2 judged, 1 unreadable" in report.failed[0].detail and "zeta" in report.failed[0].detail
+    assert "docs/adapters.md#candidates" in report.failed[0].hint

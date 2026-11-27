@@ -9,13 +9,14 @@ closes them, as Julia does under PySR, cannot touch the protocol.
 
 Protocol, one JSON object per line (``NaN``/``Infinity`` allowed: both ends are Python)::
 
-    -> {"type": "init", "options": {...}}
-    <- {"type": "ready", "python": "...", "version": "3.x.y", "worker": "...", "info": {...}}
+    -> {"type": "init", "options": {...}, "warmup": false}
+    <- {"type": "ready", "python": "...", "version": "3.x.y", "worker": "...", "info": {...},
+        "load_time": 0.5, "setup_time": 2.1 | null}
     -> {"type": "fit", "id": 7, "x": [[...], ...], "y": [...], "x_val": [[...], ...],
         "variables": ["x1", ...], "meta": {...}}
     <- {"type": "result", "id": 7, "expression": "...", "fit_time": 1.23,
         "y_pred": [...] | null, "y_pred_val": [...] | null, "constants": [...] | null,
-        "candidates": ["...", ...] | null, "extra": {...}, "error": null | "..."}
+        "candidates": ["...", ...] | null, "candidates_dropped": 0, "extra": {...}, "error": null | "..."}
     -> {"type": "close"}
     <- {"type": "closed"}
 
@@ -32,18 +33,36 @@ Worker contract -- a Python file (or module) defining:
     predictions; srbf evaluates the expression itself when they are absent), ``constants``,
     ``fit_time`` (seconds; measured around the call when absent), ``extra`` (a JSON-serializable
     dict merged into the result record), ``error`` (a message; the sample counts as failed).
-    A method that ends with several expressions and no rule for picking one (a hall of fame) may
-    return ``"candidates"``, a list of infix strings like ``expression``, instead of
-    ``"expression"``; srbf then picks one only if the config sets ``selection``, and records the
-    problem as failed otherwise.
+    ``"candidates"``: every expression the method ends with, a list of infix strings like
+    ``expression`` (each with its fitted constants written in): a method that keeps a diverse front
+    of its own (a hall of fame, a Pareto front) returns that front, not its whole population; one
+    that fits several expressions (samples, beams) returns those; a method with one model returns
+    none. srbf judges and stores every candidate and the expression with them; ``expression``
+    stays the answer. A method that ends with candidates and no rule of its own for picking one
+    returns ``"candidates"`` without ``"expression"``; srbf then picks one only if the config sets
+    ``selection``, and records the problem as failed otherwise. At most ``MAX_CANDIDATES``
+    candidates of at most ``MAX_CANDIDATE_CHARS`` characters each are kept (the first ones); the
+    rest are dropped and counted in ``candidates_dropped``.
 ``load(options) -> state``
     Optional. Called once after ``init`` with the config's ``options``; the returned object is
     passed to every ``fit`` as ``state``.
+``setup(state, options) -> state | None``
+    Optional. Data-independent preparation after ``load``: compiling, warming up on a problem of
+    the worker's own. It runs before the clock starts, in every worker process srbf starts (after
+    every restart too). A returned object other than None replaces ``state``. Written as
+    ``setup(state, options, *, warmup)``, it is told whether srbf's warm-up problem follows
+    (``init``'s ``warmup``), so that it can leave a throwaway fit of its own to that problem.
 ``info(state) -> dict``
     Optional. Versions and provenance for the ``ready`` message.
+
+``ready`` reports the seconds ``load`` and ``setup`` took (``setup_time`` is null without a
+``setup``); srbf records them in the run's metadata, never in a fit time. srbf's own warm-up
+problem, when the run asks for one, arrives as an ordinary ``fit`` whose ``meta`` says
+``"warmup": true``; its answer is discarded.
 """
 import importlib
 import importlib.util
+import inspect
 import json
 import os
 import socket
@@ -53,6 +72,10 @@ import traceback
 
 USAGE = ("usage: python runner.py --connect HOST:PORT <worker.py>\n"
          "       python runner.py --connect HOST:PORT --module <importable.module>")
+
+# The protocol's limits on a fit's candidates (srbf.candidates holds the same numbers).
+MAX_CANDIDATES = 100000
+MAX_CANDIDATE_CHARS = 10000
 
 
 def _jsonable(value):
@@ -89,7 +112,30 @@ def _load_worker(target, as_module):
 
 def _result(msg_id):
     return {"type": "result", "id": msg_id, "expression": None, "fit_time": None, "y_pred": None,
-            "y_pred_val": None, "constants": None, "candidates": None, "extra": {}, "error": None}
+            "y_pred_val": None, "constants": None, "candidates": None, "candidates_dropped": 0, "extra": {},
+            "error": None}
+
+
+def _limited(candidates):
+    """The candidates within the protocol's limits, and how many were dropped (a missing entry counts)."""
+    kept, dropped = [], 0
+    for candidate in candidates:
+        text = None if candidate is None else str(candidate)
+        if text is None or len(text) > MAX_CANDIDATE_CHARS or len(kept) >= MAX_CANDIDATES:
+            dropped += 1
+            continue
+        kept.append(text)
+    return kept, dropped
+
+
+def _takes_warmup(setup):
+    """Whether a worker's ``setup`` takes the ``warmup`` keyword (``setup(state, options, *, warmup)``)."""
+    try:
+        parameters = inspect.signature(setup).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(p.kind == p.VAR_KEYWORD or (p.name == "warmup" and p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY))
+               for p in parameters)
 
 
 def serve(worker, target, rfile, wfile):
@@ -118,15 +164,29 @@ def serve(worker, target, rfile, wfile):
         if kind == "init":
             options = msg.get("options") or {}
             try:
+                started = time.perf_counter()
                 load = getattr(worker, "load", None)
                 state = load(options) if callable(load) else None
+                load_time = time.perf_counter() - started
+                setup_time = None
+                setup = getattr(worker, "setup", None)
+                if callable(setup):
+                    started = time.perf_counter()
+                    if _takes_warmup(setup):
+                        prepared = setup(state, options, warmup=bool(msg.get("warmup")))
+                    else:
+                        prepared = setup(state, options)
+                    setup_time = time.perf_counter() - started
+                    if prepared is not None:
+                        state = prepared
                 info_fn = getattr(worker, "info", None)
                 info = info_fn(state) if callable(info_fn) else {}
             except Exception:  # noqa: BLE001 - the whole traceback goes back to srbf
                 send({"type": "error", "error": traceback.format_exc()})
                 return 1
             send({"type": "ready", "python": sys.executable, "version": sys.version.split()[0],
-                  "worker": target, "info": _jsonable(info or {})})
+                  "worker": target, "info": _jsonable(info or {}), "load_time": load_time,
+                  "setup_time": setup_time})
         elif kind == "fit":
             reply = _result(msg.get("id"))
             started = time.perf_counter()
@@ -142,7 +202,7 @@ def serve(worker, target, rfile, wfile):
                 if reply["expression"] is not None:
                     reply["expression"] = str(reply["expression"])
                 if out.get("candidates") is not None:
-                    reply["candidates"] = [str(c) for c in out["candidates"]]
+                    reply["candidates"], reply["candidates_dropped"] = _limited(out["candidates"])
                 reply["fit_time"] = float(out.get("fit_time", elapsed))
                 reply["extra"] = _jsonable(out.get("extra") or {})
                 if out.get("error") is not None:

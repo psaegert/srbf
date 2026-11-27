@@ -23,6 +23,10 @@ Layout: one compressed .npz per (problem) under <out_dir>/, columns:
   const_vals  float64 [sum(n_const)]   (optional) flat fitted constants
   const_off   int64   [n_cand + 1]     (optional) CSR offsets into const_vals
 
+``mdl`` is in bits, the unit srbf states every description length in: the manifest's
+``run_meta.mdl_dialect.unit`` says ``bits``. Stores written before say ``milli-bits`` (flash-ansr's own
+unit); ``CandidateStoreReader.mdl_bits`` reads either in bits, keyed off that stored unit.
+
 The widths are chosen for what the columns hold: `tokens` must address a byte-alphabet vocabulary
 (more than 255 ids), and `fvu` and `const_vals` are float64 because a float32 column flushes a
 genuine FVU of ~1e-50 to 0.0, which reads back as a perfect recovery. Readers key off each column's
@@ -39,6 +43,16 @@ from pathlib import Path
 from typing import Any, Iterator, Sequence
 
 import numpy as np
+
+#: The unit of the ``mdl`` column this writer's callers store (``run_meta.mdl_dialect.unit``).
+MDL_UNIT = "bits"
+#: What one stored ``mdl`` unit is in bits, for every unit a store has been written in.
+MDL_UNITS_IN_BITS = {"bits": 1.0, "milli-bits": 1e-3}
+
+
+def milli_bits_to_bits(value: Any) -> float | None:
+    """A price in thousandths of a bit (flash-ansr's unit) in bits; None stays None, NaN stays NaN."""
+    return None if value is None else float(value) / 1000.0
 
 
 class CandidateStoreWriter:
@@ -216,6 +230,20 @@ class CandidateStoreReader:
         self.out_dir = Path(out_dir)
         mpath = self.out_dir / "manifest.json"
         self.manifest = json.loads(mpath.read_text()) if mpath.exists() else None
+
+    @property
+    def mdl_unit(self) -> str:
+        """The unit of the ``mdl`` column, as the manifest states it. A store without the statement predates it and
+        holds flash-ansr's thousandths of a bit."""
+        dialect = ((self.manifest or {}).get("run_meta") or {}).get("mdl_dialect") or {}
+        return str(dialect.get("unit") or "milli-bits")
+
+    def mdl_bits(self, block: dict) -> np.ndarray:
+        """A problem's ``mdl`` column in bits, whatever unit the store was written in."""
+        unit = self.mdl_unit
+        if unit not in MDL_UNITS_IN_BITS:
+            raise ValueError(f"{self.out_dir}: mdl in an unknown unit {unit!r}; known: {', '.join(MDL_UNITS_IN_BITS)}")
+        return np.asarray(block["mdl"], dtype=np.float64) * MDL_UNITS_IN_BITS[unit]
 
     def problem_ids(self) -> list[int]:
         """Authoritative problem list = the .npz files on disk (NOT the manifest, which may be a stale

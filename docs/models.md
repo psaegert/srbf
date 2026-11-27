@@ -6,6 +6,7 @@ block. To enter a method of your own, see [Adding your method](adapters.md).
 | `type` | method | installation |
 |---|---|---|
 | `flash_ansr` | [Flash-ANSR](#flash-ansr) and its prior reference | `pip install "srbf[flash-ansr]"`, then download a checkpoint |
+| `flash_ansr_worker` | [a Flash-ANSR checkpoint in its own environment](#a-checkpoint-in-its-own-environment) | `pip install "flash-ansr>=0.19,<0.20"` in an environment of its own |
 | `pysr` | [PySR](#pysr) | `pip install pysr`, in an environment of its own if you like |
 | `subprocess`, `worker: operon` | [Operon](#operon) | `pip install pyoperon==0.6.1 scikit-learn`, in an environment of its own |
 | `subprocess`, `worker: rilsrols` | [RILS-ROLS](#rils-rols) | `scripts/envs/build_rilsrols_env.sh`, an environment of its own |
@@ -74,7 +75,7 @@ model_adapter:
 | `emission`, `refine_scope` | `fittable` | which constants the model spells itself and which the refiner fits |
 | `constant_ladder` | on | re-spell fitted constants as integers, fractions and multiples of \(\pi\) and \(e\), and let the ranking choose |
 | `complexity` | `none` | condition the model on a target complexity: `none`, `ground_truth` or a number |
-| `candidate_store_dir` | none | a directory that receives every candidate of every problem, one compressed `.npz` per problem, readable with `srbf.candidate_store.CandidateStoreReader` |
+| `candidate_store_dir` | none | a directory that receives every candidate of every problem, one compressed `.npz` per problem, readable with `srbf.candidate_store.CandidateStoreReader` (its `mdl` column in bits; `mdl_bits(block)` also reads the stores that hold thousandths of a bit) |
 
 **Ranking.** `mode` is required and takes one of three values.
 
@@ -86,6 +87,10 @@ ranking: {mode: pareto, metrics: [fvu, n_nodes], tie_break: fvu}
 ```
 
 The resolved ranking is stored in every result file. Unknown keys in the block are an error.
+
+Every candidate the model fits, with its fitted constants, goes to the run as one of the problem's candidates,
+judged by srbf like every method's ([Candidates](adapters.md#candidates)). `candidate_store_dir` is a store of its own: the model's
+record of every candidate (token ids, its own FVU and ranking columns) for re-ranking offline.
 
 **The prior reference.** With `generation_config.method: prior_sampling` the model is not used: the
 candidates are drawn from the training prior that ships beside the checkpoint
@@ -99,6 +104,59 @@ other. Its budget is the refiner's restarts (`configs/evaluation/scaling/flash-a
 1 to 1,024). It is the ceiling of the fitting stage and runs only where a ground truth exists. The
 judge is strict for the oracle as for every method: where the refitted law comes back in another form,
 a constant factor or a root spelled differently, that is another structure.
+
+### A checkpoint in its own environment
+
+A checkpoint is tied to the flash-ansr and SimpliPy it was trained with: their vocabulary, canonical forms and
+refiner. The adapter type `flash_ansr_worker` runs it in an environment that has them, through the shipped worker
+`src/srbf/worker/models/flash_ansr_worker.py`, and judges its answers with srbf's engine like any other method's.
+The T8 checkpoints are trained with flash-ansr 0.19 and SimpliPy 0.14:
+
+```bash
+python -m venv "$SRBF_ROOT/envs/flash-ansr-0.19"
+"$SRBF_ROOT/envs/flash-ansr-0.19/bin/pip" install "flash-ansr>=0.19,<0.20"     # brings SimpliPy 0.14
+```
+
+```yaml
+model_adapter:
+  type: flash_ansr_worker
+  config_provenance: author_blessed
+  python: "{{ROOT}}/envs/flash-ansr-0.19/bin/python"
+  simplipy_engine: acj-5-4-llm          # the judge's engine; the checkpoint keeps its own
+  model_path: "{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M"
+  device: cuda
+  precision: auto
+  evaluation_config:
+    n_restarts: 8
+    refiner_method: curve_fit_lm
+    refiner_p0_noise: normal
+    refiner_p0_noise_kwargs: {loc: 0.0, scale: 5}
+    ranking: {mode: mdl}
+    generation_config:
+      method: softmax_sampling
+      kwargs: {draws: 1024, max_len: 160, batch_size: 128, temperature: 1, simplify: true, unique: true}
+```
+
+The block takes the keys of a `flash_ansr` block and the keys of a worker (`python`, `env`, `timeout`,
+`worker_log`, `max_restarts`, see [the config keys](adapters.md#the-config-keys)). Three keys of the `flash_ansr`
+block are refused: `generation_config.method: oracle` and `complexity: ground_truth`, which need the problem's ground
+truth (it never reaches a worker), and `candidate_store_dir`, the in-process adapter's own store (the run judges and
+stores the worker's candidates). `options: {seed: N}` seeds every fit's draws and constant fits; without it they are
+unseeded, as in the in-process adapter.
+
+The worker returns the model's answer and every candidate it fitted, best first, each an infix string in the
+problem's column names with its fitted constants at full precision. The judge reads them as it reads any worker's
+expressions ([How an expression is read](adapters.md#how-an-expression-is-read)). `fit_time` is measured around the
+model's fit, as the in-process adapter measures it; loading the checkpoint is the worker's `load`, before the clock
+([Setup before the clock](fairness.md#setup-before-the-clock)). The result file records the worker's flash-ansr,
+SimpliPy and torch versions, the checkpoint's SHA-256 and engine, and the resolved ranking.
+
+`precision` is the transformer's arithmetic at inference: `auto` (bf16 on a CUDA device with native bf16, compute
+capability 8.0 or newer, and fp32 elsewhere), `bf16` (an error where it is not native) or `fp32`. A flash-ansr that
+has this setting applies it; for one that does not, the worker runs the fit under bf16 autocast by the same rule.
+Without the key the environment's flash-ansr keeps its own default, fp32 for the 0.19 line. Every row records the
+precision in force as `inference_precision`. `configs/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker_srbf.yaml`
+evaluates T8-3M this way on the whole suite.
 
 ## Flash-ANSR + PySR
 
@@ -149,12 +207,13 @@ model_adapter:
 | `timeout_in_seconds` | `60` | PySR's own limit on one search; a guard, not the budget |
 | `maxsize`, `parsimony` | PySR's defaults | passed on only when set; published results leave them unset ([Fairness](fairness.md#baselines-run-at-their-upstream-defaults)) |
 | `model_selection` | `best` | which equation of PySR's hall of fame is the prediction |
-| `warmup` | `true` | run a throwaway fit when the worker starts, so that Julia's one-time compilation is not part of the first problem's time |
+| `warmup` | `true` | run a throwaway fit in the worker's `setup`, before the clock, so that Julia's one-time compilation is not part of the first problem's time. Skipped when srbf's warm-up problem follows (`runner.warmup: true`), a fit at the run's own options that compiles the same code |
 | `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
 
 PySR searches over the operators the expressions are written in: `+ - * / ^`, `rootn`, and the unary
 operators `neg abs inv sin cos tan asin acos atan sinh cosh tanh asinh acosh atanh exp log`. The
-worker returns PySR's own predictions and stores the whole hall of fame in the `equations` column.
+worker returns PySR's own predictions and the whole hall of fame as the problem's candidates
+([Candidates](adapters.md#candidates)), and keeps PySR's measures of each equation in the `equations` column.
 `configs/evaluation/scaling/pysr_fastsrb.yaml` sweeps the iterations from 1 to 16,384.
 
 ## Operon
@@ -204,7 +263,8 @@ and division.
   benchmark's configs set `threads: all`, so Operon gets the whole machine, as every method does. With more than one
   thread the evaluation budget is counted in parallel and a run is not reproducible exactly.
 
-The worker stores the whole Pareto front in the `front` column. `configs/evaluation/scaling/operon_fastsrb.yaml`
+The worker returns the whole Pareto front as the problem's candidates ([Candidates](adapters.md#candidates)) and keeps
+Operon's measures of each member in the `front` column. `configs/evaluation/scaling/operon_fastsrb.yaml`
 sweeps the evaluations in doublings from 2^10 to 2^27, about 100 s per problem on the reference machine. The author's
 configuration also limits a search to 1,000 generations, as a backstop rather than a budget: his SRBench 2021
 configuration sets it only high enough for the evaluation budget to end a search first, and at his 10^6 evaluations a
@@ -288,6 +348,8 @@ same data and seed, the changed and the unchanged build take the same steps and 
   benchmark's configs set `threads: all` as for every method, and the worker caps no library's thread pool. The same
   data and seed give the same answer on the same machine.
 
+RILS-ROLS ends with one model, so its answer is the problem's only candidate ([Candidates](adapters.md#candidates)).
+
 `configs/evaluation/scaling/rilsrols_fastsrb.yaml` sweeps the fitness evaluations in doublings from 2^6, the first
 power of two above the method's first step (scoring the perturbations of its starting model), up to 2^22, about
 100 s per problem on the reference machine.
@@ -352,7 +414,7 @@ model_adapter:
 | `options.threads` | `1` | the threads Julia starts with, or `all`; with more than one, TiSR breeds and fits its islands in parallel |
 | `options.seed` | `0` | mixed with a hash of the problem's data into the run's seed |
 | `options.time_guard` | `3600` | TiSR's wall-clock limit in seconds, a guard; the `hit_time_guard` column marks a run it stopped |
-| `options.warmup` | `true` | run a throwaway fit when the worker starts, so that compiling TiSR is not part of the first problem's time |
+| `options.warmup` | `true` | run a throwaway fit in the worker's `setup`, before the clock, so that compiling TiSR is not part of the first problem's time. Skipped when srbf's warm-up problem follows (`runner.warmup: true`), a fit with the run's own settings that compiles the same code |
 | `options.config`, `options.config_by_problem` | none | TiSR settings that replace its defaults, for every problem or per problem; for side experiments only, which are then `harness_tuned`; they cannot set a stop |
 | `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
 
@@ -371,7 +433,8 @@ and srbf picks one only when the config sets `selection` ([Picking among candida
 `{mode: mdl}`, the two-part code srbf ranks Flash-ANSR's candidates with, is srbf's rule and not TiSR's. Without it
 every problem is recorded as failed. Either way the row carries the whole hall of fame in the `hall_of_fame` column,
 each member written in the benchmark's syntax with every constant at full precision, with TiSR's measures of it and
-with its `string_deviation`, how far the string's values are from TiSR's own.
+with its `string_deviation`, how far the string's values are from TiSR's own, and srbf judges and stores every member
+as one of the problem's candidates ([Candidates](adapters.md#candidates)).
 
 **What to know when reading the results:**
 - The weights 1/|y| make the search fit relative errors. TiSR replaces the infinite weight of a zero target by
@@ -504,7 +567,7 @@ model_adapter:
 | `options.n_samples` | `2000000` | expressions the RNN samples and GP-meld breeds, repeats included: the budget |
 | `options.seed` | `0` | mixed with a hash of the problem's data into the run's seed |
 | `options.max_seconds` | `3600` | a wall-clock guard far above every budget of the ladders; when it passes, the best expression so far is returned and `guard_hit` is set |
-| `options.warmup` | `true` | run a small throwaway fit when the worker starts, so that compiling DSO's numba functions is not part of the first problem's time |
+| `options.warmup` | `true` | run a small throwaway fit in the worker's `setup`, before the clock, so that compiling DSO's numba functions is not part of the first problem's time. Skipped when srbf's warm-up problem follows (`runner.warmup: true`), a fit of the run's own configuration that compiles and caches the same functions |
 | `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
 
 **Budget.** DSO checks `n_samples` after each iteration: an iteration is 1,000 expressions for DSR and 500 + 25 ×
@@ -558,7 +621,8 @@ method; its docstring gives the details.
   whose worker stops using the CPU for 60 seconds, or runs 30 times longer than the run's median problem, is tried
   once more in a fresh worker, and a second hang fails it. Every hang is logged.
 
-The worker stores the Pareto front of complexity against reward over every expression evaluated in the `front`
+The worker returns the Pareto front of complexity against reward over every expression evaluated as the problem's
+candidates ([Candidates](adapters.md#candidates)), computed within `fit_time`, keeps it with DSO's rewards in the `front`
 column, and the expressions and iterations used in `nevals` and `iterations`.
 `configs/evaluation/scaling/dso_dsr_fastsrb.yaml` sweeps DSR's budget in doublings of an iteration, from 1,000 to
 16,000 expressions, up to about 100 s per problem on the reference machine.
@@ -661,6 +725,7 @@ powers and roots, `abs`, `tan`, or the inverse and hyperbolic functions. It expr
   stall, ten seconds or more on the reference machine. Between 2^16 and 2^18 evaluations more and more runs stall, and the time per
   problem grows about tenfold per doubling of the budget.
 
+GP-GOMEA ends with one model, so its answer is the problem's only candidate ([Candidates](adapters.md#candidates)).
 The worker also stores GP-GOMEA's own printed model in the `model_string` column.
 `configs/evaluation/scaling/gpgomea_fastsrb.yaml` sweeps the evaluations in doublings, from 2^14,
 the first power of two above the cost of one generation, up to about 100 s per problem on the
@@ -735,7 +800,8 @@ empty mapping there, which states the same thing, every input numerical.
 - The option `threads` sets the threads feyn fits its models on (the authors' "auto" is the cores minus one). The
   benchmark's configs set `threads: all`, so QLattice gets the whole machine, as every method does.
 
-The worker stores the other models the method returned in the `diverse` column, and the largest deviation of the
+The worker returns every model the method returned, the answer first, as the problem's candidates
+([Candidates](adapters.md#candidates)), stores the other models with QLattice's measures in the `diverse` column, and the largest deviation of the
 expression from the model's own predictions in `string_deviation` and `string_deviation_val`.
 `configs/evaluation/scaling/qlattice_fastsrb.yaml` sweeps the epochs in doublings from 1 to 256, about 100 s per
 problem on the reference machine.
@@ -813,8 +879,10 @@ each is written as the function it computes, so that srbf evaluates what Bingo e
   use.
 - Every fit runs in one process on one thread. The same data and seed give the same answer.
 
-The worker also stores Bingo's own printed equation in the `bingo_string` column and its Pareto
-front in the `front` column. `configs/evaluation/scaling/bingo_fastsrb.yaml` sweeps the
+The worker returns the Pareto front of the equations Bingo refits at the end, on which the answer
+lies, as the problem's candidates ([Candidates](adapters.md#candidates)), computed within `fit_time`. It also
+stores Bingo's own printed equation in the `bingo_string` column and the front with Bingo's fitness in
+the `front` column. `configs/evaluation/scaling/bingo_fastsrb.yaml` sweeps the
 evaluations in doublings from 2^14 up to about 100 s per problem on the reference machine.
 
 ## Sampling and enumeration baselines
@@ -841,3 +909,6 @@ model_adapter:
 | `n_restarts`, `refiner_method`, `refiner_p0_noise` | `8`, `curve_fit_lm`, `normal` | the constant fit |
 | `node_penalty` | `0.05` | the prediction minimizes log10 FVU plus this penalty per node |
 | `unique`, `seed` (`lample_charton`) | `true`, none | skip duplicate samples; seed the sampler |
+
+Every expression either baseline fits, with its constants at full precision, goes to the run as one of the problem's
+candidates ([Candidates](adapters.md#candidates)), the prediction first.

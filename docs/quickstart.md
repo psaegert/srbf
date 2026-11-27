@@ -73,8 +73,8 @@ srbf run     -c bench/adapters/mymethod/config.yaml --experiment nguyen -v
 srbf analyze -c bench/adapters/mymethod/config.yaml -o report
 ```
 
-`report/results.md` holds one row per method, each cell a bootstrap median with its 95 % interval
-over the expressions, and `report/figures/` the plots:
+`report/results.md` holds one row per method, each cell the average over the benchmarks with its 95 %
+interval ([How results are averaged](averaging.md)), and `report/figures/` the plots:
 
 ```text
 | Model    | N expr | Numeric recovery (val) | Symbolic recovery    | Skeleton F1          | MDL ratio            | log10 FVU (val)         | Median R² (val)      |
