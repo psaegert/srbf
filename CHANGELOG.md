@@ -89,8 +89,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and input columns beyond the 17th were cut. The type `oracle` frees the same literals (`mask_fittable`), keeps the
   structural ones as written and fits them through flash-ansr's own candidate path (restarts, canonical form, constant
   ladder, typed-span duplicate, ranking) with the same settings and restarts ladder (1 to 1,024); every spelling it
-  fits goes to the run as a candidate. `first_recovery` stops the oracle at its first restart whose answer reproduces
-  the held-out points (for the acceptance of frozen draws). A `flash_ansr` block refuses `generation_config.method:
+  fits goes to the run as a candidate. `first_recovery` runs the oracle restart by restart, each from its own seed, and
+  stops at the first restart whose answer reproduces the held-out points and passes the caller's `accept` (the judge's
+  symbolic recognition, for the acceptance of frozen draws). A `flash_ansr` block refuses `generation_config.method:
   oracle`. Measured on 243 problems of 24 srbf catalogs (attempt 1 of each frozen draw, 32 restarts, the same
   candidate seed on both sides): the candidate handed to the refiner is identical on 243 of 243; of the 235 problems
   both answer, 229 get the identical answer and candidate list, and the other 6 differ only through the constant
