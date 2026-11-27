@@ -18,6 +18,7 @@ block. To enter a method of your own, see [Adding your method](adapters.md).
 | `subprocess`, `worker: qlattice` | [QLattice](#qlattice) | `scripts/envs/build_qlattice_env.sh envs/qlattice`: a virtual environment with Python 3.12 |
 | `subprocess`, `worker: bingo` | [Bingo](#bingo) | `scripts/envs/build_bingo_env.sh`, a conda environment of its own |
 | `lample_charton`, `brute_force` | [prior sampling and enumeration](#sampling-and-enumeration-baselines) | `pip install "srbf[flash-ansr]"` (they fit constants with its refiner) |
+| `oracle` | [the oracle](#the-oracle), a reference given the true formula | `pip install "srbf[flash-ansr]"` (it fits constants with its refiner); no checkpoint |
 | `subprocess` | [any method, in its own environment](adapters.md) | yours |
 
 Two keys are common to every block. `config_provenance` states who chose the configuration
@@ -65,7 +66,7 @@ model_adapter:
 |---|---|---|
 | `model_path` | required | the checkpoint directory |
 | `evaluation_config` | required | a mapping, or the path of a YAML file that holds it |
-| `evaluation_config.generation_config` | required | `method` (`softmax_sampling`, `prior_sampling` for the prior reference or `oracle` for the oracle) and its `kwargs`; `draws` is the budget |
+| `evaluation_config.generation_config` | required | `method` (`softmax_sampling`, or `prior_sampling` for the prior reference) and its `kwargs`; `draws` is the budget |
 | `evaluation_config.n_restarts`, `refiner_p0_noise` | required | restarts of the constant fit and the distribution of its starting points |
 | `evaluation_config.refiner_method` | `curve_fit_lm` | the optimizer of the constant fit |
 | `evaluation_config.ranking` | required | how the prediction is chosen among the fitted candidates; see below. A `ranking` block directly under `model_adapter` replaces it |
@@ -96,14 +97,6 @@ record of every candidate (token ids, its own FVU and ranking columns) for re-ra
 candidates are drawn from the training prior that ships beside the checkpoint
 (`catalog_train.yaml`) and then fitted and ranked like any other. It measures what the prior alone
 is worth (`configs/evaluation/scaling/flash-ansr-v25.0-T8-prior_srbf.yaml`).
-
-**The oracle.** With `generation_config.method: oracle` the model is not used either: the one candidate
-is the problem's ground truth, in the model's own emission format (a fittable literal is a
-`<constant>` for the refiner, a pow exponent or root index stays spelled), fitted and ranked like any
-other. Its budget is the refiner's restarts (`configs/evaluation/scaling/flash-ansr-v25.0-T8-oracle_srbf.yaml`,
-1 to 1,024). It is the ceiling of the fitting stage and runs only where a ground truth exists. The
-judge is strict for the oracle as for every method: where the refitted law comes back in another form,
-a constant factor or a root spelled differently, that is another structure.
 
 ### A checkpoint in its own environment
 
@@ -138,10 +131,9 @@ model_adapter:
 ```
 
 The block takes the keys of a `flash_ansr` block and the keys of a worker (`python`, `env`, `timeout`,
-`worker_log`, `max_restarts`, see [the config keys](adapters.md#the-config-keys)). Three keys of the `flash_ansr`
-block are refused: `generation_config.method: oracle` and `complexity: ground_truth`, which need the problem's ground
-truth (it never reaches a worker), and `candidate_store_dir`, the in-process adapter's own store (the run judges and
-stores the worker's candidates). `options: {seed: N}` seeds every fit's draws and constant fits; without it they are
+`worker_log`, `max_restarts`, see [the config keys](adapters.md#the-config-keys)). Two keys of the `flash_ansr`
+block are refused: `complexity: ground_truth`, which needs the problem's ground truth (it never reaches a worker), and
+`candidate_store_dir`, the in-process adapter's own store (the run judges and stores the worker's candidates). `options: {seed: N}` seeds every fit's draws and constant fits; without it they are
 unseeded, as in the in-process adapter.
 
 The worker returns the model's answer and every candidate it fitted, best first, each an infix string in the
@@ -180,6 +172,57 @@ The budget is a pair: Flash-ANSR's draws and PySR's iterations, paired so that b
 the reference machine (r* = 0.5; `flash_ansr.hybrid.R_STAR_LADDER`); the axis is labelled by the draws. The hybrid
 can also run by the clock (`hybrid: {budget_s: T, ratio: r}`: Flash-ANSR gets (1 - r) T of wall time, PySR the
 rest), which is how the ratio was chosen.
+
+## The oracle
+
+The adapter type `oracle` is a reference, not a method. It is given each problem's ground truth, the true formula,
+and only has to fit its constants. It shows how often fitting alone recovers a formula whose form is known, which
+bounds what a method that first has to find the form can reach. It needs flash-ansr's refiner and no checkpoint:
+
+```bash
+pip install "srbf[flash-ansr]"
+```
+
+```yaml
+model_adapter:
+  type: oracle
+  config_provenance: author_blessed
+  simplipy_engine: acj-5-4-llm
+  refiner_method: curve_fit_lm
+  refiner_p0_noise: normal
+  refiner_p0_noise_kwargs: {loc: 0.0, scale: 5}
+  ranking: {mode: mdl}
+  n_restarts: !sweep {name: ladder, values: [1, 32, 1024]}
+```
+
+Each fittable literal of the ground truth (a coefficient or an offset: what SimpliPy's `mask_fittable` policy masks)
+becomes a free constant, and each structural literal (a pow exponent, a root index) stays as written. The constants
+are then fitted by the path every Flash-ANSR candidate takes (`srbf.oracle`): `n_restarts` Levenberg-Marquardt fits
+from random starting values, the best fit in its canonical form, the constant ladder, a duplicate with the exponents
+free, and the ranking, which picks the answer among these spellings. The answer and every spelling go to the run as
+the problem's candidates ([Candidates](adapters.md#candidates)). No checkpoint, tokenizer or vocabulary takes part: a
+formula over any number of variables, with any operator the engine reads, is fitted as it is written. A problem
+without a ground truth (a data catalog) gets no answer.
+
+| key | default | meaning |
+|---|---|---|
+| `simplipy_engine` | required | the engine that reads, fits and prices the ground truth |
+| `ranking` | required | how the answer is chosen among the fitted spellings, as for [Flash-ANSR](#flash-ansr) |
+| `n_restarts` | 8 | fits from new random starting values: the oracle's budget |
+| `refiner_method` | `curve_fit_lm` | the optimizer of the fit |
+| `refiner_p0_noise`, `refiner_p0_noise_kwargs` | `normal`, `{loc: 0.0, scale: 5}` | the distribution of the starting values |
+| `refine_scope` | `fittable` | which literals are fitted: `fittable`, `placeholders` (the free constants only, also after a fit changed the form) or `all` (the exponents too) |
+| `refine_typed_spans` | `freeze_then_free` | `freeze_then_free` fits a duplicate with the exponents free beside the formula as written; `freeze` does not |
+| `constant_ladder` | on | re-spell fitted constants as integers, fractions and multiples of \(\pi\) and \(e\), and let the ranking choose |
+| `numpy_errors` | `ignore` | the floating-point error policy during the fit |
+| `seed` | none | fixes every starting value, so that the same problem gives the same answer; without it every fit draws fresh entropy |
+
+`configs/evaluation/scaling/oracle_srbf.yaml` evaluates it on the whole suite along 1 to 1,024 restarts. The judge is
+strict for the oracle as for every method: where the refitted law comes back in another form, a constant factor or a
+root spelled differently, that is another structure.
+
+`fit_time` is the time of the fit alone: the oracle loads nothing and runs no model. A `flash_ansr` block refuses
+`generation_config.method: oracle`; the oracle is this type.
 
 ## PySR
 

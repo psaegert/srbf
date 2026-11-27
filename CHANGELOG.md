@@ -82,6 +82,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its mean over problems is the Mean Improvability.
 
 ### Changed
+- **The oracle needs no checkpoint, tokenizer or vocabulary** (`model_adapter.type: oracle`, `srbf.oracle`,
+  `configs/evaluation/scaling/oracle_srbf.yaml`, results under `results/evaluation/scaling/oracle/`). The oracle was a
+  mode of the `flash_ansr` adapter (`generation_config.method: oracle`) that passed the ground truth through the T8-3M
+  checkpoint's tokenizer, so a formula with a variable beyond `x17` or a token outside the vocabulary got no answer,
+  and input columns beyond the 17th were cut. The type `oracle` frees the same literals (`mask_fittable`), keeps the
+  structural ones as written and fits them through flash-ansr's own candidate path (restarts, canonical form, constant
+  ladder, typed-span duplicate, ranking) with the same settings and restarts ladder (1 to 1,024); every spelling it
+  fits goes to the run as a candidate. `first_recovery` stops the oracle at its first restart whose answer reproduces
+  the held-out points (for the acceptance of frozen draws). A `flash_ansr` block refuses `generation_config.method:
+  oracle`. Measured on 243 problems of 24 srbf catalogs (attempt 1 of each frozen draw, 32 restarts, the same
+  candidate seed on both sides): the candidate handed to the refiner is identical on 243 of 243; of the 235 problems
+  both answer, 229 get the identical answer and candidate list, and the other 6 differ only through the constant
+  ladder's seed, which the old mode derived from the candidate's token ids (with that seed restored, 235 of 235
+  answers and 234 of 235 candidate lists are identical; the last swaps two lower-ranked candidates whose scores tie up
+  to the target variance's last digit, which numpy and torch compute differently). Numeric and symbolic recovery agree
+  on 235 of 235. `fit_time` no longer includes the checkpoint's encoder pass: at 32 restarts the mean CPU time per
+  problem falls from 0.32 s to 0.25 s (median 0.092 s to 0.047 s).
 - **A run that is to keep its candidates does not start without them.** A candidate store that cannot be opened, or an
   adapter without a SimpliPy engine to judge them with, stops the run with the reason before the method is prepared or
   fits anything, instead of warning and running without candidates; `runner.candidates: false` runs without them.

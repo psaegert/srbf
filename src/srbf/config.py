@@ -31,6 +31,7 @@ from srbf.model_adapters import (
     FlashANSRHybridAdapter,
     LampleChartonAdapter,
     NeSymReSAdapter,
+    OracleAdapter,
 )
 from srbf.subprocess_adapter import BUILTIN_WORKERS, SubprocessAdapter
 from srbf.paths import load_config, substitute_root_path
@@ -217,6 +218,10 @@ def flash_ansr_settings(config: Mapping[str, Any]) -> dict[str, Any]:
             "the number of expressions drawn from the model per problem. Rename the key (and the "
             "`choices` ladder in generation_overrides).")
     method = str(generation_section["method"])
+    if method == "oracle":
+        raise ValueError("generation_config.method: oracle: the oracle is an adapter of its own, model_adapter.type: "
+                         "oracle (docs/models.md), which fits the ground truth without a checkpoint, a tokenizer or a "
+                         "vocabulary")
     if method == "softmax_sampling":
         # The emission FORMAT is a sampling policy of the decoder (flash-ansr 0.17): 'fittable'
         # (default) spells the typed literals and leaves every fittable constant to the refiner.
@@ -310,8 +315,8 @@ def _build_flash_ansr_worker_adapter(config: Mapping[str, Any]) -> SubprocessAda
     interpreter ``python`` names: a checkpoint that needs another flash-ansr and SimpliPy than srbf's runs there, its
     answers judged by srbf's ``simplipy_engine``. The block's keys are the in-process adapter's (resolved by
     :func:`flash_ansr_settings`), plus the subprocess keys (``python``, ``env``, ``timeout``, ``worker_log``, ...).
-    What needs a problem's ground truth on the method's side (the oracle, ``complexity: ground_truth``) and the
-    in-process candidate ledger (``candidate_store_dir``) are refused: the ground truth never reaches a worker."""
+    What needs a problem's ground truth on the method's side (``complexity: ground_truth``) and the in-process candidate
+    ledger (``candidate_store_dir``) are refused: the ground truth never reaches a worker."""
     if not config.get("python"):
         raise ValueError("flash_ansr_worker requires 'python': the interpreter of the environment that has the "
                          "checkpoint's flash-ansr and SimpliPy")
@@ -319,9 +324,6 @@ def _build_flash_ansr_worker_adapter(config: Mapping[str, Any]) -> SubprocessAda
         raise ValueError("flash_ansr_worker: candidate_store_dir is the in-process adapter's ledger; a worker's "
                          "candidates are judged and stored by the run (runner.candidates)")
     settings = flash_ansr_settings(config)
-    if settings["generation"]["method"] == "oracle":
-        raise ValueError("flash_ansr_worker: the oracle needs each problem's ground truth, which never reaches a "
-                         "worker; run the oracle with type: flash_ansr")
     complexity = settings["complexity"]
     if complexity == "ground_truth":
         raise ValueError("flash_ansr_worker: complexity: ground_truth needs each problem's ground truth, which never "
@@ -523,6 +525,43 @@ def _build_lample_charton_adapter(config: Mapping[str, Any]) -> LampleChartonAda
     return LampleChartonAdapter(model)
 
 
+#: The keys of a ``type: oracle`` block besides ``type``, ``config_provenance`` and ``simplipy_engine``, and the
+#: flash-ansr ``RefineConfig`` field each refinement key sets.
+_ORACLE_REFINE_KEYS = {"n_restarts": "n_restarts", "refiner_method": "method", "refiner_p0_noise": "p0_noise",
+                       "refiner_p0_noise_kwargs": "p0_noise_kwargs", "refine_scope": "scope",
+                       "refine_typed_spans": "typed_spans", "constant_ladder": "constant_ladder",
+                       "numpy_errors": "numpy_errors"}
+_ORACLE_KEYS = ("type", "config_provenance", "simplipy_engine", "ranking", "seed", *_ORACLE_REFINE_KEYS)
+
+
+def _build_oracle_adapter(config: Mapping[str, Any]) -> OracleAdapter:
+    """The oracle (``srbf.oracle``): each problem's ground truth with its constants refitted by flash-ansr's candidate
+    path. Needs the engine (``simplipy_engine``) and the ranking (``ranking``); the refinement keys keep the spelling of
+    a ``flash_ansr`` block and default to flash-ansr's own values (8 restarts, ``curve_fit_lm``, N(0, 5^2) starting
+    values, the fittable scope, the constant ladder)."""
+    require_flash_ansr("the oracle")
+    from srbf.oracle import refine_config
+
+    unknown = sorted(set(config) - set(_ORACLE_KEYS))
+    if unknown:
+        raise ValueError(f"model_adapter (oracle): unknown keys {unknown}; allowed: {sorted(_ORACLE_KEYS)}")
+    reject_retired_ranking_keys(config, where="model_adapter (oracle)", retired=_RETIRED_FLASH_ANSR_RANKING_KEYS)
+    block, where = ranking_block_of(config, {})
+    settings = {field: config[key] for key, field in _ORACLE_REFINE_KEYS.items() if key in config}
+    if "n_restarts" in settings:
+        settings["n_restarts"] = coerce_int(settings["n_restarts"], "model_adapter.n_restarts")
+    try:
+        refine = refine_config(settings)
+    except ValueError as exc:
+        raise ValueError(f"model_adapter (oracle): {exc}") from exc
+    return OracleAdapter(
+        resolve_simplipy_engine(config, adapter_name="oracle"),
+        refine=refine,
+        ranking=resolve_ranking_mapping(block, where=where),
+        seed=coerce_optional_int(config.get("seed"), "model_adapter.seed"),
+    )
+
+
 def _build_brute_force_adapter(config: Mapping[str, Any]) -> BruteForceAdapter:
     require_flash_ansr("the brute_force adapter")
     from srbf.baselines import BruteForceModel
@@ -711,6 +750,7 @@ _ADAPTER_REGISTRY: dict[str, AdapterBuilder] = {
     "lample_charton": _build_lample_charton_adapter,
     "brute_force": _build_brute_force_adapter,
     "e2e": _build_e2e_adapter,
+    "oracle": _build_oracle_adapter,
 }
 
 
