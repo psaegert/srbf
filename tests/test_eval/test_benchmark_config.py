@@ -244,8 +244,9 @@ def _patch_flash_ansr(monkeypatch, captured):
             return SimpleNamespace()
 
     class DummyAdapter:
-        def __init__(self, model, device, complexity, candidate_store_dir=None):
+        def __init__(self, model, device, complexity, candidate_store_dir=None, seed=None):
             self.model = model
+            self.seed = seed
 
     monkeypatch.setattr(flash_ansr.utils.generation, "create_generation_config", fake_create_generation_config)
     monkeypatch.setattr(flash_ansr.flash_ansr, "FlashANSR", FakeFlashANSR)
@@ -279,6 +280,15 @@ def test_build_flash_ansr_adapter_generation_overrides(tmp_path, monkeypatch):
     assert captured["flash_ansr_kwargs"]["ranking"].mode == "weighted"
     assert dict(captured["flash_ansr_kwargs"]["ranking"].weights) == {"n_nodes": 0.2, "n_constants": 0.01}
     assert captured["flash_ansr_kwargs"]["ranking"].mdl_strength is None
+
+
+def test_build_flash_ansr_adapter_passes_its_seed(monkeypatch):
+    _patch_flash_ansr(monkeypatch, {})
+    inline_cfg = {"n_restarts": 2, "refiner_method": "curve_fit_lm", "refiner_p0_noise": "normal",
+                  "ranking": {"mode": "mdl"}, "generation_config": {"method": "softmax_sampling", "kwargs": {"draws": 4}}}
+    seeded = run_config.build_model_adapter({"type": "flash_ansr", "model_path": "./m", "evaluation_config": inline_cfg, "seed": "5"})
+    unseeded = run_config.build_model_adapter({"type": "flash_ansr", "model_path": "./m", "evaluation_config": inline_cfg})
+    assert seeded.seed == 5 and unseeded.seed is None
 
 
 def test_build_flash_ansr_adapter_inline_evaluation_config(monkeypatch):

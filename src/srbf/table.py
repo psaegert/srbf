@@ -190,6 +190,17 @@ def _spell_predictions(snapshot: dict[str, Any], operator_arity: Mapping[str, in
                          if prefix is not None and SYMPY_ONLY.intersection(map(str, prefix)) else prefix for prefix in seq]
 
 
+def judge_snapshot(snap: dict[str, Any], *, engine: Any, first_index: int | None = None) -> dict[str, Any]:
+    """The judge on one raw snapshot: its predictions brought into the ground truth's variable names and the engine's
+    spelling (in place), then :func:`srbf.derive_metrics` with the engine and its description length. Returns the
+    derived snapshot; :func:`judge_result_file` and the acceptance of frozen draws read it."""
+    from srbf.result_processing import derive_metrics
+
+    _rename_predictions(snap, first_index)
+    _spell_predictions(snap, engine.operator_arity)
+    return derive_metrics(snap, engine=engine, mdl_fn=mdl_bits(engine))
+
+
 def judge_result_file(path: str, *, method: str, draw: int = 1, engine: Any, first_index: int | None = None) -> list[list[Any]]:
     """The table rows (in :data:`COLUMNS` order) of one result file; an empty list for a file without problems.
 
@@ -198,7 +209,7 @@ def judge_result_file(path: str, *, method: str, draw: int = 1, engine: Any, fir
     import numpy as np  # noqa: F401 - the snapshots hold numpy arrays
 
     from srbf.metrics.symbolic import total_nestedness
-    from srbf.result_processing import WORST_VALUE, derive_metrics
+    from srbf.result_processing import WORST_VALUE
 
     with open(path, "rb") as fh:
         snap = pickle.load(fh)
@@ -212,10 +223,8 @@ def judge_result_file(path: str, *, method: str, draw: int = 1, engine: Any, fir
     shard = f"{m.group(2)}/{m.group(3)}" if m.group(2) else ""
     catalog = os.path.basename(os.path.dirname(path))
     sha = _model_sha(snap)
-    _rename_predictions(snap, first_index)
-    _spell_predictions(snap, engine.operator_arity)
+    s = judge_snapshot(snap, engine=engine, first_index=first_index)
     arity = engine.operator_arity
-    s = derive_metrics(snap, engine=engine, mdl_fn=mdl_bits(engine))
 
     def got(k: str, i: int) -> Any:
         return s[k][i] if k in s and i < len(s[k]) else None

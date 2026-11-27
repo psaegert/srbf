@@ -27,13 +27,12 @@ PRIOR_ARMS = {
     # the family; it is read from the T8-20M bundle.
     'flash-ansr-v25.0-T8-prior': 'psaegert/flash-ansr-v25.0-T8-20M',
 }
-# The oracle: the same harness fed the problem's ground truth (in the model's emission format: fittable
-# literals as <constant>, structural ones spelled) as its only candidate -- the ceiling of the fitting stage.
-# Its budget is the refiner's restarts, not draws. The candidate needs no model, only the tokenizer and the
-# engine, which every T8 bundle shares; the smallest bundle keeps the one encoder pass per problem cheap.
-ORACLE_ARMS = {
-    'flash-ansr-v25.0-T8-oracle': 'psaegert/flash-ansr-v25.0-T8-3M',
-}
+# The oracle (type: oracle, srbf.oracle): each problem's ground truth, its fittable literals freed and its structural
+# ones kept, fitted by Flash-ANSR's candidate path -- the ceiling of the fitting stage. Its budget is the refiner's
+# restarts, not draws. It needs no checkpoint, tokenizer or vocabulary, only the engine (the judge's, which the T8
+# checkpoints were trained with).
+ORACLE = 'oracle'
+ORACLE_ENGINE = 'acj-5-4-llm'
 # A checkpoint run by the flash-ansr and SimpliPy it was trained with, in an environment of its own (the adapter type
 # flash_ansr_worker, docs/models.md): the same harness, its answers judged by srbf's engine. The precision is flash-ansr's
 # default from 0.20 on, `auto`: bf16 where the GPU has it natively.
@@ -67,43 +66,69 @@ PRIOR_GENERATION = """        generation_config:
             decontaminate: true
             match_variables: true
             max_tries: 524288  # 8 x the 65,536 rung: a one-column problem that starves of unique draws stops here"""
-ORACLE_GENERATION = """        generation_config:
-          method: oracle   # the adapter hands the model each problem's ground truth"""
+SAMPLING = """    data_source:
+      catalog: {catalog}
+      sampling:
+        n_support: 512
+        n_validation: 512
+        noise: 0.0
+        problems_per_expression: 1"""
+
+
+def oracle_experiment(catalog: str) -> str:
+    """One catalog's experiment for the oracle: one rung per restart count."""
+    outs = ', '.join(f"'{{{{ROOT}}}}/results/evaluation/scaling/{ORACLE}/{catalog}/restarts_{c:06d}.pkl'"
+                     for c in RESTART_LADDER)
+    return f"""
+  {catalog}:
+{SAMPLING.format(catalog=catalog)}
+    model_adapter:
+      config_provenance: author_blessed
+      type: oracle
+      simplipy_engine: {ORACLE_ENGINE}
+      refiner_method: curve_fit_lm
+      refiner_p0_noise: normal
+      refiner_p0_noise_kwargs:
+        loc: 0.0
+        scale: 5
+      refine_scope: fittable
+      constant_ladder: true
+      ranking:
+        mode: mdl
+      n_restarts: !sweep
+        name: ladder
+        values: {RESTART_LADDER}
+    runner:
+      limit: null
+      save_every: 64
+      resume: true
+      output: !sweep
+        name: ladder
+        values: [{outs}]
+"""
 
 
 def experiment(model: str, repo: str, catalog: str, *, kind: str = 'softmax') -> str:
-    """One catalog's experiment for a decoder (`softmax`), a decoder in its own environment (`worker`), a prior
-    (`prior`) or an oracle (`oracle`) arm."""
-    oracle = kind == 'oracle'
-    ladder, prefix = (RESTART_LADDER, 'restarts') if oracle else (LADDER, 'choices')
+    """One catalog's experiment for a decoder (`softmax`), a decoder in its own environment (`worker`) or a prior
+    (`prior`) arm."""
     outs = ', '.join(
-        f"'{{{{ROOT}}}}/results/evaluation/scaling/{model}/{catalog}/{prefix}_{c:06d}.pkl'" for c in ladder)
+        f"'{{{{ROOT}}}}/results/evaluation/scaling/{model}/{catalog}/choices_{c:06d}.pkl'" for c in LADDER)
     device = 'cuda' if kind in ('softmax', 'worker') else 'cpu'
-    generation = {'softmax': SOFTMAX_GENERATION, 'worker': SOFTMAX_GENERATION, 'prior': PRIOR_GENERATION,
-                  'oracle': ORACLE_GENERATION}[kind]
+    generation = {'softmax': SOFTMAX_GENERATION, 'worker': SOFTMAX_GENERATION, 'prior': PRIOR_GENERATION}[kind]
     adapter_type = 'flash_ansr_worker' if kind == 'worker' else 'flash_ansr'
     worker_keys = (f"""
       python: '{WORKER_PYTHON}'
       simplipy_engine: {WORKER_ENGINE}     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{{{ROOT}}}}/results/evaluation/scaling/{model}/worker_logs/{catalog}.log'""" if kind == 'worker' else '')
-    overrides = (f"""      evaluation_overrides:
-        n_restarts: !sweep
-          name: ladder
-          values: {ladder}""" if oracle else f"""      generation_overrides:
+    overrides = f"""      generation_overrides:
         kwargs:
           draws: !sweep
             name: ladder
-            values: {ladder}""")
+            values: {LADDER}"""
     return f"""
   {catalog}:
-    data_source:
-      catalog: {catalog}
-      sampling:
-        n_support: 512
-        n_validation: 512
-        noise: 0.0
-        problems_per_expression: 1
+{SAMPLING.format(catalog=catalog)}
     model_adapter:
       config_provenance: author_blessed
       type: {adapter_type}{worker_keys}
@@ -140,18 +165,9 @@ def experiment(model: str, repo: str, catalog: str, *, kind: str = 'softmax') ->
 def main() -> None:
     arms = ([(model, repo, 'softmax') for model, repo in MODELS.items()]
             + [(model, repo, 'worker') for model, repo in WORKER_ARMS.items()]
-            + [(model, repo, 'prior') for model, repo in PRIOR_ARMS.items()]
-            + [(model, repo, 'oracle') for model, repo in ORACLE_ARMS.items()])
+            + [(model, repo, 'prior') for model, repo in PRIOR_ARMS.items()])
     for model, repo, kind in arms:
-        if kind == 'oracle':
-            head = (f"# the oracle (generation_config.method: oracle) on every srbf catalog: each problem's ground truth,\n"
-                    f"# in the model's emission format, as the only candidate, fitted by the refiner exactly as a decoded\n"
-                    f"# candidate is -- recovery as a function of the refiner's restarts, 1 to 1,024. The tokenizer and\n"
-                    f"# the engine come from {repo}. One experiment per catalog (`--experiment <catalog>`), one rung\n"
-                    f"# per restart count (`--sweep-filter ladder=<restarts>`). Generated by\n"
-                    f"# scripts/make_scaling_configs.py; do not edit by hand.\n"
-                    f"experiments:\n")
-        elif kind == 'worker':
+        if kind == 'worker':
             head = (f"# {repo} on every srbf catalog, run by the flash-ansr and SimpliPy it was trained with in an\n"
                     f"# environment of its own (type: flash_ansr_worker; docs/models.md), its answers judged by srbf's\n"
                     f"# engine: recovery as a function of the sampling budget, 1 to 65,536 draws. One experiment per\n"
@@ -169,7 +185,16 @@ def main() -> None:
         body = ''.join(experiment(model, repo, c, kind=kind) for c in CATALOGS)
         path = ROOT / 'configs' / 'evaluation' / 'scaling' / f'{model}_srbf.yaml'
         path.write_text(head + body.lstrip('\n'))
-        print(path.relative_to(ROOT), len(CATALOGS), 'experiments x', len(RESTART_LADDER if kind == 'oracle' else LADDER), 'rungs')
+        print(path.relative_to(ROOT), len(CATALOGS), 'experiments x', len(LADDER), 'rungs')
+    head = ("# the oracle (type: oracle, srbf.oracle) on every srbf catalog: each problem's ground truth with its\n"
+            "# constants refitted by Flash-ANSR's candidate path, without a checkpoint, a tokenizer or a vocabulary --\n"
+            "# recovery as a function of the refiner's restarts, 1 to 1,024. One experiment per catalog\n"
+            "# (`--experiment <catalog>`), one rung per restart count (`--sweep-filter ladder=<restarts>`). Generated by\n"
+            "# scripts/make_scaling_configs.py; do not edit by hand.\n"
+            "experiments:\n")
+    path = ROOT / 'configs' / 'evaluation' / 'scaling' / f'{ORACLE}_srbf.yaml'
+    path.write_text(head + ''.join(oracle_experiment(c) for c in CATALOGS).lstrip('\n'))
+    print(path.relative_to(ROOT), len(CATALOGS), 'experiments x', len(RESTART_LADDER), 'rungs')
 
 
 if __name__ == '__main__':

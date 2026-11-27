@@ -52,12 +52,13 @@ def _toy_problems(seed: int) -> list[tuple[dict, dict]]:
                    "y_support_noisy": 3 * xd + 0.25}
     placeholder = {"row": 3, "eq_id": "p", "kind": "formula", "skeleton": None, "expression": None, "constants": [],
                    "variables": ["x1"], "complexity": None, "gt_kind": "exact", "noise": 0.0, "meta": {},
-                   "is_placeholder": True, "placeholder_reason": "max_trials_exhausted"}
+                   "is_placeholder": True, "placeholder_reason": "max_trials_exhausted",
+                   "attempt": 1, "checked": True, "formula_inherent": True, "failures": ["placeholder"] * 4}
     c = 1.0 + seed / 10
-    return [formula("a", 0, x0, xv0, lambda x: 2 * x, ["*", "2", "x1"]),
-            formula("b", 1, x1, xv1, lambda x: c * x[:, :1] + x[:, 1:], ["+", "*", repr(c), "x1", "x2"],
-                    meta={"per_run_values": {"c": c}}),
-            (data_record, data_arrays), (placeholder, {})]
+    second = formula("b", 1, x1, xv1, lambda x: c * x[:, :1] + x[:, 1:], ["+", "*", repr(c), "x1", "x2"],
+                     meta={"per_run_values": {"c": c}})
+    second[0].update(attempt=3, checked=True, formula_inherent=False, failures=["numeric", "symbolic"])
+    return [formula("a", 0, x0, xv0, lambda x: 2 * x, ["*", "2", "x1"]), second, (data_record, data_arrays), (placeholder, {})]
 
 
 def _render(root, catalog_path, *, name="toy", repeats=(1,), seed=0) -> dict:
@@ -73,9 +74,10 @@ def _render(root, catalog_path, *, name="toy", repeats=(1,), seed=0) -> dict:
         path = root / name / f"repeat-{repeat}.npz"
         np.savez(path, _meta=np.frombuffer(json.dumps(meta).encode(), dtype=np.uint8), **arrays)
         files[str(repeat)] = {"path": f"{name}/{path.name}", "bytes": path.stat().st_size, "sha256": _sha(path)}
+    entry = {**identity, "problems": 4, "kinds": {}, "ids": None, "placeholders": {}, "files": files}
     manifest = {"format": "symbolic-data/frozen-draws", "format_version": 1, "settings": SETTINGS, "repeats": list(repeats),
-                "rendered_with": {}, "catalogs": {name: {**identity, "problems": 4, "kinds": {}, "ids": None,
-                                                         "placeholders": {}, "files": files}}}
+                "rendered_with": {}, "acceptance": {"attempts_sha256": "a" * 64, "rule": "the test's rule"},
+                "catalogs": {name: entry}}
     (root / "manifest.json").write_text(json.dumps(manifest, indent=1, sort_keys=True))
     return manifest
 
@@ -109,6 +111,9 @@ def test_reads_every_problem_as_rendered_and_records_the_draws(catalog, draws):
         meta = sample.metadata
         assert meta["eval_row_index"] == index and meta["benchmark_eq_id"] == record["eq_id"]
         assert meta["draws_sha256"] == sha and meta["draws_repeat"] == 1
+        assert meta["draws_attempt"] == record.get("attempt", 1)
+        assert meta["draws_formula_inherent"] == record.get("formula_inherent", False)
+        assert meta["draws_failures"] == record.get("failures", [])
         if record["is_placeholder"]:
             assert sample.is_placeholder and meta["placeholder_reason"] == "max_trials_exhausted"
             continue
@@ -121,6 +126,9 @@ def test_reads_every_problem_as_rendered_and_records_the_draws(catalog, draws):
     identity = source.draws_identity()
     assert identity["sha256"] == sha and identity["repeat"] == 1 and identity["catalog"] == "toy"
     assert identity["manifest_sha256"] == _sha(draws / "manifest.json")
+    assert identity["acceptance"] == {"attempts_sha256": "a" * 64, "rule": "the test's rule"}
+    assert [s.metadata["draws_attempt"] for s in samples] == [1, 3, 1, 1]
+    assert samples[1].metadata["draws_failures"] == ["numeric", "symbolic"]       # what failed attempts 1 and 2
 
 
 def test_a_noise_level_scales_the_stored_vector_on_formula_problems_only(catalog, draws):

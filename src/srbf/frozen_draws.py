@@ -100,6 +100,7 @@ class FrozenDrawsSource:
         if manifest.get("format") != FORMAT or manifest.get("format_version") not in FORMAT_VERSIONS:
             raise FrozenDrawsError(f"{manifest_path}: not a {FORMAT} manifest of version {FORMAT_VERSIONS}")
         self.settings = dict(manifest["settings"])
+        self.acceptance = manifest.get("acceptance")
         self.level = self._check_sampling(sampling or {})
         if holdouts:
             raise FrozenDrawsError("data_source.holdouts cannot apply to frozen draws: the render is the problem set")
@@ -163,7 +164,15 @@ class FrozenDrawsSource:
         """What a result records about the draws it read."""
         return {"format_version": FORMAT_VERSIONS[-1], "catalog": self.catalog_name, "catalog_sha256": self.catalog_sha256,
                 "repeat": self.repeat, "path": str(self.path), "sha256": self.sha256, "size": self.size,
-                "manifest_sha256": self.manifest_sha256, "settings": dict(self.settings), "noise": self.level}
+                "manifest_sha256": self.manifest_sha256, "settings": dict(self.settings), "noise": self.level,
+                "acceptance": self.acceptance}
+
+    def row_fields(self, index: int) -> dict[str, Any]:
+        """What a result row records about its problem's draw: the attempt kept, whether the formula is flagged
+        formula-inherent (no attempt let it be recognized) and the kind of each failed attempt, in order."""
+        record = self.records[index]
+        return {"draws_attempt": int(record.get("attempt", 1)), "draws_formula_inherent": bool(record.get("formula_inherent", False)),
+                "draws_failures": [str(kind) for kind in record.get("failures") or []]}
 
     def __iter__(self) -> Iterator[Any]:
         from symbolic_data import Problem

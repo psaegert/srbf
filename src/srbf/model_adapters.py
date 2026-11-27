@@ -69,9 +69,13 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         device: str = "cpu",
         complexity: str | list[int | float] | int | float = "none",
         candidate_store_dir: str | None = None,
+        seed: int | None = None,
     ) -> None:
         self.model = model
         self.device = device
+        # A seed makes every fit reproducible (flash-ansr derives each candidate's restarts from it and the candidate);
+        # None keeps fresh entropy per fit.
+        self.seed = None if seed is None else int(seed)
         # Fail fast on an unknown mode: a bad string would otherwise only surface on the first problem,
         # AFTER the (slow) model load. Keep the accepted strings in sync with `_resolve_complexity`.
         if isinstance(complexity, str) and complexity not in ("none", "ground_truth"):
@@ -134,16 +138,6 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         record["inference_precision"] = self.inference_precision()
 
         y_fit = sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support
-        if getattr(self.model.generation_config, "method", None) == "oracle":
-            # The oracle's one privilege, in oracle mode only: this problem's ground truth (the law with its
-            # literals spelled, over the columns as x1..xN) becomes the one candidate the refiner fits.
-            # A fresh config of the model's own kind, so srbf needs no newer flash-ansr to run older ones.
-            expression = record.get("expression")
-            if not expression:
-                record["error"] = "The oracle needs the problem's ground truth, and this problem has none."
-                record["prediction_success"] = False
-                return EvaluationResult(record)
-            self.model.generation_config = type(self.model.generation_config)(expression=list(expression))
         complexity_value = self._resolve_complexity(record)
         variable_names = record.get("variable_names")
         x_val = sample.x_validation if sample.x_validation.shape[0] > 0 else None
@@ -158,6 +152,7 @@ class FlashANSRAdapter(EvaluationModelAdapter):
                     sample.x_support, y_fit,
                     variable_names=variable_names if variable_names is not None else "auto",
                     complexity=complexity_value,
+                    **({} if self.seed is None else {"seed": self.seed}),
                 )
         except (ConvergenceError, OverflowError, TypeError, ValueError) as exc:
             record["error"] = str(exc)
@@ -321,6 +316,90 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         if mode == "ground_truth":
             return metadata.get("complexity")
         raise NotImplementedError(f"Unsupported complexity configuration: {mode}")
+
+
+class OracleAdapter(EvaluationModelAdapter):
+    """The oracle (:mod:`srbf.oracle`): each problem's ground truth with its constants refitted.
+
+    The ground truth is the one thing the adapter reads that no method is given. ``refine`` holds the refinement
+    settings (flash-ansr's ``RefineConfig``), ``ranking`` the ranking that picks the answer among the fitted spellings,
+    ``seed`` fixes every fit's starting values (None: fresh entropy per fit). No model is loaded: the engine is the
+    adapter's whole state.
+    """
+
+    def __init__(self, simplipy_engine: Any, *, refine: Any, ranking: Any, seed: int | None = None) -> None:
+        self.simplipy_engine = simplipy_engine
+        self.refine = refine
+        self.ranking = ranking
+        self.seed = None if seed is None else int(seed)
+
+    def get_simplipy_engine(self) -> Any:
+        """Return the SimpliPy engine the oracle reads, fits and prices the ground truth with."""
+        return self.simplipy_engine
+
+    def ranking_config(self) -> dict[str, Any] | None:
+        """The resolved ranking in force, as ``__meta__`` and every row record it."""
+        return dict(self.ranking.as_dict())
+
+    def prepare(self, *, data_source: Any | None = None) -> None:  # noqa: ARG002
+        return None
+
+    def evaluate_sample(self, sample: EvaluationSample) -> EvaluationResult:
+        from srbf.oracle import refit_formula
+
+        record = sample.clone_metadata()
+        record["ranking"] = self.ranking_config()
+        expression = record.get("expression")
+        if not expression:
+            record["error"] = "The oracle needs the problem's ground truth, and this problem has none."
+            record["prediction_success"] = False
+            return EvaluationResult(record)
+        y_fit = sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support
+        fit_t0 = time.time()
+        try:
+            fit = refit_formula(list(expression), sample.x_support, y_fit, engine=self.simplipy_engine,
+                                refine=self.refine, ranking=self.ranking, seed=self.seed,
+                                variable_names=record.get("variable_names"))
+        except (OverflowError, TypeError, ValueError) as exc:
+            record["error"] = str(exc)
+            record["prediction_success"] = False
+            return EvaluationResult(record)
+        record["fit_time"] = time.time() - fit_t0
+        return EvaluationResult(self.answer(record, sample, fit))
+
+    @staticmethod
+    def answer(record: dict[str, Any], sample: EvaluationSample, fit: Any) -> dict[str, Any]:
+        """``record`` (the sample's metadata) with the answer of ``fit`` (an :class:`srbf.oracle.OracleFit` on
+        ``sample``) and its candidates, as a run stores them; returns ``record``."""
+        record["refinement_time"] = fit.refinement_time
+        best = fit.best
+        if best is None:
+            record["error"] = f"The oracle fitted no candidate: {fit.reason}."
+            record["prediction_success"] = False
+            return record
+
+        record["prediction_success"] = True
+        record["predicted_expression"] = best.infix
+        record["predicted_expression_prefix"] = normalize_expression(list(best.prefix))
+        record["predicted_skeleton_prefix"] = list(best.skeleton)
+        record["predicted_constants"] = list(best.constants)
+        record["predicted_score"] = best.score
+        record["predicted_mdl"] = best.mdl
+        record["predicted_n_nodes"] = best.n_nodes
+        record["predicted_pareto_rank"] = best.pareto_rank
+        record["predicted_typed_frozen"] = best.typed_frozen
+        record["predicted_typed_thaw"] = best.typed_thaw
+        record["predicted_spelling"] = best.spelling
+        # every spelling the oracle fitted, its constants substituted, for the run to judge and store (srbf.candidates)
+        record["candidate_expressions"] = [" ".join(c.prefix) for c in fit.candidates]
+        record["candidate_notation"] = "prefix"
+        record["candidate_variables"] = [f"x{i + 1}" for i in range(np.asarray(sample.x_support).shape[1])]
+        record["candidate_prediction"] = 0
+
+        x_val = sample.x_validation if sample.x_validation.shape[0] > 0 else None
+        record["y_pred"] = best.predict(sample.x_support).copy()
+        record["y_pred_val"] = best.predict(x_val).copy() if x_val is not None else np.empty_like(sample.y_validation)
+        return record
 
 
 def _evaluate_refiner_baseline(model: Any, sample: EvaluationSample) -> EvaluationResult:

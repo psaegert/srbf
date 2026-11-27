@@ -236,15 +236,19 @@ class CatalogSource(EvaluationDataSource):
             # exact | reference | none (symbolic-data 0.11.0); "exact" for older releases.
             # Metric regimes key on this: never pool reference/none FVU with exact-GT rows.
             "gt_kind": getattr(problem, "gt_kind", "exact"),
-            **self._draws_fields(),
+            **self._draws_fields(row_index),
         }
 
-    def _draws_fields(self) -> dict[str, Any]:
-        """Which draws a row was read from: the file's sha256 and the repeat (no fields when drawn afresh)."""
+    def _draws_fields(self, row_index: int) -> dict[str, Any]:
+        """Which draws a row was read from: the file's sha256, the repeat, the attempt the problem keeps and its
+        formula-inherent flag (no fields when drawn afresh)."""
         if self._draws is None:
             identity = self.draws_identity()
             self._draws = {} if identity is None else {"draws_sha256": identity["sha256"], "draws_repeat": identity["repeat"]}
-        return dict(self._draws)
+        if not self._draws:
+            return {}
+        row_fields = getattr(self.problem_source, "row_fields", None)
+        return {**self._draws, **(row_fields(row_index) if callable(row_fields) else {})}
 
     def _encode_input_ids(self, skeleton_tokens: list[str]) -> list[int]:
         tokenizer = self.tokenizer

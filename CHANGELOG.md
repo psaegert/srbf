@@ -50,6 +50,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   render, holdouts, or an output file holding rows of other draws are refused. Rows record `draws_sha256` and
   `draws_repeat`, `__meta__` records `draws` and the input `catalog_draws` (checked by paired comparisons), and
   `srbf merge` refuses shards of different draws. One draw per problem (`repeat: 1`) is the default.
+- **Frozen draws are accepted draws** (`srbf.draw_acceptance`, `scripts/accept_frozen_draws.py`). Each problem keeps
+  the first seeded attempt (symbolic-data's `CatalogDraws`) on which its targets are finite with a defined FVU on both
+  sides and, at some restart, the oracle (`type: oracle`: the ground truth with its constants refitted, no checkpoint)
+  reaches numeric recovery on the held-out points with a refitted formula the judge recognizes; attempt 1 with the
+  flag `formula_inherent` when none within `max_trials` does. The oracle runs restart by restart from seeded starting
+  values and stops at the first restart that passes both (`srbf.oracle.first_recovery`); an attempt fails only when
+  none of its 1,024 restarts does. Constant formulas and data problems are not checked. The script writes the attempts
+  document symbolic-data renders with, which records the kind of each failed attempt (`failures`); `--shard K/N`
+  splits the run into independent tasks, each resumable from its own journal, and `--merge` writes the document from
+  their journals. Rows record `draws_attempt`, `draws_formula_inherent` and `draws_failures`, `__meta__.draws` the
+  acceptance. Judging only the first restart that recovers numerically made the kept attempt depend on the oracle's
+  seed where only a product or ratio of a law's constants is fixed by the data. Checked again at three oracle seeds on
+  the ten problems where that was seen (21 attempts: seven AI-Feynman laws, the BMS prior expression, decomposable-NSR
+  E9 and AI Feynman 2.0 table 4 equation 12), every attempt gets the same verdict at all three seeds, so each problem
+  keeps the same attempt: attempt 1 for nine, attempt 3 for table 4 equation 12, whose first two attempts fail
+  numerically at every seed. The passing restart came between the 3rd and the 716th of 1,024. `srbf.table.judge_snapshot` is the judge on one snapshot (what `judge_result_file`
+  runs).
+- **`model_adapter.seed` (flash_ansr)**: seeds every fit, so that the same problem gives the same answer.
 - **Every candidate of every method, stored and judged by srbf.** A worker returns its own front (PySR's hall of fame,
   Operon's, DSO's and Bingo's Pareto fronts, QLattice's diverse models, TiSR's hall of fame) as `candidates` beside its
   `expression`, which stays the answer; Flash-ANSR and the sampling and enumeration baselines hand over every
@@ -82,6 +100,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its mean over problems is the Mean Improvability.
 
 ### Changed
+- **The oracle needs no checkpoint, tokenizer or vocabulary** (`model_adapter.type: oracle`, `srbf.oracle`,
+  `configs/evaluation/scaling/oracle_srbf.yaml`, results under `results/evaluation/scaling/oracle/`). The oracle was a
+  mode of the `flash_ansr` adapter (`generation_config.method: oracle`) that passed the ground truth through the T8-3M
+  checkpoint's tokenizer, so a formula with a variable beyond `x17` or a token outside the vocabulary got no answer,
+  and input columns beyond the 17th were cut. The type `oracle` frees the same literals (`mask_fittable`), keeps the
+  structural ones as written and fits them through flash-ansr's own candidate path (restarts, canonical form, constant
+  ladder, typed-span duplicate, ranking) with the same settings and restarts ladder (1 to 1,024); every spelling it
+  fits goes to the run as a candidate. `first_recovery` runs the oracle restart by restart, each from its own seed, and
+  stops at the first restart whose answer reproduces the held-out points and passes the caller's `accept` (the judge's
+  symbolic recognition, for the acceptance of frozen draws). A `flash_ansr` block refuses `generation_config.method:
+  oracle`. Measured on 243 problems of 24 srbf catalogs (attempt 1 of each frozen draw, 32 restarts, the same
+  candidate seed on both sides): the candidate handed to the refiner is identical on 243 of 243; of the 235 problems
+  both answer, 229 get the identical answer and candidate list, and the other 6 differ only through the constant
+  ladder's seed, which the old mode derived from the candidate's token ids (with that seed restored, 235 of 235
+  answers and 234 of 235 candidate lists are identical; the last swaps two lower-ranked candidates whose scores tie up
+  to the target variance's last digit, which numpy and torch compute differently). Numeric and symbolic recovery agree
+  on 235 of 235. `fit_time` no longer includes the checkpoint's encoder pass: at 32 restarts the mean CPU time per
+  problem falls from 0.32 s to 0.25 s (median 0.092 s to 0.047 s).
 - **A run that is to keep its candidates does not start without them.** A candidate store that cannot be opened, or an
   adapter without a SimpliPy engine to judge them with, stops the run with the reason before the method is prepared or
   fits anything, instead of warning and running without candidates; `runner.candidates: false` runs without them.
