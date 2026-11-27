@@ -5,7 +5,8 @@
   (``mult2..5``, ``div2..5``, ``pow2..5``, ``pow1_2..pow1_5``) respelled into the current one, a
   pure token rewrite with no simplification (the table of simplipy's
   ``benchmarks/corpus/convert_nv.py``).
-* :func:`prefix_to_infix` -- a prefix token list rendered as the plain infix srbf's engine reads.
+* :func:`prefix_to_infix` -- a prefix token list rendered as the plain infix srbf's engine reads
+  (SimpliPy 0.14 and 0.15 read it alike), its variables optionally renamed.
 * :func:`substitute_placeholders` -- ``<constant>`` placeholders replaced by fitted values.
 """
 
@@ -17,6 +18,8 @@ LEGACY_DIV = {"div%d" % k: str(k) for k in (2, 3, 4, 5)}
 LEGACY_POW = {"pow%d" % k: str(k) for k in (2, 3, 4, 5)}
 LEGACY_ROOT = {"pow1_%d" % k: str(k) for k in (2, 3, 4, 5)}
 LEGACY_TOKENS = set(LEGACY_MULT) | set(LEGACY_DIV) | set(LEGACY_POW) | set(LEGACY_ROOT)
+# SimpliPy's prefix spells the two named constants as numpy does; the judge reads them as ``pi`` and ``e``.
+NAMED_CONSTANTS = {"np.pi": "pi", "np.e": "e"}
 
 
 def _arity(token):
@@ -64,30 +67,45 @@ def respell_legacy_prefix(tokens):
     return out
 
 
-def _to_infix(tokens, i):
+def _leaf(token, names):
+    """A leaf in infix: a variable (renamed by ``names``), a named constant, or a number (a negative one in
+    parentheses, so that no reader sees two signs in a row)."""
+    t = str(token)
+    if t.startswith("<"):
+        raise ValueError("token %r is no number, variable or constant: substitute placeholders first" % t)
+    if t in NAMED_CONSTANTS:
+        return NAMED_CONSTANTS[t]
+    if names and t in names:
+        return str(names[t])
+    return "(%s)" % t if t.startswith("-") else t
+
+
+def _to_infix(tokens, i, names):
     if i >= len(tokens):
         raise ValueError("prefix expression ends inside an operator's arguments")
     t = tokens[i]
     if t in LEGACY_TOKENS:
         raise ValueError("legacy token %r: respell with respell_legacy_prefix() first" % t)
     if t in BINARY:
-        a, j = _to_infix(tokens, i + 1)
-        b, j = _to_infix(tokens, j)
+        a, j = _to_infix(tokens, i + 1, names)
+        b, j = _to_infix(tokens, j, names)
         if t == "pow":
             return "(%s)**(%s)" % (a, b), j
         if t == "rootn":
             return "rootn(%s, %s)" % (a, b), j
         return "(%s %s %s)" % (a, t, b), j
     if t in UNARY:
-        a, j = _to_infix(tokens, i + 1)
+        a, j = _to_infix(tokens, i + 1, names)
         return "%s(%s)" % (t, a), j
-    return str(t), i + 1
+    return _leaf(t, names), i + 1
 
 
-def prefix_to_infix(tokens):
+def prefix_to_infix(tokens, names=None):
     """Render a prefix token list (current vocabulary) as plain infix: ``+ * 2 x1 pow x2 3`` ->
-    ``((2 * x1) + (x2)**(3))``."""
-    text, j = _to_infix(list(tokens), 0)
+    ``((2 * x1) + (x2)**(3))``. ``names`` renames variables (``{"x1": "v1"}``, leaves only), ``np.pi`` and
+    ``np.e`` are written ``pi`` and ``e``, and a negative number stands in parentheses. A ``<...>`` token
+    (an unfilled placeholder, a special token) raises."""
+    text, j = _to_infix(list(tokens), 0, dict(names or {}))
     if j != len(tokens):
         raise ValueError("trailing tokens after a complete prefix expression: %r" % (list(tokens)[j:],))
     return text

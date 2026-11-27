@@ -165,11 +165,14 @@ def build_model_adapter(config: Mapping[str, Any]) -> Any:
     return builder(config)
 
 
-def _build_flash_ansr_adapter(config: Mapping[str, Any]) -> FlashANSRAdapter:
-    require_flash_ansr("the flash_ansr adapter")
-    from flash_ansr.flash_ansr import FlashANSR
-    from flash_ansr.utils.generation import create_generation_config
+def flash_ansr_settings(config: Mapping[str, Any]) -> dict[str, Any]:
+    """A ``flash_ansr`` block resolved into Flash-ANSR's policy, as plain data and without importing flash-ansr.
 
+    Returns ``model_path`` (``{{ROOT}}`` replaced), ``generation`` (``method`` and ``kwargs``, the overrides merged and
+    the emission format set), ``refine``, ``compute`` (the keys of flash-ansr's config objects), ``ranking`` (the
+    ``ranking:`` block, checked for its keys but not resolved), ``ranking_where`` (where the block came from, for
+    messages), ``complexity`` and ``device`` (the device the adapter moves the model to). The in-process builder loads
+    the model with them; the ``flash_ansr_worker`` type hands them to the worker, whose own flash-ansr resolves them."""
     model_path = config.get("model_path")
     eval_config_payload = config.get("evaluation_config")
     if model_path is None or eval_config_payload is None:
@@ -202,10 +205,10 @@ def _build_flash_ansr_adapter(config: Mapping[str, Any]) -> FlashANSRAdapter:
 
     # A retired ranking key in EITHER layer would be silently ignored and the run would rank at the
     # default -- the defect that left every srbf run to date at penalty 0.0. Check both, then
-    # resolve the REQUIRED `ranking` block (validated before the model loads).
+    # check the REQUIRED `ranking` block (resolved by flash-ansr, before the model loads).
     reject_retired_ranking_keys(config, where="model_adapter (flash_ansr)", retired=_RETIRED_FLASH_ANSR_RANKING_KEYS)
     reject_retired_ranking_keys(eval_cfg, where="model_adapter.evaluation_config (flash_ansr)", retired=_RETIRED_FLASH_ANSR_RANKING_KEYS)
-    ranking = resolve_ranking_block(config, eval_cfg)
+    ranking_block, ranking_where = ranking_block_of(config, eval_cfg)
 
     generation_kwargs = dict(generation_section.get("kwargs", {}))
     if "choices" in generation_kwargs:
@@ -218,10 +221,9 @@ def _build_flash_ansr_adapter(config: Mapping[str, Any]) -> FlashANSRAdapter:
         # The emission FORMAT is a sampling policy of the decoder (flash-ansr 0.17): 'fittable'
         # (default) spells the typed literals and leaves every fittable constant to the refiner.
         generation_kwargs.setdefault("emission", emission)
-    generation_config = create_generation_config(method=method, **generation_kwargs)
 
     # The estimator's policy in flash-ansr's config objects (0.17): the refiner, the ranking (resolved
-    # above, knob by knob for ITS mode), the compute. Keys keep srbf's spelling in the YAML.
+    # by flash-ansr, knob by knob for ITS mode), the compute. Keys keep srbf's spelling in the YAML.
     refine: dict[str, Any] = {
         "n_restarts": eval_cfg["n_restarts"],
         "method": eval_cfg.get("refiner_method", "curve_fit_lm"),
@@ -260,27 +262,87 @@ def _build_flash_ansr_adapter(config: Mapping[str, Any]) -> FlashANSRAdapter:
     if precision is not None:
         compute["precision"] = str(precision)
 
-    model = FlashANSR.load(
-        directory=substitute_root_path(str(model_path)),
-        generation_config=generation_config,
-        refine=refine,
-        ranking=ranking,
-        compute=compute,
-    )
+    return {
+        "model_path": substitute_root_path(str(model_path)),
+        "generation": {"method": method, "kwargs": generation_kwargs},
+        "refine": refine,
+        "compute": compute,
+        "ranking": dict(ranking_block),
+        "ranking_where": ranking_where,
+        "complexity": config.get("complexity", eval_cfg.get("complexity", "none")),
+        "device": config.get("device", eval_cfg.get("device", "cpu")),
+    }
 
-    complexity = config.get("complexity", eval_cfg.get("complexity", "none"))
-    adapter_device = config.get("device", eval_cfg.get("device", "cpu"))
+
+def _build_flash_ansr_adapter(config: Mapping[str, Any]) -> FlashANSRAdapter:
+    require_flash_ansr("the flash_ansr adapter")
+    from flash_ansr.flash_ansr import FlashANSR
+    from flash_ansr.utils.generation import create_generation_config
+
+    settings = flash_ansr_settings(config)
+    ranking = resolve_ranking_mapping(settings["ranking"], where=settings["ranking_where"])
+    generation_config = create_generation_config(method=settings["generation"]["method"],
+                                                 **settings["generation"]["kwargs"])
+
+    model = FlashANSR.load(
+        directory=settings["model_path"],
+        generation_config=generation_config,
+        refine=settings["refine"],
+        ranking=ranking,
+        compute=settings["compute"],
+    )
 
     return FlashANSRAdapter(
         model,
-        device=adapter_device,
-        complexity=complexity,
+        device=settings["device"],
+        complexity=settings["complexity"],
         # substitute_root_path like every other path field (output/model_path/...); without it a
         # {{ROOT}}-relative candidate_store_dir silently writes to a literal "{{ROOT}}/" dir (the capture
         # is best-effort/error-swallowing). Production used an absolute SCRATCH path so never hit this.
         candidate_store_dir=(
             substitute_root_path(str(_csd)) if (_csd := config.get("candidate_store_dir")) is not None else None
         ),
+    )
+
+
+def _build_flash_ansr_worker_adapter(config: Mapping[str, Any]) -> SubprocessAdapter:
+    """A ``flash_ansr`` block run by the shipped Flash-ANSR worker (``srbf/worker/models/flash_ansr_worker.py``) in the
+    interpreter ``python`` names: a checkpoint that needs another flash-ansr and SimpliPy than srbf's runs there, its
+    answers judged by srbf's ``simplipy_engine``. The block's keys are the in-process adapter's (resolved by
+    :func:`flash_ansr_settings`), plus the subprocess keys (``python``, ``env``, ``timeout``, ``worker_log``, ...).
+    What needs a problem's ground truth on the method's side (the oracle, ``complexity: ground_truth``) and the
+    in-process candidate ledger (``candidate_store_dir``) are refused: the ground truth never reaches a worker."""
+    if not config.get("python"):
+        raise ValueError("flash_ansr_worker requires 'python': the interpreter of the environment that has the "
+                         "checkpoint's flash-ansr and SimpliPy")
+    if config.get("candidate_store_dir") is not None:
+        raise ValueError("flash_ansr_worker: candidate_store_dir is the in-process adapter's ledger; a worker's "
+                         "candidates are judged and stored by the run (runner.candidates)")
+    settings = flash_ansr_settings(config)
+    if settings["generation"]["method"] == "oracle":
+        raise ValueError("flash_ansr_worker: the oracle needs each problem's ground truth, which never reaches a "
+                         "worker; run the oracle with type: flash_ansr")
+    complexity = settings["complexity"]
+    if complexity == "ground_truth":
+        raise ValueError("flash_ansr_worker: complexity: ground_truth needs each problem's ground truth, which never "
+                         "reaches a worker; give a number or 'none'")
+    if isinstance(complexity, str) and complexity != "none":
+        raise ValueError(f"complexity string must be 'none' (or pass an int/float/list); got {complexity!r}")
+    common = _subprocess_common_kwargs(config)
+    common["options"] = {
+        "model_path": settings["model_path"],
+        "generation": settings["generation"],
+        "refine": settings["refine"],
+        "ranking": settings["ranking"],
+        "compute": settings["compute"],
+        "complexity": complexity,
+        "device": settings["device"],
+        **common["options"],
+    }
+    return SubprocessAdapter(
+        worker="flash_ansr",
+        simplipy_engine=resolve_simplipy_engine(config, adapter_name="flash_ansr_worker"),
+        **common,
     )
 
 
@@ -532,12 +594,19 @@ def resolve_ranking_block(config: Mapping[str, Any], eval_cfg: Mapping[str, Any]
     Read from ``model_adapter.ranking``; when absent, from ``evaluation_config.ranking``. When BOTH
     carry one the adapter's block REPLACES the evaluation config's outright (no merge: a partial
     merge across modes would combine the knobs of two modes, which the library refuses). Strict
-    inside: unknown keys raise, retired keys raise, ``mode`` is required. Vocabulary validation is
-    flash-ansr's own ``resolve_ranking`` -- never a second copy of the tuples.
+    inside: unknown keys raise, retired keys raise, ``mode`` is required (:func:`ranking_block_of`).
+    Vocabulary validation is flash-ansr's own ``resolve_ranking`` -- never a second copy of the tuples.
 
     The block is required, not defaulted, on purpose: a run must SAY how it ranks, and a value stated
     under a key that nothing reads would otherwise rank at the default without a word.
     """
+    block, where = ranking_block_of(config, eval_cfg)
+    return resolve_ranking_mapping(block, where=where)
+
+
+def ranking_block_of(config: Mapping[str, Any], eval_cfg: Mapping[str, Any]) -> tuple[Mapping[str, Any], str]:
+    """The ``ranking:`` block of a flash_ansr adapter and where it was found, checked for its keys (no flash-ansr
+    needed): the adapter's block, else the evaluation config's; retired and unknown keys raise, ``mode`` is required."""
     if "ranking" in config:
         block, where = config["ranking"], "model_adapter.ranking"
     elif "ranking" in eval_cfg:
@@ -558,10 +627,15 @@ def resolve_ranking_block(config: Mapping[str, Any], eval_cfg: Mapping[str, Any]
         raise ValueError(f"{where}: unknown keys {unknown}; allowed: {list(_RANKING_BLOCK_KEYS)}")
     if "mode" not in block:
         raise ValueError(f"{where}: 'mode' is required (one of mdl, weighted, pareto)")
+    return block, where
+
+
+def resolve_ranking_mapping(block: Mapping[str, Any], *, where: str) -> "RankingConfig":
+    """A checked ``ranking:`` block (:func:`ranking_block_of`) resolved by flash-ansr's own ``resolve_ranking``."""
     require_flash_ansr("a flash_ansr ranking block")
-    from flash_ansr.scoring import resolve_ranking
+    from flash_ansr.scoring import resolve_ranking as _resolve
     try:
-        return resolve_ranking(
+        return _resolve(
             str(block["mode"]),
             mdl_strength=(None if block.get("mdl_strength") is None
                           else coerce_float(block["mdl_strength"], f"{where}.mdl_strength")),
@@ -629,6 +703,7 @@ def _build_flash_ansr_hybrid_adapter(config: Mapping[str, Any]) -> FlashANSRHybr
 
 _ADAPTER_REGISTRY: dict[str, AdapterBuilder] = {
     "flash_ansr": _build_flash_ansr_adapter,
+    "flash_ansr_worker": _build_flash_ansr_worker_adapter,
     "flash_ansr_hybrid": _build_flash_ansr_hybrid_adapter,
     "pysr": _build_pysr_adapter,
     "subprocess": _build_subprocess_adapter,
@@ -748,6 +823,7 @@ def load_existing_results(path: str) -> Mapping[str, Sequence[Any]] | None:
 __all__ = [
     "build_catalog_source",
     "build_model_adapter",
+    "flash_ansr_settings",
     "resolve_simplipy_engine",
     "extract_run_section",
     "select_experiment",

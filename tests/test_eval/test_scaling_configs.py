@@ -13,7 +13,7 @@ from srbf.sweep import Sweep, register_sweep_yaml, resolve_sweeps
 from srbf.config import select_experiment
 
 EVAL_CONFIG_DIR = Path(__file__).resolve().parents[2] / "configs" / "evaluation"
-VALID_ADAPTERS = {"flash_ansr", "pysr", "nesymres", "e2e", "lample_charton", "brute_force", "subprocess"}
+VALID_ADAPTERS = {"flash_ansr", "flash_ansr_worker", "pysr", "nesymres", "e2e", "lample_charton", "brute_force", "subprocess"}
 VALID_CATALOGS = {
     "fastsrb", "feynman", "feynman-bonus", "srsd-dummy",
     "erbench-syneq", "erbench-densities", "erbench-phybench",
@@ -28,6 +28,8 @@ VALID_CATALOGS = {
 # harness-tuned. Every shipped config declares its label EXPLICITLY (no silent default).
 EXPECTED_PROVENANCE = {
     "flash_ansr": "author_blessed",
+    # a Flash-ANSR checkpoint run by the flash-ansr and SimpliPy it was trained with, in an environment of its own
+    "flash_ansr_worker": "author_blessed",
     "pysr": "upstream_default",
     "nesymres": "upstream_default",
     "e2e": "upstream_default",

@@ -20,7 +20,8 @@ WORKER_TEMPLATE = '''"""%NAME%: an srbf worker. It runs in ITS OWN interpreter (
 imported here, so any torch / simplipy / numpy version goes.
 
 The contract (docs/adapters.md):
-    load(options) -> state      optional, once per run: load weights, start a backend
+    load(options) -> state      optional, once per worker process: load weights, start a backend
+    setup(state, options)       optional, after load: compile, warm up; before the clock, like load
     info(state)   -> dict       optional: versions and provenance, recorded with the run
     fit(x, y, *, x_val, variables, meta, options, state) -> {"expression": "<infix>", ...}
 """

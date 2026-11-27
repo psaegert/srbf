@@ -13,10 +13,16 @@ driver is model- and data-layer-agnostic.
 After each problem the driver takes the method's candidates out of the record, judges them and
 stores them next to the result file (:class:`srbf.candidates.CandidateRecorder`), outside the time
 the method is measured for.
+
+Setup before the clock (docs/fairness.md): building the adapter and its ``prepare`` happen before
+the first problem, and with ``runner.warmup`` srbf's warm-up problem (:mod:`srbf.warmup`) goes
+through the method's fit before it, its answer discarded. A worker-backed adapter repeats the
+warm-up in every worker it starts. The seconds of all of it go into ``__meta__['setup']``.
 """
 from __future__ import annotations
 
 import os
+import time
 import warnings
 from collections import Counter
 from pathlib import Path
@@ -35,6 +41,14 @@ def check_candidates_setting(value: Any) -> bool | str:
     if isinstance(value, bool) or (isinstance(value, str) and value):
         return value
     raise ValueError(f"runner.candidates is true, false or a directory, got {value!r}")
+
+
+def check_warmup_setting(value: Any) -> bool:
+    """``runner.warmup``: whether srbf's warm-up problem runs through the method before the first timed problem (and
+    again after every worker restart). False by default; the timing ladder turns it on."""
+    if isinstance(value, bool):
+        return value
+    raise ValueError(f"runner.warmup is true or false, got {value!r}")
 
 
 class Benchmark:
@@ -57,6 +71,7 @@ class Benchmark:
         shard: Optional[tuple[int, int]] = None,
         candidates: bool | str = True,
         engine_name: Optional[str] = None,
+        warmup: bool = False,
     ) -> None:
         self.source = source
         # (index, count) when this run is one shard of a unit (`srbf run --shard`); stamped into __meta__.
@@ -85,6 +100,11 @@ class Benchmark:
         # (<output stem>.candidates), a path = there, False = nowhere. `engine_name` names the judge's engine in the store.
         self.candidates = check_candidates_setting(candidates)
         self.engine_name = engine_name
+        # Setup before the clock: srbf's warm-up problem before the first timed problem (srbf.warmup), and the seconds
+        # spent building the adapter (set by `from_config`), preparing it and warming it up, for __meta__['setup'].
+        self.warmup = check_warmup_setting(warmup)
+        self.build_time: Optional[float] = None
+        self._setup: dict[str, Any] = {}
 
     @classmethod
     def from_config(
@@ -142,6 +162,7 @@ class Benchmark:
         candidates = check_candidates_setting(runner_cfg.get("candidates", True))
         if isinstance(candidates, str):
             candidates = substitute_root_path(candidates)
+        warmup = check_warmup_setting(runner_cfg.get("warmup", False))
         engine_name = model_cfg.get("simplipy_engine")
 
         initial_results = None
@@ -198,12 +219,16 @@ class Benchmark:
 
         # LAST: loads the model. `build_adapter=False` resolves a run's progress (existing_results, total_limit,
         # completed) and nothing else: such a Benchmark is read, not run.
+        build_started = time.perf_counter()
         adapter = run_config.build_model_adapter(model_cfg) if build_adapter else None
+        build_time = time.perf_counter() - build_started if build_adapter else None
 
-        return built(cls(source, adapter, result_store=store, output_path=output_path, save_every=save_every,
-                         limit=remaining, completed=False, total_limit=total_limit, existing_results=existing,
-                         config_provenance=config_provenance, shard=shard, candidates=candidates,
-                         engine_name=None if engine_name is None else str(engine_name)))
+        benchmark = cls(source, adapter, result_store=store, output_path=output_path, save_every=save_every,
+                        limit=remaining, completed=False, total_limit=total_limit, existing_results=existing,
+                        config_provenance=config_provenance, shard=shard, candidates=candidates,
+                        engine_name=None if engine_name is None else str(engine_name), warmup=warmup)
+        benchmark.build_time = build_time
+        return built(benchmark)
 
     @classmethod
     def runs_from_config(
@@ -315,14 +340,6 @@ class Benchmark:
         meta = {**(meta or {}), "config_provenance": provenance}
         if self.shard is not None:
             meta["shard"] = {"index": self.shard[0], "count": self.shard[1]}
-        # The RESOLVED ranking (values, not a hash) beside the label: the check whose absence let
-        # every earlier flash_ansr run rank at 0.0 while its config said 0.05.
-        ranking_fn = getattr(self.model_adapter, "ranking_config", None)
-        meta["ranking"] = ranking_fn() if callable(ranking_fn) else None
-        # The transformer's inference precision (bf16 / fp32): pools drawn in different precisions never mix.
-        precision_fn = getattr(self.model_adapter, "inference_precision", None)
-        if callable(precision_fn):
-            meta["inference_precision"] = precision_fn()
         # The frozen draws the problems were read from; as a data input, a paired comparison checks both sides read them.
         draws_fn = getattr(self.source, "draws_identity", None)
         draws = draws_fn() if callable(draws_fn) else None
@@ -343,15 +360,31 @@ class Benchmark:
         if output_path is not None:
             resolved_output = Path(substitute_root_path(output_path))
 
+        prepare_started = time.perf_counter()
         prepare_adapter = getattr(self.model_adapter, "prepare", None)
         if callable(prepare_adapter):
             prepare_adapter(data_source=self.source)
+        self._setup = {"warmup": self.warmup, "build_time": self.build_time,
+                       "prepare_time": time.perf_counter() - prepare_started, "events": []}
+        if self.warmup:
+            self._warm_up()
+
+        # The RESOLVED ranking (values, not a hash) beside the label: the check whose absence let
+        # every earlier flash_ansr run rank at 0.0 while its config said 0.05. Read once the adapter is prepared: a
+        # worker reports its own (srbf.subprocess_adapter.SubprocessAdapter.ranking_config) when it is up.
+        ranking_fn = getattr(self.model_adapter, "ranking_config", None)
+        meta["ranking"] = ranking_fn() if callable(ranking_fn) else None
+        # The transformer's inference precision (bf16 / fp32): pools drawn in different precisions never mix.
+        precision_fn = getattr(self.model_adapter, "inference_precision", None)
+        if callable(precision_fn):
+            meta["inference_precision"] = precision_fn()
 
         # What an out-of-process method reports about itself (its interpreter, package versions, checkpoint)
         # is part of what ran: it is known once the worker is up, and goes beside the rest of the provenance.
         worker_info = getattr(self.model_adapter, "worker_info", None)
         if callable(worker_info):
             meta["worker"] = worker_info() or None
+        meta["setup"] = self._setup_meta()
 
         prepare_source = getattr(self.source, "prepare", None)
         if callable(prepare_source):
@@ -406,6 +439,7 @@ class Benchmark:
                     progress_bar.update(1)
 
                 if save_every is not None and processed % save_every == 0 and resolved_output is not None:
+                    meta["setup"] = self._setup_meta()
                     self.result_store.save(resolved_output, meta=meta)
 
                 if (
@@ -430,12 +464,38 @@ class Benchmark:
         final_snapshot = self.result_store.snapshot()
 
         if resolved_output is not None:
+            meta["setup"] = self._setup_meta()
             self.result_store.save(resolved_output, meta=meta)
 
         if tracker is not None:
             tracker.print_summary("Final summary")
 
         return final_snapshot
+
+    def _warm_up(self) -> None:
+        """Run srbf's warm-up problem through the method, untimed, its answer discarded. A worker-backed adapter warms
+        its worker itself and again after every restart (``warm_up``); an in-process adapter is warmed here, through
+        its ``evaluate_sample``. A warm-up the method fails is recorded in ``__meta__['setup']`` and warned about; the
+        run goes on, since the problems it then fails are recorded as failures too."""
+        from srbf.warmup import run_warmup, warmup_sample
+
+        sample = warmup_sample()
+        warm = getattr(self.model_adapter, "warm_up", None)
+        if callable(warm):
+            warm(sample)
+            return
+        outcome = run_warmup(self.model_adapter.evaluate_sample, sample)
+        self._setup["events"] = [{"reason": "start", **outcome}]
+        if outcome["warmup_error"] is not None:
+            warnings.warn(f"the warm-up problem failed: {outcome['warmup_error']}", RuntimeWarning)
+
+    def _setup_meta(self) -> dict[str, Any]:
+        """``__meta__['setup']``: whether the warm-up ran, the seconds of building and preparing the adapter, and one
+        record per start of the method (a worker's every start, with its load, setup and warm-up seconds)."""
+        events = getattr(self.model_adapter, "setup_events", None)
+        if isinstance(events, list):
+            return {**self._setup, "events": [dict(event) for event in events]}
+        return {**self._setup, "events": [dict(event) for event in self._setup.get("events", [])]}
 
     def _candidate_recorder(self, output: Optional[Path], meta: Optional[Mapping[str, Any]]) -> Any:
         """The run's candidate store (``self.candidates``), or None: switched off, no output to put it next to, or an

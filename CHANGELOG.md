@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Setup before the clock, one rule for every method.** Anything that does not depend on the data may happen before
+  the clock starts: loading weights, compiling, warming up on a fixed synthetic problem. This happens once per worker
+  process and again after every worker restart. Everything after the problem's data arrives counts toward fit time.
+  A worker may define `setup(state, options)`, which runs after `load` in every worker process; `ready` reports the
+  seconds of both. With `runner.warmup: true` srbf sends one fixed problem (`srbf.warmup.warmup_sample`:
+  \(1.5\,x_1 \sin(x_2) + 0.5\), 512 support and 512 validation points, seed 0) through the method's fit before the
+  first timed problem and discards the answer: an in-process adapter's `evaluate_sample` once, after `prepare`, and a
+  worker after every start, a restart after a crash, a timeout or a hang included (`SubprocessAdapter.warm_up`). The
+  seconds of building and preparing the adapter and of every worker start, with its warm-up's time and error, go into
+  `__meta__['setup']`, never into a `fit_time`. A failing warm-up is recorded and warned about; one that takes the
+  worker down counts as a crash. `scripts/run_timing_ladder.py` turns the warm-up on in every timed unit; other runs
+  leave it off by default (their times are not published, and it costs one fit at the run's budget per worker start).
+- **`flash_ansr_worker`: a Flash-ANSR checkpoint in the flash-ansr and SimpliPy it was trained with.** The adapter type
+  takes a `flash_ansr` block plus `python` (the environment's interpreter) and `simplipy_engine` (the judge's engine)
+  and runs the checkpoint through the shipped worker `flash_ansr_worker.py` (no srbf in that environment). The worker
+  returns the model's answer and every fitted candidate as infix in the problem's column names, constants at full
+  precision, in a spelling SimpliPy 0.14 and 0.15 both read; `fit_time` is measured around the model's fit, as the
+  in-process adapter measures it. `precision` (`auto`, `bf16`, `fp32`) is applied by a flash-ansr that has the
+  setting, and otherwise by the worker under bf16 autocast with the same rule. The oracle, `complexity: ground_truth`
+  and `candidate_store_dir` are refused: a worker never sees the ground truth. `srbf.config.flash_ansr_settings`
+  resolves a `flash_ansr` block without importing flash-ansr, for both types. A worker that reports `ranking` and
+  `inference_precision` in its `info` has them recorded in `__meta__` like the in-process adapter's.
+  `configs/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker_srbf.yaml` runs T8-3M this way on the whole suite.
+- **`srbf_worker_helpers.prefix_to_infix(tokens, names=None)`** renames variables (leaves only), writes `np.pi` and
+  `np.e` as `pi` and `e`, puts a negative number in parentheses and refuses an unfilled `<constant>` or other special
+  token.
 - **`srbf.headline`: the front area and the time index.** `front_area(bits, fvu, l_lo=, l_hi=)` is the share of a
   problem's box that a run's candidates dominate: lengths on a log2 axis from the price of the support targets' mean
   (`lower_edge_bits`) to 26 bits per support point (`upper_edge_bits`), FVU on a log10 axis from 2^-52 to 1, computed

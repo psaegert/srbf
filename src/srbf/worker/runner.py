@@ -10,7 +10,8 @@ closes them, as Julia does under PySR, cannot touch the protocol.
 Protocol, one JSON object per line (``NaN``/``Infinity`` allowed: both ends are Python)::
 
     -> {"type": "init", "options": {...}}
-    <- {"type": "ready", "python": "...", "version": "3.x.y", "worker": "...", "info": {...}}
+    <- {"type": "ready", "python": "...", "version": "3.x.y", "worker": "...", "info": {...},
+        "load_time": 0.5, "setup_time": 2.1 | null}
     -> {"type": "fit", "id": 7, "x": [[...], ...], "y": [...], "x_val": [[...], ...],
         "variables": ["x1", ...], "meta": {...}}
     <- {"type": "result", "id": 7, "expression": "...", "fit_time": 1.23,
@@ -45,8 +46,17 @@ Worker contract -- a Python file (or module) defining:
 ``load(options) -> state``
     Optional. Called once after ``init`` with the config's ``options``; the returned object is
     passed to every ``fit`` as ``state``.
+``setup(state, options) -> state | None``
+    Optional. Data-independent preparation after ``load``: compiling, warming up on a problem of
+    the worker's own. It runs before the clock starts, in every worker process srbf starts (after
+    every restart too). A returned object other than None replaces ``state``.
 ``info(state) -> dict``
     Optional. Versions and provenance for the ``ready`` message.
+
+``ready`` reports the seconds ``load`` and ``setup`` took (``setup_time`` is null without a
+``setup``); srbf records them in the run's metadata, never in a fit time. srbf's own warm-up
+problem, when the run asks for one, arrives as an ordinary ``fit`` whose ``meta`` says
+``"warmup": true``; its answer is discarded.
 """
 import importlib
 import importlib.util
@@ -141,15 +151,26 @@ def serve(worker, target, rfile, wfile):
         if kind == "init":
             options = msg.get("options") or {}
             try:
+                started = time.perf_counter()
                 load = getattr(worker, "load", None)
                 state = load(options) if callable(load) else None
+                load_time = time.perf_counter() - started
+                setup_time = None
+                setup = getattr(worker, "setup", None)
+                if callable(setup):
+                    started = time.perf_counter()
+                    prepared = setup(state, options)
+                    setup_time = time.perf_counter() - started
+                    if prepared is not None:
+                        state = prepared
                 info_fn = getattr(worker, "info", None)
                 info = info_fn(state) if callable(info_fn) else {}
             except Exception:  # noqa: BLE001 - the whole traceback goes back to srbf
                 send({"type": "error", "error": traceback.format_exc()})
                 return 1
             send({"type": "ready", "python": sys.executable, "version": sys.version.split()[0],
-                  "worker": target, "info": _jsonable(info or {})})
+                  "worker": target, "info": _jsonable(info or {}), "load_time": load_time,
+                  "setup_time": setup_time})
         elif kind == "fit":
             reply = _result(msg.get("id"))
             started = time.perf_counter()

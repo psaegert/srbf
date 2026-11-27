@@ -105,6 +105,8 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         return getattr(self.model, "precision", None)
 
     def prepare(self, *, data_source: Any | None = None) -> None:  # type: ignore[override]
+        # Data-independent preparation, before the clock (docs/fairness.md): the weights were loaded when the adapter
+        # was built; here the model moves to its device. srbf's warm-up problem, when the run asks for it, follows.
         self.model.to(self.device).eval()
 
         # Fail HERE, once, before the campaign starts -- not per problem inside _capture_ledger,
@@ -166,8 +168,9 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         record["generation_time"] = result.generation_time
         record["refinement_time"] = result.refinement_time
 
-        # Full candidate ledger -> compact columnar store (save-all tier); off (None) => zero overhead.
-        if self.candidate_store_dir is not None:
+        # Full candidate ledger -> compact columnar store (save-all tier); off (None) => zero overhead. srbf's warm-up
+        # problem (srbf.warmup) is no row of the run, and its ledger is not stored.
+        if self.candidate_store_dir is not None and not record.get("warmup"):
             self._capture_ledger(record, result, sample)
 
         best = result.best

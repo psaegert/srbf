@@ -6,6 +6,7 @@ block. To enter a method of your own, see [Adding your method](adapters.md).
 | `type` | method | installation |
 |---|---|---|
 | `flash_ansr` | [Flash-ANSR](#flash-ansr) and its prior reference | `pip install "srbf[flash-ansr]"`, then download a checkpoint |
+| `flash_ansr_worker` | [a Flash-ANSR checkpoint in its own environment](#a-checkpoint-in-its-own-environment) | `pip install "flash-ansr>=0.19,<0.20"` in an environment of its own |
 | `pysr` | [PySR](#pysr) | `pip install pysr`, in an environment of its own if you like |
 | `subprocess`, `worker: operon` | [Operon](#operon) | `pip install pyoperon==0.6.1 scikit-learn`, in an environment of its own |
 | `subprocess`, `worker: rilsrols` | [RILS-ROLS](#rils-rols) | `scripts/envs/build_rilsrols_env.sh`, an environment of its own |
@@ -103,6 +104,59 @@ other. Its budget is the refiner's restarts (`configs/evaluation/scaling/flash-a
 1 to 1,024). It is the ceiling of the fitting stage and runs only where a ground truth exists. The
 judge is strict for the oracle as for every method: where the refitted law comes back in another form,
 a constant factor or a root spelled differently, that is another structure.
+
+### A checkpoint in its own environment
+
+A checkpoint is tied to the flash-ansr and SimpliPy it was trained with: their vocabulary, canonical forms and
+refiner. The adapter type `flash_ansr_worker` runs it in an environment that has them, through the shipped worker
+`src/srbf/worker/models/flash_ansr_worker.py`, and judges its answers with srbf's engine like any other method's.
+The T8 checkpoints are trained with flash-ansr 0.19 and SimpliPy 0.14:
+
+```bash
+python -m venv "$SRBF_ROOT/envs/flash-ansr-0.19"
+"$SRBF_ROOT/envs/flash-ansr-0.19/bin/pip" install "flash-ansr>=0.19,<0.20"     # brings SimpliPy 0.14
+```
+
+```yaml
+model_adapter:
+  type: flash_ansr_worker
+  config_provenance: author_blessed
+  python: "{{ROOT}}/envs/flash-ansr-0.19/bin/python"
+  simplipy_engine: acj-5-4-llm          # the judge's engine; the checkpoint keeps its own
+  model_path: "{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M"
+  device: cuda
+  precision: auto
+  evaluation_config:
+    n_restarts: 8
+    refiner_method: curve_fit_lm
+    refiner_p0_noise: normal
+    refiner_p0_noise_kwargs: {loc: 0.0, scale: 5}
+    ranking: {mode: mdl}
+    generation_config:
+      method: softmax_sampling
+      kwargs: {draws: 1024, max_len: 160, batch_size: 128, temperature: 1, simplify: true, unique: true}
+```
+
+The block takes the keys of a `flash_ansr` block and the keys of a worker (`python`, `env`, `timeout`,
+`worker_log`, `max_restarts`, see [the config keys](adapters.md#the-config-keys)). Three keys of the `flash_ansr`
+block are refused: `generation_config.method: oracle` and `complexity: ground_truth`, which need the problem's ground
+truth (it never reaches a worker), and `candidate_store_dir`, the in-process adapter's own store (the run judges and
+stores the worker's candidates). `options: {seed: N}` seeds every fit's draws and constant fits; without it they are
+unseeded, as in the in-process adapter.
+
+The worker returns the model's answer and every candidate it fitted, best first, each an infix string in the
+problem's column names with its fitted constants at full precision. The judge reads them as it reads any worker's
+expressions ([How an expression is read](adapters.md#how-an-expression-is-read)). `fit_time` is measured around the
+model's fit, as the in-process adapter measures it; loading the checkpoint is the worker's `load`, before the clock
+([Setup before the clock](fairness.md#setup-before-the-clock)). The result file records the worker's flash-ansr,
+SimpliPy and torch versions, the checkpoint's SHA-256 and engine, and the resolved ranking.
+
+`precision` is the transformer's arithmetic at inference: `auto` (bf16 on a CUDA device with native bf16, compute
+capability 8.0 or newer, and fp32 elsewhere), `bf16` (an error where it is not native) or `fp32`. A flash-ansr that
+has this setting applies it; for one that does not, the worker runs the fit under bf16 autocast by the same rule.
+Without the key the environment's flash-ansr keeps its own default, fp32 for the 0.19 line. Every row records the
+precision in force as `inference_precision`. `configs/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker_srbf.yaml`
+evaluates T8-3M this way on the whole suite.
 
 ## Flash-ANSR + PySR
 
