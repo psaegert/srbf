@@ -135,6 +135,28 @@ def test_every_row_names_its_catalogs_benchmark_and_the_cache_does_not_hold_it(t
     assert {r[COLUMNS.index("benchmark")] for r in rows2} == {"feynman", "feynman-points", "nguyen"}
     at = COLUMNS.index("benchmark")
     assert [r[:at] + r[at + 1:] for r in rows2] == [r[:at] + r[at + 1:] for r in rows]
+    assert {r[COLUMNS.index("subset")] for r in rows} == {"feynman", "feynman-points", "nguyen"}   # one subset each
+
+
+def test_every_row_names_its_problems_subset_and_the_cache_does_not_hold_it(tmp_path):
+    """The subset column sits next to the benchmark: each row's problem's subset from the subsets mapping (by its row),
+    the catalog's name for a catalog it does not name or a row beyond its problems, and an empty cell for a catalog
+    that could not be read. A changed mapping judges no file again."""
+    for catalog in ("srsd", "nguyen", "gone"):
+        _write(tmp_path, catalog, "choices_000001.pkl", _snapshot([["+", "x1", "x2"], ["*", "x1", "x2"], ["x1"]]))
+    tree = ResultTree("m", 1, str(tmp_path / "tree"))
+    cache, out = str(tmp_path / "cache"), str(tmp_path / "t.csv")
+    build_table([tree], out, engine=ENGINE, workers=1, cache_dir=cache, log=None, benchmarks={"srsd": "srsd"},
+                subsets={"srsd": ["easy", "hard"], "gone": None})
+    header, *rows = _read(out)
+    assert header == COLUMNS and header[header.index("benchmark") + 1] == "subset"
+    got = {(r[COLUMNS.index("catalog")], int(r[COLUMNS.index("row")])): r[COLUMNS.index("subset")] for r in rows}
+    assert got == {("srsd", 0): "easy", ("srsd", 1): "hard", ("srsd", 2): "srsd",
+                   ("nguyen", 0): "nguyen", ("nguyen", 1): "nguyen", ("nguyen", 2): "nguyen",
+                   ("gone", 0): "", ("gone", 1): "", ("gone", 2): ""}
+    again = build_table([tree], out, engine=ENGINE, workers=1, cache_dir=cache, log=None)
+    assert (again.judged, again.from_cache) == (0, 3)
+    assert {r[COLUMNS.index("subset")] for r in _read(out)[1:]} == {"srsd", "nguyen", "gone"}
 
 
 def test_the_catalogs_of_the_trees_are_their_directories(tmp_path):

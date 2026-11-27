@@ -109,6 +109,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its mean over problems is the Mean Improvability.
 
 ### Changed
+- **Runs and `srbf table` write each problem's subset.** A problem names the subset of its benchmark in its catalog
+  (the `subset` field of a yaml entry, or of a frozen problem's meta; symbolic-data's catalogs carry it from
+  integration/0.19 on): a run stamps it on every row (`subset`, None where the catalog names none), and `srbf table`
+  writes a `subset` column next to `benchmark`, read from the catalogs before judging as the benchmark is
+  (`srbf.suites.catalog_subsets`, `catalog_subset_rows`, and `catalog_structure` for both with one report per
+  unreadable catalog; `build_table(..., subsets=)`). A problem without the field is in the subset named after its
+  catalog, as before; a subset must be a non-empty name without "/" (the site keys a subset's cells
+  `<catalog>/<subset>`). The judged rows and the per-file cache hold neither column (`srbf.table.CATALOG_COLUMNS`).
+  `srbf analyze -c` gives a snapshot without the column its catalog's subsets (by `eval_row_index`).
 - **Averages have three levels: benchmarks > subsets > problems** (nested random effects). Within a benchmark, problems
   sit in subsets: the parts its authors published it in (a problem's `subset`, from its rows), else the catalogs it is
   stored in. The structure is fixed by the data, never chosen by looking at results; the spread between benchmarks and

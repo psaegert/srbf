@@ -200,7 +200,7 @@ def main(argv: list[str] | None = None) -> None:
             out = build_report(runs, args.out_dir, engine=engine, title=args.title)
             print(f"Wrote {out}")
         case 'table':
-            from srbf.suites import catalog_benchmarks
+            from srbf.suites import catalog_structure
             from srbf.table import ResultTree, build_table, parse_index_bases, tree_catalogs
 
             try:
@@ -209,13 +209,15 @@ def main(argv: list[str] | None = None) -> None:
             except ValueError as exc:
                 parser.error(str(exc))
             trees = [ResultTree(t.method, t.draw, t.path, bases.get(t.method)) for t in trees]
-            # every catalog's benchmark, from its metadata: the unit the site and srbf analyze average over
+            # every catalog's benchmark, from its metadata, and every problem's subset within it: the units the site
+            # and srbf analyze average over
             catalogs = tree_catalogs(trees)
-            benchmarks = catalog_benchmarks(catalogs, warn=lambda text: print(f"WARN {text}"))
-            print(f"{len(catalogs)} catalogs in {len(set(benchmarks.values()))} benchmarks")
+            benchmarks, subsets = catalog_structure(catalogs, warn=lambda text: print(f"WARN {text}"))
+            n_subsets = len({(benchmarks[c], u) for c, labels in subsets.items() for u in (labels or [c])})
+            print(f"{len(catalogs)} catalogs in {len(set(benchmarks.values()))} benchmarks, {n_subsets} subsets")
             report = build_table(trees, args.out, engine=args.engine, workers=args.workers, cache_dir=args.cache,
                                  max_rung=args.max_rung, stall_timeout=args.stall_timeout, progress_path=args.progress,
-                                 benchmarks=benchmarks)
+                                 benchmarks=benchmarks, subsets=subsets)
             if report.stalled:
                 sys.exit(1)
         case 'rejudge':

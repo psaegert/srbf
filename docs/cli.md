@@ -108,8 +108,9 @@ Figures need the `analysis` extra. See [Results](results.md#the-standard-report)
 
 Judge the result files of whole evaluations into one CSV: a row per problem and rung, with every
 metric of [Metrics](metrics.md) as a column. This is the table the results explorer is built from.
-Each row also names the benchmark of its catalog, read from the catalog's metadata before judging; a
-catalog whose metadata cannot be read is a benchmark of its own, with a warning
+Each row also names the benchmark of its catalog and the subset of its problem, read from the catalog before judging
+(the `benchmark` field of its metadata, the `subset` field of each problem; a problem without one is in the subset
+named after its catalog); a catalog that cannot be read is a benchmark of its own, one subset, with a warning
 ([How results are averaged](averaging.md#benchmarks-their-subsets-and-their-problems)).
 
 ```bash

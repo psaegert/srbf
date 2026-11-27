@@ -233,6 +233,9 @@ class CatalogSource(EvaluationDataSource):
             "ground_truth_prefix": gt_prefix,
             "ground_truth_infix": gt_infix,
             "eval_row_index": row_index,
+            # the subset of its benchmark the problem belongs to, as its catalog names it (None where it names none:
+            # readers then take the catalog's name, srbf.suites.catalog_subset_rows)
+            "subset": (getattr(problem, "meta", None) or {}).get("subset"),
             # exact | reference | none (symbolic-data 0.11.0); "exact" for older releases.
             # Metric regimes key on this: never pool reference/none FVU with exact-GT rows.
             "gt_kind": getattr(problem, "gt_kind", "exact"),

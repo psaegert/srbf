@@ -7,11 +7,13 @@ expressions), each file possibly split into shards
 :func:`build_table` judges any number of trees in parallel and writes the rows as CSV (``srbf table``). The results
 site is built from this table.
 
-Every row names its catalog (the directory the result file is in) and the catalog's benchmark, the unit results are
-averaged over (docs/averaging.md): the ``benchmarks`` mapping :func:`build_table` is given, which ``srbf table`` reads
-from the catalogs' metadata (:func:`srbf.suites.catalog_benchmarks`); a catalog it does not name is a benchmark of its
-own. The benchmark is a property of the catalog, not of the result file, so the judge's rows and the per-file cache do
-not hold it (:data:`JUDGED_COLUMNS`): it is added when the table is written, and a catalog whose benchmark changes
+Every row names its catalog (the directory the result file is in), the catalog's benchmark, the unit results are
+averaged over (docs/averaging.md), and the problem's subset within it: the ``benchmarks`` and ``subsets`` mappings
+:func:`build_table` is given, which ``srbf table`` reads from the catalogs (:func:`srbf.suites.catalog_benchmarks`, the
+``benchmark`` field of a catalog's metadata; :func:`srbf.suites.catalog_subsets`, the ``subset`` field of each of its
+problems). A catalog the mappings do not name is a benchmark of its own and one subset, named after itself. Both are
+properties of the catalog, not of the result file, so the judge's rows and the per-file cache do not hold them
+(:data:`JUDGED_COLUMNS`): they are added when the table is written, and a catalog whose benchmark or subsets change
 needs no file judged again.
 
 Row semantics:
@@ -54,7 +56,7 @@ from typing import Any, Mapping
 from srbf.rungs import RESULT_FILE, RUNG_PREFIXES  # a result file's name: the rung and, for a shard, its index and count
 
 
-ID_COLUMNS = ["model", "draw", "catalog", "benchmark", "rung", "shard", "row", "sha"]
+ID_COLUMNS = ["model", "draw", "catalog", "benchmark", "subset", "rung", "shard", "row", "sha"]
 RATE_COLUMNS = ["success", "numeric_recovery_val", "numeric_recovery_fit", "numeric_recovery_relative_val",
                 "numeric_recovery_relative_fit", "symbolic_recovery", "symbolic_recovery_mask_fittable",
                 "symbolic_recovery_mask_none", "skeleton_match_raw"]
@@ -72,9 +74,11 @@ GROUND_TRUTH_COLUMNS = ["skeleton_length", "ground_truth_mdl", "n_constants", "t
 EXPRESSION_COLUMNS = ["predicted_expression", "ground_truth_expression"]
 #: The table's columns, in order.
 COLUMNS = ID_COLUMNS + RATE_COLUMNS + ANALYSIS_COLUMNS + GROUND_TRUTH_COLUMNS + EXPRESSION_COLUMNS
+#: The columns :func:`build_table` adds from the catalogs when it writes the table.
+CATALOG_COLUMNS = ["benchmark", "subset"]
 #: The columns of the judge's rows (:func:`judge_result_file`, the per-file cache), in order: every column but the
-#: benchmark, which :func:`build_table` adds from the catalog when it writes the table.
-JUDGED_COLUMNS = [c for c in COLUMNS if c != "benchmark"]
+#: benchmark and the subset, which :func:`build_table` adds from the catalog when it writes the table.
+JUDGED_COLUMNS = [c for c in COLUMNS if c not in CATALOG_COLUMNS]
 #: Bumped whenever a row's content changes without a change to srbf's source (it is part of the cache key).
 TABLE_VERSION = 2   # 2: n_validation, constant targets, and empty rates where they are not defined
 # A fresh pool counts as stalled when nothing is in flight and nothing finishes for stall_timeout; before its first file
@@ -212,7 +216,7 @@ def judge_snapshot(snap: dict[str, Any], *, engine: Any, first_index: int | None
 
 
 def judge_result_file(path: str, *, method: str, draw: int = 1, engine: Any, first_index: int | None = None) -> list[list[Any]]:
-    """The judged rows (in :data:`JUDGED_COLUMNS` order: the table's columns but the benchmark, which
+    """The judged rows (in :data:`JUDGED_COLUMNS` order: the table's columns but the benchmark and the subset, which
     :func:`build_table` adds) of one result file; an empty list for a file without problems.
 
     ``engine`` is a loaded ``SimpliPyEngine``. Raises when the file cannot be read or judged.
@@ -312,14 +316,25 @@ def judge_result_file(path: str, *, method: str, draw: int = 1, engine: Any, fir
 
 
 _CATALOG_AT = JUDGED_COLUMNS.index("catalog")
+_ROW_AT = JUDGED_COLUMNS.index("row")
 _BENCHMARK_AT = COLUMNS.index("benchmark")
+assert COLUMNS[_BENCHMARK_AT:_BENCHMARK_AT + 2] == CATALOG_COLUMNS
 
 
-def with_benchmark(row: Sequence[Any], benchmarks: Mapping[str, str]) -> list[Any]:
-    """A judged row (:data:`JUDGED_COLUMNS`) as a table row (:data:`COLUMNS`): its catalog's benchmark put in, from
-    ``benchmarks``, or the catalog itself when ``benchmarks`` does not name it."""
+def with_benchmark(row: Sequence[Any], benchmarks: Mapping[str, str],
+                   subsets: Mapping[str, Sequence[str] | None] | None = None) -> list[Any]:
+    """A judged row (:data:`JUDGED_COLUMNS`) as a table row (:data:`COLUMNS`): its catalog's benchmark and its
+    problem's subset put in, from ``benchmarks`` ({catalog: benchmark}) and ``subsets`` ({catalog: the subset of each
+    problem, in row order}), or the catalog itself where they do not name it. A catalog ``subsets`` maps to None, or a
+    benchmark mapped to "", was not read: its cells stay empty, which the site export refuses unless told to fall back."""
     catalog = row[_CATALOG_AT]
-    return [*row[:_BENCHMARK_AT], benchmarks.get(catalog, catalog), *row[_BENCHMARK_AT:]]
+    labels = (subsets or {}).get(catalog, ())
+    if labels is None:
+        subset = ""
+    else:
+        index = int(row[_ROW_AT])
+        subset = labels[index] if 0 <= index < len(labels) else catalog
+    return [*row[:_BENCHMARK_AT], benchmarks.get(catalog, catalog), subset, *row[_BENCHMARK_AT:]]
 
 
 # ---- the judge's fingerprint and the per-file cache ---------------------------------------------------------------
@@ -519,12 +534,13 @@ class TableReport:
 def build_table(trees: Iterable[ResultTree], out: str, *, engine: str = "acj-5-4-llm", workers: int = 4,
                 cache_dir: str | None = None, max_rung: int | None = None, stall_timeout: float = 1800.0,
                 progress_path: str | None = None, log: Callable[[str], None] | None = print,
-                benchmarks: Mapping[str, str] | None = None,
+                benchmarks: Mapping[str, str] | None = None, subsets: Mapping[str, Sequence[str] | None] | None = None,
                 _judge: Callable[..., tuple[int, list[list[Any]], str | None]] = _judge_job) -> TableReport:
     """Judge every result file of ``trees`` and write the table to ``out`` (CSV, written atomically).
 
-    ``benchmarks`` maps a catalog to the benchmark it belongs to, the table's ``benchmark`` column; a catalog it does
-    not name (every catalog, without it) is a benchmark of its own.
+    ``benchmarks`` maps a catalog to the benchmark it belongs to, the table's ``benchmark`` column, and ``subsets`` a
+    catalog to the subset of each of its problems (in row order), the ``subset`` column; a catalog they do not name
+    (every catalog, without them) is a benchmark of its own and one subset named after itself (:func:`with_benchmark`).
 
     Files are judged by ``workers`` processes, largest first, and taken as they finish. A file still running
     ``stall_timeout`` seconds after it started is stopped with its pool and judged once more in a fresh one; a file
@@ -660,7 +676,7 @@ def build_table(trees: Iterable[ResultTree], out: str, *, engine: str = "acj-5-4
                     judged += 1
                     if err:
                         continue
-                writer.writerows(with_benchmark(row, benchmarks or {}) for row in stored)
+                writer.writerows(with_benchmark(row, benchmarks or {}, subsets) for row in stored)
                 n_rows += len(stored)
         os.replace(tmp, out)
     finally:

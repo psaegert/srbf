@@ -29,6 +29,7 @@ frame = pd.DataFrame({key: snapshot[key] for key in ("benchmark_eq_id", "predict
 | columns | meaning |
 |---|---|
 | `benchmark_eq_id`, `eval_row_index` | the ground truth's id in its catalog and the problem's position in the run |
+| `subset` | the subset of its benchmark the problem belongs to, as its catalog names it (empty where it names none: the catalog's own name then stands for it) |
 | `skeleton`, `expression`, `ground_truth_prefix`, `ground_truth_infix` | the ground truth: its skeleton with constants masked, and the expression with its constants, in prefix and infix notation |
 | `variables` | the names of the columns as the catalog writes them, for example `v1, v2`; skeletons and predictions name the same columns `x1, x2, ...` by position |
 | `x`, `y`, `x_val`, `y_val` | the support and validation points, without noise |
@@ -147,6 +148,7 @@ srbf table --tree mymethod:1:results/evaluation/scaling/mymethod -o table.csv
 |---|---|
 | `model`, `draw`, `catalog`, `rung`, `shard`, `row` | where the row comes from: the method and draw named in `--tree`, the catalog directory, the rung and shard of the file, and the problem's `eval_row_index` |
 | `benchmark` | the benchmark the catalog belongs to, from the `benchmark` field of the catalog's metadata, else the catalog itself: the unit results are averaged over ([How results are averaged](averaging.md#benchmarks-their-subsets-and-their-problems)) |
+| `subset` | the subset of its benchmark the problem belongs to, from the problem's `subset` field in its catalog, else the catalog itself; empty for a catalog that could not be read |
 | `sha` | the first 8 hex digits of the model weights' sha256, when the run recorded one |
 | `success`, the recoveries, `skeleton_match_raw` | rates: 1 or 0 for every problem, a failed prediction is 0 |
 | the analysis columns (`log10_fvu_val`, `r2_val`, `mdl_ratio`, `f1_score`, the edit distances, ...) | about the prediction; empty for a failed one, except the metrics with a worst value (token and variable F1, precision, recall), which a failed prediction takes |

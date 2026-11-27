@@ -581,6 +581,9 @@ def catalog_subsets(subsets: Mapping[str, Mapping[int, str]], sizes: Mapping[str
     a catalog all of whose problems lie in one subset named otherwise."""
     out: dict[str, dict[str, Any]] = {}
     for c, by_row in subsets.items():
+        slashed = sorted({x for x in by_row.values() if PART_SEP in x})
+        if slashed:   # the page keys a subset's cells "<catalog>/<subset>"
+            raise ValueError(f"catalog {c!r}: subsets may not contain {PART_SEP!r}: {slashed}")
         n = max(sizes.get(c, 0), max(by_row, default=-1) + 1)
         labels = [by_row.get(i, c) for i in range(n)]
         names = list(dict.fromkeys(labels))

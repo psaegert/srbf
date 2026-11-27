@@ -550,7 +550,8 @@ def _model_name(model_cfg: Mapping[str, Any]) -> str:
 
 
 def runs_from_config(config: str, *, model: str | None = None, warn: Any = None,
-                     benchmarks: Mapping[str, str] | None = None) -> list[RunResult]:
+                     benchmarks: Mapping[str, str] | None = None,
+                     subsets: Mapping[str, Sequence[str] | None] | None = None) -> list[RunResult]:
     """The RunResult of every (experiment, sweep rung) of a run config whose output exists.
 
     The manifest ``srbf analyze`` otherwise reads is derived from the config: ``catalog`` is the
@@ -559,7 +560,10 @@ def runs_from_config(config: str, *, model: str | None = None, warn: Any = None,
     none or cannot be read, which ``warn`` reports), ``scaling`` the rung's numeric sweep label
     (``ladder=128`` -> 128), ``model`` the given name or one derived from the adapter block (the
     checkpoint directory, the worker's name). Outputs that do not exist yet are skipped and reported
-    through ``warn``. ``benchmarks`` ({catalog: benchmark}) is taken instead of the catalogs' metadata.
+    through ``warn``. ``benchmarks`` ({catalog: benchmark}) is taken instead of the catalogs' metadata. A snapshot
+    without a ``subset`` column (written before runs recorded it) gets one from ``subsets`` ({catalog: the subset of
+    each problem}, by ``eval_row_index``), by default from its catalog's problems when the catalogs are read
+    (:func:`srbf.suites.catalog_subsets`; not when ``benchmarks`` is given).
     """
     import pickle
 
@@ -597,12 +601,18 @@ def runs_from_config(config: str, *, model: str | None = None, warn: Any = None,
             refs.setdefault(catalog, ref)
             runs.append(RunResult(model=model or _model_name(run_cfg.get("model_adapter") or {}),
                                   benchmark=catalog, catalog=catalog, snapshot=snapshot, scaling=scaling, axis=axis))
-    if benchmarks is None:
-        from srbf.suites import catalog_benchmarks
+    if benchmarks is None:   # the catalogs are read; a caller who names the benchmarks names the subsets too
+        from srbf.suites import catalog_structure
 
-        benchmarks = catalog_benchmarks(refs, warn=warn)
+        benchmarks, read = catalog_structure(refs, warn=warn)
+        subsets = read if subsets is None else subsets
     for run in runs:
         run.benchmark = benchmarks.get(run.catalog, run.catalog)
+        labels = (subsets or {}).get(run.catalog)
+        rows = run.snapshot.get("eval_row_index")
+        if SUBSET_FIELD not in run.snapshot and labels and rows is not None:
+            run.snapshot = {**run.snapshot, SUBSET_FIELD: [labels[int(r)] if r is not None and 0 <= int(r) < len(labels) else None
+                                                           for r in rows]}
     return runs
 
 

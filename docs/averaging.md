@@ -17,10 +17,11 @@ Results are organised in three levels: benchmarks, the subsets of each benchmark
 - A **problem** is one formula with its data; its value is the mean of its runs.
 
 Each catalog names its benchmark in the `benchmark` field of its metadata
-([Benchmarks](benchmarks.md#benchmarks-and-catalogs)), and a problem's subset is the `subset` field of its rows where
-they carry one; otherwise its catalog is its subset. A catalog without the `benchmark` field is a benchmark of its own.
-srbf guesses neither from names. `srbf table` writes the benchmark of every row next to its catalog, and `srbf analyze`
-reads it from the catalogs' metadata, so the site and the package average over the same structure.
+([Benchmarks](benchmarks.md#benchmarks-and-catalogs)), and each problem names its subset in its own `subset` field;
+a problem without it is in the subset named after its catalog. A catalog without the `benchmark` field is a benchmark
+of its own. srbf guesses neither from names. A run writes each problem's subset into its rows, `srbf table` writes the
+benchmark and the subset of every row next to its catalog, and `srbf analyze` reads both from the catalogs (the subset
+from the rows where they have it), so the site and the package average over the same structure.
 
 The structure is fixed before any result is looked at: it comes from how the authors split their benchmark, or from
 how srbf stores it, and never from how different the parts turn out to be. Choosing it by measuring would let the

@@ -19,7 +19,9 @@ are the expanded form of the same thing.
 A catalog belongs to a benchmark, the unit results are averaged over (docs/averaging.md): one benchmark can be split
 over several catalogs for hosting or format reasons, and each of them names it in the ``benchmark`` field of its
 metadata. :func:`catalog_benchmark` reads that field, and :func:`catalog_benchmarks` maps catalogs to their benchmarks,
-a catalog without the field being a benchmark of its own.
+a catalog without the field being a benchmark of its own. Within its benchmark each problem belongs to a subset, the
+``subset`` field of the problem (the authors' part of the benchmark, or the part one catalog holds); a problem without
+it is in the subset named after its catalog (:func:`catalog_subset_rows`, :func:`catalog_subsets`).
 """
 from __future__ import annotations
 
@@ -90,15 +92,33 @@ def expand_suite(raw: Mapping[str, Any]) -> dict[str, Any]:
 
 #: The catalog metadata field that names the benchmark a catalog belongs to.
 BENCHMARK_FIELD = "benchmark"
+#: The field of a catalog's problem (a yaml entry, a frozen problem's meta) that names the subset of its benchmark the
+#: problem belongs to: the part of the benchmark its authors published it in, or the part one catalog holds.
+SUBSET_FIELD = "subset"
 
 
 @functools.lru_cache(maxsize=None)
-def _read_metadata(ref: str) -> Mapping[str, Any]:
+def _read_catalog(ref: str) -> tuple[Mapping[str, Any], tuple[Any, ...]]:
+    """A catalog's metadata block and the subset field of each of its problems, in row order; read once per process."""
     from symbolic_data import load_catalog
 
     from srbf.paths import substitute_root_path
 
-    return types.MappingProxyType(dict(load_catalog(os.path.expanduser(substitute_root_path(ref))).meta or {}))
+    catalog = load_catalog(os.path.expanduser(substitute_root_path(ref)))
+    return types.MappingProxyType(dict(catalog.meta or {})), tuple(_problem_subsets(catalog))
+
+
+def _read_metadata(ref: str) -> Mapping[str, Any]:
+    return _read_catalog(ref)[0]
+
+
+def _problem_subsets(catalog: Any) -> list[Any]:
+    """The subset field of each problem of a loaded catalog, in row order: a frozen catalog's problems' meta, a
+    declarative catalog's entries (None where a problem names none)."""
+    if getattr(catalog, "frozen", False):
+        return [(getattr(p, "meta", None) or {}).get(SUBSET_FIELD) for p in getattr(catalog, "problems", None) or []]
+    entries = getattr(catalog, "entries", None)
+    return [(getattr(e, "meta", None) or {}).get(SUBSET_FIELD) for e in entries.values()] if isinstance(entries, Mapping) else []
 
 
 def _metadata(catalog: Any) -> Mapping[str, Any]:
@@ -111,12 +131,30 @@ def _metadata(catalog: Any) -> Mapping[str, Any]:
     return _read_metadata(catalog)
 
 
+def _subset_fields(catalog: Any) -> tuple[Any, ...]:
+    """The subset field of each problem of ``catalog`` (a reference, a loaded catalog, or a generative config)."""
+    if isinstance(catalog, str):
+        return _read_catalog(catalog)[1]
+    return tuple(_problem_subsets(catalog))
+
+
 def _named_benchmark(meta: Mapping[str, Any], catalog: Any) -> str | None:
     value = meta.get(BENCHMARK_FIELD)
     if value is None:
         return None
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"catalog {catalog!r}: its metadata's {BENCHMARK_FIELD!r} must be a non-empty string, not {value!r}")
+    return value.strip()
+
+
+def _named_subset(value: Any, catalog: Any, name: str) -> str:
+    """A problem's subset: its field, else the catalog's name. A subset is a non-empty string without "/" (the results
+    site keys a catalog's cells per subset as "<catalog>/<subset>")."""
+    if value is None:
+        return name
+    if not isinstance(value, str) or not value.strip() or "/" in value:
+        raise ValueError(f"catalog {catalog!r}: a problem's {SUBSET_FIELD!r} must be a non-empty string without '/', "
+                         f"not {value!r}")
     return value.strip()
 
 
@@ -127,6 +165,15 @@ def catalog_benchmark(catalog: Any) -> str | None:
     ``repo_id:name``, or a path), read with symbolic-data, a loaded catalog, or a mapping (a generative catalog, which
     has no such metadata). Raises when the catalog cannot be read, or when the field is not a non-empty string."""
     return _named_benchmark(_metadata(catalog), catalog)
+
+
+def catalog_subset_rows(catalog: Any, name: str | None = None) -> list[str]:
+    """The subset of each problem of ``catalog``, in row order (a run's ``eval_row_index``): the problem's ``subset``
+    field, else the catalog's name (``name``, by default the reference itself). A generative catalog lists no problems
+    (every row is then in the subset named after it). Raises when the catalog cannot be read, or when a field is not a
+    non-empty string without "/"."""
+    label = name if name is not None else str(catalog)
+    return [_named_subset(v, catalog, label) for v in _subset_fields(catalog)]
 
 
 def catalog_benchmarks(catalogs: Mapping[str, Any] | Iterable[str], *,
@@ -148,5 +195,46 @@ def catalog_benchmarks(catalogs: Mapping[str, Any] | Iterable[str], *,
     return out
 
 
-__all__ = ["BENCHMARK_FIELD", "SRBF_CATALOGS", "SUITES", "catalog_benchmark", "catalog_benchmarks", "expand_suite",
-           "suite_catalogs"]
+def catalog_structure(catalogs: Mapping[str, Any] | Iterable[str], *, warn: Callable[[str], None] | None = None
+                      ) -> tuple[dict[str, str], dict[str, list[str] | None]]:
+    """({catalog: benchmark}, {catalog: the subset of each of its problems}) for ``catalogs``, each catalog read once:
+    :func:`catalog_benchmarks` and :func:`catalog_subsets` together, a catalog that cannot be read reported once (a
+    benchmark of its own, one subset: None)."""
+    refs = dict(catalogs) if isinstance(catalogs, Mapping) else {name: name for name in catalogs}
+    benchmarks: dict[str, str] = {}
+    subsets: dict[str, list[str] | None] = {}
+    for name, ref in refs.items():
+        try:
+            meta, fields = _metadata(ref), _subset_fields(ref)
+        except Exception as exc:  # noqa: BLE001 - an unreadable catalog keeps its own name, and says so
+            if warn is not None:
+                warn(f"cannot read catalog {name!r} ({type(exc).__name__}: {exc}); it is a benchmark of its own, one subset")
+            benchmarks[name], subsets[name] = name, None
+            continue
+        benchmarks[name] = _named_benchmark(meta, ref) or name
+        subsets[name] = [_named_subset(v, ref, name) for v in fields]
+    return benchmarks, subsets
+
+
+def catalog_subsets(catalogs: Mapping[str, Any] | Iterable[str], *,
+                    warn: Callable[[str], None] | None = None) -> dict[str, list[str] | None]:
+    """{catalog: the subset of each of its problems} for ``catalogs`` (as :func:`catalog_benchmarks` takes them), from
+    each problem's ``subset`` field, else the catalog's name (:func:`catalog_subset_rows`). A catalog that cannot be read
+    maps to None (each of its problems is then in the subset named after it), reported through ``warn``; a field that is
+    not a non-empty string without "/" raises."""
+    refs = dict(catalogs) if isinstance(catalogs, Mapping) else {name: name for name in catalogs}
+    out: dict[str, list[str] | None] = {}
+    for name, ref in refs.items():
+        try:
+            fields = _subset_fields(ref)
+        except Exception as exc:  # noqa: BLE001 - an unreadable catalog is one subset, and says so
+            if warn is not None:
+                warn(f"cannot read the problems of catalog {name!r} ({type(exc).__name__}: {exc}); it is one subset")
+            out[name] = None
+            continue
+        out[name] = [_named_subset(v, ref, name) for v in fields]
+    return out
+
+
+__all__ = ["BENCHMARK_FIELD", "SRBF_CATALOGS", "SUBSET_FIELD", "SUITES", "catalog_benchmark", "catalog_benchmarks",
+           "catalog_structure", "catalog_subset_rows", "catalog_subsets", "expand_suite", "suite_catalogs"]

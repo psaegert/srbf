@@ -131,3 +131,9 @@ def test_the_release_carries_a_split_catalogs_subsets_and_their_cells(tmp_path, 
     assert '"toy/easy"' in paired and '"toy/hard"' in paired
     assert not any(part in str(p.relative_to(out)) for p in out.rglob("*") for part in ("easy", "hard"))   # no files of its own
     assert release["pv"] == {"pa": {"8": ["toy"]}, "pb": {"8": ["toy"]}}
+
+
+def test_a_subset_with_a_slash_is_refused():
+    """The page keys a subset's cells "<catalog>/<subset>"."""
+    with pytest.raises(ValueError, match="may not contain"):
+        export.catalog_subsets({"srsd": {0: "easy", 1: "a/b"}}, {"srsd": 2})
