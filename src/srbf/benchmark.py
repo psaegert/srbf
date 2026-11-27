@@ -18,8 +18,9 @@ opened, or an adapter without an engine to judge with, fails the run before anyt
 
 Setup before the clock (docs/fairness.md): building the adapter and its ``prepare`` happen before
 the first problem, and with ``runner.warmup`` srbf's warm-up problem (:mod:`srbf.warmup`) goes
-through the method's fit before it, its answer discarded. A worker-backed adapter repeats the
-warm-up in every worker it starts. The seconds of all of it go into ``__meta__['setup']``.
+through the method's fit before it, its answer discarded. A worker-backed adapter is armed with the
+warm-up before it starts its first worker, and repeats it in every worker it starts. The seconds of
+all of it go into ``__meta__['setup']``.
 """
 from __future__ import annotations
 
@@ -456,13 +457,20 @@ class Benchmark:
     def _set_up(self, meta: dict[str, Any]) -> None:
         """Everything before the first timed problem, recorded in ``meta``: the adapter's ``prepare``, the warm-up, what
         the prepared adapter reports about itself, and the source's ``prepare``."""
+        from srbf.warmup import warmup_sample
+
         prepare_started = time.perf_counter()
+        arm = getattr(self.model_adapter, "warm_up", None) if self.warmup else None
+        if callable(arm):
+            # A worker-backed adapter, armed before it starts a worker: every worker it starts, the first included, is
+            # told that the warm-up problem follows its setup, and runs it before its first timed problem.
+            arm(warmup_sample())
         prepare_adapter = getattr(self.model_adapter, "prepare", None)
         if callable(prepare_adapter):
             prepare_adapter(data_source=self.source)
         self._setup = {"warmup": self.warmup, "build_time": self.build_time,
                        "prepare_time": time.perf_counter() - prepare_started, "events": []}
-        if self.warmup:
+        if self.warmup and not callable(arm):
             self._warm_up()
 
         # The RESOLVED ranking (values, not a hash) beside the label: the check whose absence let
@@ -487,18 +495,13 @@ class Benchmark:
             prepare_source(adapter=self.model_adapter)
 
     def _warm_up(self) -> None:
-        """Run srbf's warm-up problem through the method, untimed, its answer discarded. A worker-backed adapter warms
-        its worker itself and again after every restart (``warm_up``); an in-process adapter is warmed here, through
-        its ``evaluate_sample``. A warm-up the method fails is recorded in ``__meta__['setup']`` and warned about; the
-        run goes on, since the problems it then fails are recorded as failures too."""
+        """Run srbf's warm-up problem through an in-process adapter's ``evaluate_sample``, untimed, its answer
+        discarded (a worker-backed adapter warms its workers itself, ``warm_up``). A warm-up the method fails is
+        recorded in ``__meta__['setup']`` and warned about; the run goes on, since the problems it then fails are
+        recorded as failures too."""
         from srbf.warmup import run_warmup, warmup_sample
 
-        sample = warmup_sample()
-        warm = getattr(self.model_adapter, "warm_up", None)
-        if callable(warm):
-            warm(sample)
-            return
-        outcome = run_warmup(self.model_adapter.evaluate_sample, sample)
+        outcome = run_warmup(self.model_adapter.evaluate_sample, warmup_sample())
         self._setup["events"] = [{"reason": "start", **outcome}]
         if outcome["warmup_error"] is not None:
             warnings.warn(f"the warm-up problem failed: {outcome['warmup_error']}", RuntimeWarning)

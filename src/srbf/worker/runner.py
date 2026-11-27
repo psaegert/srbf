@@ -9,7 +9,7 @@ closes them, as Julia does under PySR, cannot touch the protocol.
 
 Protocol, one JSON object per line (``NaN``/``Infinity`` allowed: both ends are Python)::
 
-    -> {"type": "init", "options": {...}}
+    -> {"type": "init", "options": {...}, "warmup": false}
     <- {"type": "ready", "python": "...", "version": "3.x.y", "worker": "...", "info": {...},
         "load_time": 0.5, "setup_time": 2.1 | null}
     -> {"type": "fit", "id": 7, "x": [[...], ...], "y": [...], "x_val": [[...], ...],
@@ -49,7 +49,9 @@ Worker contract -- a Python file (or module) defining:
 ``setup(state, options) -> state | None``
     Optional. Data-independent preparation after ``load``: compiling, warming up on a problem of
     the worker's own. It runs before the clock starts, in every worker process srbf starts (after
-    every restart too). A returned object other than None replaces ``state``.
+    every restart too). A returned object other than None replaces ``state``. Written as
+    ``setup(state, options, *, warmup)``, it is told whether srbf's warm-up problem follows
+    (``init``'s ``warmup``), so that it can leave a throwaway fit of its own to that problem.
 ``info(state) -> dict``
     Optional. Versions and provenance for the ``ready`` message.
 
@@ -60,6 +62,7 @@ problem, when the run asks for one, arrives as an ordinary ``fit`` whose ``meta`
 """
 import importlib
 import importlib.util
+import inspect
 import json
 import os
 import socket
@@ -125,6 +128,16 @@ def _limited(candidates):
     return kept, dropped
 
 
+def _takes_warmup(setup):
+    """Whether a worker's ``setup`` takes the ``warmup`` keyword (``setup(state, options, *, warmup)``)."""
+    try:
+        parameters = inspect.signature(setup).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(p.kind == p.VAR_KEYWORD or (p.name == "warmup" and p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY))
+               for p in parameters)
+
+
 def serve(worker, target, rfile, wfile):
     """Serve the protocol for ``worker`` on the line-oriented ``rfile``/``wfile``; returns the exit code."""
     def send(obj):
@@ -159,7 +172,10 @@ def serve(worker, target, rfile, wfile):
                 setup = getattr(worker, "setup", None)
                 if callable(setup):
                     started = time.perf_counter()
-                    prepared = setup(state, options)
+                    if _takes_warmup(setup):
+                        prepared = setup(state, options, warmup=bool(msg.get("warmup")))
+                    else:
+                        prepared = setup(state, options)
                     setup_time = time.perf_counter() - started
                     if prepared is not None:
                         state = prepared

@@ -58,8 +58,10 @@ Three patches to DSO v3.0.0 are applied in :func:`load`, each the smallest chang
   config can switch it on, and the worker stops that pool too.
 * ``max_seconds`` (float, 3600): a wall-clock guard checked after each iteration, set far above any budget of the
   ladders. When it passes, the best expression so far is returned and ``guard_hit`` is set.
-* ``warmup`` (bool, true): run a small throwaway fit in :func:`load`, so that the one-time compilation of DSO's
-  numba functions is not part of the first problem's time.
+* ``warmup`` (bool, true): run a small throwaway fit in :func:`setup`, before the clock, so that the one-time
+  compilation of DSO's numba functions is not part of the first problem's time. It is skipped when srbf's own warm-up
+  problem follows (``runner.warmup: true``): that is a fit of the run's own configuration, in a child like every fit,
+  which compiles and caches the same functions.
 * ``config`` (dict, none): settings merged over the arm's configuration (lists replace). For side experiments
   only, such as reproducing a published configuration; published results never set it.
 
@@ -542,9 +544,13 @@ def load(options):
              "max_seconds": float(options.get("max_seconds", 3600.0)), "config": dict(options.get("config") or {}),
              "threads": resolve_threads(options.get("threads", 1)), "modules": modules, "patches": patches,
              "numba_cache": numba_cache}
-    if options.get("warmup", True):
-        warmup_fit(state)
     return state
+
+
+def setup(state, options, *, warmup):
+    """Before the clock: the throwaway fit (``options.warmup``), unless srbf's warm-up problem follows (``warmup``)."""
+    if options.get("warmup", True) and not warmup:
+        warmup_fit(state)
 
 
 # A run small enough to take a second or two that still calls every compiled function of the real runs.

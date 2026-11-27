@@ -333,11 +333,20 @@ def test_the_arm_is_required(fake_dso):
         w.load({})
 
 
-def test_load_warms_up_with_a_small_run_of_the_arm(fake_dso):
-    w.load({"arm": "udsr", "n_samples": 10**6})
+def test_setup_warms_up_with_a_small_run_of_the_arm(fake_dso):
+    options = {"arm": "udsr", "n_samples": 10**6}
+    state = w.load(options)
+    assert not Optimizer.instances                                   # load fits nothing
+    assert w.setup(state, options, warmup=False) is None
     (warmup,) = Optimizer.instances
     assert warmup.config["training"]["n_samples"] == 1 and warmup.config["training"]["batch_size"] == 20
     assert warmup.config["gp_meld"]["population_size"] == 20 and warmup.config["policy_optimizer"]["pqt_k"] == 10
+
+
+def test_setup_leaves_the_warm_up_to_srbfs_problem_or_to_nobody(fake_dso):
+    for options, srbf_warmup in (({"arm": "udsr"}, True), ({"arm": "udsr", "warmup": False}, False)):
+        w.setup(w.load(options), options, warmup=srbf_warmup)
+    assert not Optimizer.instances
 
 
 def test_the_front_keeps_the_non_dominated_valid_expressions():

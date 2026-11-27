@@ -85,6 +85,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A run that is to keep its candidates does not start without them.** A candidate store that cannot be opened, or an
   adapter without a SimpliPy engine to judge them with, stops the run with the reason before the method is prepared or
   fits anything, instead of warning and running without candidates; `runner.candidates: false` runs without them.
+- **The PySR, TiSR and DSO workers warm up in `setup`, and only once.** Their throwaway fit (`warmup`, on by default)
+  moved from `load` to the new `setup` hook, before the clock as before, and is skipped when srbf's warm-up problem
+  follows (`runner.warmup: true`), which is a fit at the run's own options and compiles the same code; timing runs no
+  longer warm these methods twice. A worker's `setup(state, options, *, warmup)` is told whether the warm-up problem
+  follows (`init` carries `warmup`); a `setup(state, options)` is called as before. The run arms a worker-backed
+  adapter with the warm-up before it starts its first worker.
 - **One MDL unit, bits, everywhere.** The Flash-ANSR adapter's raw `predicted_mdl` and the `mdl` column of its
   `candidate_store_dir` store were flash-ansr's thousandths of a bit; both are bits now, as `derive_metrics` and the
   table report them, and the store's `run_meta.mdl_dialect.unit` says `bits`. `CandidateStoreReader.mdl_bits(block)`

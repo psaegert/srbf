@@ -6,8 +6,9 @@ Runs in whichever interpreter has ``pysr`` (and its Julia backend); imports pysr
 * ``timeout_in_seconds`` (int, 60), ``niterations`` (int, 100): the search budget, the compute
   axis of the scaling sweeps.
 * ``maxsize``, ``parsimony`` (None = PySR's own defaults; see docs/fairness.md), ``model_selection`` ('best' = PySR's default).
-* ``warmup`` (True): pay the one-off Julia precompile on a throwaway model in ``load`` so the
-  first timed fit starts warm.
+* ``warmup`` (True): pay the one-off Julia compilation on a throwaway fit in ``setup``, before the
+  clock, so the first timed fit starts warm. It is skipped when srbf's own warm-up problem follows
+  (``runner.warmup: true``): that is a fit at the run's own options, which compiles the same code.
 
 The result carries PySR's own predictions (``y_pred``/``y_pred_val`` from ``predict``), the best
 equation as ``expression`` (in the variable names srbf handed over), PySR's hall of fame (its
@@ -81,8 +82,8 @@ def _model_kwargs(options):
 
 
 def warmup_fit(options):
-    """Pay the Julia startup + SymbolicRegression.jl compile cost OUTSIDE timing: a throwaway
-    minimal fit, best-effort (a failing warmup forfeits only the warmup)."""
+    """Pay SymbolicRegression.jl's compile cost OUTSIDE timing: a throwaway minimal fit, best-effort (a failing warmup
+    forfeits only the warmup)."""
     kwargs = _model_kwargs(options)
     kwargs["niterations"] = 1
     model = create_model(**kwargs)
@@ -95,10 +96,13 @@ def warmup_fit(options):
 
 
 def load(options):
-    model = create_model(**_model_kwargs(options))
-    if bool(options.get("warmup", True)):
+    return {"model": create_model(**_model_kwargs(options))}
+
+
+def setup(state, options, *, warmup):
+    """Before the clock: the throwaway fit (``options.warmup``), unless srbf's warm-up problem follows (``warmup``)."""
+    if bool(options.get("warmup", True)) and not warmup:
         warmup_fit(options)
-    return {"model": model}
 
 
 def info(state):

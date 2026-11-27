@@ -97,6 +97,11 @@ never in a `fit_time`. Put into `setup` what your method would otherwise do on i
 warm-up problem catches what is left. A warm-up that fails is recorded with its reason and reported
 as a warning, and one that takes the worker down counts as a crash.
 
+A `setup` that warms up on a throwaway fit of its own can leave that to srbf's warm-up problem when
+it follows: written as `setup(state, options, *, warmup)`, it is told whether the warm-up problem
+follows (`warmup=True`), and the method is warmed up once, not twice. The shipped PySR, TiSR and
+DSO workers do this ([Models](models.md)).
+
 ### How an expression is read
 
 The expression is parsed by the judge's SimpliPy engine. It reads

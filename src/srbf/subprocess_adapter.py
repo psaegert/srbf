@@ -13,8 +13,10 @@ goes on to the run, which judges and stores them (:mod:`srbf.candidates`).
 
 Setup before the clock (docs/fairness.md): a worker's ``load`` and ``setup`` run when it starts, and
 when the run asks for it (``runner.warmup``) srbf's warm-up problem (:mod:`srbf.warmup`) goes through
-the worker's fit before the first timed problem, in every worker process, after every restart too.
-Their seconds are recorded per worker start (:attr:`SubprocessAdapter.setup_events`), never in a fit time.
+the worker's fit before the first timed problem, in every worker process, after every restart too. A
+worker is told at its start whether the warm-up problem follows, so that its ``setup`` can leave a
+throwaway fit of its own to it. Their seconds are recorded per worker start
+(:attr:`SubprocessAdapter.setup_events`), never in a fit time.
 """
 from __future__ import annotations
 
@@ -218,8 +220,10 @@ class WorkerProcess:
         stderr_tail: int = 200,
         hang_after_idle_s: float | None = None,
         hang_idle_cpu_s: float = 1.0,
+        warmup: bool = False,
     ) -> None:
         self.python = python
+        self.warmup = bool(warmup)             # whether srbf's warm-up problem follows the worker's setup (init tells it)
         self.hang_after_idle_s = None if hang_after_idle_s is None else float(hang_after_idle_s)
         self.hang_idle_cpu_s = float(hang_idle_cpu_s)
         self.last_window_cpu_s: float | None = None   # CPU seconds of the worker tree over the last idle window
@@ -264,7 +268,7 @@ class WorkerProcess:
         threading.Thread(target=self._pump_output, daemon=True).start()
         self._accept(self.startup_timeout)
         threading.Thread(target=self._pump_socket, daemon=True).start()
-        self._send({"type": "init", "options": self.options})
+        self._send({"type": "init", "options": self.options, "warmup": self.warmup})
         reply = self._receive(self.startup_timeout, expect="ready")
         self.info = dict(reply.get("info") or {})
         self.info["python"] = reply.get("python")
@@ -605,6 +609,7 @@ class SubprocessAdapter(EvaluationModelAdapter):
             python=self.python, worker=self.worker, options=self.options, env=self.env, cwd=self.cwd,
             startup_timeout=self.startup_timeout, log_path=self.worker_log,
             hang_after_idle_s=self.hang_after_idle_s, hang_idle_cpu_s=self.hang_idle_cpu_s,
+            warmup=self._warmup is not None,
         )
         process.start()
         self._process = process
@@ -615,10 +620,12 @@ class SubprocessAdapter(EvaluationModelAdapter):
             self._warm()
 
     def warm_up(self, sample: EvaluationSample) -> dict[str, Any]:
-        """Arm srbf's warm-up problem (:func:`srbf.warmup.warmup_sample`) and run it through the worker that is up:
-        from now on every worker the adapter starts, after a crash, a timeout or a hang, is warmed up the same way
-        before its first timed problem. Returns the last worker start's record (:attr:`setup_events`). A warm-up that
-        takes the worker down counts as a crash: the worker is restarted within ``max_restarts``, and warmed up again."""
+        """Arm srbf's warm-up problem (:func:`srbf.warmup.warmup_sample`): from now on every worker the adapter starts,
+        after a crash, a timeout or a hang too, is told at its start that the warm-up problem follows its ``setup`` and
+        runs it before its first timed problem. Armed before :meth:`prepare`, as the run arms it, the first worker is
+        told too; a worker that is already up is warmed up at once. Returns the last worker start's record
+        (:attr:`setup_events`; empty before the first start). A warm-up that takes the worker down counts as a crash:
+        the worker is restarted within ``max_restarts``, and warmed up again."""
         self._warmup = sample
         if self._process is not None:
             try:

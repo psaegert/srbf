@@ -207,7 +207,7 @@ model_adapter:
 | `timeout_in_seconds` | `60` | PySR's own limit on one search; a guard, not the budget |
 | `maxsize`, `parsimony` | PySR's defaults | passed on only when set; published results leave them unset ([Fairness](fairness.md#baselines-run-at-their-upstream-defaults)) |
 | `model_selection` | `best` | which equation of PySR's hall of fame is the prediction |
-| `warmup` | `true` | run a throwaway fit when the worker starts, so that Julia's one-time compilation is not part of the first problem's time |
+| `warmup` | `true` | run a throwaway fit in the worker's `setup`, before the clock, so that Julia's one-time compilation is not part of the first problem's time. Skipped when srbf's warm-up problem follows (`runner.warmup: true`), a fit at the run's own options that compiles the same code |
 | `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
 
 PySR searches over the operators the expressions are written in: `+ - * / ^`, `rootn`, and the unary
@@ -414,7 +414,7 @@ model_adapter:
 | `options.threads` | `1` | the threads Julia starts with, or `all`; with more than one, TiSR breeds and fits its islands in parallel |
 | `options.seed` | `0` | mixed with a hash of the problem's data into the run's seed |
 | `options.time_guard` | `3600` | TiSR's wall-clock limit in seconds, a guard; the `hit_time_guard` column marks a run it stopped |
-| `options.warmup` | `true` | run a throwaway fit when the worker starts, so that compiling TiSR is not part of the first problem's time |
+| `options.warmup` | `true` | run a throwaway fit in the worker's `setup`, before the clock, so that compiling TiSR is not part of the first problem's time. Skipped when srbf's warm-up problem follows (`runner.warmup: true`), a fit with the run's own settings that compiles the same code |
 | `options.config`, `options.config_by_problem` | none | TiSR settings that replace its defaults, for every problem or per problem; for side experiments only, which are then `harness_tuned`; they cannot set a stop |
 | `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
 
@@ -567,7 +567,7 @@ model_adapter:
 | `options.n_samples` | `2000000` | expressions the RNN samples and GP-meld breeds, repeats included: the budget |
 | `options.seed` | `0` | mixed with a hash of the problem's data into the run's seed |
 | `options.max_seconds` | `3600` | a wall-clock guard far above every budget of the ladders; when it passes, the best expression so far is returned and `guard_hit` is set |
-| `options.warmup` | `true` | run a small throwaway fit when the worker starts, so that compiling DSO's numba functions is not part of the first problem's time |
+| `options.warmup` | `true` | run a small throwaway fit in the worker's `setup`, before the clock, so that compiling DSO's numba functions is not part of the first problem's time. Skipped when srbf's warm-up problem follows (`runner.warmup: true`), a fit of the run's own configuration that compiles and caches the same functions |
 | `python`, `env`, `timeout`, `max_restarts`, `worker_log` | | as for every worker ([the config keys](adapters.md#the-config-keys)) |
 
 **Budget.** DSO checks `n_samples` after each iteration: an iteration is 1,000 expressions for DSR and 500 + 25 ×

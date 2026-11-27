@@ -80,6 +80,18 @@ def _data():
     return X, 2.5 * X[:, 0] * X[:, 1] + 1.0
 
 
+def test_setup_warms_up_with_a_short_run_unless_srbfs_warmup_problem_follows(julia):
+    options = {"generations": 64}
+    state = w.load(options)
+    assert julia.calls == []                                         # load fits nothing
+    w.setup(state, options, warmup=True)                             # srbf's warm-up problem compiles the same code
+    w.setup(state, {"warmup": False}, warmup=False)
+    assert julia.calls == []
+    assert w.setup(state, options, warmup=False) is None
+    (call,) = julia.calls
+    assert call["n_gens"] == w.WARMUP_GENERATIONS and state["generations"] == 64
+
+
 def test_tisr_runs_at_its_defaults_with_the_benchmark_operators_the_budget_and_one_thread(julia):
     X, y = _data()
     state = w.load({"generations": 64, "warmup": False})
