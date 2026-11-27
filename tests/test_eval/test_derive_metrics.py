@@ -264,24 +264,53 @@ def test_law_and_prediction_are_judged_by_one_function_of_their_canonical_forms(
 
 
 def test_a_match_in_either_form_is_a_match():
-    """No simplifier is complete. ``x1 ** 1.5 * (x1 ** 1.5 + x1)`` and ``x1 * x1 * (x1 ** 0.5 + x1)`` are one
-    function whose canonical forms differ, while their skeletons as written agree; a product and a power
-    agree in canonical form only. Either agreement is a sound witness, and the judge takes both."""
+    """No simplifier is complete. ``x1 ** 0.5 + x2`` and ``x1 ** 0.50000001 + x2``, an exponent a method left
+    unsnapped, have canonical forms that differ (the root of the first becomes ``rootn(x1, 2)``, the second stays a
+    power), while their skeletons as written agree; ``x1 * (x1 + 1)`` and ``x1 ** 2 + x1`` agree in canonical form
+    only. Either agreement is a sound witness, and the judge takes both."""
     from simplipy import SimpliPyEngine
     from symbolic_data.token_ops import normalize_skeleton
     engine = SimpliPyEngine.load('acj2-5-4-llm', install=True)
-    laws = [['*', 'pow', 'x1', '/', '3', '2', '+', 'pow', 'x1', '/', '3', '2', 'x1'], ['pow', 'x1', '2']]
-    predictions = [['*', '*', 'x1', 'x1', '+', 'pow', 'x1', '0.5', 'x1'], ['*', 'x1', 'x1']]
+    laws = [['+', 'pow', 'x1', '0.5', 'x2'], ['*', 'x1', '+', 'x1', '1']]
+    predictions = [['+', 'pow', 'x1', '0.50000001', 'x2'], ['+', 'pow', 'x1', '2', 'x1']]
     snapshot = {
-        'skeleton': [['*', 'pow', 'x1', '<constant>', '+', 'pow', 'x1', '<constant>', 'x1'], ['pow', 'x1', '<constant>']],
+        'skeleton': [normalize_skeleton(law) for law in laws],
         'ground_truth_prefix': laws, 'predicted_expression_prefix': predictions,
         'predicted_skeleton_prefix': [normalize_skeleton(p) for p in predictions],
         'benchmark_eq_id': ['A', 'B'], 'placeholder': [False] * 2,
     }
     scored = derive_metrics(snapshot, engine=engine)
     assert list(scored['symbolic_recovery']) == [True, True]
-    assert scored['skeleton_simplified'][0] == scored['predicted_skeleton_prefix'][0]      # the pair that agreed
+    # the written pair agreed for A, the canonical pair for B
+    assert scored['skeleton_simplified'][0] == scored['predicted_skeleton_prefix'][0] == ['+', 'x2', 'pow', 'x1', '<constant>']
+    assert scored['skeleton_simplified'][1] == scored['predicted_skeleton_prefix'][1] == ['+', 'x1', 'pow', 'x1', '<constant>']
     assert list(scored['edit_distance']) == [0, 0]
+    masked = [list(engine.mask(engine.simplify(t), 'all', collect=False)) for t in (laws[0], predictions[0])]
+    assert masked[0] != masked[1]                                           # A's canonical forms differ
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    "SimpliPy FX-76: under strict, the domain rule does not use the confinement a sibling term of a sum gives, so "
+    "x1^(3/2)*x1^(3/2) stays a product next to x1^(5/2) once the canonical form multiplies x1^(3/2) out over the sum: "
+    "the law reads x1^(5/2) + x1^(3/2)*x1^(3/2), the prediction x1^(5/2) + x1^3, and neither form agrees (permissive "
+    "matches)"))
+def test_a_known_miss_one_function_whose_strict_forms_do_not_meet():
+    """``x1 ** 1.5 * (x1 ** 1.5 + x1)`` and ``x1 * x1 * (x1 ** 0.5 + x1)`` are one function where both are defined,
+    but under the strict mode neither their canonical forms nor their skeletons as written agree. Kept as a known miss:
+    the test passes, and so fails here, once the strict simplifier uses the confinement by a sibling term."""
+    from simplipy import SimpliPyEngine
+    from symbolic_data.token_ops import normalize_skeleton
+    engine = SimpliPyEngine.load('acj2-5-4-llm', install=True)
+    laws = [['*', 'pow', 'x1', '/', '3', '2', '+', 'pow', 'x1', '/', '3', '2', 'x1']]
+    predictions = [['*', '*', 'x1', 'x1', '+', 'pow', 'x1', '0.5', 'x1']]
+    snapshot = {
+        'skeleton': [['*', 'pow', 'x1', '<constant>', '+', 'pow', 'x1', '<constant>', 'x1']],
+        'ground_truth_prefix': laws, 'predicted_expression_prefix': predictions,
+        'predicted_skeleton_prefix': [normalize_skeleton(p) for p in predictions],
+        'benchmark_eq_id': ['A'], 'placeholder': [False],
+    }
+    scored = derive_metrics(snapshot, engine=engine)
+    assert list(scored['symbolic_recovery']) == [True]
 
 
 def test_a_malformed_answer_is_judged_as_stored_and_costs_no_other_row():
