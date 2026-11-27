@@ -552,7 +552,8 @@
     });
     return out;
   }
-  function benchText(S) { return S + (S === 1 ? " benchmark" : " benchmarks"); }
+  // "B benchmarks", and ", U subsets" where some benchmark has more than one
+  function benchText(S, U) { return S + (S === 1 ? " benchmark" : " benchmarks") + (U > S ? ", " + U + " subsets" : ""); }
   // ---- averaging over problem sets (owner 2026-09-27) --------------------------------------------------------------
   // The results are problem sets > problems > runs. A problem's value is the mean of its runs; a set is its number of
   // problems with a value, their sum and their sum of squares (the exporter's cells). Sets are combined by a random-
@@ -945,7 +946,7 @@
       c = combineScaleNested(ys, vs, flat.reduce(function (a, st) { return a + st.n - 1; }, 0));
       n0 = c.tau2 > 0 ? e.pooled / c.tau2 : Infinity; n0S = c.tau2W > 0 ? e.pooled / c.tau2W : Infinity;
     }
-    c.n = flat.reduce(function (a, st) { return a + st.n; }, 0); c.sets = groups; c.n0 = n0; c.n0S = n0S;
+    c.n = flat.reduce(function (a, st) { return a + st.n; }, 0); c.sets = groups; c.n0 = n0; c.n0S = n0S; c.U = flat.length;
     return c;
   }
   function holm(ps) {
@@ -1025,7 +1026,7 @@
   function problemsText(st, use) {
     var n = Math.round(st.n), S = st.S || use.length;
     var more = st.ndef ? st.ndef - n : 0;
-    return "From " + n.toLocaleString() + " problems in " + benchText(S) + (more > 0 ? "; " + more.toLocaleString() + " more have no finite value, which the mean leaves out" : "") + (st.d === 1 ? "; some problems have one finished run so far" : "");
+    return "From " + n.toLocaleString() + " problems in " + benchText(S, st.U) + (more > 0 ? "; " + more.toLocaleString() + " more have no finite value, which the mean leaves out" : "") + (st.d === 1 ? "; some problems have one finished run so far" : "");
   }
   function thin(st) { return !!st && !st.pending && typeof st.share === "number" && st.share < state.valid / 100; }
   function shareText(st) { return Math.floor(100 * st.share) + " % of the problems have a value"; }   // shown in tooltips
@@ -1057,26 +1058,26 @@
     var fit, out;
     if (metric.kind === "rate") {
       fit = reCombine(byBench(cs, function (c) { var x = cell(m, c, r), t = x && x.m[metric.key]; return t ? { n: t[0], s1: t[1], s2: t[2] } : null; }), "logit");
-      return fit ? { v: fit.mu, lo: fit.lo, hi: fit.hi, piLo: fit.piLo, piHi: fit.piHi, n: fit.n, S: fit.S, share: 1, ciPending: !!fit.ciPending } : null;
+      return fit ? { v: fit.mu, lo: fit.lo, hi: fit.hi, piLo: fit.piLo, piHi: fit.piHi, n: fit.n, S: fit.S, U: fit.U, share: 1, ciPending: !!fit.ciPending } : null;
     }
     var share = validShare(metric, cells);
     if (statOf(metric) === "mean") {
       fit = reCombine(byBench(cs, function (c) { var t = reading(cell(m, c, r), metric.key); return t ? { n: t[1], s1: t[2], s2: t[3] } : null; }), "normal");
       if (!fit) { return null; }
       var nd = cells.reduce(function (a, c) { var t = reading(c, metric.key); return a + (t ? t[0] : 0); }, 0);
-      return { v: fit.mu, lo: fit.lo, hi: fit.hi, piLo: fit.piLo, piHi: fit.piHi, n: fit.n, ndef: nd, S: fit.S, share: share };
+      return { v: fit.mu, lo: fit.lo, hi: fit.hi, piLo: fit.piLo, piHi: fit.piHi, n: fit.n, ndef: nd, S: fit.S, U: fit.U, share: share };
     }
     if (!histKeys(metric).every(function (k) { return ready(histFile(k)); })) { return { pending: true }; }
     var ph = pooledHist(metric.key, m, r, cs); if (!ph) { return null; }
     if (metric.median_via) {
       var pf = pooledHist(metric.median_via, m, r, cs); if (!pf) { return null; }
       var q = function (share_) { return r2Quantile(ph, pf, Math.max(1e-9, Math.min(ph.n, share_ * ph.n))); }, half0 = medianShareHalf(pf, quantileBin(pf, pf.n / 2)), qm = q(0.5);
-      out = { v: qm.v, lo: q(Math.max(0, 0.5 - half0)).v, hi: q(Math.min(1, 0.5 + half0)).v, n: ph.n, S: ph.S, edge: qm.edge, share: share };
+      out = { v: qm.v, lo: q(Math.max(0, 0.5 - half0)).v, hi: q(Math.min(1, 0.5 + half0)).v, n: ph.n, S: ph.S, U: ph.parts.length, edge: qm.edge, share: share };
       return out;
     }
     var mid = quantileBin(ph, ph.n / 2), half = medianShareHalf(ph, mid);
     var lo = quantileBin(ph, Math.max(1e-9, (0.5 - half) * ph.n)), hi = quantileBin(ph, Math.min(ph.n, (0.5 + half) * ph.n));
-    return { v: binVal(ph, mid), lo: binVal(ph, lo), hi: binVal(ph, hi), n: ph.n, S: ph.S, edge: mid === 0 ? -1 : (mid === ph.nb - 1 ? 1 : 0), share: share };
+    return { v: binVal(ph, mid), lo: binVal(ph, lo), hi: binVal(ph, hi), n: ph.n, S: ph.S, U: ph.parts.length, edge: mid === 0 ? -1 : (mid === ph.nb - 1 ? 1 : 0), share: share };
   }
 
   function fmt(metric, x, edge) {
@@ -1312,7 +1313,7 @@
         var least = thin(sx) && (!thin(sy) || sx.share < sy.share) ? sx : sy;
         if (thin(sx) || thin(sy)) { thinDrawn = true; }
         pts.push({ x: sx.v, xlo: sx.lo, xhi: sx.hi, v: sy.v, lo: sy.lo, hi: sy.hi, hollow: thin(sx) || thin(sy), end: endsAt(m.key, r),
-          title: withEnd(m.key, r, m.label + " @ " + r + ": " + fmt(xm, sx.v, sx.edge) + " " + xm.short + ", " + fmt(ym, sy.v, sy.edge) + " " + ym.short + ", " + Math.round(sy.n).toLocaleString() + " problems in " + benchText(sy.S) + (least.share < 1 ? ", " + shareText(least) : "")) });
+          title: withEnd(m.key, r, m.label + " @ " + r + ": " + fmt(xm, sx.v, sx.edge) + " " + xm.short + ", " + fmt(ym, sy.v, sy.edge) + " " + ym.short + ", " + Math.round(sy.n).toLocaleString() + " problems in " + benchText(sy.S, sy.U) + (least.share < 1 ? ", " + shareText(least) : "")) });
         [sx.v, anyCI() ? sx.lo : sx.v, anyCI() ? sx.hi : sx.v].forEach(function (v) { if (isFinite(v)) { xmin = Math.min(xmin, v); xmax = Math.max(xmax, v); } });
         [sy.v, anyCI() ? sy.lo : sy.v, anyCI() ? sy.hi : sy.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
       });
@@ -1875,7 +1876,7 @@
     var sOf = function (key) { if (key in ssets) { return ssets[key]; } var pc = cellOf(key), t = pc && pc.m[pk]; return t ? { n: t[3], s1: sgn * t[4], s2: t[5] } : null; };
     var fd = reCombine(byBench(has, dOf), "normal"); if (!fd) { return null; }   // a set's subsets: their own cells
     var ft = rate ? fd : reCombine(byBench(has, sOf), "normal");
-    return { v: fd.mu, lo: fd.lo, hi: fd.hi, piLo: fd.piLo, piHi: fd.piHi, n: ft ? ft.n : fd.n, S: fd.S, p: ft ? ft.p : null, wins: wins, losses: losses };
+    return { v: fd.mu, lo: fd.lo, hi: fd.hi, piLo: fd.piLo, piHi: fd.piHi, n: ft ? ft.n : fd.n, S: fd.S, U: fd.U, p: ft ? ft.p : null, wins: wins, losses: losses };
   }
   function fmtDelta(metric, d) { if (!isFinite(d)) { return "–"; } var tf = tfOf(metric); if (metric.kind === "rate" || metric.fmt === "pct") { return (d >= 0 ? "+" : "") + (100 * d).toFixed(1) + " pp"; } if (tf === "log2") { return "× " + Math.pow(2, d).toFixed(2); } if (tf === "log10") { return "× " + Math.pow(10, d).toFixed(2); } return (d >= 0 ? "+" : "") + d.toFixed(metric.fmt === "num3" ? 3 : 2); }
   function renderPaired(shown) {
@@ -1892,7 +1893,7 @@
     var charts = inBlock(root.querySelector(".v2main"), plots.length, function () { return plots.map(function (p) { var series = [], ymin = Infinity, ymax = -Infinity, tmin = Infinity, tmax = -Infinity;
       var ctx = p.key + (leftOut(p.key) ? "@answered" : "") + "|" + base.key + "|" + slotContext(pairCellsOf(p.key));
       others.forEach(function (m) { var pts = []; slots.forEach(function (sl) { var x = sl.x, st = slotMemo("pair|" + ctx + "|" + m.key + "|" + sl.slot, function () { return pairedSlotStat(p, m.key, base.key, sl.slot); }); if (!st || !isFinite(st.v)) { return; }
-          pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, title: m.label + " − " + base.label + " at " + posText(time ? "t" + x : x) + ": " + fmtDelta(p, st.v) + " [" + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + "], over " + st.n.toLocaleString() + " problems in " + benchText(st.S) + ", p = " + fmtP(st.p) });
+          pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, title: m.label + " − " + base.label + " at " + posText(time ? "t" + x : x) + ": " + fmtDelta(p, st.v) + " [" + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + "], over " + st.n.toLocaleString() + " problems in " + benchText(st.S, st.U) + ", p = " + fmtP(st.p) });
           [st.v, anyCI() ? st.lo : st.v, anyCI() ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } }); if (time) { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); } });
         if (pts.length) { series.push({ key: m.key, label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), dash: !!m.dash, pts: pts }); } });
       var title = "Δ " + mname(p) + " vs " + base.label;
@@ -2186,8 +2187,8 @@
     ro.forEach(function (x, i) { ro.forEach(function (z, j) { if (j <= i) { return; }
       var f = reCombine(byBench(out.cats, function (c) { return pair(x, z, c); }), "normal");
       if (!f) { f = { mu: 0, lo: 0, hi: 0, p: 1, n: 0, S: 0 }; }
-      beat[i][j] = { p: (1 + f.mu) / 2, lo: (1 + f.lo) / 2, hi: (1 + f.hi) / 2, pv: f.p, n: f.n, S: f.S };
-      beat[j][i] = { p: (1 - f.mu) / 2, lo: (1 - f.hi) / 2, hi: (1 - f.lo) / 2, pv: f.p, n: f.n, S: f.S };
+      beat[i][j] = { p: (1 + f.mu) / 2, lo: (1 + f.lo) / 2, hi: (1 + f.hi) / 2, pv: f.p, n: f.n, S: f.S, U: f.U };
+      beat[j][i] = { p: (1 - f.mu) / 2, lo: (1 - f.hi) / 2, hi: (1 - f.lo) / 2, pv: f.p, n: f.n, S: f.S, U: f.U };
       pairs.push([i, j]); }); });
     out.n = beat[0][1].n; out.beat = beat; out.k = k;
     ro.forEach(function (x, i) { var lost = 0; ro.forEach(function (_z, j) { if (j !== i) { lost += beat[j][i].p; } });
@@ -2250,7 +2251,7 @@
       ord.map(function (x) { return '<tr><td><span class="v2sw" style="background:' + colorOf(x.m) + '"></span>' + esc(x.m.label) + "</td><td>" + placeText(x.m, x.places, time) + "</td><td><b>" + x.rank.toFixed(2) + "</b></td><td>" + (100 * x.share).toFixed(1) + " %</td><td>" + Math.round(x.blank).toLocaleString() + ' <span class="v2ci-txt">of ' + lg.n.toLocaleString() + "</span></td></tr>"; }).join("") + "</tbody></table></div>";
     var t2 = '<h3 class="v2h">Head to head</h3><div class="v2table-wrap"><table class="v2table v2matrix v2h2h"><thead><tr><th>row beats column on</th>' + ord.map(function (x) { return '<th><span class="v2sw" style="background:' + colorOf(x.m) + '"></span>' + esc(x.m.label) + "</th>"; }).join("") + "</tr></thead><tbody>" +
       ord.map(function (x, a) { return '<tr><td><span class="v2sw" style="background:' + colorOf(x.m) + '"></span>' + esc(x.m.label) + "</td>" + ord.map(function (z, b) { if (a === b) { return '<td class="v2na">·</td>'; } var e = lg.beat[idx[a]][idx[b]], w = e.p, rgb = accentRGB();
-        return '<td style="background:rgba(' + rgb.join(",") + "," + (0.04 + 0.5 * w).toFixed(2) + ')" title="' + esc(x.m.label + " does better than " + z.m.label + " on " + (100 * e.p).toFixed(1) + " % of the problems (95 % interval " + (100 * e.lo).toFixed(1) + " to " + (100 * e.hi).toFixed(1) + " %), ties counting half, averaged over " + benchText(e.S) + "; " + (e.sep ? "the pairwise test tells them apart" : "the pairwise test does not tell them apart") + " (p = " + fmtP(e.padj) + ")") + '">' + (w > 0.5 && e.sep ? "<b>" : "") + (100 * w).toFixed(1) + " %" + (w > 0.5 && e.sep ? "</b>" : "") + ' <span class="v2ci-txt">[' + (100 * e.lo).toFixed(0) + ", " + (100 * e.hi).toFixed(0) + "]</span></td>"; }).join("") + "</tr>"; }).join("") + "</tbody></table></div>" +
+        return '<td style="background:rgba(' + rgb.join(",") + "," + (0.04 + 0.5 * w).toFixed(2) + ')" title="' + esc(x.m.label + " does better than " + z.m.label + " on " + (100 * e.p).toFixed(1) + " % of the problems (95 % interval " + (100 * e.lo).toFixed(1) + " to " + (100 * e.hi).toFixed(1) + " %), ties counting half, averaged over " + benchText(e.S, e.U) + "; " + (e.sep ? "the pairwise test tells them apart" : "the pairwise test does not tell them apart") + " (p = " + fmtP(e.padj) + ")") + '">' + (w > 0.5 && e.sep ? "<b>" : "") + (100 * w).toFixed(1) + " %" + (w > 0.5 && e.sep ? "</b>" : "") + ' <span class="v2ci-txt">[' + (100 * e.lo).toFixed(0) + ", " + (100 * e.hi).toFixed(0) + "]</span></td>"; }).join("") + "</tr>"; }).join("") + "</tbody></table></div>" +
       '<p class="v2hint">Each cell: the share of problems on which the row\u2019s method does better than the column\u2019s on ' + esc(p.label) + ", ties counting half, averaged over the problem sets, with its 95 % interval. Bold: the row\u2019s method does better, and the " + term("pairtest", "pairwise test") + " tells the two apart.</p>";
     return t1 + t2;
   }

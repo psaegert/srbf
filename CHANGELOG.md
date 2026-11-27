@@ -118,6 +118,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   catalog, as before; a subset must be a non-empty name without "/" (the site keys a subset's cells
   `<catalog>/<subset>`). The judged rows and the per-file cache hold neither column (`srbf.table.CATALOG_COLUMNS`).
   `srbf analyze -c` gives a snapshot without the column its catalog's subsets (by `eval_row_index`).
+- **The explorer's tooltips count the subsets** ("N problems in B benchmarks, S subsets") wherever some benchmark has
+  more than one; a release of one subset per benchmark reads as before.
 - **Strict where it publishes: an unreadable catalog stops the table and the release.** `srbf table` stops before
   judging when a catalog's benchmark and subsets cannot be read, naming every such catalog
   (`srbf.suites.catalog_structure(..., strict=True)`, `UnreadableCatalogs`); `--lenient-metadata` writes the table
