@@ -20,7 +20,7 @@ import dataclasses
 import time
 from contextlib import nullcontext
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 
@@ -233,13 +233,15 @@ def refit_formula(expression: Sequence[str], X: Any, y: Any, *, engine: Any, ref
 
 @dataclass(frozen=True)
 class Recovery:
-    """The oracle stopped at its first numeric recovery (:func:`first_recovery`): ``fit`` is the oracle at the restart
-    that recovered (None when none did), ``restarts`` the restarts spent, ``answered`` whether any restart converged
-    (a restart that diverges everywhere leaves no answer)."""
+    """The oracle stopped at its first recovery (:func:`first_recovery`): ``fit`` is the oracle at the first restart that
+    recovered (None when none did), ``restarts`` the restarts spent, ``answered`` whether any restart converged (a
+    restart that diverges everywhere leaves no answer) and ``numeric`` whether any restart's answer reproduced the
+    held-out points, accepted or not."""
 
     fit: OracleFit | None
     restarts: int
     answered: bool
+    numeric: bool
 
     @property
     def recovered(self) -> bool:
@@ -247,15 +249,17 @@ class Recovery:
 
 
 def first_recovery(expression: Sequence[str], X: Any, y: Any, X_val: Any, y_val: Any, *, engine: Any, refine: Any = None,
-                   ranking: Any = None, seed: int = 0, variable_names: Sequence[str] | None = None) -> Recovery:
-    """The oracle stopped at its first numeric recovery: whether the formula can be recovered from ``(X, y)`` at all.
+                   ranking: Any = None, seed: int = 0, variable_names: Sequence[str] | None = None,
+                   accept: Callable[[OracleFit], bool] | None = None) -> Recovery:
+    """The oracle stopped at its first recovery: whether the formula can be recovered from ``(X, y)`` at all.
 
     Restart ``r`` (``0 .. n_restarts - 1`` of ``refine``) is the whole oracle at one restart from the seed ``(seed, r)``
-    (:func:`refit_formula`: the fit, its canonical form, the constant ladder, the duplicate and the ranking), and the
-    first restart whose answer reproduces the held-out targets ``y_val`` (``is_perfect_fit``) ends the search. Every
-    stage counts: the constant ladder re-spells one constant and refits the others, which recovers formulas whose plain
-    fit does not (a product of constants of very different sizes, say). ``(X_val, y_val)`` are points the oracle is
-    never fitted on.
+    (:func:`refit_formula`: the fit, its canonical form, the constant ladder, the duplicate and the ranking). A restart
+    recovers when its answer reproduces the held-out targets ``y_val`` (``is_perfect_fit``) and ``accept`` (when given;
+    the judge's symbolic recognition, say) accepts it; the first restart that recovers ends the search, and none is
+    passed to ``accept`` whose answer misses the held-out targets. Every stage counts: the constant ladder re-spells one
+    constant and refits the others, which recovers formulas whose plain fit does not (a product of constants of very
+    different sizes, say). ``(X_val, y_val)`` are points the oracle is never fitted on.
     """
     from srbf.metrics.numeric import is_perfect_fit
 
@@ -264,18 +268,21 @@ def first_recovery(expression: Sequence[str], X: Any, y: Any, X_val: Any, y_val:
     X_val_arr = np.asarray(X_val, dtype=float).reshape(-1, X_arr.shape[1])
     y_val_arr = np.asarray(y_val, dtype=float).reshape(-1)
     if oracle_candidate(expression, engine) is None:
-        return Recovery(None, 0, False)
+        return Recovery(None, 0, False, False)
     one = dataclasses.replace(settings, n_restarts=1)
-    answered = False
+    answered = numeric = False
     for restart in range(settings.n_restarts):
         fit = refit_formula(expression, X_arr, y_arr, engine=engine, refine=one, ranking=ranking, seed=(int(seed), restart),
                             variable_names=variable_names)
         if fit.best is None:
             continue
         answered = True
-        if is_perfect_fit(y_val_arr, fit.best.predict(X_val_arr)):
-            return Recovery(fit, restart + 1, True)
-    return Recovery(None, settings.n_restarts, answered)
+        if not is_perfect_fit(y_val_arr, fit.best.predict(X_val_arr)):
+            continue
+        numeric = True
+        if accept is None or accept(fit):
+            return Recovery(fit, restart + 1, True, True)
+    return Recovery(None, settings.n_restarts, answered, numeric)
 
 
 __all__ = ["CONSTANT", "OracleCandidate", "OracleFit", "Recovery", "UNREADABLE", "first_recovery", "oracle_candidate",

@@ -120,11 +120,33 @@ def test_the_first_recovery_counts_what_the_constant_ladder_recovers(engine):
     assert recovery.fit.best.spelling is not None                  # the answer is the ladder's
 
 
+def test_the_first_recovery_goes_on_until_a_restart_is_also_accepted(engine):
+    """With ``accept`` (the judge's recognition), a restart whose answer reproduces the held-out points but is not
+    accepted does not end the search: the first restart that passes both does, or none among the full count."""
+    law = ["*", "1.3", "sin", "*", "7.3", "x1"]
+    sample = _sample(law, f=lambda X: 1.3 * np.sin(7.3 * X[:, 0]), n_columns=1)
+    refine = {"n_restarts": 64, "constant_ladder": False}
+    args = (law, sample.x_support, sample.y_support, sample.x_validation, sample.y_validation)
+    plain = first_recovery(*args, engine=engine, refine=refine, seed=1)
+    seen = []
+
+    def second(fit):
+        seen.append(fit)
+        return len(seen) >= 2                       # rejects the first recovery, accepts the next
+
+    picky = first_recovery(*args, engine=engine, refine=refine, seed=1, accept=second)
+    assert picky.recovered and picky.numeric and picky.restarts > plain.restarts and len(seen) == 2
+    assert all(is_perfect_fit(sample.y_validation, f.best.predict(sample.x_validation)) for f in seen)
+    never = first_recovery(*args, engine=engine, refine={**refine, "n_restarts": 16}, seed=1, accept=lambda fit: False)
+    assert not never.recovered and never.numeric and never.answered and never.restarts == 16
+
+
 def test_a_formula_that_does_not_fit_the_data_is_not_recovered(engine):
     sample = _sample(LAW)            # the data of LAW, the formula of another law
     recovery = first_recovery(["*", "2.0", "exp", "x1"], sample.x_support, sample.y_support, sample.x_validation,
                               sample.y_validation, engine=engine, refine={"n_restarts": 4}, seed=0)
     assert not recovery.recovered and recovery.fit is None and recovery.restarts == 4 and recovery.answered
+    assert not recovery.numeric
     unreadable = first_recovery(["+", "x1"], sample.x_support, sample.y_support, sample.x_validation,
                                 sample.y_validation, engine=engine)
     assert not unreadable.recovered and unreadable.restarts == 0 and not unreadable.answered
