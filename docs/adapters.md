@@ -146,7 +146,9 @@ and evaluated on the support and validation points. Its FVU is `srbf.metrics.num
 the noiseless targets, as the table judges a prediction; a value that is not finite at some point
 gives an FVU of infinity. Every candidate gets a status: `judged` (read, evaluated and priced),
 `unreadable`, `unevaluable` or `unpriced`, with the reason. Nothing a method reports about its
-candidates is used.
+candidates is used. A candidate the judge has not finished with after 10 seconds (reading, pricing
+and evaluating it; a candidate usually takes half a millisecond) is `unevaluable`, with the reason,
+and the judge goes on with the next one, so one pathological candidate cannot stall a run.
 
 **Storage.** The candidates of `results/.../fastsrb/niter_000064.pkl` go to the directory
 `results/.../fastsrb/niter_000064.candidates/`, into the log `niter_000064.log`: one compressed

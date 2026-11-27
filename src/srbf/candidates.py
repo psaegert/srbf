@@ -24,6 +24,7 @@ changes (another price, say), from the stored strings and the points the result 
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import importlib
 import json
@@ -31,7 +32,9 @@ import math
 import os
 import pickle
 import re
+import signal
 import struct
+import threading
 import time
 import warnings
 import zlib
@@ -58,10 +61,13 @@ JUDGE_VERSION = 1
 MAX_CANDIDATES = 100_000
 #: A worker's candidate written with more characters than this is dropped and counted.
 MAX_CANDIDATE_CHARS = 10_000
+#: Seconds the judge spends on one candidate (reading, pricing and evaluating it) before it gives up on it: the
+#: candidate is unevaluable, with the reason, and the judge goes on with the next one (:func:`judge_candidates`).
+JUDGE_TIMEOUT_S = 10.0
 
 STATUS_JUDGED = 0        # read, evaluated and priced
 STATUS_UNREADABLE = 1    # the judge's engine cannot read it (a function outside the vocabulary, a placeholder, ...)
-STATUS_UNEVALUABLE = 2   # read, but evaluating it on the points raised
+STATUS_UNEVALUABLE = 2   # read, but evaluating it on the points raised; or judging it took over JUDGE_TIMEOUT_S
 STATUS_UNPRICED = 3      # read and evaluated, but the engine gives it no finite price
 STATUS_NAMES = ("judged", "unreadable", "unevaluable", "unpriced")
 
@@ -195,6 +201,45 @@ def _first_line(exc: BaseException) -> str:
     return (f"{type(exc).__name__}: {text.splitlines()[0]}" if text else type(exc).__name__)[:300]
 
 
+class _CandidateTimeout(BaseException):
+    """Raised into a candidate's judgement when its time is up. A BaseException, so that the ``except Exception`` of the
+    code it interrupts (the price's, the engine's, the evaluation's) cannot swallow it."""
+
+
+def _alarm(signum: int, frame: Any) -> None:
+    raise _CandidateTimeout
+
+
+@contextlib.contextmanager
+def _time_limit(seconds: float | None) -> Iterator[None]:
+    """Raise :class:`_CandidateTimeout` into the body once ``seconds`` have passed.
+
+    The interval timer of this process (``setitimer(ITIMER_REAL)``) and its ``SIGALRM``: nothing is started, so nothing
+    can be left running. A thread cannot be stopped from outside, so a judgement that hangs would keep its thread (and
+    the GIL) after a thread-based timeout; a process per candidate would cost more than the judgement and would have to
+    be reaped. The handler runs between two bytecodes of the main thread: a call into native code (numpy, a compiled
+    part of the engine) finishes before it takes effect. Off the main thread, or without ``setitimer``, the body runs
+    without a limit. The handler and an alarm someone else had set (a test runner's timeout) are put back, that alarm
+    less the time spent here."""
+    if (seconds is None or not hasattr(signal, "setitimer")
+            or threading.current_thread() is not threading.main_thread()):
+        yield
+        return
+    previous = signal.signal(signal.SIGALRM, _alarm)
+    started = time.monotonic()
+    outer = (0.0, 0.0)
+    try:
+        outer = signal.setitimer(signal.ITIMER_REAL, float(seconds))
+        try:
+            yield
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0.0)    # the alarm fires once: if it came first, nothing is left
+    finally:
+        signal.signal(signal.SIGALRM, signal.SIG_DFL if previous is None else previous)
+        if outer[0] > 0.0:
+            signal.setitimer(signal.ITIMER_REAL, max(outer[0] - (time.monotonic() - started), 1e-6), outer[1])
+
+
 def _read_candidate(engine: Any, text: str, notation: str, variables: Sequence[str]) -> list[str]:
     """The prefix the judge prices and evaluates: read, in the ground truth's variable names, in the form the table
     stores and judges a prediction in (``normalize_expression``, then the engine's ``convert_expression``)."""
@@ -224,14 +269,19 @@ def _read_candidate(engine: Any, text: str, notation: str, variables: Sequence[s
 
 
 def judge_candidates(expressions: Sequence[str], *, engine: Any, variables: Sequence[str], x_fit: Any, y_fit: Any,
-                     x_val: Any = None, y_val: Any = None, notation: str = "infix") -> Judgement:
+                     x_val: Any = None, y_val: Any = None, notation: str = "infix",
+                     timeout: float | None = JUDGE_TIMEOUT_S) -> Judgement:
     """Judge every candidate as srbf judges a prediction.
 
     ``variables`` are the column names the method was handed; ``x_fit``/``y_fit`` and ``x_val``/``y_val`` the fitting
     and held-out points and the targets the table judges with (the noiseless ones). A candidate is read by the engine,
     priced by :func:`srbf.pricing.price_bits` and evaluated with the engine's realizations; its FVU is
     :func:`srbf.metrics.numeric.fvu` on every point, so a non-finite value anywhere gives ``inf``. The held-out FVU is
-    NaN for a problem without held-out points."""
+    NaN for a problem without held-out points.
+
+    One candidate gets ``timeout`` seconds (None: no limit) for all of it: a candidate the judge has not finished by
+    then is unevaluable, with the reason, its FVUs NaN, its price kept if it was priced, and the judge goes on with the
+    next one. The limit is the main thread's alarm (:func:`_time_limit`); a judgement in another thread has none."""
     n = len(expressions)
     X_fit = np.asarray(x_fit, dtype=float)
     if X_fit.ndim == 1:
@@ -252,12 +302,13 @@ def judge_candidates(expressions: Sequence[str], *, engine: Any, variables: Sequ
     fvu_fit = np.full(n, np.nan)
     fvu_val = np.full(n, np.nan)
     status = np.zeros(n, dtype=np.uint8)
-    for i, text in enumerate(expressions):
+
+    def judge(i: int, text: str) -> None:
         try:
-            prefix = _read_candidate(engine, str(text), notation, variables)
+            prefix = _read_candidate(engine, text, notation, variables)
         except Exception as exc:  # noqa: BLE001 - a candidate the engine cannot read is a judged outcome
             status[i], reasons[i] = STATUS_UNREADABLE, _first_line(exc)
-            continue
+            return
         prefixes[i] = " ".join(prefix)
         bits[i] = price(prefix)
         try:
@@ -266,12 +317,20 @@ def judge_candidates(expressions: Sequence[str], *, engine: Any, variables: Sequ
                 raise ValueError("the expression does not give one value per point")
         except Exception as exc:  # noqa: BLE001 - evaluation errors vary
             status[i], reasons[i] = STATUS_UNEVALUABLE, _first_line(exc)
-            continue
+            return
         fvu_fit[i] = fvu(Y_fit, y_hat_fit)
         if has_val:
             fvu_val[i] = fvu(Y_val, y_hat_val)
         if not np.isfinite(bits[i]):
             status[i], reasons[i] = STATUS_UNPRICED, "the engine gives no finite price"
+
+    for i, text in enumerate(expressions):
+        try:
+            with _time_limit(timeout):
+                judge(i, str(text))
+        except _CandidateTimeout:
+            fvu_fit[i] = fvu_val[i] = np.nan
+            status[i], reasons[i] = STATUS_UNEVALUABLE, f"judging it took longer than {timeout:g} s"
     return Judgement(prefixes, reasons, bits, fvu_fit, fvu_val, status)
 
 
@@ -713,7 +772,7 @@ def rejudge_candidates(result_file: str | os.PathLike[str], *, engine: Any, engi
 
 
 __all__ = [
-    "CANDIDATE_FIELDS", "MAX_CANDIDATES", "MAX_CANDIDATE_CHARS", "NOTATIONS", "STATUS_JUDGED", "STATUS_NAMES",
+    "CANDIDATE_FIELDS", "JUDGE_TIMEOUT_S", "MAX_CANDIDATES", "MAX_CANDIDATE_CHARS", "NOTATIONS", "STATUS_JUDGED", "STATUS_NAMES",
     "STATUS_UNEVALUABLE", "STATUS_UNPRICED", "STATUS_UNREADABLE", "CandidateLog", "CandidateRecorder", "CandidateSet",
     "Judgement", "candidate_judge_fingerprint", "candidate_store_path", "evaluate_prefix", "iter_candidates",
     "judge_candidates", "judge_identity", "limit_candidates", "load_candidates", "read_expression", "read_manifests",

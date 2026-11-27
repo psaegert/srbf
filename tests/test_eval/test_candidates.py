@@ -2,7 +2,10 @@
 judgement, the store, the run's side (Benchmark + CandidateRecorder), the worker protocol and the reading API."""
 import json
 import pickle
+import signal
 import textwrap
+import threading
+import time
 from pathlib import Path
 
 import numpy as np
@@ -109,6 +112,85 @@ class TestJudgement:
         assert j.bits[0] == price_bits(engine, record["predicted_expression_prefix"])
         assert j.fvu_fit[0] == fvu(sample.y_support, record["y_pred"])
         assert j.fvu_val[0] == fvu(sample.y_validation, record["y_pred_val"])
+
+
+# ---- a candidate that takes too long ------------------------------------------------------------------------------
+class TestJudgeTimeout:
+    """One pathological candidate must not stall a problem: past its time it is unevaluable and the judge goes on."""
+
+    @staticmethod
+    def _spinning_evaluation(monkeypatch, token="sin"):
+        real = cand.evaluate_prefix
+
+        def evaluate(engine, prefix, *args):
+            if token in prefix:
+                while True:                    # a candidate whose evaluation never ends
+                    pass
+            return real(engine, prefix, *args)
+        monkeypatch.setattr(cand, "evaluate_prefix", evaluate)
+
+    def test_a_candidate_whose_evaluation_never_ends_is_unevaluable_and_the_rest_are_judged(self, engine, monkeypatch):
+        self._spinning_evaluation(monkeypatch)
+        threads, handler, timer = threading.active_count(), signal.getsignal(signal.SIGALRM), signal.getitimer(signal.ITIMER_REAL)
+        started = time.monotonic()
+        sample = _toy()
+        j = judge_candidates([EXACT, "sin(v1)", "2.0*v1"], engine=engine, variables=["v1", "v2"], x_fit=sample.x_support,
+                             y_fit=sample.y_support, x_val=sample.x_validation, y_val=sample.y_validation, timeout=0.3)
+        assert time.monotonic() - started < 5.0
+        assert list(j.status) == [STATUS_JUDGED, STATUS_UNEVALUABLE, STATUS_JUDGED]
+        assert j.reasons[1] == "judging it took longer than 0.3 s"
+        assert j.prefixes[1] == "sin x1" and np.isfinite(j.bits[1])        # it was read and priced before it stalled
+        assert np.isnan(j.fvu_fit[1]) and np.isnan(j.fvu_val[1])
+        assert j.fvu_val[0] == 0.0 and np.isfinite(j.fvu_val[2])
+        assert threading.active_count() == threads                          # nothing was started to time it
+        assert signal.getsignal(signal.SIGALRM) == handler                 # the alarm is put back as it was
+        assert timer != (0.0, 0.0) or signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
+
+    def test_code_that_catches_every_exception_cannot_swallow_the_timeout(self, engine, monkeypatch):
+        def price(prefix):
+            try:
+                time.sleep(60)
+            except Exception:  # noqa: BLE001 - as the engine's own guards do
+                return 1.0
+            return 1.0
+        monkeypatch.setattr(cand, "pricer", lambda e: price)
+        started = time.monotonic()
+        j = _judge_with_timeout(engine, ["v1"], 0.2)
+        assert time.monotonic() - started < 5.0
+        assert j.status[0] == STATUS_UNEVALUABLE and np.isnan(j.bits[0]) and "longer than 0.2 s" in j.reasons[0]
+
+    def test_an_alarm_set_before_survives_the_judgement(self, engine, monkeypatch):
+        self._spinning_evaluation(monkeypatch)
+        fired = []
+        previous = signal.signal(signal.SIGALRM, lambda *a: fired.append(True))
+        try:
+            signal.setitimer(signal.ITIMER_REAL, 30.0)
+            _judge_with_timeout(engine, ["sin(v1)", "v1"], 0.2)
+            remaining, _ = signal.getitimer(signal.ITIMER_REAL)
+            assert 25.0 < remaining < 30.0 and not fired          # still armed, less the time the judgement took
+            signal.setitimer(signal.ITIMER_REAL, 0.05)
+            time.sleep(0.5)
+            assert fired                                            # and its own handler answers it
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0.0)
+            signal.signal(signal.SIGALRM, previous)
+
+    def test_off_the_main_thread_the_judgement_runs_without_a_limit(self, engine):
+        out = {}
+        worker = threading.Thread(target=lambda: out.update(j=_judge_with_timeout(engine, [EXACT], 0.2)))
+        worker.start()
+        worker.join(60)
+        assert list(out["j"].status) == [STATUS_JUDGED]
+
+    def test_the_run_judges_with_the_default_limit(self):
+        import inspect
+        assert inspect.signature(judge_candidates).parameters["timeout"].default == cand.JUDGE_TIMEOUT_S == 10.0
+
+
+def _judge_with_timeout(engine, expressions, timeout):
+    sample = _toy()
+    return judge_candidates(expressions, engine=engine, variables=["v1", "v2"], x_fit=sample.x_support,
+                            y_fit=sample.y_support, x_val=sample.x_validation, y_val=sample.y_validation, timeout=timeout)
 
 
 # ---- the store ----------------------------------------------------------------------------------------------------
