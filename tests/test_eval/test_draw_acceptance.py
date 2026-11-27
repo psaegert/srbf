@@ -60,8 +60,8 @@ def test_an_attempt_is_judged_by_the_oracle_and_the_judge(engine, problem, verdi
 
 
 def test_a_recovery_the_judge_does_not_recognize_fails_the_attempt(engine, monkeypatch):
-    """The judge reads the stopping restart's answer: where it calls the refitted law another structure (the judge is
-    strict about a constant factor spelled differently, say), the attempt fails on (c)."""
+    """The judge reads every restart's answer that recovers numerically: where it calls each refitted law another
+    structure (the judge is strict about a constant factor spelled differently, say), the attempt fails on (c)."""
     import srbf.table
 
     judge = srbf.table.judge_snapshot
@@ -74,7 +74,27 @@ def test_a_recovery_the_judge_does_not_recognize_fails_the_attempt(engine, monke
 
     monkeypatch.setattr(srbf.table, "judge_snapshot", strict)
     check = OracleCheck(_oracle(engine), engine)
-    assert check(_problem()) == "symbolic" and check.spent == 1
+    assert check(_problem()) == "symbolic" and check.spent == 4          # every restart recovers, none is recognized
+
+
+def test_an_attempt_passes_when_any_restart_is_also_recognized(engine, monkeypatch):
+    """The judge rejects the first two restarts that recover numerically and recognizes the third: the attempt passes on
+    the third, and fails only when no restart among the full count passes both."""
+    import srbf.table
+
+    judge = srbf.table.judge_snapshot
+    calls = []
+
+    def third(snap, *, engine, first_index=None):
+        judged = judge(snap, engine=engine, first_index=first_index)
+        if snap.get("prediction_success", [False])[0]:
+            calls.append(1)
+            judged["symbolic_recovery"] = [len(calls) >= 3]
+        return judged
+
+    monkeypatch.setattr(srbf.table, "judge_snapshot", third)
+    check = OracleCheck(_oracle(engine), engine)
+    assert check(_problem()) == ACCEPTED and check.spent == 3 and len(calls) == 3
 
 
 def test_a_placeholder_is_never_accepted(engine):
@@ -112,9 +132,9 @@ def test_the_first_accepted_attempt_is_kept_and_none_is_flagged(tmp_path):
     doc = json.loads(out.read_text())
     chosen = doc["catalogs"]["toy"]["attempts"]["1"]
     assert list(chosen) == ["a", "b", "c"]                                       # the constant formula is not checked
-    assert chosen["a"] == {"attempt": 3, "formula_inherent": False, "failed": {"numeric": 2}}
-    assert chosen["b"] == {"attempt": 1, "formula_inherent": True, "failed": {"symbolic": 4}}   # max_trials attempts
-    assert chosen["c"] == {"attempt": 1, "formula_inherent": False, "failed": {}}
+    assert chosen["a"] == {"attempt": 3, "formula_inherent": False, "failures": ["numeric", "numeric"]}
+    assert chosen["b"] == {"attempt": 1, "formula_inherent": True, "failures": ["symbolic"] * 4}   # max_trials attempts
+    assert chosen["c"] == {"attempt": 1, "formula_inherent": False, "failures": []}
     assert summary["checked"] == 3 and summary["later_attempt"] == 1 and summary["formula_inherent"] == 1
     assert set(summary["seconds"]["toy"]) == {"a", "b", "c", "k"}
     # symbolic-data renders the attempts it was handed

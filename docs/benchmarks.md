@@ -180,12 +180,16 @@ A noise level `s` gives the targets `y + s * std(y) * noise` per side from the s
 **Every draw lets its own formula be recognized.** With one draw per problem, a draw on which the true formula
 cannot be recovered would waste the problem for every method. So each problem's draw is the first of a fixed,
 seeded sequence of attempts on which (a) every target is finite and the FVU is defined on the fitting and on the
-held-out points, (b) the [oracle](models.md#the-oracle) (the ground truth with its constants refitted; no checkpoint
-takes part, so a formula over any number of variables is checked) reaches numeric recovery on the held-out points,
-and (c) the judge recognizes the refitted formula symbolically. The oracle runs restart by restart, restart `r` from
-the seed `(seed, r)`, and stops at the first restart whose answer recovers the held-out points: the check only asks
-whether the formula can be recovered from the draw, and the first success answers that. An attempt gets at most
-1,024 restarts (`srbf.oracle.first_recovery`). Attempts differ only in what the benchmark leaves to chance (input
+held-out points, and at some restart (b) the [oracle](models.md#the-oracle) (the ground truth with its constants
+refitted; no checkpoint takes part, so a formula over any number of variables is checked) reaches numeric recovery on
+the held-out points and (c) the judge recognizes that restart's refitted formula symbolically. The oracle runs restart
+by restart, restart `r` from the seed `(seed, r)`, and stops at the first restart that passes both: the check only
+asks whether the formula can be recovered from the draw, and the first success answers that. An attempt fails only
+when none of its 1,024 restarts passes both (`srbf.oracle.first_recovery`), so that the verdict is the draw's and not
+one restart's: where only a product or ratio of a law's constants is fixed by the data, restarts land on different
+members of the family of equivalent constants, and the judge recognizes some of them and not others. Each failed
+attempt is recorded with the first check it fails: `not_finite` or `fvu_undefined` (a), `no_prediction` or `numeric`
+(b), `symbolic` (c). Attempts differ only in what the benchmark leaves to chance (input
 points, random constants, per-run values), never in the formula or its fixed constants. This is a deviation from
 every benchmark with random values: the points are conditioned on the formula being recoverable from them. A problem
 on which no attempt within `max_trials` passes keeps its first attempt and is flagged formula-inherent: what defeats
@@ -209,7 +213,7 @@ A run is refused, before the model loads, when:
 
 Shards address the problems by their position in the render, which is the catalog's order, so `--shard K/N` and a
 subset of rows pick the same problems on every machine. Every row records `draws_sha256` (the draws file's SHA-256),
-`draws_repeat`, `draws_attempt` (the attempt the problem keeps) and `draws_formula_inherent`, and `__meta__` records the draws under `draws` and as the input `catalog_draws`, so a paired
+`draws_repeat`, `draws_attempt` (the attempt the problem keeps), `draws_formula_inherent` and `draws_failures` (the kind of each failed attempt), and `__meta__` records the draws under `draws` and as the input `catalog_draws`, so a paired
 comparison verifies that both sides read the same file ([Paired comparisons](paired.md#pairing-is-checked)).
 
 Another way to share points is a frozen catalog file: draw the problems once with symbolic-data, save them with

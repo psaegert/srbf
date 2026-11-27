@@ -34,7 +34,7 @@ frame = pd.DataFrame({key: snapshot[key] for key in ("benchmark_eq_id", "predict
 | `x`, `y`, `x_val`, `y_val` | the support and validation points, without noise |
 | `y_noisy`, `y_noisy_val` | the targets with the run's noise. A method is given `y_noisy` when the run adds noise, and never any validation target |
 | `n_support`, `noise_level` | the sampling parameters of the problem |
-| `draws_sha256`, `draws_repeat`, `draws_attempt`, `draws_formula_inherent` | with [frozen draws](benchmarks.md#draws-the-same-data-for-every-method): the SHA-256 of the draws file the problem was read from, its repeat, the attempt the problem keeps, and whether no attempt let its formula be recognized |
+| `draws_sha256`, `draws_repeat`, `draws_attempt`, `draws_formula_inherent`, `draws_failures` | with [frozen draws](benchmarks.md#draws-the-same-data-for-every-method): the SHA-256 of the draws file the problem was read from, its repeat, the attempt the problem keeps, whether no attempt let its formula be recognized, and the kind of each failed attempt in order (`numeric`, `symbolic`, ...) |
 | `complexity` | the number of tokens of the ground truth's skeleton |
 | `predicted_expression` | the prediction as an infix string, in the names `x1, x2, ...` |
 | `predicted_expression_prefix`, `predicted_skeleton_prefix` | the prediction in prefix notation, with its constants and with constants masked |

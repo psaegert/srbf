@@ -168,10 +168,11 @@ class FrozenDrawsSource:
                 "acceptance": self.acceptance}
 
     def row_fields(self, index: int) -> dict[str, Any]:
-        """What a result row records about its problem's draw: the attempt kept and whether the formula is flagged
-        formula-inherent (no attempt let it be recognized)."""
+        """What a result row records about its problem's draw: the attempt kept, whether the formula is flagged
+        formula-inherent (no attempt let it be recognized) and the kind of each failed attempt, in order."""
         record = self.records[index]
-        return {"draws_attempt": int(record.get("attempt", 1)), "draws_formula_inherent": bool(record.get("formula_inherent", False))}
+        return {"draws_attempt": int(record.get("attempt", 1)), "draws_formula_inherent": bool(record.get("formula_inherent", False)),
+                "draws_failures": [str(kind) for kind in record.get("failures") or []]}
 
     def __iter__(self) -> Iterator[Any]:
         from symbolic_data import Problem

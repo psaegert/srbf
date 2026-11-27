@@ -7,15 +7,22 @@ never the formula or its fixed constants. This module judges each attempt in tha
 document symbolic-data renders with (``symbolic-data render-draws --attempts``). An attempt is accepted when
 
 (a) every target is finite and the FVU is defined on the fitting and on the held-out points (the targets vary);
-(b) srbf's oracle (:mod:`srbf.oracle`: the ground truth with its constants refitted, no checkpoint involved) reaches
-    numeric recovery on the held-out points (``is_perfect_fit``). The oracle runs restart by restart, restart ``r``
-    from the seed ``(seed, r)``, and stops at the first restart whose answer recovers them
-    (:func:`srbf.oracle.first_recovery`): the check only asks whether the formula can be recovered from the draw, and
-    the first success answers that. ``n_restarts`` restarts without one fail the attempt;
+(b) at some restart, srbf's oracle (:mod:`srbf.oracle`: the ground truth with its constants refitted, no checkpoint
+    involved) reaches numeric recovery on the held-out points (``is_perfect_fit``), and
 (c) srbf's judge recognizes that restart's refitted formula (``symbolic_recovery``).
 
+The oracle runs restart by restart, restart ``r`` from the seed ``(seed, r)``, and stops at the first restart that
+passes both (b) and (c) (:func:`srbf.oracle.first_recovery`): the check only asks whether the formula can be recovered
+from the draw, and the first success answers that. An attempt fails only when none of its ``n_restarts`` restarts
+passes both, so that its verdict records the draw and not the luck of one restart: where the constants of a law are
+not identifiable from the data (only their product or ratio is), restarts land on different members of the family of
+equivalent constants, and the judge recognizes some of them and not others. A failed attempt's kind is the first
+check it fails: ``placeholder``, ``not_finite`` or ``fvu_undefined`` (a), ``no_prediction`` (no restart converged),
+``numeric`` (no restart reproduced the held-out points) or ``symbolic`` (some did, none was recognized).
+
 The first accepted attempt within the render's ``max_trials`` is kept. When none is accepted, attempt 1 is kept and
-the problem is flagged ``formula_inherent``. Formulas that are constant by construction and data problems are not
+the problem is flagged ``formula_inherent``. The attempts document records, for every checked problem, the kind of
+each failed attempt in order (``failures``). Formulas that are constant by construction and data problems are not
 checked. symbolic-data never imports srbf: the two meet in ``CatalogDraws.draw`` and the attempts document.
 
 Every problem is an independent task: a run can be split into shards (``shard=(k, n)``), each with a journal of its
@@ -27,7 +34,6 @@ from __future__ import annotations
 import json
 import os
 import time
-from collections import Counter
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
@@ -36,12 +42,13 @@ import numpy as np
 #: The rule, as the attempts document and the draws' manifest record it.
 RULE = ("the first seeded attempt (1..max_trials) whose targets are finite with a defined FVU on both sides, on which "
         "srbf's oracle (the ground truth with its constants refitted, restart by restart from seeded starting values, "
-        "at most {n_restarts} restarts) reaches numeric recovery on the held-out points at some restart, stopping at "
-        "the first, and srbf's judge recognizes that restart's refitted formula; otherwise attempt 1, flagged "
+        "at most {n_restarts} restarts) reaches, at some restart, numeric recovery on the held-out points with a refitted "
+        "formula srbf's judge recognizes, stopping at the first such restart; otherwise attempt 1, flagged "
         "formula_inherent. Constant formulas and data problems are not checked.")
 
 ACCEPTED = "accepted"
-#: Why an attempt is not accepted, in the order the rule checks: (a), (b), (c).
+#: Why an attempt is not accepted, in the order the rule checks: (a), (b), (c). ``symbolic``: some restart recovered
+#: the held-out points numerically, and the judge recognized none of those restarts' formulas.
 REASONS = ("placeholder", "not_finite", "fvu_undefined", "no_prediction", "numeric", "symbolic")
 
 
@@ -63,8 +70,9 @@ class OracleCheck:
 
     ``adapter`` is an ``oracle`` adapter (:class:`srbf.model_adapters.OracleAdapter`): its engine, its refinement
     settings (whose ``n_restarts`` is the most restarts an attempt gets), its ranking and its seed. ``judge_engine`` is the
-    engine srbf's judge runs with (``srbf table``'s default, ``acj-5-4-llm``). ``spent`` holds the restarts the last
-    attempt took.
+    engine srbf's judge runs with (``srbf table``'s default, ``acj-5-4-llm``). Every restart whose answer recovers the
+    held-out points numerically is judged; the first one the judge recognizes accepts the attempt. ``spent`` holds the
+    restarts the last attempt took.
     """
 
     def __init__(self, adapter: Any, judge_engine: Any, engine_name: str | None = None) -> None:
@@ -103,20 +111,22 @@ class OracleCheck:
         if targets("fit_quality_undefined_fit") or targets("fit_quality_undefined_val"):
             return "fvu_undefined"
         y_fit = sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support
+
+        def recognized(fit: Any) -> bool:
+            judged = self._judge(OracleAdapter.answer(sample.clone_metadata(), sample, fit))
+            return bool(judged("numeric_recovery_val")) and bool(judged("symbolic_recovery"))
+
         recovery = first_recovery(
             list(sample.metadata.get("expression") or []), sample.x_support, y_fit, sample.x_validation,
             sample.y_validation, engine=self.adapter.get_simplipy_engine(), refine=self.adapter.refine,
             ranking=self.adapter.ranking, seed=self.adapter.seed or 0,
-            variable_names=sample.metadata.get("variable_names"))
+            variable_names=sample.metadata.get("variable_names"), accept=recognized)
         self.spent = recovery.restarts
-        if recovery.fit is None:
-            return "numeric" if recovery.answered else "no_prediction"
-        judged = self._judge(OracleAdapter.answer(sample.clone_metadata(), sample, recovery.fit))
-        if not bool(judged("numeric_recovery_val")):
-            return "numeric"
-        if not bool(judged("symbolic_recovery")):
+        if recovery.recovered:
+            return ACCEPTED
+        if recovery.numeric:
             return "symbolic"
-        return ACCEPTED
+        return "numeric" if recovery.answered else "no_prediction"
 
 
 def oracle_adapter_config(config: str | os.PathLike[str], *, n_restarts: int, seed: int,
@@ -200,16 +210,16 @@ def judge_attempts(ref: str, row: int, repeat: int) -> tuple[str, str, int, dict
     first = draws.draw(row, repeat, 1)
     if not needs_check(first.kind, first.problem):
         return draws.name, draws.ids[row], repeat, None, timing()
-    reasons: Counter[str] = Counter()
+    failures: list[str] = []                    # the kind of each failed attempt, in order
     for attempt in range(1, int(draws.settings.max_trials) + 1):
         draw = first if attempt == 1 else draws.draw(row, repeat, attempt)
         verdict = check(draw.problem)
         restarts += int(getattr(check, "spent", 0) or 0)
         if verdict == ACCEPTED:
-            choice = {"attempt": attempt, "formula_inherent": False, "failed": dict(sorted(reasons.items()))}
+            choice = {"attempt": attempt, "formula_inherent": False, "failures": failures}
             return draws.name, draws.ids[row], repeat, choice, timing()
-        reasons[verdict] += 1
-    choice = {"attempt": 1, "formula_inherent": True, "failed": dict(sorted(reasons.items()))}
+        failures.append(verdict)
+    choice = {"attempt": 1, "formula_inherent": True, "failures": failures}
     return draws.name, draws.ids[row], repeat, choice, timing()
 
 
@@ -319,8 +329,8 @@ def accept_draws(refs: Sequence[str], out: str | os.PathLike[str], *, check_fact
     ``check_factory`` builds the check once per worker process (a picklable callable, such as
     ``functools.partial(oracle_check, ...)``). ``ids`` restricts a catalog (by ref or name) to a frozen subset, as the
     render will. The document lists every catalog, and in it every checked problem with the attempt it keeps, its flag
-    and how many attempts failed for which reason. ``journal`` appends each problem's result as it is judged, and a run
-    started again on the same journal judges only the problems it does not hold. ``shard=(k, n)`` judges only the
+    and the kind of each failed attempt in order (``failures``, :data:`REASONS`). ``journal`` appends each problem's
+    result as it is judged, and a run started again on the same journal judges only the problems it does not hold. ``shard=(k, n)`` judges only the
     tasks ``k, k + n, k + 2n, ...`` of the plan (every problem of every catalog, repeat by repeat): shards are
     independent runs, each with a journal of its own, and :func:`merge_journals` writes the document of all of them.
     The summary adds each problem's seconds, CPU seconds and the oracle's restarts (not in the document, which a rerun

@@ -53,11 +53,11 @@ def _toy_problems(seed: int) -> list[tuple[dict, dict]]:
     placeholder = {"row": 3, "eq_id": "p", "kind": "formula", "skeleton": None, "expression": None, "constants": [],
                    "variables": ["x1"], "complexity": None, "gt_kind": "exact", "noise": 0.0, "meta": {},
                    "is_placeholder": True, "placeholder_reason": "max_trials_exhausted",
-                   "attempt": 1, "checked": True, "formula_inherent": True}
+                   "attempt": 1, "checked": True, "formula_inherent": True, "failures": ["placeholder"] * 4}
     c = 1.0 + seed / 10
     second = formula("b", 1, x1, xv1, lambda x: c * x[:, :1] + x[:, 1:], ["+", "*", repr(c), "x1", "x2"],
                      meta={"per_run_values": {"c": c}})
-    second[0].update(attempt=3, checked=True, formula_inherent=False)
+    second[0].update(attempt=3, checked=True, formula_inherent=False, failures=["numeric", "symbolic"])
     return [formula("a", 0, x0, xv0, lambda x: 2 * x, ["*", "2", "x1"]), second, (data_record, data_arrays), (placeholder, {})]
 
 
@@ -113,6 +113,7 @@ def test_reads_every_problem_as_rendered_and_records_the_draws(catalog, draws):
         assert meta["draws_sha256"] == sha and meta["draws_repeat"] == 1
         assert meta["draws_attempt"] == record.get("attempt", 1)
         assert meta["draws_formula_inherent"] == record.get("formula_inherent", False)
+        assert meta["draws_failures"] == record.get("failures", [])
         if record["is_placeholder"]:
             assert sample.is_placeholder and meta["placeholder_reason"] == "max_trials_exhausted"
             continue
@@ -127,6 +128,7 @@ def test_reads_every_problem_as_rendered_and_records_the_draws(catalog, draws):
     assert identity["manifest_sha256"] == _sha(draws / "manifest.json")
     assert identity["acceptance"] == {"attempts_sha256": "a" * 64, "rule": "the test's rule"}
     assert [s.metadata["draws_attempt"] for s in samples] == [1, 3, 1, 1]
+    assert samples[1].metadata["draws_failures"] == ["numeric", "symbolic"]       # what failed attempts 1 and 2
 
 
 def test_a_noise_level_scales_the_stored_vector_on_formula_problems_only(catalog, draws):
