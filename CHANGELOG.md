@@ -109,6 +109,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its mean over problems is the Mean Improvability.
 
 ### Changed
+- **Runs and `srbf table` write each problem's subset.** A problem names the subset of its benchmark in its catalog
+  (the `subset` field of a yaml entry, or of a frozen problem's meta; symbolic-data's catalogs carry it from
+  integration/0.19 on): a run stamps it on every row (`subset`, None where the catalog names none), and `srbf table`
+  writes a `subset` column next to `benchmark`, read from the catalogs before judging as the benchmark is
+  (`srbf.suites.catalog_subsets`, `catalog_subset_rows`, and `catalog_structure` for both with one report per
+  unreadable catalog; `build_table(..., subsets=)`). A problem without the field is in the subset named after its
+  catalog, as before; a subset must be a non-empty name without "/" (the site keys a subset's cells
+  `<catalog>/<subset>`). The judged rows and the per-file cache hold neither column (`srbf.table.CATALOG_COLUMNS`).
+  `srbf analyze -c` gives a snapshot without the column its catalog's subsets (by `eval_row_index`).
+- **The explorer's tooltips count the subsets** ("N problems in B benchmarks, S subsets") wherever some benchmark has
+  more than one; a release of one subset per benchmark reads as before.
+- **Strict where it publishes: an unreadable catalog stops the table and the release.** `srbf table` stops before
+  judging when a catalog's benchmark and subsets cannot be read, naming every such catalog
+  (`srbf.suites.catalog_structure(..., strict=True)`, `UnreadableCatalogs`); `--lenient-metadata` writes the table
+  with that catalog's benchmark and subset cells empty instead. `scripts/site_export_v2.py` refuses rows that name no
+  benchmark or subset (`load_rows(..., strict=True)`, its default from the command line), so a table written before
+  the `subset` column, or leniently, is not published with guessed structure; `--lenient-metadata` takes each
+  catalog's name, as local builds may. `srbf analyze` keeps the fallback.
+- **The time axis nests each problem in its own subset.** `scripts/site_timing.py` averages the seconds per problem
+  over benchmarks > subsets by the problems' subsets (`over_sets(..., subsets=)`), as every other metric is averaged,
+  no longer by catalog: `scripts/freeze_timing_subset.py` records each catalog's `subsets` in the timing manifest
+  (`names`, and `rows` for more than one), a subset ladder's row is placed by its `source_row_index` and a whole-suite
+  row by its `eval_row_index`. A manifest that records no subsets for a catalog makes it one subset, the time of the
+  catalogs nested within their benchmarks to the last bit.
 - **Averages have three levels: benchmarks > subsets > problems** (nested random effects). Within a benchmark, problems
   sit in subsets: the parts its authors published it in (a problem's `subset`, from its rows), else the catalogs it is
   stored in. The structure is fixed by the data, never chosen by looking at results; the spread between benchmarks and

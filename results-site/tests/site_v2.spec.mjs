@@ -963,7 +963,8 @@ test('the problem sets of one benchmark are its subsets, and a set split into su
   // a set the release splits into subsets without cells per subset is taken whole
   const whole = benchCore({ srsd: { subsets: ['easy', 'hard'] } });
   expect(whole.byBench(['srsd'], (c) => (c === 'srsd' ? sets.srsd : null)).map((g) => g.map((q) => [q.u, q.n]))).toEqual([[['srsd', 60]]]);
-  expect([own.benchText(1), own.benchText(29)]).toEqual(['1 benchmark', '29 benchmarks']);
+  expect([own.benchText(1), own.benchText(29), own.benchText(29, 29), own.benchText(3, 5)]).toEqual(['1 benchmark', '29 benchmarks', '29 benchmarks', '3 benchmarks, 5 subsets']);
+  expect(split.reCombine(split.byBench(cs, of), 'normal').U).toBe(6);   // feynman's two, nguyen, keijzer, srsd's two
 });
 
 test('two problem sets declared one benchmark are its subsets in the explorer\'s averages, and keep their own rows', async ({ page }) => {
@@ -1022,6 +1023,10 @@ test('a problem set the release splits into subsets is averaged subset by subset
   await page.goto(`/explorer.html?release=2026-09&v=table&rows=cats&p=${key}&pm=budget&r=${r}&m=${m}&c=all`);
   await expect(page.locator(V2 + ' .v2table tbody td:first-child', { hasText: /^feynman$/ })).toHaveCount(1);
   await expect(page.locator(V2 + ' .v2table tbody td:first-child', { hasText: /feynman\/a/ })).toHaveCount(0);
+  // the tooltips count the subsets where a benchmark has more than one
+  await page.goto(`/explorer.html?release=2026-09&v=curves&p=${key}&x=rung&m=${m}&c=all`);
+  const n = D.catalogs.length;
+  await expect(page.locator(V2 + ' svg.v2chart title', { hasText: new RegExp(n + ' benchmarks, ' + (n + 1) + ' subsets') }).first()).toBeAttached({ timeout: 15000 });
   expect(errors).toEqual([]);
 });
 

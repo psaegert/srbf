@@ -82,3 +82,28 @@ def test_a_runs_benchmark_comes_from_its_catalogs_metadata(tmp_path):
     assert len(said) == 1 and "'gone'" in said[0]
     assert [r.benchmark for r in runs_from_config(str(config), benchmarks={"nguyen": "classic"})] == [
         "feynman", "feynman-points", "classic", "gone"]   # a given mapping replaces the metadata
+
+
+def test_a_snapshot_without_subsets_takes_its_catalogs(tmp_path):
+    """Rows written before runs recorded the subset get it from the catalog's problems (by eval_row_index); rows that
+    have it keep their own."""
+    import yaml
+
+    catalog = tmp_path / "srsd.yaml"
+    catalog.write_text(yaml.safe_dump({"metadata": {"name": "srsd", "benchmark": "srsd"},
+                                       "expressions": {f"P{i}": {"raw": "x1", "prepared": "v1", "subset": u}
+                                                       for i, u in enumerate(["easy", "easy", "hard"])}}))
+    config = tmp_path / "run.yaml"
+    config.write_text(
+        "experiments:\n"
+        f"  srsd: {{data_source: {{catalog: '{catalog}'}}, runner: {{output: '{tmp_path}/srsd.pkl'}}}}\n"
+        f"  other: {{data_source: {{catalog: '{catalog}'}}, runner: {{output: '{tmp_path}/other.pkl'}}}}\n"
+        "model_adapter: {type: subprocess, worker: /x/w.py}\n")
+    _snapshot(tmp_path / "srsd.pkl", 3)
+    with (tmp_path / "other.pkl").open("wb") as handle:
+        pickle.dump({"eval_row_index": [0, 1], "prediction_success": [True, True], "subset": ["mine", "mine"]}, handle)
+    runs = {r.catalog: r for r in runs_from_config(str(config))}
+    assert runs["srsd"].benchmark == "srsd" and runs["srsd"].snapshot["subset"] == ["easy", "easy", "hard"]
+    assert runs["other"].snapshot["subset"] == ["mine", "mine"]
+    named = runs_from_config(str(config), benchmarks={})            # the caller names the structure: nothing is read
+    assert all("subset" not in r.snapshot or r.catalog == "other" for r in named)

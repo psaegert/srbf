@@ -116,3 +116,74 @@ def test_catalogs_map_to_their_benchmarks_or_to_themselves(tmp_path, monkeypatch
     assert catalog_benchmarks([refs["nguyen"]]) == {refs["nguyen"]: refs["nguyen"]}
     monkeypatch.setattr(paths, "substitute_root_path", lambda p: p.replace("{{ROOT}}", str(tmp_path)))
     assert catalog_benchmarks({"f": "{{ROOT}}/feynman-restricted.yaml"}) == {"f": "feynman"}
+
+
+# ---- the subset of its benchmark each problem belongs to: the problem's `subset` ----------------------------------
+def _catalog_with(tmp_path, name, subsets, **meta):
+    import yaml
+
+    expressions = {f"P{i}": ({"subset": u} if u is not None else {}) | {"raw": "x1", "prepared": "v1"}
+                   for i, u in enumerate(subsets)}
+    path = tmp_path / f"{name}.yaml"
+    path.write_text(yaml.safe_dump({"metadata": {"name": name, **meta}, "expressions": expressions}, sort_keys=False))
+    return str(path)
+
+
+def test_every_problem_names_its_subset_or_is_in_its_catalogs(tmp_path):
+    from srbf.suites import catalog_structure, catalog_subset_rows, catalog_subsets
+
+    srsd = _catalog_with(tmp_path, "srsd", ["easy", "easy", None, "hard"], benchmark="srsd")
+    plain = _catalog_with(tmp_path, "nguyen", [None, None])
+    assert catalog_subset_rows(srsd, "srsd") == ["easy", "easy", "srsd", "hard"]       # in row order
+    assert catalog_subset_rows(plain, "nguyen") == ["nguyen", "nguyen"]                # a catalog without the field
+    assert catalog_subset_rows({"type": "generative"}, "gen") == []                    # lists no problems
+    said = []
+    got = catalog_subsets({"srsd": srsd, "nguyen": plain, "gone": str(tmp_path / "gone.yaml")}, warn=said.append)
+    assert got == {"srsd": ["easy", "easy", "srsd", "hard"], "nguyen": ["nguyen", "nguyen"], "gone": None}
+    assert len(said) == 1 and "'gone'" in said[0] and "one subset" in said[0]
+    said.clear()
+    benchmarks, subsets = catalog_structure({"srsd": srsd, "gone": str(tmp_path / "gone.yaml")}, warn=said.append)
+    assert benchmarks == {"srsd": "srsd", "gone": "gone"} and subsets == {"srsd": got["srsd"], "gone": None}
+    assert len(said) == 1 and "a benchmark of its own, one subset" in said[0]      # one report per catalog
+
+
+def test_a_frozen_catalog_names_its_problems_subsets_in_their_meta(tmp_path):
+    import numpy as np
+    from symbolic_data import Problem
+    from symbolic_data.catalog import ProblemCatalog
+
+    from srbf.suites import catalog_subset_rows
+
+    def problem(meta):
+        x, y = np.zeros((4, 1)), np.zeros((4, 1))
+        return Problem(x_support=x, y_support=y, y_support_noisy=y, x_validation=x, y_validation=y, y_validation_noisy=y,
+                       skeleton=None, expression=None, constants=[], variables=["x1"], complexity=None, meta=meta)
+    path = ProblemCatalog.from_problems([problem({"subset": "a"}), problem({}), problem({"subset": "b"})],
+                                        name="data-points").save(tmp_path / "data-points.npz")
+    assert catalog_subset_rows(str(path), "data-points") == ["a", "data-points", "b"]
+
+
+@pytest.mark.parametrize("bad", ["", "  ", 3, "a/b"])
+def test_a_subset_is_a_name_without_a_slash(tmp_path, bad):
+    """The results site keys a catalog's cells per subset as "<catalog>/<subset>"."""
+    from srbf.suites import catalog_subset_rows, catalog_subsets
+
+    path = _catalog_with(tmp_path, f"bad{len(str(bad))}", [bad])
+    with pytest.raises(ValueError, match="without '/'"):
+        catalog_subset_rows(path, "bad")
+    with pytest.raises(ValueError, match="without '/'"):
+        catalog_subsets({"bad": path})
+
+
+def test_strict_reading_names_every_catalog_it_cannot_read(tmp_path):
+    """What publishes must not fall back to a catalog's name: strict reading raises, naming each unreadable catalog,
+    and reports nothing through warn."""
+    from srbf.suites import UnreadableCatalogs, catalog_structure
+
+    ok = _catalog_with(tmp_path, "srsd", ["easy"], benchmark="srsd")
+    said = []
+    with pytest.raises(UnreadableCatalogs, match=r"2 catalog\(s\): 'gone'.*'lost'"):
+        catalog_structure({"srsd": ok, "gone": str(tmp_path / "gone.yaml"), "lost": str(tmp_path / "lost.yaml")},
+                          warn=said.append, strict=True)
+    assert said == []
+    assert catalog_structure({"srsd": ok}, strict=True) == ({"srsd": "srsd"}, {"srsd": ["easy"]})

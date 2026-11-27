@@ -79,6 +79,18 @@ def test_bridges_problem_fields_and_stamps_row_index():
         np.testing.assert_array_equal(s.x_support, p.x_support)
 
 
+def test_a_problems_subset_is_stamped_on_its_sample():
+    """The subset of its benchmark a problem belongs to, as its catalog names it, goes into the run's rows (None where it
+    names none: readers then take the catalog's name)."""
+    named = _problem(["x1"], ["x1"], ["x1"], 1, eq_id="E1")
+    named.meta["subset"] = "hard"
+    plain = _problem(["x1"], ["x1"], ["x1"], 1, eq_id="E2")
+    gap = _problem(None, None, ["x1"], None, is_placeholder=True)
+    gap.meta["subset"] = "easy"
+    samples = list(CatalogSource(_FakeSource([named, plain, gap])))
+    assert [s.metadata["subset"] for s in samples] == ["hard", None, "easy"]
+
+
 def test_no_tokenizer_leaves_input_ids_none():
     src = CatalogSource(_FakeSource([_problem(["sin", "x1"], ["sin", "x1"], ["x1"], 2)]))
     sample = next(iter(src))

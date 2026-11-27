@@ -12,9 +12,11 @@ multiple of that subset's shard count): the very same instances. Without it the 
 catalog, which samples new support points for the same laws.
 
 The manifest ``<out-dir>/timing_subset.json`` records the rule, every catalog's full size (the stratum weight the
-read-out uses), shard, count and source rows, and the benchmark the catalog belongs to (its metadata's ``benchmark``,
-else its own name), which scripts/site_timing.py averages over. Existing files are never overwritten: they are
-verified instead; a kept catalog's benchmark is read again.
+read-out uses), shard, count and source rows, the benchmark the catalog belongs to (its metadata's ``benchmark``, else
+its own name) and the subset of each of its problems (``subsets``: ``names`` and, for more than one, ``rows``, each
+row's index into the names; a problem's ``subset`` field, else the catalog's name), which scripts/site_timing.py
+averages over. Existing files are never overwritten: they are verified instead; a kept catalog's benchmark and subsets
+are read again.
 """
 from __future__ import annotations
 
@@ -30,6 +32,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from run_calibrated_ladder import catalog_size, parse_rule, subset_count  # noqa: E402
 
 DEFAULT_RULE = "50:40,20:4,10:2"
+
+
+def subset_record(labels: list[str] | None, catalog: str) -> dict[str, Any]:
+    """A catalog's subsets as the manifest records them: {"names": [...]} and, for more than one, "rows" (each problem's
+    index into the names, in row order); a catalog that could not be read is one subset, named after itself."""
+    names = list(dict.fromkeys(labels or [catalog]))
+    return {"names": names} if len(names) == 1 else {"names": names, "rows": [names.index(x) for x in labels or []]}
 
 
 def _rows(problems: Any) -> list[int]:
@@ -134,7 +143,7 @@ def main() -> int:
     if not a.config:
         sys.exit("-c/--config is required to freeze (catalog sizes)")
     from srbf.config import load_run_config, select_experiment
-    from srbf.suites import catalog_benchmarks
+    from srbf.suites import catalog_structure
 
     cfg = load_run_config(a.config)
     experiments = list(cfg["experiments"])
@@ -143,8 +152,8 @@ def main() -> int:
         experiments = [e for e in experiments if e in wanted]
     rule = parse_rule(a.subset_rule)
     sizes = {e: catalog_size(select_experiment(cfg, e)) for e in experiments}
-    benchmarks = catalog_benchmarks({e: (select_experiment(cfg, e).get("data_source") or {}).get("catalog", e) for e in experiments},
-                                    warn=lambda text: print(f"  WARN {text}", flush=True))
+    benchmarks, subsets = catalog_structure({e: (select_experiment(cfg, e).get("data_source") or {}).get("catalog", e)
+                                             for e in experiments}, warn=lambda text: print(f"  WARN {text}", flush=True))
     suite = sum(sizes.values())
     existing = json.loads(manifest_path.read_text()) if manifest_path.exists() else None
     catalogs = dict(existing["catalogs"]) if existing else {}
@@ -155,7 +164,7 @@ def main() -> int:
         if out.exists():
             if e not in catalogs:
                 raise RuntimeError(f"{out} exists without a manifest entry; remove it or restore the manifest")
-            catalogs[e]["benchmark"] = benchmarks[e]
+            catalogs[e]["benchmark"], catalogs[e]["subsets"] = benchmarks[e], subset_record(subsets[e], e)
             print(f"  kept   {e}: {catalogs[e]['count']} problems (1 in {catalogs[e]['shard']} of {sizes[e]})", flush=True)
             continue
         sampling = dict(select_experiment(cfg, e)["data_source"].get("sampling") or {})
@@ -164,6 +173,7 @@ def main() -> int:
         else:
             rows = freeze_from_source(cfg, e, n, out, a.engine)
         catalogs[e] = {"size": sizes[e], "shard": n, "count": len(rows), "weight": sizes[e] / suite, "benchmark": benchmarks[e],
+                       "subsets": subset_record(subsets[e], e),
                        "nested_in": str(Path(a.from_frozen) / f"{e}.npz") if a.from_frozen else None,
                        "source_row_index": rows}
         print(f"  frozen {e}: {len(rows)} problems (1 in {n} of {sizes[e]}) {time.time() - t0:.1f}s", flush=True)

@@ -108,9 +108,12 @@ Figures need the `analysis` extra. See [Results](results.md#the-standard-report)
 
 Judge the result files of whole evaluations into one CSV: a row per problem and rung, with every
 metric of [Metrics](metrics.md) as a column. This is the table the results explorer is built from.
-Each row also names the benchmark of its catalog, read from the catalog's metadata before judging; a
-catalog whose metadata cannot be read is a benchmark of its own, with a warning
-([How results are averaged](averaging.md#benchmarks-their-subsets-and-their-problems)).
+Each row also names the benchmark of its catalog and the subset of its problem, read from the catalog before judging
+(the `benchmark` field of its metadata, the `subset` field of each problem; a problem without one is in the subset
+named after its catalog; [How results are averaged](averaging.md#benchmarks-their-subsets-and-their-problems)). A
+catalog that cannot be read stops the command before anything is judged, since a published table must not guess its
+structure; with `--lenient-metadata` the table is written with that catalog's benchmark and subset cells empty, which
+the results site's export refuses unless it is given the same switch.
 
 ```bash
 srbf table --tree mymethod:1:results/evaluation/scaling/mymethod \
@@ -129,6 +132,7 @@ srbf table --tree mymethod:1:results/evaluation/scaling/mymethod \
 | `--max-rung` | leave out the rungs above this one |
 | `--stall-timeout` | seconds without a finished file before the workers are stopped and the table is written with what was judged; the exit code is then 1 |
 | `--progress` | a file that records every result file as it starts and finishes, so a stall names the files in flight |
+| `--lenient-metadata` | write a catalog whose benchmark and subsets cannot be read with those cells empty instead of stopping (for local use) |
 
 A file that cannot be read, such as one that is still being written, is reported and left out. See
 [Results](results.md#one-table-for-every-problem) for the columns.

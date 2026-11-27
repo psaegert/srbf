@@ -63,6 +63,10 @@ def build_parser() -> argparse.ArgumentParser:
                                    '(STALLED) if it does not finish again')
     table_parser.add_argument('--progress', type=str, default=None, metavar='FILE',
                               help='Record every file as it starts and finishes (default: a temporary file), so a file that runs too long is found')
+    table_parser.add_argument('--lenient-metadata', action='store_true',
+                              help="Write a catalog whose benchmark and subsets cannot be read with those cells empty, "
+                                   "instead of refusing it (local use; the site export refuses such a table unless "
+                                   "given the same switch)")
 
     rejudge_parser = subparsers.add_parser("rejudge", help="Judge the candidates stored with result files again, with this srbf's judge")
     rejudge_parser.add_argument('results', type=str, nargs='+', help='Result files whose stored candidates to judge again (a shard file judges its shard)')
@@ -200,7 +204,7 @@ def main(argv: list[str] | None = None) -> None:
             out = build_report(runs, args.out_dir, engine=engine, title=args.title)
             print(f"Wrote {out}")
         case 'table':
-            from srbf.suites import catalog_benchmarks
+            from srbf.suites import UnreadableCatalogs, catalog_structure
             from srbf.table import ResultTree, build_table, parse_index_bases, tree_catalogs
 
             try:
@@ -209,13 +213,23 @@ def main(argv: list[str] | None = None) -> None:
             except ValueError as exc:
                 parser.error(str(exc))
             trees = [ResultTree(t.method, t.draw, t.path, bases.get(t.method)) for t in trees]
-            # every catalog's benchmark, from its metadata: the unit the site and srbf analyze average over
+            # every catalog's benchmark, from its metadata, and every problem's subset within it: the units the site
+            # and srbf analyze average over
             catalogs = tree_catalogs(trees)
-            benchmarks = catalog_benchmarks(catalogs, warn=lambda text: print(f"WARN {text}"))
-            print(f"{len(catalogs)} catalogs in {len(set(benchmarks.values()))} benchmarks")
+            # strict by default: a published table must not guess a catalog's benchmark or subsets; with
+            # --lenient-metadata an unreadable catalog's cells stay empty, which the site export refuses unless told
+            try:
+                benchmarks, subsets = catalog_structure(catalogs, warn=lambda text: print(f"WARN {text}"),
+                                                        strict=not args.lenient_metadata)
+            except UnreadableCatalogs as exc:
+                sys.exit(f"table: {exc}. Fix the catalog references, or pass --lenient-metadata to write the table with "
+                         "their benchmark and subset cells empty")
+            benchmarks = {c: ("" if subsets[c] is None else b) for c, b in benchmarks.items()}
+            n_subsets = len({(benchmarks[c] or c, u) for c, labels in subsets.items() for u in (labels or [c])})
+            print(f"{len(catalogs)} catalogs in {len({b or c for c, b in benchmarks.items()})} benchmarks, {n_subsets} subsets")
             report = build_table(trees, args.out, engine=args.engine, workers=args.workers, cache_dir=args.cache,
                                  max_rung=args.max_rung, stall_timeout=args.stall_timeout, progress_path=args.progress,
-                                 benchmarks=benchmarks)
+                                 benchmarks=benchmarks, subsets=subsets)
             if report.stalled:
                 sys.exit(1)
         case 'rejudge':

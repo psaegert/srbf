@@ -65,7 +65,7 @@ def test_the_rows_subsets_split_a_catalog_into_cells_per_subset(tmp_path):
     without the column is one subset, named after itself."""
     rows = [_sub_row("srsd", i, "easy" if i < 3 else ("hard" if i < 5 else ""), success=int(i < 3)) for i in range(6)]
     rows += [_sub_row("srsd-points", i, "points") for i in range(2)] + [_sub_row("nguyen", 0, "")]
-    root = _rows(tmp_path, rows, columns=COLUMNS + ["subset"])
+    root = _rows(tmp_path, rows, columns=COLUMNS)
     benchmarks: dict[str, str] = {}
     subsets: dict[str, dict[int, str]] = {}
     data = export.load_rows(root, benchmarks, subsets)
@@ -87,7 +87,7 @@ def test_the_rows_subsets_split_a_catalog_into_cells_per_subset(tmp_path):
 
 
 def test_a_problem_in_two_subsets_is_an_error(tmp_path):
-    root = _rows(tmp_path, [_sub_row("srsd", 0, "easy"), _sub_row("srsd", 0, "hard", draw=2)], columns=COLUMNS + ["subset"])
+    root = _rows(tmp_path, [_sub_row("srsd", 0, "easy"), _sub_row("srsd", 0, "hard", draw=2)], columns=COLUMNS)
     with pytest.raises(ValueError, match="two subsets"):
         export.load_rows(root, {}, {})
 
@@ -131,3 +131,28 @@ def test_the_release_carries_a_split_catalogs_subsets_and_their_cells(tmp_path, 
     assert '"toy/easy"' in paired and '"toy/hard"' in paired
     assert not any(part in str(p.relative_to(out)) for p in out.rglob("*") for part in ("easy", "hard"))   # no files of its own
     assert release["pv"] == {"pa": {"8": ["toy"]}, "pb": {"8": ["toy"]}}
+
+
+def test_a_subset_with_a_slash_is_refused():
+    """The page keys a subset's cells "<catalog>/<subset>"."""
+    with pytest.raises(ValueError, match="may not contain"):
+        export.catalog_subsets({"srsd": {0: "easy", 1: "a/b"}}, {"srsd": 2})
+
+
+def test_a_release_refuses_rows_that_name_no_benchmark_or_subset(tmp_path):
+    """Strict by default where it publishes: a row without its benchmark or subset (an older table, or one written with
+    srbf table --lenient-metadata for a catalog it could not read) is refused, every such catalog named; lenient
+    loading takes each catalog's name, as local builds may."""
+    rows = [_sub_row("srsd", 0, "easy"), _sub_row("srsd", 1, "hard"), _sub_row("gone", 0, ""),
+            {**_sub_row("lost", 0, "x"), "benchmark": ""}]
+    root = _rows(tmp_path, rows, columns=COLUMNS)
+    with pytest.raises(ValueError, match=r"2 catalog\(s\) name no benchmark or subset: gone \(no subset\); lost \(no benchmark\)"):
+        export.load_rows(root, {}, {}, strict=True)
+    benchmarks: dict[str, str] = {}
+    subsets: dict[str, dict[int, str]] = {}
+    export.load_rows(root, benchmarks, subsets)                      # lenient: the catalog's own name
+    assert benchmarks["lost"] == "lost" and "gone" not in subsets
+    (tmp_path / "old").mkdir()
+    old = _rows(tmp_path / "old", [_row("feynman", 0, "feynman")], columns=[c for c in COLUMNS if c != "subset"])
+    with pytest.raises(ValueError, match="feynman \\(no subset\\)"):
+        export.load_rows(old, {}, {}, strict=True)                   # a table written before the subset column
