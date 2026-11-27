@@ -52,11 +52,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `srbf merge` refuses shards of different draws. One draw per problem (`repeat: 1`) is the default.
 - **Frozen draws are accepted draws** (`srbf.draw_acceptance`, `scripts/accept_frozen_draws.py`). Each problem keeps
   the first seeded attempt (symbolic-data's `CatalogDraws`) on which its targets are finite with a defined FVU on both
-  sides, the oracle (ground truth, constants refitted with 1,024 seeded restarts) reaches numeric recovery on the
-  held-out points, and the judge recognizes the refitted formula; attempt 1 with the flag `formula_inherent` when none
-  within `max_trials` does. Constant formulas and data problems are not checked. The script writes the attempts
-  document symbolic-data renders with; rows record `draws_attempt` and `draws_formula_inherent`, `__meta__.draws` the
-  acceptance. `srbf.table.judge_snapshot` is the judge on one snapshot (what `judge_result_file` runs).
+  sides, the oracle (`type: oracle`: the ground truth with its constants refitted, no checkpoint) reaches numeric
+  recovery on the held-out points, and the judge recognizes the refitted formula; attempt 1 with the flag
+  `formula_inherent` when none within `max_trials` does. The oracle runs restart by restart from seeded starting values
+  and stops at the first restart that recovers the held-out points (`srbf.oracle.first_recovery`, at most 1,024
+  restarts per attempt). Constant formulas and data problems are not checked. The script writes the attempts document
+  symbolic-data renders with; `--shard K/N` splits the run into independent tasks, each resumable from its own journal,
+  and `--merge` writes the document from their journals. Rows record `draws_attempt` and `draws_formula_inherent`,
+  `__meta__.draws` the acceptance. `srbf.table.judge_snapshot` is the judge on one snapshot (what `judge_result_file`
+  runs).
 - **`model_adapter.seed` (flash_ansr)**: seeds every fit, so that the same problem gives the same answer.
 - **Every candidate of every method, stored and judged by srbf.** A worker returns its own front (PySR's hall of fame,
   Operon's, DSO's and Bingo's Pareto fronts, QLattice's diverse models, TiSR's hall of fame) as `candidates` beside its

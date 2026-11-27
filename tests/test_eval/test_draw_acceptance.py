@@ -10,10 +10,11 @@ import numpy as np
 import pytest
 import yaml
 
-from srbf.draw_acceptance import ACCEPTED, RULE, OracleCheck, accept_draws, oracle_adapter_config
+from srbf.draw_acceptance import (ACCEPTED, RULE, OracleCheck, accept_draws, merge_journals, oracle_adapter_config,
+                                  oracle_check)
 
 ROOT = Path(__file__).resolve().parents[2]
-ORACLE_CONFIG = ROOT / "configs/evaluation/scaling/flash-ansr-v25.0-T8-oracle_srbf.yaml"
+ORACLE_CONFIG = ROOT / "configs/evaluation/scaling/oracle_srbf.yaml"
 
 
 @pytest.fixture(scope="module")
@@ -22,53 +23,64 @@ def engine():
     return SimpliPyEngine.load("acj-4", install=True)
 
 
-def _problem(y_val_constant: bool = False, finite: bool = True):
+def _problem(y_val_constant: bool = False, finite: bool = True, expression=("*", "2", "x1"), skeleton=("*", "<constant>", "x1"),
+             f=lambda x: 2 * x, low: float = 1.0, high: float = 2.0):
     from symbolic_data import Problem
     rng = np.random.default_rng(0)
-    x, xv = rng.uniform(1, 2, (32, 1)), rng.uniform(1, 2, (16, 1))
-    y, yv = 2 * x, (np.full((16, 1), 3.0) if y_val_constant else 2 * xv)
+    x, xv = rng.uniform(low, high, (32, 1)), rng.uniform(low, high, (16, 1))
+    y, yv = f(x), (np.full((16, 1), 3.0) if y_val_constant else f(xv))
     if not finite:
         y = y.copy()
         y[0, 0] = np.inf
     return Problem(x_support=x, y_support=y, y_support_noisy=y.copy(), x_validation=xv, y_validation=yv,
-                   y_validation_noisy=yv.copy(), skeleton=("*", "<constant>", "x1"), expression=["*", "2", "x1"],
-                   constants=[2.0], variables=["x1"], complexity=3, eq_id="e")
+                   y_validation_noisy=yv.copy(), skeleton=tuple(skeleton), expression=list(expression),
+                   constants=[2.0], variables=["x1"], complexity=len(skeleton), eq_id="e")
 
 
-class _Adapter:
-    """Answers each problem as an adapter does (`evaluate_sample` -> the run's record), with a chosen prediction."""
+def _oracle(engine, n_restarts: int = 4):
+    pytest.importorskip("flash_ansr", reason="the oracle fits with flash-ansr's refiner")
+    from flash_ansr.scoring import resolve_ranking
 
-    def __init__(self, mode: str) -> None:
-        self.mode = mode
-
-    def evaluate_sample(self, sample):
-        from srbf.core import EvaluationResult
-        record = sample.clone_metadata()
-        if self.mode == "fail":
-            return EvaluationResult({**record, "prediction_success": False, "error": "no candidate"})
-        prefix = ["abs", "*", "2", "x1"] if self.mode == "other_structure" else ["*", "2", "x1"]
-        skeleton = ["abs", "*", "<constant>", "x1"] if self.mode == "other_structure" else ["*", "<constant>", "x1"]
-        y_pred_val = sample.y_validation * (1.001 if self.mode == "off" else 1.0)
-        record.update(prediction_success=True, predicted_expression=" ".join(prefix), predicted_expression_prefix=prefix,
-                      predicted_skeleton_prefix=skeleton, y_pred=sample.y_support.copy(), y_pred_val=y_pred_val)
-        return EvaluationResult(record)
+    from srbf.model_adapters import OracleAdapter
+    from srbf.oracle import refine_config
+    return OracleAdapter(engine, refine=refine_config({"n_restarts": n_restarts}), ranking=resolve_ranking("mdl"), seed=0)
 
 
-@pytest.mark.parametrize("mode, problem, verdict", [
-    ("exact", {}, ACCEPTED),
-    ("off", {}, "numeric"),
-    ("other_structure", {}, "symbolic"),
-    ("fail", {}, "no_prediction"),
-    ("exact", {"y_val_constant": True}, "fvu_undefined"),
-    ("exact", {"finite": False}, "not_finite"),
+@pytest.mark.parametrize("problem, verdict", [
+    ({}, ACCEPTED),
+    ({"f": lambda x: 2 * x + 0.3 * np.sin(5 * x)}, "numeric"),                      # the data of another law
+    ({"expression": ("+", "log", "x1", "2"), "low": -2.0, "high": -1.0}, "no_prediction"),   # no restart converges
+    ({"y_val_constant": True}, "fvu_undefined"),
+    ({"finite": False}, "not_finite"),
 ])
-def test_an_attempt_is_judged_by_the_judge(engine, mode, problem, verdict):
-    assert OracleCheck(_Adapter(mode), engine)(_problem(**problem)) == verdict
+def test_an_attempt_is_judged_by_the_oracle_and_the_judge(engine, problem, verdict):
+    check = OracleCheck(_oracle(engine), engine)
+    assert check(_problem(**problem)) == verdict
+    assert check.spent == {ACCEPTED: 1, "numeric": 4, "no_prediction": 4}.get(verdict, 0)
+
+
+def test_a_recovery_the_judge_does_not_recognize_fails_the_attempt(engine, monkeypatch):
+    """The judge reads the stopping restart's answer: where it calls the refitted law another structure (the judge is
+    strict about a constant factor spelled differently, say), the attempt fails on (c)."""
+    import srbf.table
+
+    judge = srbf.table.judge_snapshot
+
+    def strict(snap, *, engine, first_index=None):
+        judged = judge(snap, engine=engine, first_index=first_index)
+        if snap.get("prediction_success", [False])[0]:
+            judged["symbolic_recovery"] = [False]
+        return judged
+
+    monkeypatch.setattr(srbf.table, "judge_snapshot", strict)
+    check = OracleCheck(_oracle(engine), engine)
+    assert check(_problem()) == "symbolic" and check.spent == 1
 
 
 def test_a_placeholder_is_never_accepted(engine):
     from symbolic_data import Problem
-    assert OracleCheck(_Adapter("exact"), engine)(Problem.placeholder(variables=["x1"], reason="max_trials_exhausted")) == "placeholder"
+    check = OracleCheck(_oracle(engine), engine)
+    assert check(Problem.placeholder(variables=["x1"], reason="max_trials_exhausted")) == "placeholder"
 
 
 class _ScriptedCheck:
@@ -117,13 +129,11 @@ def test_the_first_accepted_attempt_is_kept_and_none_is_flagged(tmp_path):
 
 
 def test_the_oracle_block_comes_from_the_oracle_config():
-    block = oracle_adapter_config(ORACLE_CONFIG, model_path="/models/oracle", n_restarts=1024, seed=7)
-    assert block["type"] == "flash_ansr" and block["model_path"] == "/models/oracle" and block["seed"] == 7
-    assert block["evaluation_config"]["n_restarts"] == 1024 and block["evaluation_config"]["generation_config"]["method"] == "oracle"
-    assert "evaluation_overrides" not in block and block["device"] == "cpu" and block["refiner_workers"] == 1
+    block = oracle_adapter_config(ORACLE_CONFIG, n_restarts=1024, seed=7)
+    assert block["type"] == "oracle" and block["seed"] == 7 and block["n_restarts"] == 1024
+    assert block["simplipy_engine"] == "acj-5-4-llm" and "model_path" not in block
     with pytest.raises(ValueError, match="not an oracle config"):
-        oracle_adapter_config(ROOT / "configs/evaluation/scaling/flash-ansr-v25.0-T8-3M_srbf.yaml",
-                              model_path="/m", n_restarts=8, seed=0)
+        oracle_adapter_config(ROOT / "configs/evaluation/scaling/flash-ansr-v25.0-T8-3M_srbf.yaml", n_restarts=8, seed=0)
 
 
 def test_the_flash_ansr_adapter_forwards_its_seed():
@@ -176,3 +186,75 @@ def test_a_run_resumes_from_its_journal(tmp_path):
     assert json.loads((tmp_path / "resumed.json").read_text()) == first
     with pytest.raises(ValueError, match="another rule"):
         accept_draws([str(catalog)], out, check_factory=_NeverCalled, **{**kwargs, "rule": "another"})
+
+
+def _toy(tmp_path):
+    unit = {"sample_range": [1.0, 2.0], "sample_type": ["uni", "pos"]}
+    catalog = tmp_path / "toy.yaml"
+    catalog.write_text(yaml.safe_dump({"metadata": {"name": "toy", "version": 1}, "expressions": {
+        "a": {"prepared": "v1 * v2 + 2.5", "vars": {"v1": dict(unit), "v2": dict(unit)}},
+        "b": {"prepared": "sin(v1)", "vars": {"v1": dict(unit)}},
+        "c": {"prepared": "1.5 * v1", "vars": {"v1": dict(unit)}},
+        "d": {"prepared": "v1 / 2.5", "vars": {"v1": dict(unit)}}}}))
+    return catalog
+
+
+def test_shards_are_independent_runs_whose_journals_merge_into_the_whole_document(tmp_path):
+    draws = pytest.importorskip("symbolic_data.draws")
+    catalog = _toy(tmp_path)
+    settings = draws.DrawsSettings(n_support=16, n_validation=8, max_trials=4, simplipy_engine="acj-4")
+    kwargs = dict(rule="r", settings=settings, log=lambda _: None)
+    accept_draws([str(catalog)], tmp_path / "whole.json", check_factory=_ScriptedCheck, **kwargs)
+    for k in range(3):
+        accept_draws([str(catalog)], tmp_path / f"shard{k}.json", check_factory=_ScriptedCheck,
+                     journal=tmp_path / f"j{k}.jsonl", shard=(k, 3), **kwargs)
+    shard0 = json.loads((tmp_path / "shard0.json").read_text())["catalogs"]["toy"]["attempts"]["1"]
+    assert list(shard0) == ["a", "d"]                                  # tasks 0 and 3 of the plan
+    journals = [tmp_path / f"j{k}.jsonl" for k in range(3)]
+    summary = merge_journals([str(catalog)], tmp_path / "merged.json", journals, **{k: v for k, v in kwargs.items() if k != "log"})
+    assert json.loads((tmp_path / "merged.json").read_text()) == json.loads((tmp_path / "whole.json").read_text())
+    assert summary["problems"] == 4 and summary["checked"] == 4
+    with pytest.raises(ValueError, match="1 of 4 problems are in no journal"):
+        merge_journals([str(catalog)], tmp_path / "x.json", journals[:2], rule="r", settings=settings)
+    with pytest.raises(ValueError, match="another rule"):
+        merge_journals([str(catalog)], tmp_path / "x.json", journals, rule="another", settings=settings)
+    with pytest.raises(ValueError, match="another shard"):          # a shard's journal resumes only that shard
+        accept_draws([str(catalog)], tmp_path / "x.json", check_factory=_NeverCalled, journal=journals[0], shard=(1, 3),
+                     **kwargs)
+
+
+def test_a_journal_cut_mid_line_is_repaired_before_it_grows(tmp_path):
+    draws = pytest.importorskip("symbolic_data.draws")
+    catalog = _toy(tmp_path)
+    settings = draws.DrawsSettings(n_support=16, n_validation=8, max_trials=4, simplipy_engine="acj-4")
+    journal = tmp_path / "journal.jsonl"
+    kwargs = dict(rule="r", settings=settings, journal=journal, log=lambda _: None)
+    accept_draws([str(catalog)], tmp_path / "first.json", check_factory=_ScriptedCheck, **kwargs)
+    lines = journal.read_text().splitlines()
+    journal.write_text("\n".join(lines[:3]) + "\n" + lines[3][:12])          # stopped while writing the third problem
+    accept_draws([str(catalog)], tmp_path / "again.json", check_factory=_ScriptedCheck, **kwargs)
+    again = journal.read_text().splitlines()
+    assert len(again) == 5 and all(json.loads(line) for line in again)      # header + four problems, every line whole
+    assert json.loads((tmp_path / "again.json").read_text()) == json.loads((tmp_path / "first.json").read_text())
+
+
+def test_the_oracle_check_runs_from_the_oracle_config_and_counts_its_restarts(tmp_path):
+    draws = pytest.importorskip("symbolic_data.draws")
+    pytest.importorskip("flash_ansr", reason="the oracle fits with flash-ansr's refiner")
+    import functools
+
+    config = tmp_path / "oracle.yaml"
+    config.write_text(yaml.safe_dump({"experiments": {"toy": {
+        "data_source": {"catalog": "toy", "sampling": {"n_support": 16, "n_validation": 8, "problems_per_expression": 1}},
+        "model_adapter": {"type": "oracle", "config_provenance": "author_blessed", "simplipy_engine": "acj-4",
+                          "ranking": {"mode": "mdl"}, "n_restarts": 8},
+        "runner": {"output": str(tmp_path / "out.pkl")}}}}))
+    catalog = _toy(tmp_path)
+    settings = draws.DrawsSettings(n_support=32, n_validation=16, max_trials=2, simplipy_engine="acj-4")
+    factory = functools.partial(oracle_check, str(config), 16, 0, "acj-4")
+    summary = accept_draws([str(catalog)], tmp_path / "attempts.json", check_factory=factory, rule=RULE.format(n_restarts=16),
+                           settings=settings, log=lambda _: None)
+    chosen = json.loads((tmp_path / "attempts.json").read_text())["catalogs"]["toy"]["attempts"]["1"]
+    assert {eq_id: c["attempt"] for eq_id, c in chosen.items()} == {"a": 1, "b": 1, "c": 1, "d": 1}
+    assert all(not c["formula_inherent"] for c in chosen.values())
+    assert all(1 <= summary["seconds"]["toy"][eq_id]["restarts"] <= 16 for eq_id in chosen)

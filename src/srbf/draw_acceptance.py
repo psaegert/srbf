@@ -7,13 +7,20 @@ never the formula or its fixed constants. This module judges each attempt in tha
 document symbolic-data renders with (``symbolic-data render-draws --attempts``). An attempt is accepted when
 
 (a) every target is finite and the FVU is defined on the fitting and on the held-out points (the targets vary);
-(b) srbf's oracle (the ``flash_ansr`` adapter in oracle mode: the ground truth is the only candidate, its constants
-    refitted with many seeded restarts) reaches numeric recovery on the held-out points (``is_perfect_fit``);
-(c) srbf's judge recognizes the refitted formula (``symbolic_recovery``).
+(b) srbf's oracle (:mod:`srbf.oracle`: the ground truth with its constants refitted, no checkpoint involved) reaches
+    numeric recovery on the held-out points (``is_perfect_fit``). The oracle runs restart by restart, restart ``r``
+    from the seed ``(seed, r)``, and stops at the first restart whose answer recovers them
+    (:func:`srbf.oracle.first_recovery`): the check only asks whether the formula can be recovered from the draw, and
+    the first success answers that. ``n_restarts`` restarts without one fail the attempt;
+(c) srbf's judge recognizes that restart's refitted formula (``symbolic_recovery``).
 
 The first accepted attempt within the render's ``max_trials`` is kept. When none is accepted, attempt 1 is kept and
 the problem is flagged ``formula_inherent``. Formulas that are constant by construction and data problems are not
 checked. symbolic-data never imports srbf: the two meet in ``CatalogDraws.draw`` and the attempts document.
+
+Every problem is an independent task: a run can be split into shards (``shard=(k, n)``), each with a journal of its
+own that a restarted shard resumes from, and :func:`merge_journals` writes the attempts document from the shards'
+journals.
 """
 from __future__ import annotations
 
@@ -28,8 +35,9 @@ import numpy as np
 
 #: The rule, as the attempts document and the draws' manifest record it.
 RULE = ("the first seeded attempt (1..max_trials) whose targets are finite with a defined FVU on both sides, on which "
-        "srbf's oracle (the ground truth with its constants refitted, {n_restarts} seeded restarts) reaches numeric "
-        "recovery on the held-out points and srbf's judge recognizes the refitted formula; otherwise attempt 1, flagged "
+        "srbf's oracle (the ground truth with its constants refitted, restart by restart from seeded starting values, "
+        "at most {n_restarts} restarts) reaches numeric recovery on the held-out points at some restart, stopping at "
+        "the first, and srbf's judge recognizes that restart's refitted formula; otherwise attempt 1, flagged "
         "formula_inherent. Constant formulas and data problems are not checked.")
 
 ACCEPTED = "accepted"
@@ -53,8 +61,10 @@ class _One:
 class OracleCheck:
     """The acceptance test of one attempt: ``check(problem) -> "accepted"`` or the first reason (:data:`REASONS`) it fails.
 
-    ``adapter`` is a ``flash_ansr`` adapter in oracle mode (any adapter whose ``evaluate_sample`` returns a run's
-    record); ``judge_engine`` the engine srbf's judge runs with (``srbf table``'s default, ``acj-5-4-llm``).
+    ``adapter`` is an ``oracle`` adapter (:class:`srbf.model_adapters.OracleAdapter`): its engine, its refinement
+    settings (whose ``n_restarts`` is the most restarts an attempt gets), its ranking and its seed. ``judge_engine`` is the
+    engine srbf's judge runs with (``srbf table``'s default, ``acj-5-4-llm``). ``spent`` holds the restarts the last
+    attempt took.
     """
 
     def __init__(self, adapter: Any, judge_engine: Any, engine_name: str | None = None) -> None:
@@ -62,14 +72,25 @@ class OracleCheck:
         self.judge_engine = judge_engine
         #: the judge engine's name, so that a worker drawing the attempts with the same engine can share it
         self.engine_name = engine_name
-        prepare = getattr(adapter, "prepare", None)
-        if callable(prepare):
-            prepare()
+        self.spent = 0
+
+    def _judge(self, record: Mapping[str, Any]) -> Callable[[str], Any]:
+        from srbf.table import judge_snapshot
+
+        judged = judge_snapshot({key: [value] for key, value in record.items()}, engine=self.judge_engine)
+
+        def first(key: str) -> Any:
+            values = judged.get(key)
+            return None if values is None else values[0]
+
+        return first
 
     def __call__(self, problem: Any) -> str:
         from srbf.data_sources import CatalogSource
-        from srbf.table import judge_snapshot
+        from srbf.model_adapters import OracleAdapter
+        from srbf.oracle import first_recovery
 
+        self.spent = 0
         if getattr(problem, "is_placeholder", False):
             return "placeholder"
         if not (np.isfinite(problem.y_support).all() and np.isfinite(problem.y_validation).all()):
@@ -77,28 +98,31 @@ class OracleCheck:
         source = CatalogSource(_One(problem))
         source.prepare(adapter=self.adapter)
         sample = next(iter(source))
-        record = dict(self.adapter.evaluate_sample(sample).to_mapping())
-        judged = judge_snapshot({key: [value] for key, value in record.items()}, engine=self.judge_engine)
-
-        def first(key: str) -> Any:
-            values = judged.get(key)
-            return None if values is None else values[0]
-
-        if first("fit_quality_undefined_fit") or first("fit_quality_undefined_val"):
+        # whether the FVU is defined is a property of the targets: the judge says so before the oracle runs
+        targets = self._judge({**sample.clone_metadata(), "prediction_success": False})
+        if targets("fit_quality_undefined_fit") or targets("fit_quality_undefined_val"):
             return "fvu_undefined"
-        if not record.get("prediction_success"):
-            return "no_prediction"
-        if not bool(first("numeric_recovery_val")):
+        y_fit = sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support
+        recovery = first_recovery(
+            list(sample.metadata.get("expression") or []), sample.x_support, y_fit, sample.x_validation,
+            sample.y_validation, engine=self.adapter.get_simplipy_engine(), refine=self.adapter.refine,
+            ranking=self.adapter.ranking, seed=self.adapter.seed or 0,
+            variable_names=sample.metadata.get("variable_names"))
+        self.spent = recovery.restarts
+        if recovery.fit is None:
+            return "numeric" if recovery.answered else "no_prediction"
+        judged = self._judge(OracleAdapter.answer(sample.clone_metadata(), sample, recovery.fit))
+        if not bool(judged("numeric_recovery_val")):
             return "numeric"
-        if not bool(first("symbolic_recovery")):
+        if not bool(judged("symbolic_recovery")):
             return "symbolic"
         return ACCEPTED
 
 
-def oracle_adapter_config(config: str | os.PathLike[str], *, model_path: str, n_restarts: int, seed: int,
+def oracle_adapter_config(config: str | os.PathLike[str], *, n_restarts: int, seed: int,
                           experiment: str | None = None) -> dict[str, Any]:
     """The oracle's ``model_adapter`` block from a reference config (an experiment of the oracle's scaling config), at
-    ``n_restarts`` restarts, seeded, on one CPU core, with the checkpoint at ``model_path``."""
+    ``n_restarts`` restarts and seeded."""
     from srbf import config as run_config
     from srbf.sweep import resolve_sweeps
 
@@ -107,28 +131,24 @@ def oracle_adapter_config(config: str | os.PathLike[str], *, model_path: str, n_
     chosen = run_config.select_experiment(raw, experiment or (next(iter(experiments)) if experiments else None))
     resolved, _ = resolve_sweeps(chosen)[0]
     adapter = dict(run_config.extract_run_section(resolved)["model_adapter"])
-    if (adapter.get("evaluation_config") or {}).get("generation_config", {}).get("method") != "oracle":
-        raise ValueError(f"{config}: not an oracle config (evaluation_config.generation_config.method: oracle)")
-    adapter.pop("evaluation_overrides", None)
-    adapter["evaluation_config"] = {**adapter["evaluation_config"], "n_restarts": int(n_restarts), "device": "cpu"}
-    adapter.update(model_path=str(model_path), device="cpu", seed=int(seed), refiner_workers=1, persistent_refine_pool=False)
+    if adapter.get("type") != "oracle":
+        raise ValueError(f"{config}: not an oracle config (model_adapter.type: oracle)")
+    adapter.update(n_restarts=int(n_restarts), seed=int(seed))
     return adapter
 
 
-def oracle_check(config: str, model_path: str, n_restarts: int = 1024, seed: int = 0, judge_engine: str = "acj-5-4-llm",
+def oracle_check(config: str, n_restarts: int = 1024, seed: int = 0, judge_engine: str = "acj-5-4-llm",
                  experiment: str | None = None) -> OracleCheck:
     """An :class:`OracleCheck` built from the oracle's reference config (picklable through ``functools.partial``)."""
-    import yaml
     from simplipy import SimpliPyEngine
 
     from srbf import config as run_config
 
-    block = oracle_adapter_config(config, model_path=model_path, n_restarts=n_restarts, seed=seed, experiment=experiment)
+    block = oracle_adapter_config(config, n_restarts=n_restarts, seed=seed, experiment=experiment)
     adapter = run_config.build_model_adapter(block)
-    # one engine per process where the checkpoint's engine is the judge's (a loaded engine holds its rule set in memory)
-    model_config = Path(model_path) / "model.yaml"
-    model_engine = (yaml.safe_load(model_config.read_text(encoding="utf-8")) or {}).get("simplipy_engine") if model_config.is_file() else None
-    engine = adapter.get_simplipy_engine() if model_engine == judge_engine else SimpliPyEngine.load(judge_engine, install=True)
+    # one engine per process where the oracle's engine is the judge's (a loaded engine holds its rule set in memory)
+    engine = (adapter.get_simplipy_engine() if str(block.get("simplipy_engine")) == judge_engine
+              else SimpliPyEngine.load(judge_engine, install=True))
     return OracleCheck(adapter, engine, engine_name=judge_engine)
 
 
@@ -145,7 +165,7 @@ def _init_worker(check_factory: Callable[[], Callable[[Any], str]], settings: An
         try:
             import torch
             torch.set_num_threads(1)
-        except ImportError:  # pragma: no cover - the oracle needs torch; a fake check does not
+        except ImportError:  # pragma: no cover - flash-ansr's refiner imports torch; a fake check does not
             pass
     _WORKER.clear()
     _WORKER.update(check=check_factory(), settings=settings, draws={})
@@ -169,9 +189,11 @@ def judge_attempts(ref: str, row: int, repeat: int) -> tuple[str, str, int, dict
     from symbolic_data.draws import needs_check
 
     start, cpu = time.perf_counter(), time.process_time()
+    restarts = 0
 
     def timing() -> dict[str, float]:
-        return {"seconds": time.perf_counter() - start, "cpu_seconds": time.process_time() - cpu}
+        # the oracle's restarts over all attempts, when the check counts them (OracleCheck.spent)
+        return {"seconds": time.perf_counter() - start, "cpu_seconds": time.process_time() - cpu, "restarts": restarts}
 
     draws = _catalog(ref)
     check = _WORKER["check"]
@@ -182,6 +204,7 @@ def judge_attempts(ref: str, row: int, repeat: int) -> tuple[str, str, int, dict
     for attempt in range(1, int(draws.settings.max_trials) + 1):
         draw = first if attempt == 1 else draws.draw(row, repeat, attempt)
         verdict = check(draw.problem)
+        restarts += int(getattr(check, "spent", 0) or 0)
         if verdict == ACCEPTED:
             choice = {"attempt": attempt, "formula_inherent": False, "failed": dict(sorted(reasons.items()))}
             return draws.name, draws.ids[row], repeat, choice, timing()
@@ -194,42 +217,49 @@ def _task(task: tuple[str, int, int]) -> tuple[str, str, int, dict[str, Any] | N
     return judge_attempts(*task)
 
 
-def _journal(path: Path, header: dict[str, Any]) -> list[tuple[str, str, int, dict[str, Any] | None, dict[str, float]]]:
+_Result = tuple[str, str, int, dict[str, Any] | None, dict[str, float]]
+
+
+def _read_journal(path: Path) -> tuple[dict[str, Any], list[_Result]]:
+    """A journal's header and the results it holds. A last line cut short when the run stopped is dropped from the file,
+    so that the next result starts a line of its own."""
+    text = path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    if not lines:
+        raise ValueError(f"{path} is empty: not a journal")
+    if not text.endswith("\n"):
+        lines = lines[:-1]
+        path.write_text("".join(line + "\n" for line in lines), encoding="utf-8")
+    done: list[_Result] = []
+    for line in lines[1:]:
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:           # a line cut short by an earlier stop, before this repair existed
+            continue
+        done.append((entry["catalog"], entry["eq_id"], int(entry["repeat"]), entry["choice"], dict(entry["timing"])))
+    return json.loads(lines[0]), done
+
+
+def _journal(path: Path, header: dict[str, Any]) -> list[_Result]:
     """The results a journal already holds (after checking that it was written for this run), or none."""
     if not path.exists():
         path.write_text(json.dumps(header) + "\n", encoding="utf-8")
         return []
-    lines = path.read_text(encoding="utf-8").splitlines()
-    if not lines or json.loads(lines[0]) != header:
-        raise ValueError(f"{path} was written for other catalogs, settings or another rule; use another journal")
-    done = []
-    for line in lines[1:]:
-        try:
-            entry = json.loads(line)
-        except json.JSONDecodeError:           # a line cut short when the run stopped
-            continue
-        done.append((entry["catalog"], entry["eq_id"], int(entry["repeat"]), entry["choice"], dict(entry["timing"])))
+    found, done = _read_journal(path)
+    if found != header:
+        raise ValueError(f"{path} was written for other catalogs, settings, another rule or another shard; use another "
+                         f"journal")
     return done
 
 
-def accept_draws(refs: Sequence[str], out: str | os.PathLike[str], *, check_factory: Callable[[], Callable[[Any], str]],
-                 rule: str, settings: Any = None, ids: Mapping[str, Sequence[str]] | None = None, jobs: int = 1,
-                 journal: str | os.PathLike[str] | None = None, log: Callable[[str], None] = print) -> dict[str, Any]:
-    """Judge every checked problem of ``refs`` and write the attempts document to ``out``; returns a summary.
-
-    ``check_factory`` builds the check once per worker process (a picklable callable, such as
-    ``functools.partial(oracle_check, ...)``). ``ids`` restricts a catalog (by ref or name) to a frozen subset, as the
-    render will. The document lists every catalog, and in it every checked problem with the attempt it keeps, its flag
-    and how many attempts failed for which reason. ``journal`` appends each problem's result as it is judged, and a run
-    started again on the same journal judges only the problems it does not hold. The summary adds each problem's
-    seconds and CPU seconds (not in the document, which a rerun with the same software reproduces).
-    """
-    from symbolic_data.draws import ATTEMPTS_FORMAT, CatalogDraws, DrawsSettings
+def _plan(refs: Sequence[str], settings: Any, ids: Mapping[str, Sequence[str]]) -> tuple[
+        dict[str, Any], dict[str, list[str]], list[tuple[str, int, int]], dict[tuple[str, int, int], tuple[str, str, int]]]:
+    """Every catalog of ``refs`` (its source and, per repeat, the attempts to fill), its problems in order, and the
+    tasks: one per problem and repeat, keyed by ``(catalog name, eq_id, repeat)``."""
+    from symbolic_data.draws import CatalogDraws
 
     from simplipy import SimpliPyEngine
 
-    settings = settings or DrawsSettings()
-    ids = dict(ids or {})
     catalogs: dict[str, Any] = {}
     order: dict[str, list[str]] = {}
     tasks: list[tuple[str, int, int]] = []
@@ -246,19 +276,75 @@ def accept_draws(refs: Sequence[str], out: str | os.PathLike[str], *, check_fact
             for row in rows:
                 tasks.append((ref, row, repeat))
                 keys[(ref, row, repeat)] = (draws.name, draws.ids[row], repeat)
-    results: list[tuple[str, str, int, dict[str, Any] | None, dict[str, float]]] = []
+    return catalogs, order, tasks, keys
+
+
+def _header(settings: Any, rule: str, catalogs: Mapping[str, Any], order: Mapping[str, list[str]],
+            shard: tuple[int, int] | None) -> dict[str, Any]:
+    header = {"settings": settings.record(), "repeats": list(settings.repeats), "rule": rule,
+              "catalogs": {name: entry["source_sha256"] for name, entry in catalogs.items()},
+              "problems": {name: len(problems) for name, problems in order.items()}}
+    if shard is not None:
+        header["shard"] = list(shard)
+    return header
+
+
+def _document(out: str | os.PathLike[str], catalogs: dict[str, Any], order: Mapping[str, list[str]],
+              results: Sequence[_Result], settings: Any, rule: str) -> dict[str, Any]:
+    """Write the attempts document of ``results`` to ``out`` and return the summary (without the wall time)."""
+    from symbolic_data.draws import ATTEMPTS_FORMAT
+
+    seconds: dict[str, dict[str, dict[str, float]]] = {}
+    for name, eq_id, repeat, choice, spent in results:
+        seconds.setdefault(name, {})[eq_id] = spent
+        if choice is not None:
+            catalogs[name]["attempts"][str(repeat)][eq_id] = choice
+    for name, entry in catalogs.items():                  # the catalog's order, whatever order the workers finished in
+        rank = {eq_id: i for i, eq_id in enumerate(order[name])}
+        entry["attempts"] = {r: {eq_id: per[eq_id] for eq_id in sorted(per, key=rank.__getitem__)} for r, per in entry["attempts"].items()}
+    doc = {"format": ATTEMPTS_FORMAT, "format_version": 1, "settings": settings.record(), "repeats": list(settings.repeats),
+           "rule": rule, "catalogs": catalogs}
+    Path(out).write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
+    chosen = [c for entry in catalogs.values() for per in entry["attempts"].values() for c in per.values()]
+    return {"problems": len(results), "checked": len(chosen), "later_attempt": sum(c["attempt"] > 1 for c in chosen),
+            "formula_inherent": sum(c["formula_inherent"] for c in chosen), "seconds": seconds}
+
+
+def accept_draws(refs: Sequence[str], out: str | os.PathLike[str], *, check_factory: Callable[[], Callable[[Any], str]],
+                 rule: str, settings: Any = None, ids: Mapping[str, Sequence[str]] | None = None, jobs: int = 1,
+                 journal: str | os.PathLike[str] | None = None, shard: tuple[int, int] | None = None,
+                 log: Callable[[str], None] = print) -> dict[str, Any]:
+    """Judge every checked problem of ``refs`` and write the attempts document to ``out``; returns a summary.
+
+    ``check_factory`` builds the check once per worker process (a picklable callable, such as
+    ``functools.partial(oracle_check, ...)``). ``ids`` restricts a catalog (by ref or name) to a frozen subset, as the
+    render will. The document lists every catalog, and in it every checked problem with the attempt it keeps, its flag
+    and how many attempts failed for which reason. ``journal`` appends each problem's result as it is judged, and a run
+    started again on the same journal judges only the problems it does not hold. ``shard=(k, n)`` judges only the
+    tasks ``k, k + n, k + 2n, ...`` of the plan (every problem of every catalog, repeat by repeat): shards are
+    independent runs, each with a journal of its own, and :func:`merge_journals` writes the document of all of them.
+    The summary adds each problem's seconds, CPU seconds and the oracle's restarts (not in the document, which a rerun
+    with the same software reproduces).
+    """
+    from symbolic_data.draws import DrawsSettings
+
+    settings = settings or DrawsSettings()
+    catalogs, order, tasks, keys = _plan(refs, settings, dict(ids or {}))
+    if shard is not None:
+        k, n = (int(v) for v in shard)
+        if not 0 <= k < n:
+            raise ValueError(f"shard {k}/{n}: the shard index must be in 0..{n - 1}")
+        tasks = tasks[k::n]
+    results: list[_Result] = []
     handle = None
     if journal is not None:
-        header = {"settings": settings.record(), "repeats": list(settings.repeats), "rule": rule,
-                  "catalogs": {name: entry["source_sha256"] for name, entry in catalogs.items()},
-                  "problems": {name: len(problems) for name, problems in order.items()}}
-        results = _journal(Path(journal), header)
+        results = _journal(Path(journal), _header(settings, rule, catalogs, order, shard))
         done = {(name, eq_id, repeat) for name, eq_id, repeat, _, _ in results}
         tasks = [task for task in tasks if keys[task] not in done]
         handle = open(journal, "a", encoding="utf-8")
         log(f"{len(done)} problems from the journal, {len(tasks)} to judge")
 
-    def record(result: tuple[str, str, int, dict[str, Any] | None, dict[str, float]]) -> None:
+    def record(result: _Result) -> None:
         results.append(result)
         if handle is not None:
             name, eq_id, repeat, choice, spent = result
@@ -293,21 +379,34 @@ def accept_draws(refs: Sequence[str], out: str | os.PathLike[str], *, check_fact
     finally:
         if handle is not None:
             handle.close()
-    seconds: dict[str, dict[str, dict[str, float]]] = {}
-    for name, eq_id, repeat, choice, spent in results:
-        seconds.setdefault(name, {})[eq_id] = spent
-        if choice is not None:
-            catalogs[name]["attempts"][str(repeat)][eq_id] = choice
-    for name, entry in catalogs.items():                  # the catalog's order, whatever order the workers finished in
-        rank = {eq_id: i for i, eq_id in enumerate(order[name])}
-        entry["attempts"] = {r: {eq_id: per[eq_id] for eq_id in sorted(per, key=rank.__getitem__)} for r, per in entry["attempts"].items()}
-    doc = {"format": ATTEMPTS_FORMAT, "format_version": 1, "settings": settings.record(), "repeats": list(settings.repeats),
-           "rule": rule, "catalogs": catalogs}
-    Path(out).write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
-    chosen = [c for entry in catalogs.values() for per in entry["attempts"].values() for c in per.values()]
-    return {"problems": len(results), "checked": len(chosen), "later_attempt": sum(c["attempt"] > 1 for c in chosen),
-            "formula_inherent": sum(c["formula_inherent"] for c in chosen), "seconds": seconds,
-            "wall_seconds": time.perf_counter() - started}
+    return {**_document(out, catalogs, order, results, settings, rule), "wall_seconds": time.perf_counter() - started}
 
 
-__all__ = ["ACCEPTED", "REASONS", "RULE", "OracleCheck", "accept_draws", "judge_attempts", "oracle_adapter_config", "oracle_check"]
+def merge_journals(refs: Sequence[str], out: str | os.PathLike[str], journals: Sequence[str | os.PathLike[str]], *,
+                   rule: str, settings: Any = None, ids: Mapping[str, Sequence[str]] | None = None) -> dict[str, Any]:
+    """The attempts document of a run split into shards, from the shards' journals; returns the summary.
+
+    ``refs``, ``rule``, ``settings`` and ``ids`` are the run's. Every journal must have been written for them (any shard
+    of them), and together they must hold every task of the plan; a task journaled twice keeps its first result. Raises
+    ``ValueError`` naming what is missing or does not belong.
+    """
+    from symbolic_data.draws import DrawsSettings
+
+    settings = settings or DrawsSettings()
+    catalogs, order, _tasks, keys = _plan(refs, settings, dict(ids or {}))
+    expected = _header(settings, rule, catalogs, order, None)
+    results: dict[tuple[str, str, int], _Result] = {}
+    for path in journals:
+        header, done = _read_journal(Path(path))
+        if {key: value for key, value in header.items() if key != "shard"} != expected:
+            raise ValueError(f"{path} was written for other catalogs, settings or another rule")
+        for result in done:
+            results.setdefault((result[0], result[1], result[2]), result)
+    missing = [key for key in keys.values() if key not in results]
+    if missing:
+        raise ValueError(f"{len(missing)} of {len(keys)} problems are in no journal, e.g. {missing[:3]}")
+    return _document(out, catalogs, order, [results[key] for key in keys.values()], settings, rule)
+
+
+__all__ = ["ACCEPTED", "REASONS", "RULE", "OracleCheck", "accept_draws", "judge_attempts", "merge_journals",
+           "oracle_adapter_config", "oracle_check"]

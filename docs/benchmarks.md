@@ -180,15 +180,20 @@ A noise level `s` gives the targets `y + s * std(y) * noise` per side from the s
 **Every draw lets its own formula be recognized.** With one draw per problem, a draw on which the true formula
 cannot be recovered would waste the problem for every method. So each problem's draw is the first of a fixed,
 seeded sequence of attempts on which (a) every target is finite and the FVU is defined on the fitting and on the
-held-out points, (b) the oracle (the `flash_ansr` adapter in oracle mode: the ground truth is the only candidate and
-its constants are refitted, here with 1,024 seeded restarts) reaches numeric recovery on the held-out points, and (c)
-the judge recognizes the refitted formula symbolically. Attempts differ only in what the benchmark leaves to chance
-(input points, random constants, per-run values), never in the formula or its fixed constants. This is a deviation
-from every benchmark with random values: the points are conditioned on the formula being recoverable from them. A
-problem on which no attempt within `max_trials` passes keeps its first attempt and is flagged formula-inherent: what
-defeats recovery there is the formula, not the draw. Formulas that are constants by construction and data catalogs are
-not checked. `scripts/accept_frozen_draws.py` (`srbf.draw_acceptance`) chooses the attempts and writes the document
-symbolic-data renders with.
+held-out points, (b) the [oracle](models.md#the-oracle) (the ground truth with its constants refitted; no checkpoint
+takes part, so a formula over any number of variables is checked) reaches numeric recovery on the held-out points,
+and (c) the judge recognizes the refitted formula symbolically. The oracle runs restart by restart, restart `r` from
+the seed `(seed, r)`, and stops at the first restart whose answer recovers the held-out points: the check only asks
+whether the formula can be recovered from the draw, and the first success answers that. An attempt gets at most
+1,024 restarts (`srbf.oracle.first_recovery`). Attempts differ only in what the benchmark leaves to chance (input
+points, random constants, per-run values), never in the formula or its fixed constants. This is a deviation from
+every benchmark with random values: the points are conditioned on the formula being recoverable from them. A problem
+on which no attempt within `max_trials` passes keeps its first attempt and is flagged formula-inherent: what defeats
+recovery there is the formula, not the draw. Formulas that are constants by construction and data catalogs are not
+checked. `scripts/accept_frozen_draws.py` (`srbf.draw_acceptance`) chooses the attempts and writes the document
+symbolic-data renders with. Every problem is an independent task: `--shard K/N` judges every N-th problem of the plan
+with a journal of its own, which a restarted shard resumes from, and `--merge` writes the document from the shards'
+journals.
 
 A run is refused, before the model loads, when:
 
