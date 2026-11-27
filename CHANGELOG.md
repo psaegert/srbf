@@ -109,6 +109,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its mean over problems is the Mean Improvability.
 
 ### Changed
+- **Averages have three levels: benchmarks > subsets > problems** (nested random effects). Within a benchmark, problems
+  sit in subsets: the parts its authors published it in (a problem's `subset`, from its rows), else the catalogs it is
+  stored in. The structure is fixed by the data, never chosen by looking at results; the spread between benchmarks and
+  the spread between the subsets of one benchmark are estimated for every average and only set the weights, so subsets
+  that really differ count more on their own and subsets that are alike collapse into their benchmark, with no
+  threshold. Means: the three-level random-effects mean (subsets within a benchmark by weights
+  1 / (tau_S^2 + v), benchmarks by 1 / (tau_B^2 + 1 / W_b)), both variances by Paule and Mandel's rule (tau_S^2 within
+  benchmarks); rates: rho_S within benchmarks by Williams' rule, each benchmark as its effective counts (each subset's
+  counts scaled by 1 / (1 + (n - 1) rho_S)), and the beta-binomial average over them with the score-test interval;
+  medians and distributions weigh subsets the same way. Intervals count the sampling of problems within subsets, t on
+  their degrees of freedom; the range for one more benchmark adds the spread of a subset. Without a benchmark of two
+  subsets every number is the two-level one, to the last bit. A benchmark split over several catalogs is no longer
+  merged into one problem set: its catalogs are its subsets. `srbf.aggregate` gains `combine_nested`, `nest`,
+  `nest_sets`, `within_tau2`, `within_rho`, `effective_sets`, `nested_set_weights` and `average(..., subsets=)`;
+  `Average` gains `n_subsets` and `subset_weights`, `Combined` `tau2_within` and `subset_weights`; `combine` is
+  `combine_nested` with one subset per benchmark. `srbf analyze` reads a snapshot's `subset` column. The site export
+  reads the rows' `subset` column: a catalog of several subsets carries `subsets` and `subset_rows`, and its cells,
+  histograms and pair cells are also written per subset (`<catalog>/<subset>`); the explorer averages over benchmarks
+  and subsets everywhere it averages, and `pairstats.js` cuts a subset's problems out of its catalog's files
+  (`restrict`). The time axis nests catalogs within benchmarks. docs/averaging.md explains the three levels, the
+  estimators, the literature and the simulations (`scripts/averaging_simulation.py`).
 - **Results are averaged over benchmarks, not catalogs.** A benchmark stored in several catalogs for hosting or format
   reasons (a licence repository, `-restricted` or `-share-alike`; fixed-point companions, `-points`; its formula and
   data halves) is one problem set: its catalogs' problems are put together and every problem in it counts once, so the

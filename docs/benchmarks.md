@@ -17,8 +17,9 @@ from the ground truth, so a perfect prediction exists for every problem.
 A catalog names the benchmark it belongs to in the `benchmark` field of its metadata. Most benchmarks are one catalog.
 A benchmark stored in several, for its licence (`-restricted`, `-share-alike`), for its fixed data points (`-points`)
 or as a formula and a data half, names the same benchmark in each of them, and results are averaged over benchmarks,
-not catalogs ([How results are averaged](averaging.md#a-problem-set-is-a-benchmark)). A catalog without the field is a
-benchmark of its own.
+with their catalogs as subsets ([How results are averaged](averaging.md#benchmarks-their-subsets-and-their-problems)).
+A catalog without the field is a benchmark of its own. A benchmark its authors published in parts names a problem's
+part in the `subset` field of its rows; the parts are then the benchmark's subsets.
 
 ### Physics
 

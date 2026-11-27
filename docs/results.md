@@ -130,9 +130,9 @@ not finite is left out, which for `log10_fvu_val` means the expressions that wer
 ## Averages over problem sets
 
 `bootstrap_report` takes every expression it is given alike. `srbf analyze` below, like the
-[results explorer](https://psaegert.github.io/srbf/), averages over the benchmarks instead, each a problem set, so that
-one large catalog does not decide the number (`srbf.aggregate`): [How results are averaged](averaging.md) describes the
-method, why it was chosen, and the literature it rests on.
+[results explorer](https://psaegert.github.io/srbf/), averages over the benchmarks instead, and within each benchmark
+over its subsets, so that one large catalog does not decide the number (`srbf.aggregate`):
+[How results are averaged](averaging.md) describes the method, why it was chosen, and the literature it rests on.
 
 ## One table for every problem
 
@@ -146,7 +146,7 @@ srbf table --tree mymethod:1:results/evaluation/scaling/mymethod -o table.csv
 | columns | meaning |
 |---|---|
 | `model`, `draw`, `catalog`, `rung`, `shard`, `row` | where the row comes from: the method and draw named in `--tree`, the catalog directory, the rung and shard of the file, and the problem's `eval_row_index` |
-| `benchmark` | the benchmark the catalog belongs to, from the `benchmark` field of the catalog's metadata, else the catalog itself: the problem set results are averaged over ([How results are averaged](averaging.md#a-problem-set-is-a-benchmark)) |
+| `benchmark` | the benchmark the catalog belongs to, from the `benchmark` field of the catalog's metadata, else the catalog itself: the unit results are averaged over ([How results are averaged](averaging.md#benchmarks-their-subsets-and-their-problems)) |
 | `sha` | the first 8 hex digits of the model weights' sha256, when the run recorded one |
 | `success`, the recoveries, `skeleton_match_raw` | rates: 1 or 0 for every problem, a failed prediction is 0 |
 | the analysis columns (`log10_fvu_val`, `r2_val`, `mdl_ratio`, `f1_score`, the edit distances, ...) | about the prediction; empty for a failed one, except the metrics with a worst value (token and variable F1, precision, recall), which a failed prediction takes |
@@ -192,7 +192,8 @@ build_report(runs, "report", engine=engine)                    # results.md and 
 ```
 
 A metric is named by its column. A run is a `RunResult(model, benchmark, snapshot, scaling=None, catalog="")`,
-so results from anywhere can be put into the same tables: runs of the catalogs of one benchmark (`catalog` names
-each, by default the benchmark itself) are averaged as one problem set. `scaling_figure`, `per_benchmark_figure` and `distribution_figure` return
+so results from anywhere can be put into the same tables: the catalogs of one benchmark (`catalog` names each, by
+default the benchmark itself) are its subsets, and a snapshot's `subset` column, where it has one, places each problem
+in a subset of its benchmark instead. `scaling_figure`, `per_benchmark_figure` and `distribution_figure` return
 matplotlib figures, and `export_data(runs, "data.json", engine=engine)` writes the summaries as
 JSON. Figures need `pip install "srbf[analysis]"`.
