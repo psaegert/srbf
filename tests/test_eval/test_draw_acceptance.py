@@ -300,12 +300,51 @@ def test_a_journal_cut_mid_line_is_repaired_before_it_grows(tmp_path):
     assert json.loads((tmp_path / "again.json").read_text()) == json.loads((tmp_path / "first.json").read_text())
 
 
-class _SlowFirstAttempt(OracleCheck):
-    """An oracle check whose first attempt would burn CPU far past its cap and whose later attempts pass at once."""
+def _profiling_clock() -> tuple[int, float] | None:
+    """The calling process's profiling CPU clock, the clock ITIMER_PROF counts (user + system time, sampled at every
+    tick; Linux's clock id for a process's CPUCLOCK_PROF, pid 0 meaning the caller), and its resolution, one tick.
+    None where it cannot be read."""
+    clock = (~0 << 3) | 0
+    try:
+        time.clock_gettime(clock)
+        return clock, time.clock_getres(clock)
+    except (OSError, AttributeError):
+        return None
 
-    def __init__(self, catalog, settings, time_cap) -> None:
+
+#: Where the profiling clock cannot be read, how far below the cap time.process_time may stop: 20 ms. On a loaded
+#: 1000 Hz machine the profiling clock ran up to 14 ms ahead of process_time at a 1 s cap (2026-11-27), while it read
+#: the cap plus one tick every time.
+PROCESS_TIME_MARGIN = 0.02
+
+
+def _cap_clock() -> tuple[callable, float]:
+    """The clock to read a cap's floor on, and how far below the cap it may stop: the profiling clock with one tick of
+    tolerance, else process_time with PROCESS_TIME_MARGIN."""
+    prof = _profiling_clock()
+    if prof is None:
+        return time.process_time, PROCESS_TIME_MARGIN
+    return (lambda: time.clock_gettime(prof[0])), prof[1]
+
+
+class _SlowFirstAttempt(OracleCheck):
+    """An oracle check whose first attempt would burn CPU far past its cap and whose later attempts pass at once.
+    ``capped`` receives, for every attempt that reaches the cap, the CPU time the whole capped call ran on the clock
+    the cap counts (:func:`_cap_clock`); the cap covers all of ``_check``, so a first call that loads the catalog may
+    reach it before the loop below starts."""
+
+    def __init__(self, catalog, settings, time_cap, capped: list[float]) -> None:
         super().__init__(adapter=None, judge_engine=None, time_cap=time_cap)
         self.script = _ScriptedCheck(catalog, settings)
+        self.capped = capped
+
+    def __call__(self, problem) -> str:
+        clock, _ = _cap_clock()
+        started = clock()
+        verdict = super().__call__(problem)
+        if verdict == TIME:
+            self.capped.append(clock() - started)
+        return verdict
 
     def _check(self, problem) -> str:
         if self.script.attempt(problem) == 1:
@@ -332,34 +371,23 @@ def test_an_attempt_that_reaches_the_cap_fails_with_time_and_the_next_one_runs(t
     settings = draws.DrawsSettings(n_support=16, n_validation=8, max_trials=4, simplipy_engine="acj-4")
     before, handler = _children(), signal.getsignal(signal.SIGPROF)
     journal = tmp_path / "journal.jsonl"
+    capped: list[float] = []
     summary = accept_draws([str(catalog)], tmp_path / "attempts.json", rule="r", settings=settings, journal=journal,
-                           check_factory=functools.partial(_SlowFirstAttempt, str(catalog), settings, 0.3), log=lambda _: None)
+                           check_factory=functools.partial(_SlowFirstAttempt, str(catalog), settings, 0.3, capped),
+                           log=lambda _: None)
     chosen = json.loads((tmp_path / "attempts.json").read_text())["catalogs"]["toy"]["attempts"]["1"]
     assert all(c == {"attempt": 2, "formula_inherent": False, "failures": [TIME]} for c in chosen.values())
     assert summary["time"] == 4
+    # the cap stops an attempt once the profiling clock reaches it; that clock samples whole ticks and runs ahead of
+    # process_time under load, so the floor is read on it, with one tick of tolerance (its resolution)
+    _, slack = _cap_clock()
+    assert len(capped) == 4 and all(0.3 - slack <= c < 5 for c in capped)
+    # the journal records process_time, which may stop up to PROCESS_TIME_MARGIN short of the cap
     first = [json.loads(line) for line in journal.read_text().splitlines()[1:] if json.loads(line)["attempt"] == 1]
-    assert all(e["verdict"] == TIME and 0.3 <= e["timing"]["cpu_seconds"] < 5 for e in first)
+    assert all(e["verdict"] == TIME and 0.3 - PROCESS_TIME_MARGIN <= e["timing"]["cpu_seconds"] < 5 for e in first)
     # nothing left behind: no thread, no process, the profiling timer off and the previous handler back
     assert _children() == before
     assert signal.getitimer(signal.ITIMER_PROF) == (0.0, 0.0) and signal.getsignal(signal.SIGPROF) == handler
-
-
-def _profiling_clock() -> tuple[int, float] | None:
-    """The calling process's profiling CPU clock, the clock ITIMER_PROF counts (user + system time, sampled at every
-    tick; Linux's clock id for a process's CPUCLOCK_PROF, pid 0 meaning the caller), and its resolution, one tick.
-    None where it cannot be read."""
-    clock = (~0 << 3) | 0
-    try:
-        time.clock_gettime(clock)
-        return clock, time.clock_getres(clock)
-    except (OSError, AttributeError):
-        return None
-
-
-#: Where the profiling clock cannot be read, how far below the cap time.process_time may stop: 20 ms. On a loaded
-#: 1000 Hz machine the profiling clock ran up to 14 ms ahead of process_time at a 1 s cap (2026-11-27), while it read
-#: the cap plus one tick every time.
-PROCESS_TIME_MARGIN = 0.02
 
 
 def test_the_cap_abandons_the_oracle_in_the_middle_of_its_restarts(engine):
@@ -369,13 +397,12 @@ def test_the_cap_abandons_the_oracle_in_the_middle_of_its_restarts(engine):
     unrecoverable = _problem(f=lambda x: 2 * x + 0.3 * np.sin(5 * x))       # would run a million restarts
     assert check(unrecoverable) == TIME                                      # warm: the engine's own pools exist now
     before, tasks = _children(), len(os.listdir("/proc/self/task"))
-    prof = _profiling_clock()
-    started, prof_started = time.process_time(), time.clock_gettime(prof[0]) if prof else 0.0
+    clock, slack = _cap_clock()
+    started, cap_started = time.process_time(), clock()
     verdict = check(unrecoverable)
-    spent = time.process_time() - started
+    spent, capped = time.process_time() - started, clock() - cap_started
     # the cap stops the attempt once the profiling clock reaches it; that clock samples whole ticks and runs ahead of
     # process_time under load, so the floor is read on it, with one tick of tolerance (its resolution)
-    capped, slack = (time.clock_gettime(prof[0]) - prof_started, prof[1]) if prof else (spent, PROCESS_TIME_MARGIN)
     assert verdict == TIME and 1.0 - slack <= capped and spent < 6 and 0 < check.spent < 10 ** 6
     assert _children() == before and len(os.listdir("/proc/self/task")) == tasks
     assert signal.getitimer(signal.ITIMER_PROF) == (0.0, 0.0)
