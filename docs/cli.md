@@ -110,7 +110,7 @@ Judge the result files of whole evaluations into one CSV: a row per problem and 
 metric of [Metrics](metrics.md) as a column. This is the table the results explorer is built from.
 Each row also names the benchmark of its catalog, read from the catalog's metadata before judging; a
 catalog whose metadata cannot be read is a benchmark of its own, with a warning
-([How results are averaged](averaging.md#a-problem-set-is-a-benchmark)).
+([How results are averaged](averaging.md#benchmarks-their-subsets-and-their-problems)).
 
 ```bash
 srbf table --tree mymethod:1:results/evaluation/scaling/mymethod \

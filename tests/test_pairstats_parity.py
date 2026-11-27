@@ -46,8 +46,9 @@ const job = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 for (const f of job.files) { vm.runInThisContext(fs.readFileSync(f, "utf8"), { filename: f }); }
 const hex = (x) => { const b = Buffer.alloc(8); b.writeDoubleLE(x); return b.toString("hex"); };
 const file = (m, r, c) => { const f = PS.file(job.rel, m, r, c); if (!f) { throw new Error("no pv frame " + [m, r, c]); } return f; };
-const pos = (p) => p.raw ? PS.at(PS.decode(p.raw[0]), p.raw[1] ? PS.decode(p.raw[1]) : null, p.w)
+const pos0 = (p) => p.raw ? PS.at(PS.decode(p.raw[0]), p.raw[1] ? PS.decode(p.raw[1]) : null, p.w)
   : PS.at(file(p[0], p[2], p[1]), p[3] === null ? null : file(p[0], p[3], p[1]), p[4]);
+const pos = (p) => { const P = pos0(p); if (!p.raw && p[5]) { const keep = new Set(p[5]); return PS.restrict(P, (id) => keep.has(id)); } return P; };
 const run = (j) => { try { return j.kind === "paired" ? PS.pairedCell(pos(j.a), pos(j.b)) : PS.rankPairCell(pos(j.a), pos(j.b), j.keys); }
   catch (e) { if (job.catch) { return { error: String(e.message) }; } throw e; } };
 const out = { cells: (job.jobs || []).map(run) };
@@ -411,6 +412,40 @@ def test_between_two_budgets_follows_the_documented_rule(tmp_path: Path) -> None
         same(py, js, f"{j['kind']} {j['a']} vs {j['b']}")
     # the reference reduces to the cell of today at a budget a method ran
     same(paired_cell_today(data["A"][("big", 2)], data["C"][("big", 4)]), reference_between(data, ["A", "big", 2, None, 0], ["C", "big", 2, 4, 1], "paired", []))
+
+
+def test_a_subsets_cells_are_its_sets_cut_by_row(tmp_path: Path) -> None:
+    """A problem set split into subsets of its benchmark: the exporter writes each subset's cells from the subset's rows
+    (part_cells), and the page cuts the set's pv/ files by subset_rows (pairstats.restrict); both agree bit for bit, at
+    the budgets the methods ran and between them."""
+    data, sizes = fixture(tmp_path)
+    files = write_pv(tmp_path, data, sizes)
+    labels = {"big": {i: "hard" if i % 3 == 0 else "easy" for i in range(300)}, "small": {i: "x" for i in range(5)}}
+    parts = sx.catalog_subsets(labels, sizes)
+    assert parts["big"]["subsets"] == ["hard", "easy"] and parts["big"]["rows"][:4] == [0, 1, 1, 0]
+    assert parts["small"] == {"subsets": ["x", "small"], "rows": [0] * 5 + [1] * 7}   # a problem without one: its set's
+    pdata, psizes = sx.part_cells(data, parts)
+    assert psizes == {"big/hard": 100, "big/easy": 200, "small/x": 5, "small/small": 7}
+    jobs, expect = [], []
+    for c in ("small", "big"):
+        for i, name in enumerate(parts[c]["subsets"]):
+            keep = [r for r, j in enumerate(parts[c]["rows"]) if j == i]
+            pk = f"{c}/{name}"
+            ps = [[m, c, r, None, 0] for m, r in positions(data, sizes, c)]     # at budgets the methods ran
+            pairs = [(ps[0], ps[-1]), (ps[1], ps[2])] + [(a, b) for a, b in INTERPOLATED if a[1] == c]   # and between
+            for a, b in pairs:
+                for kind in ("paired", "rank"):
+                    jobs.append({"kind": kind, "a": a + [keep], "b": b + [keep], "keys": KEYS6})
+                    pa = sx.position(pdata[a[0]][(pk, a[2])], None if a[3] is None else pdata[a[0]][(pk, a[3])], a[4])
+                    pb = sx.position(pdata[b[0]][(pk, b[2])], None if b[3] is None else pdata[b[0]][(pk, b[3])], b[4])
+                    expect.append(sx.rank_pair_cell_at(pa, pb, KEYS6) if kind == "rank" else sx.paired_cell_at(pa, pb))
+    got = run_js(tmp_path, {"rel": REL, "files": files, "jobs": jobs})["cells"]
+    assert len(got) == len(expect) >= 24 and all(e is not None for e in expect)
+    for j, py, js in zip(jobs, expect, got):
+        same(py, js, f"{j['kind']} {j['a'][:5]} vs {j['b'][:5]}")
+    # and a subset's cell is not its set's
+    assert expect[0]["n"] < sx.paired_cell_at(sx.position(data[jobs[0]["a"][0]][("small", jobs[0]["a"][2])]),
+                                              sx.position(data[jobs[0]["b"][0]][("small", jobs[0]["b"][2])]))["n"]
 
 
 def test_between_budgets_only_the_problems_of_both_take_part(tmp_path: Path) -> None:

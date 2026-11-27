@@ -1,31 +1,39 @@
-"""Averages over problem sets: the averaging of srbf's results site and of ``srbf analyze``.
+"""Averages over benchmarks: the averaging of srbf's results site and of ``srbf analyze``.
 
-Results are organised as problem sets > problems > runs, and a problem set is a benchmark: the catalogs of one
-benchmark (split over several files for hosting or format reasons) merge into one set, in which every problem counts
-once (:func:`by_benchmark`, :func:`merge_sets`), and a catalog that names no benchmark is a set of its own. A problem's
-value is the mean of its runs, and a set is summarised by the number of its problems with a value, their mean and their
-variance. The sets are combined by a random-effects average (DerSimonian and Laird 1986): every set has its own true
-value, and the sets are weighted by 1 / (tau^2 + the set's own sampling variance), with the between-set variance tau^2
-by Paule and Mandel's estimator. Rates (shares of problems solved) are combined by the beta-binomial model (Skellam
-1948): a set's sum of problem values is binomial with the set's rate, and the rates follow a beta distribution whose
-mean is the average; its likelihood is closed-form, so sets at 0 % or 100 % enter as they are. Ratios are averaged in
-log2 (geometric means), and medians weigh each set as the average does, with Woodruff's interval.
+Results are organised as benchmarks > subsets > problems > runs. A benchmark is a problem set as its authors published
+it; its subsets are the parts they published it in (a problem's subset), else the catalogs it is stored in (a catalog
+that names no benchmark is a benchmark of its own). The structure is fixed by the data, never chosen by looking at
+results (:func:`nest`). A problem's value is the mean of its runs, and a subset is summarised by the number of its
+problems with a value, their mean and their variance. Subsets and benchmarks each have their own true values: a
+subset's scatters around its benchmark's with variance tau_S^2, a benchmark's around the average with tau_B^2 (a
+three-level random-effects model, :func:`combine_nested`). Means: a benchmark's subsets are weighted by
+1 / (tau_S^2 + their sampling variance), the benchmarks by 1 / (tau_B^2 + the variance of their estimate), both
+variances by Paule and Mandel's rule (tau_S^2 within benchmarks; DerSimonian and Laird 1986 for the random-effects
+average). Rates (shares of problems solved): the correlation rho_S of a subset's problems within its benchmark by
+Williams' (1982) rule, each benchmark as its effective counts (each subset's counts scaled by 1 / (1 + (n - 1) rho_S)),
+and the benchmarks by the beta-binomial model (Skellam 1948): a benchmark's count is binomial with its rate, and the
+rates follow a beta distribution whose mean is the average; its likelihood is closed-form, so benchmarks at 0 % or
+100 % enter as they are. The variance components only set the weights: subsets that differ count more on their own,
+subsets that are alike collapse into their benchmark. Ratios are averaged in log2 (geometric means), and medians weigh
+each subset as the average does, with Woodruff's interval. With one subset per benchmark every result is the
+two-level one, bit for bit.
 
-Every interval covers these problem sets: the weights (for rates, the beta's concentration) are held at their
-estimates and only the sampling of problems within each set counts, with t on the problems' degrees of freedom,
-sum (n - 1). Where one more set would fall is the prediction range (Higgins, Thompson and Spiegelhalter 2009), for
-rates the fitted beta's 2.5 % to 97.5 %. One set alone is its own mean with the t interval over its problems, a rate
-its plain rate with the Wilson interval. docs/averaging.md has the formulas, the reasons and the sources.
+Every interval covers these benchmarks and subsets: the weights (for rates, rho_S and the beta's concentration) are
+held at their estimates and only the sampling of problems within each subset counts, with t on the problems' degrees
+of freedom, sum (n - 1). Where one more benchmark would fall is the prediction range (Higgins, Thompson and
+Spiegelhalter 2009), for a benchmark of one subset; for rates a beta's 2.5 % to 97.5 %. One benchmark of one subset is
+its own mean with the t interval over its problems, a rate its plain rate with the Wilson interval.
+docs/averaging.md has the formulas, the reasons and the sources.
 
 results-site/explorer_v2.js implements the same arithmetic step for step (the t distribution below is the same
 continued fraction); scripts/site_random_effects.py loads this file for the site's scripts, and tests and the site
 suite check that the page and this module agree. :func:`average` is the entry point from per-problem run values;
-:func:`combine` works from per-set sums.
+:func:`combine_nested` works from per-subset sums grouped by benchmark, :func:`combine` from per-set sums.
 """
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable, Mapping, Sequence, TypeVar
 
 import numpy as np
@@ -96,8 +104,9 @@ def t_two_sided_p(t: float, df: float) -> float:
 # ---- one problem set ---------------------------------------------------------------------------------------------------
 @dataclass(frozen=True)
 class SetStat:
-    """A problem set at one budget: n problems with a value, the sum and the sum of squares of their values."""
-    n: int
+    """A problem set at one budget: n problems with a value, the sum and the sum of squares of their values (a
+    benchmark's effective counts, :func:`effective_sets`, may be fractional)."""
+    n: float
     s1: float
     s2: float
 
@@ -163,7 +172,12 @@ def paule_mandel(y: Sequence[float], v: Sequence[float]) -> float:
 @dataclass
 class Combined:
     """mu and its 95 % interval on the combining scale, the prediction interval for a new set (None below three sets),
-    tau^2, the normalised weights, the number of sets and the two-sided p-value of mu = 0 (for differences)."""
+    tau^2, the normalised weights, the number of sets and the two-sided p-value of mu = 0 (for differences).
+
+    Over benchmarks > subsets (:func:`combine_nested`) the sets are the benchmarks: ``tau2`` is the spread between
+    benchmarks, ``tau2_within`` the spread between the subsets of one benchmark (a rate's 1 / nu_S, as ``tau2`` holds
+    1 / nu_B), ``weights`` each benchmark's share and ``subset_weights`` each subset's (per benchmark, summing to its
+    benchmark's share)."""
     mu: float
     lo: float
     hi: float
@@ -173,26 +187,33 @@ class Combined:
     weights: list[float]
     S: int
     p: float | None
+    tau2_within: float = 0.0
+    subset_weights: list[list[float]] | None = None
 
 
-def combine_scale(y: Sequence[float], v: Sequence[float], df: int = 1) -> Combined:
+def combine_scale(y: Sequence[float], v: Sequence[float], df: int = 1, *, sampling: Sequence[float] | None = None,
+                  tau2_within: float = 0.0) -> Combined:
     """The random-effects mean of set estimates y with squared standard errors v, and its interval over these sets:
     Var(mu) = sum w^2 v / (sum w)^2 with the weights held fixed, t with ``df`` degrees of freedom (the problems' own,
-    sum over the sets of n - 1). One set is its own mean, with the t interval on its problems."""
+    sum over the sets of n - 1). One set is its own mean, with the t interval on its problems.
+
+    For benchmarks made of subsets (:func:`combine_scale_nested`), ``v`` is a benchmark's variance given its own true
+    value (which counts the spread of its subsets, tau2_within), ``sampling`` the part of it that is the sampling of
+    problems, the only part the interval counts, and ``tau2_within`` widens the range for one more benchmark."""
     S = len(y)
     tau2 = paule_mandel(y, v) if S > 1 else 0.0
     w = [1.0 / (vi + tau2) for vi in v]
     sw = sum(w)
     mu = sum(wi * yi for wi, yi in zip(w, y)) / sw
-    se = math.sqrt(sum(wi * wi * vi for wi, vi in zip(w, v))) / sw
+    se = math.sqrt(sum(wi * wi * si for wi, si in zip(w, v if sampling is None else sampling))) / sw
     df = max(1, df)
     tq = t_ppf(0.975, df)
     p = t_two_sided_p(mu / se, df) if se > 0 else (0.0 if mu != 0 else 1.0)
     pi_lo = pi_hi = None
     if S >= 3:
-        half = t_ppf(0.975, S - 2) * math.sqrt(tau2 + 1.0 / sw)
+        half = t_ppf(0.975, S - 2) * math.sqrt(tau2 + tau2_within + 1.0 / sw)
         pi_lo, pi_hi = mu - half, mu + half
-    return Combined(mu, mu - tq * se, mu + tq * se, pi_lo, pi_hi, tau2, [wi / sw for wi in w], S, p)
+    return Combined(mu, mu - tq * se, mu + tq * se, pi_lo, pi_hi, tau2, [wi / sw for wi in w], S, p, tau2_within)
 
 
 # ---- rates: the beta-binomial model ----------------------------------------------------------------------------------
@@ -491,7 +512,7 @@ def _rate_interval(sets: Sequence[SetStat], eta: float, lam: float, t2: float) -
     return (0.0 if ends[0] == -math.inf else _sig(ends[0])), (1.0 if ends[1] == math.inf else _sig(ends[1]))
 
 
-def combine_rates(sets: Sequence[SetStat]) -> Combined:
+def combine_rates(sets: Sequence[SetStat], df: float | None = None, rho_within: float = 0.0) -> Combined:
     """Rates over problem sets by the beta-binomial model: the mean rate m of a problem set, on the 0-1 scale.
 
     One set is its plain rate k / n with the Wilson interval; so is a group in which every set is at 0 % (or 100 %).
@@ -502,38 +523,188 @@ def combine_rates(sets: Sequence[SetStat]) -> Combined:
     for one rate, keeps the interval inside 0-100 % and sensible where many sets sit at 0 % or 100 %, where a
     delta-method interval on the log-odds spanned almost the whole range. The range for one more set is the 2.5 % to
     97.5 % quantiles of Beta(a, b). The weights are each set's share of the information about eta; tau2 carries 1 / s
-    (0 for the pooled rate)."""
+    (0 for the pooled rate).
+
+    For benchmarks made of subsets (:func:`combine_rates_nested`) the sets are the benchmarks' effective counts, ``df``
+    the problems' degrees of freedom (sum (n - 1) over the subsets) and ``rho_within`` the correlation of the problems
+    of one subset within its benchmark: one more benchmark of one subset spreads as a beta whose 1 / (nu + 1) is
+    rho_B + (1 - rho_B) rho_within, rho_B = 1 / (s + 1)."""
     S = len(sets)
     N = sum(s.n for s in sets)
     K = sum(s.s1 for s in sets)
     eta, lam = rate_fit(sets) if S > 1 else (0.0, 0.0)
+    within = rho_within / (1.0 - rho_within) if rho_within < 1.0 else math.inf
     if S == 1 or not math.isfinite(eta):
         lo, hi = wilson(K, N)
-        return Combined(K / N, lo, hi, None, None, 0.0, [s.n / N for s in sets], S, None)
+        return Combined(K / N, lo, hi, None, None, 0.0, [s.n / N for s in sets], S, None, within)
     pooled = not math.isfinite(lam)
     m = 1.0 / (1.0 + math.exp(-eta))
     s = math.exp(min(lam, LAM_MAX))
     a, b, q = m * s, (1.0 - m) * s, m * (1.0 - m)
     tg_a, tg_b = trigamma(a), trigamma(b)
     info = [-(s * q) ** 2 * (trigamma(st.s1 + a) - tg_a + trigamma(st.n - st.s1 + b) - tg_b) for st in sets]
-    tq = t_ppf(0.975, max(1, sum(st.n - 1 for st in sets)))
+    tq = t_ppf(0.975, max(1, sum(st.n - 1 for st in sets) if df is None else df))
     lo, hi = _rate_interval(sets, eta, lam, tq * tq)
     pi_lo = pi_hi = None
     if S >= 3:
-        pi_lo, pi_hi = beta_ppf(0.025, a, b), beta_ppf(0.975, a, b)
+        pa, pb = a, b
+        if rho_within > 0.0:   # a benchmark of one subset: its spread between benchmarks and that of its subset
+            rho_b = 1.0 / (s + 1.0)
+            nu = max(math.exp(LAM_MIN), 1.0 / (rho_b + (1.0 - rho_b) * rho_within) - 1.0)
+            pa, pb = m * nu, (1.0 - m) * nu
+        pi_lo, pi_hi = beta_ppf(0.025, pa, pb), beta_ppf(0.975, pa, pb)
     tot = sum(info)
-    return Combined(m, min(lo, m), max(hi, m), pi_lo, pi_hi, 0.0 if pooled else 1.0 / s, [x / tot for x in info], S, None)
+    return Combined(m, min(lo, m), max(hi, m), pi_lo, pi_hi, 0.0 if pooled else 1.0 / s, [x / tot for x in info], S, None,
+                    within)
+
+
+# ---- three levels: benchmarks > subsets > problems -------------------------------------------------------------------
+# A benchmark may consist of subsets: the parts its authors published it in, or the catalogs it is stored in. The
+# structure is read from the data (a problem's subset, else its catalog) and never chosen by looking at results.
+# Problems sit within subsets within benchmarks, and each level has true values of its own: a subset's true value
+# scatters around its benchmark's with variance tau_S^2, a benchmark's around the average with tau_B^2 (three-level
+# random effects). Both are estimated for every average, and they only set the weights: subsets that really differ
+# count more on their own, subsets that are alike collapse into their benchmark. A benchmark of one subset is a problem
+# set as before, and when no benchmark has two subsets the average is the two-level one, bit for bit.
+
+def within_tau2(ys: Sequence[Sequence[float]], vs: Sequence[Sequence[float]]) -> float:
+    """tau_S^2, the spread of subsets around their benchmark, by Paule and Mandel's rule within the benchmarks: the
+    subsets' weighted squared deviations from their benchmark's weighted mean (weights 1 / (v + tau_S^2)) equal their
+    expectation, the sum over the benchmarks of (subsets - 1). 0 when they fall short of it, or no benchmark has two
+    subsets."""
+    groups = [(y, v) for y, v in zip(ys, vs) if len(y) > 1]
+    df = sum(len(y) - 1 for y, _ in groups)
+
+    def excess(t2: float) -> float:
+        q = 0.0
+        for y, v in groups:
+            w = [1.0 / (vi + t2) for vi in v]
+            mu = sum(wi * yi for wi, yi in zip(w, y)) / sum(w)
+            q += sum(wi * (yi - mu) ** 2 for wi, yi in zip(w, y))
+        return q - df
+
+    if df == 0 or excess(0.0) <= 0:
+        return 0.0
+    lo, hi = 0.0, 1.0
+    while excess(hi) > 0:
+        hi *= 2.0
+    for _ in range(PM_ITERATIONS):
+        mid = (lo + hi) / 2.0
+        lo, hi = (mid, hi) if excess(mid) > 0 else (lo, mid)
+    return (lo + hi) / 2.0
+
+
+def combine_scale_nested(ys: Sequence[Sequence[float]], vs: Sequence[Sequence[float]], df: int = 1) -> Combined:
+    """The three-level random-effects mean of subset estimates ``ys[b][s]`` (benchmark b, subset s) with squared
+    standard errors ``vs[b][s]``. Given tau_S^2 (:func:`within_tau2`), a benchmark's subsets combine with weights
+    1 / (v + tau_S^2) into its estimate, whose variance given the benchmark's true value is 1 / their sum (one subset:
+    v + tau_S^2); the benchmarks combine as sets do (:func:`combine_scale`), tau_B^2 by Paule and Mandel. This is the
+    generalised least squares mean of the three-level model, done in two steps. The interval counts only the sampling
+    of problems, sum over subsets of (weight)^2 v, the weights held fixed."""
+    tau2_s = within_tau2(ys, vs)
+    y_b: list[float] = []
+    v_b: list[float] = []
+    s_b: list[float] = []
+    shares: list[list[float]] = []
+    for y, v in zip(ys, vs):
+        if len(y) == 1:
+            y_b.append(y[0])
+            v_b.append(v[0] + tau2_s)
+            s_b.append(v[0])
+            shares.append([1.0])
+            continue
+        w = [1.0 / (vi + tau2_s) for vi in v]
+        W = sum(w)
+        sh = [wi / W for wi in w]
+        y_b.append(sum(wi * yi for wi, yi in zip(w, y)) / W)
+        v_b.append(1.0 / W)
+        s_b.append(sum(x * x * vi for x, vi in zip(sh, v)))
+        shares.append(sh)
+    c = combine_scale(y_b, v_b, df, sampling=s_b, tau2_within=tau2_s)
+    c.subset_weights = [[wb * x for x in sh] for wb, sh in zip(c.weights, shares)]
+    return c
+
+
+def within_rho(groups: Sequence[Sequence[SetStat]]) -> float:
+    """rho_S, the correlation between two problems of one subset that its benchmark's rate does not explain, by
+    Williams' (1982) rule: a subset of n problems counts as c = 1 / (1 + (n - 1) rho) of them (its design effect), a
+    benchmark's rate is p = sum c k / sum c n, and Pearson's chi-square of the subsets about their benchmark's rate,
+    sum c n (k / n - p)^2 / (p (1 - p)), equals its degrees of freedom, the sum over benchmarks of (subsets - 1). A
+    benchmark whose subsets are all at 0 % or all at 100 % says nothing about rho and is left out. 0 when the
+    chi-square falls short of its degrees of freedom, or no benchmark has two subsets; 1 (every subset counts as one
+    problem) when it exceeds them even there. The root is found by bisection."""
+    use = [g for g in groups if len(g) > 1 and sum(st.s1 for st in g) > 0 and any(st.s1 < st.n for st in g)]
+    df = sum(len(g) - 1 for g in use)
+
+    def excess(rho: float) -> float:
+        x2 = 0.0
+        for g in use:
+            c = [1.0 / (1.0 + (st.n - 1) * rho) for st in g]
+            p = sum(ci * st.s1 for ci, st in zip(c, g)) / sum(ci * st.n for ci, st in zip(c, g))
+            x2 += sum(ci * st.n * (st.s1 / st.n - p) ** 2 for ci, st in zip(c, g)) / (p * (1.0 - p))
+        return x2 - df
+
+    if df == 0 or excess(0.0) <= 0:
+        return 0.0
+    if excess(1.0) >= 0:
+        return 1.0
+    lo, hi = 0.0, 1.0
+    for _ in range(PM_ITERATIONS):
+        mid = (lo + hi) / 2.0
+        lo, hi = (mid, hi) if excess(mid) > 0 else (lo, mid)
+    return (lo + hi) / 2.0
+
+
+def effective_sets(groups: Sequence[Sequence[SetStat]], rho: float) -> list[SetStat]:
+    """Each benchmark as one set of effective counts: its subsets' problems and sums, each subset's scaled by its
+    c = 1 / (1 + (n - 1) rho) (Kish's effective sample size). rho = 0 merges the subsets: every problem counts once."""
+    out = []
+    for g in groups:
+        if len(g) == 1 and rho == 0.0:
+            out.append(g[0])
+            continue
+        c = [1.0 / (1.0 + (st.n - 1) * rho) for st in g]
+        out.append(SetStat(sum(ci * st.n for ci, st in zip(c, g)), sum(ci * st.s1 for ci, st in zip(c, g)),
+                           sum(ci * st.s2 for ci, st in zip(c, g))))
+    return out
+
+
+def combine_rates_nested(groups: Sequence[Sequence[SetStat]]) -> Combined:
+    """Rates over benchmarks > subsets: rho_S within the benchmarks (:func:`within_rho`), each benchmark as its
+    effective counts (:func:`effective_sets`), and the benchmarks by the beta-binomial model with the score-test
+    interval (:func:`combine_rates`), t on the problems' degrees of freedom. Given its true rate, a benchmark's
+    effective count has the mean and the variance of a binomial count of its effective size: the two-stage
+    approximation of the model in which the subsets' rates follow a beta around their benchmark's (docs/averaging.md
+    has its check against that model)."""
+    rho = within_rho(groups)
+    eff = effective_sets(groups, rho)
+    c = combine_rates(eff, df=sum(st.n - 1 for g in groups for st in g), rho_within=rho)
+    c.subset_weights = [[wb] if len(g) == 1 else [wb * st.n / (1.0 + (st.n - 1) * rho) / e.n for st in g]
+                        for wb, g, e in zip(c.weights, groups, eff)]
+    return c
+
+
+def combine_nested(groups: Sequence[Sequence[SetStat]], scale: str = "normal") -> Combined | None:
+    """Combine benchmarks made of subsets: ``groups[b]`` holds the subsets of benchmark b. A rate (scale "logit") comes
+    back on its own 0-1 scale. A subset without problems is left out, and so is a benchmark without subsets."""
+    groups = [g for g in ([s for s in g if s.n > 0] for g in groups) if g]
+    if not groups:
+        return None
+    if scale == "logit":
+        return combine_rates_nested(groups)
+    flat = [s for g in groups for s in g]
+    y, v = set_estimates(flat, scale)
+    ys, vs, at = [], [], 0
+    for g in groups:
+        ys.append(y[at:at + len(g)])
+        vs.append(v[at:at + len(g)])
+        at += len(g)
+    return combine_scale_nested(ys, vs, int(sum(s.n - 1 for s in flat)))
 
 
 def combine(sets: Sequence[SetStat], scale: str = "normal") -> Combined | None:
-    """Combine problem sets; a rate (scale "logit") comes back on its own 0-1 scale (combine_rates)."""
-    sets = [s for s in sets if s.n > 0]
-    if not sets:
-        return None
-    if scale == "logit":
-        return combine_rates(sets)
-    y, v = set_estimates(sets, scale)
-    return combine_scale(y, v, sum(s.n - 1 for s in sets))
+    """Combine problem sets, each a benchmark of its own; a rate (scale "logit") comes back on its own 0-1 scale."""
+    return combine_nested([[s] for s in sets], scale)
 
 
 def holm(pvalues: Iterable[float]) -> list[float]:
@@ -547,14 +718,44 @@ def holm(pvalues: Iterable[float]) -> list[float]:
     return out
 
 
-# ---- benchmarks: the problem sets ------------------------------------------------------------------------------------
+# ---- benchmarks and their subsets: the problem sets -------------------------------------------------------------------
 _T = TypeVar("_T")
 
 
+def nest(problems: Mapping[str, Sequence[_T]], benchmarks: Mapping[str, str] | None = None,
+         subsets: Mapping[str, Sequence[str | None]] | None = None) -> dict[str, dict[str, list[_T]]]:
+    """The problems of each catalog placed in their benchmark and subset: {benchmark: {subset: problems}}.
+
+    A catalog's benchmark is ``benchmarks[catalog]`` (a catalog it does not name is a benchmark of its own), and a
+    problem's subset is ``subsets[catalog][i]`` for the catalog's i-th problem (the authors' part of the benchmark, or
+    the part of it a catalog holds); a catalog ``subsets`` does not name, or a problem with an empty subset, is in the
+    subset named after its catalog. Problems of one benchmark and one subset name are one subset, whichever catalog
+    they are in. Keys in the order they first appear."""
+    out: dict[str, dict[str, list[_T]]] = {}
+    for catalog, values in problems.items():
+        subs = out.setdefault((benchmarks or {}).get(catalog, catalog), {})
+        labels = (subsets or {}).get(catalog)
+        if labels is not None and len(labels) != len(values):
+            raise ValueError(f"catalog {catalog!r}: {len(labels)} subsets for {len(values)} problems")
+        for i, value in enumerate(values):
+            label = labels[i] if labels is not None else None
+            subs.setdefault(label if label else catalog, []).append(value)
+    return out
+
+
+def nest_sets(sets: Mapping[str, SetStat], benchmarks: Mapping[str, str] | None = None) -> list[list[SetStat]]:
+    """Per-catalog summaries grouped by benchmark, each catalog a subset of it (for :func:`combine_nested`); a
+    catalog ``benchmarks`` does not name is a benchmark of its own."""
+    out: dict[str, list[SetStat]] = {}
+    for catalog, st in sets.items():
+        out.setdefault((benchmarks or {}).get(catalog, catalog), []).append(st)
+    return list(out.values())
+
+
 def by_benchmark(problems: Mapping[str, Sequence[_T]], benchmarks: Mapping[str, str]) -> dict[str, list[_T]]:
-    """The problems of each catalog, merged into one problem set per benchmark: the catalogs ``benchmarks`` maps to the
-    same benchmark become one set, every problem in it once, and a catalog it does not name is a benchmark of its own
-    (its name is the benchmark's). Keyed by benchmark, in the order the benchmarks first appear."""
+    """The problems of each catalog, merged into one list per benchmark (every problem in it once; a catalog
+    ``benchmarks`` does not name is a benchmark of its own), keyed by benchmark in the order the benchmarks first
+    appear: a benchmark's own value over all its problems. The averages nest instead (:func:`nest`)."""
     out: dict[str, list[_T]] = {}
     for catalog, values in problems.items():
         out.setdefault(benchmarks.get(catalog, catalog), []).extend(values)
@@ -578,8 +779,9 @@ KINDS = ("mean", "rate", "ratio", "median")
 
 @dataclass(frozen=True)
 class Average:
-    """An average over problem sets: the value and its 95 % interval over these sets, the range for one more set (None
-    below three sets, and for a median), the problems and sets behind it, and each set's share of the weight."""
+    """An average over benchmarks: the value and its 95 % interval over these benchmarks, the range for one more
+    benchmark (None below three, and for a median), the problems, benchmarks and subsets behind it, each benchmark's
+    share of the weight and each subset's ({benchmark: {subset: share}}, summing to its benchmark's)."""
     value: float
     lo: float
     hi: float
@@ -588,6 +790,8 @@ class Average:
     n_problems: int
     n_sets: int
     weights: dict[str, float]
+    n_subsets: int = 0
+    subset_weights: dict[str, dict[str, float]] = field(default_factory=dict)
 
 
 def _number(v: object) -> float | None:
@@ -623,6 +827,18 @@ def _set_stats(problems: Mapping[str, Sequence[Sequence[object]]], kind: str) ->
     return names, stats
 
 
+def _nested_stats(nested: Mapping[str, Mapping[str, Sequence[Sequence[object]]]], kind: str
+                  ) -> tuple[list[tuple[str, list[str]]], list[list[SetStat]]]:
+    """Each benchmark's subsets with a value: ([(benchmark, [subset, ...]), ...], [[SetStat, ...], ...])."""
+    names, groups = [], []
+    for bench, subs in nested.items():
+        sub_names, stats = _set_stats(subs, kind)
+        if stats:
+            names.append((bench, sub_names))
+            groups.append(stats)
+    return names, groups
+
+
 def _weighted_quantile(points: Sequence[tuple[float, float]], q: float) -> float:
     """The smallest value whose cumulative weight reaches q of the total (points sorted by value)."""
     total = sum(w for _, w in points)
@@ -634,76 +850,117 @@ def _weighted_quantile(points: Sequence[tuple[float, float]], q: float) -> float
     return points[-1][0]
 
 
-def _median(problems: Mapping[str, Sequence[Sequence[object]]]) -> Average | None:
-    """The median over problem sets: every problem weighs 1 within its set, shared by its runs, and a set of n problems
-    weighs n / (n + n0), n0 = pooled within-set variance / tau^2 of the mean's random-effects fit (a set counts about once
-    whatever its size, a set of a few problems less), as the average weighs it. Non-finite values count at their end of
-    the scale. The interval is Woodruff's (1952): each set's share of weight at or below the median is averaged over the
-    sets like any value, and that share's interval is read back through the weighted distribution."""
-    sets: list[tuple[str, int, list[tuple[float, float]]]] = []
-    for name, runs_of in problems.items():
-        pts: list[tuple[float, float]] = []
-        n = 0
-        for runs in runs_of:
-            vals = [x for x in (_number(v) for v in runs) if x is not None]
-            if vals:
-                n += 1
-                pts += [(x, 1.0 / len(vals)) for x in vals]
-        if n:
-            sets.append((name, n, pts))
-    if not sets:
+def nested_set_weights(ns: Sequence[Sequence[float]], n0_within: float, n0_between: float) -> list[list[float]]:
+    """The weight of every subset of ``ns[b]`` (its numbers of problems, per benchmark) in a median or distribution,
+    as the average weighs it. A subset of n problems counts n / (1 + n / n0_S) problems within its benchmark, so a
+    benchmark counts N* = their sum, and the benchmark weighs N* / (N* + n0_B) (N* when n0_B is infinite: no spread
+    between benchmarks), shared among its subsets by their counts. n0_S = sigma^2 / tau_S^2 and n0_B =
+    sigma^2 / tau_B^2 from the fit of the mean (infinite when that spread is 0). A benchmark of one subset weighs
+    n / (n + n0_B) when its subsets are alike, a set's weight in the two-level average."""
+    out = []
+    for g in ns:
+        each = [n / (1.0 + n / n0_within) for n in g]
+        nstar = sum(each)
+        bench = nstar / (nstar + n0_between) if math.isfinite(n0_between) else nstar
+        out.append([bench] if len(g) == 1 else [bench * e / nstar for e in each])
+    return out
+
+
+def _median(nested: Mapping[str, Mapping[str, Sequence[Sequence[object]]]]) -> Average | None:
+    """The median over benchmarks > subsets: every problem weighs 1 within its subset, shared by its runs, and the
+    subsets weigh as :func:`nested_set_weights` says, with n0_S and n0_B from the three-level fit of the mean (pooled
+    within-subset variance over tau_S^2 and over tau_B^2): a benchmark counts about once whatever its size, a subset of
+    a few problems less, and a subset that differs from its benchmark's others counts more on its own. Non-finite values
+    count at their end of the scale. The interval is Woodruff's (1952): each subset's share of weight at or below the
+    median is averaged over the benchmarks like any value, and that share's interval is read back through the weighted
+    distribution."""
+    benches: list[tuple[str, list[tuple[str, int, list[tuple[float, float]]]]]] = []
+    for bench, subs in nested.items():
+        units = []
+        for sub, runs_of in subs.items():
+            pts: list[tuple[float, float]] = []
+            n = 0
+            for runs in runs_of:
+                vals = [x for x in (_number(v) for v in runs) if x is not None]
+                if vals:
+                    n += 1
+                    pts += [(x, 1.0 / len(vals)) for x in vals]
+            if n:
+                units.append((sub, n, pts))
+        if units:
+            benches.append((bench, units))
+    if not benches:
         return None
-    _, stats = _set_stats({name: problems[name] for name, _, _ in sets}, "mean")
-    n0 = math.inf
-    if len(stats) >= 2:
-        own = [s for s in stats if s.var is not None]
+    _, groups = _nested_stats({b: {s: nested[b][s] for s, _, _ in units} for b, units in benches}, "mean")
+    n0_s = n0_b = math.inf
+    if sum(len(g) for g in groups) >= 2:
+        own = [s for g in groups for s in g if s.var is not None]
         den = sum(s.n - 1 for s in own)
         pooled = sum((s.n - 1) * s.var for s in own if s.var is not None) / den if den > 0 else 0.0
-        tau2 = combine_scale(*set_estimates(stats, "normal"), df=1).tau2
-        n0 = pooled / tau2 if tau2 > 0 else math.inf
-    set_w = {name: (n / (n + n0) if math.isfinite(n0) else float(n)) for name, n, _ in sets}
-    points = sorted((x, set_w[name] * w / n) for name, n, pts in sets for x, w in pts)
+        flat = [s for g in groups for s in g]
+        y, v = set_estimates(flat, "normal")
+        ys, vs, at = [], [], 0
+        for g in groups:
+            ys.append(y[at:at + len(g)])
+            vs.append(v[at:at + len(g)])
+            at += len(g)
+        fit = combine_scale_nested(ys, vs, df=1)
+        n0_b = pooled / fit.tau2 if fit.tau2 > 0 else math.inf
+        n0_s = pooled / fit.tau2_within if fit.tau2_within > 0 else math.inf
+    unit_w = nested_set_weights([[float(n) for _, n, _ in units] for _, units in benches], n0_s, n0_b)
+    points = sorted((x, uw * w / n) for (_, units), ws in zip(benches, unit_w) for (_, n, pts), uw in zip(units, ws)
+                    for x, w in pts)
     med = _weighted_quantile(points, 0.5)
     shares = []
-    for name, n, pts in sets:
-        tot = sum(w for _, w in pts)
-        p = min(1.0, sum(w for x, w in pts if x <= med) / tot)
-        k = max(1, round(tot))
-        shares.append(SetStat(k, p * k, p * k))
-    c = combine(shares, "normal")
+    for _, units in benches:
+        g = []
+        for _, n, pts in units:
+            tot = sum(w for _, w in pts)
+            p = min(1.0, sum(w for x, w in pts if x <= med) / tot)
+            k = max(1, round(tot))
+            g.append(SetStat(k, p * k, p * k))
+        shares.append(g)
+    c = combine_nested(shares, "normal")
     half = max(0.0, (c.hi - c.lo) / 2) if c is not None else 0.0
     lo = _weighted_quantile(points, max(0.0, 0.5 - half))
     hi = _weighted_quantile(points, min(1.0, 0.5 + half))
-    total_w = sum(set_w.values())
-    return Average(med, lo, hi, None, None, sum(n for _, n, _ in sets), len(sets),
-                   {name: w / total_w for name, w in set_w.items()})
+    bench_w = [sum(ws) if len(ws) > 1 else ws[0] for ws in unit_w]
+    total_w = sum(bench_w)
+    return Average(med, lo, hi, None, None, sum(n for _, units in benches for _, n, _ in units), len(benches),
+                   {b: w / total_w for (b, _), w in zip(benches, bench_w)}, sum(len(units) for _, units in benches),
+                   {b: {s: w / total_w for (s, _, _), w in zip(units, ws)} for (b, units), ws in zip(benches, unit_w)})
 
 
 def average(problems: Mapping[str, Sequence[Sequence[object]]], kind: str = "mean", *,
-            benchmarks: Mapping[str, str] | None = None) -> Average | None:
-    """The average over problem sets of per-problem run values: ``problems[set]`` lists, for each problem of the set,
-    the values of its runs. With ``benchmarks`` ({catalog: benchmark}), ``problems`` is keyed by catalog and the
-    catalogs of one benchmark are one set (:func:`by_benchmark`); the weights are then keyed by benchmark. ``kind``:
+            benchmarks: Mapping[str, str] | None = None,
+            subsets: Mapping[str, Sequence[str | None]] | None = None) -> Average | None:
+    """The average over benchmarks of per-problem run values: ``problems[catalog]`` lists, for each problem of the
+    catalog, the values of its runs. ``benchmarks`` ({catalog: benchmark}) names each catalog's benchmark (a catalog it
+    does not name is a benchmark of its own), and ``subsets`` ({catalog: [subset of each problem]}) each problem's
+    subset within it (by default its catalog): benchmarks > subsets > problems (:func:`nest`), averaged by the
+    three-level model (:func:`combine_nested`). The weights are keyed by benchmark, the subset weights by benchmark and
+    subset. ``kind``:
 
-    * ``"mean"``: the random-effects average of the sets' means (a problem's value is the mean of its runs' finite
+    * ``"mean"``: the random-effects average of the subsets' means (a problem's value is the mean of its runs' finite
       values; problems without one are left out);
     * ``"rate"``: the beta-binomial average (a run hits or misses; a problem's value is its share of hits);
     * ``"ratio"``: the mean in log2, shown back on the ratio's scale (a geometric mean);
-    * ``"median"``: the median with each set weighted as the average weighs it, and Woodruff's interval.
+    * ``"median"``: the median with each subset weighted as the average weighs it, and Woodruff's interval.
 
-    None when no set has a value. One set alone is its own mean (a rate: its plain rate with the Wilson interval)."""
+    None when nothing has a value. One benchmark of one subset is its own mean (a rate: its plain rate with the Wilson
+    interval); without ``benchmarks`` and ``subsets`` every catalog is a benchmark of one subset, the two-level average."""
     if kind not in KINDS:
         raise ValueError(f"kind must be one of {KINDS}, not {kind!r}")
-    if benchmarks is not None:
-        problems = by_benchmark(problems, benchmarks)
+    nested = nest(problems, benchmarks, subsets)
     if kind == "median":
-        return _median(problems)
-    names, stats = _set_stats(problems, kind)
-    if not stats:
+        return _median(nested)
+    names, groups = _nested_stats(nested, kind)
+    if not groups:
         return None
-    c = combine(stats, "logit" if kind == "rate" else "normal")
-    assert c is not None
+    c = combine_nested(groups, "logit" if kind == "rate" else "normal")
+    assert c is not None and c.subset_weights is not None
     back = (lambda x: 2.0 ** x) if kind == "ratio" else (lambda x: x)
     return Average(back(c.mu), back(c.lo), back(c.hi), None if c.pi_lo is None else back(c.pi_lo),
-                   None if c.pi_hi is None else back(c.pi_hi), sum(s.n for s in stats), len(stats),
-                   dict(zip(names, c.weights)))
+                   None if c.pi_hi is None else back(c.pi_hi), int(sum(s.n for g in groups for s in g)), len(groups),
+                   {b: w for (b, _), w in zip(names, c.weights)}, sum(len(g) for g in groups),
+                   {b: dict(zip(subs, ws)) for (b, subs), ws in zip(names, c.subset_weights)})
