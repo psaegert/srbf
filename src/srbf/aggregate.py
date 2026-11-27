@@ -129,20 +129,68 @@ def expit(x: float) -> float:
     return 1.0 / (1.0 + math.exp(-x))
 
 
+def pooled_variance(sets: Sequence[SetStat]) -> float:
+    """The variance within sets, pooled over the sets with a variance of their own: sum (n - 1) s^2 / sum (n - 1)
+    (0 without any)."""
+    num = sum((s.n - 1) * s.var for s in sets if s.var is not None)
+    den = sum(s.n - 1 for s in sets if s.var is not None)
+    return num / den if den > 0 else 0.0
+
+
+@dataclass(frozen=True)
+class VariancePrior:
+    """The prior that moderates the sets' variances (:func:`variance_prior`): ``d0`` degrees of freedom (inf: every set
+    takes ``s0_2``) around the variance ``s0_2``."""
+    d0: float
+    s0_2: float
+
+
+def variance_prior(sets: Sequence[SetStat]) -> VariancePrior | None:
+    """The empirical-Bayes prior of the within-set variances, by Smyth's (2004) moments of log s^2 over the sets with a
+    variance of their own (n >= 2, s^2 > 0), d = n - 1: e = log s^2 - psi(d/2) + log(d/2) has mean log s0^2 -
+    psi(d0/2) + log(d0/2) and variance psi'(d0/2) + psi'(d/2), so psi'(d0/2) is the variance of e beyond the sampling's,
+    mean psi'(d/2); d0 = 2 psi'^-1(that excess), and d0 = inf (one common variance) when the excess is not positive.
+    None with fewer than two such sets, where the excess cannot be estimated."""
+    own = [(s.n - 1, s.var) for s in sets if s.var is not None and s.var > 0]
+    if len(own) < 2:
+        return None
+    e = [math.log(v) - digamma(d / 2.0) + math.log(d / 2.0) for d, v in own]
+    mean = sum(e) / len(e)
+    excess = sum((x - mean) ** 2 for x in e) / (len(e) - 1) - sum(trigamma(d / 2.0) for d, _ in own) / len(own)
+    if excess <= 0:
+        return VariancePrior(math.inf, math.exp(mean))
+    d0 = 2.0 * trigamma_inverse(excess)
+    return VariancePrior(d0, math.exp(mean + digamma(d0 / 2.0) - math.log(d0 / 2.0)))
+
+
+def moderated_variance(st: SetStat, prior: VariancePrior) -> float:
+    """A set's variance moderated by the prior: (d0 s0^2 + d s^2) / (d0 + d), d = n - 1; s0^2 for a set of one problem
+    and for every set when d0 is infinite, d0 s0^2 / (d0 + d) for a set whose problems all have one value."""
+    d = st.n - 1
+    if d < 1 or math.isinf(prior.d0):
+        return prior.s0_2
+    return (prior.d0 * prior.s0_2 + d * (st.var or 0.0)) / (prior.d0 + d)
+
+
 def set_estimates(sets: Sequence[SetStat], scale: str) -> tuple[list[float], list[float]]:
     """Each set's mean and its squared standard error, for a metric that is not a rate (rates: combine_rates).
 
-    A set whose problems all have the same value, or that has one problem, has no usable variance of its own: it takes
-    the variance pooled over the sets."""
+    A set's variance is moderated by an empirical-Bayes prior fitted to the variances of all the sets
+    (:func:`variance_prior`, :func:`moderated_variance`): a set of a few problems borrows spread from the others in
+    proportion to how alike the sets' variances are, from its own variance (sets that differ) to the common one (sets
+    that are alike). With fewer than two sets that have a variance of their own, a set without one (one problem, or one
+    value) takes the variance pooled over the sets."""
     assert scale == "normal", scale
     sets = [s for s in sets if s.n > 0]
-    num = sum((s.n - 1) * s.var for s in sets if s.var is not None)
-    den = sum(s.n - 1 for s in sets if s.var is not None)
-    pooled = num / den if den > 0 else 0.0
+    prior = variance_prior(sets)
+    pooled = pooled_variance(sets) if prior is None else 0.0
     ys, vs = [], []
     for s in sets:
-        own = s.var if s.var is not None and s.var > 0 else None
-        v = own if own is not None else pooled
+        if prior is not None:
+            v = moderated_variance(s, prior)
+        else:
+            own = s.var if s.var is not None and s.var > 0 else None
+            v = own if own is not None else pooled
         ys.append(s.mean)
         vs.append(max(EPS_VAR, v / s.n))
     return ys, vs
@@ -245,6 +293,34 @@ def trigamma(x: float) -> float:
         x += 1.0
     f = 1.0 / (x * x)
     return r + 1.0 / x + 0.5 * f + (1.0 / x) * f * (1.0 / 6 - f * (1.0 / 30 - f * (1.0 / 42 - f * (1.0 / 30 - f * (5.0 / 66)))))
+
+
+def tetragamma(x: float) -> float:
+    """psi''(x), x > 0: psi''(x) = psi''(x + 1) - 2/x^3 up to x >= 10, then the asymptotic series."""
+    r = 0.0
+    while x < 10.0:
+        r -= 2.0 / (x * x * x)
+        x += 1.0
+    inv = 1.0 / x
+    f = inv * inv
+    return r - f * (1.0 + inv + f * (0.5 - f * (1.0 / 6 - f * (1.0 / 6 - f * (3.0 / 10 - f * (5.0 / 6))))))
+
+
+def trigamma_inverse(x: float) -> float:
+    """The y > 0 with psi'(y) = x: Newton's method on 1 / psi'(y) from y = 0.5 + 1/x (Smyth 2004), 1/x and
+    1/sqrt(x) at the extremes."""
+    if x > 1e7:
+        return 1.0 / math.sqrt(x)
+    if x < 1e-6:
+        return 1.0 / x
+    y = 0.5 + 1.0 / x
+    for _ in range(50):
+        tri = trigamma(y)
+        dif = tri * (1.0 - tri / x) / tetragamma(y)
+        y += dif
+        if -dif / y < 1e-8:
+            break
+    return y
 
 
 def _sig(x: float) -> float:

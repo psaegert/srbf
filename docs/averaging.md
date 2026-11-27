@@ -97,9 +97,9 @@ deviations equal their expectation, and 0 where they fall short of it.
 - \(\tau_B^2\) from the benchmarks' estimates with their variances \(1/W_b\), as for sets:
   \(\sum_b w_b (\bar{x}_b - \hat{\theta})^2 = B - 1\).
 
-A subset whose problems all have the same value, or that has one problem, has no variance of its own and takes the
-variance pooled over the other subsets. When no benchmark has two subsets the average is the two-level one, every
-benchmark a set weighted by \(1/(\tau^2 + \sigma_s^2/n_s)\), to the last bit.
+A subset's own variance \(\sigma_{bs}^2\) is moderated: a subset of a few problems borrows spread from the others
+([Small subsets borrow spread](#small-subsets-borrow-spread)). When no benchmark has two subsets the average is the
+two-level one, every benchmark a set weighted by \(1/(\tau^2 + \sigma_s^2/n_s)\), to the last bit.
 
 The two variances act only through the weights:
 
@@ -119,6 +119,42 @@ problems about 2 %.
 The mean leaves out values that are not finite; a problem's value is the mean of its runs' finite values. Ratios such
 as the MDL ratio are averaged in \(\log_2\) and shown back on their own scale, as geometric means, so a ratio of 2 and
 one of 0.5 average to 1.
+
+### Small subsets borrow spread
+
+A subset of two to four problems estimates its own variance from one to three degrees of freedom, so its \(\sigma^2\)
+is often far too small or too large, and its weight and its share of the interval with it. A subset of one problem, or
+whose problems all have the same value, has no variance at all. Each subset's variance is therefore moderated towards a
+common value by an empirical-Bayes prior fitted to the variances of all the subsets of one method and metric
+([Smyth 2004](https://doi.org/10.2202/1544-6115.1027)):
+
+$$
+\tilde{s}_{bs}^2 = \frac{d_0\, s_0^2 + d_{bs}\, s_{bs}^2}{d_0 + d_{bs}},
+\qquad d_{bs} = n_{bs} - 1 .
+$$
+
+The prior's variance \(s_0^2\) and its weight \(d_0\), in degrees of freedom, come from the subsets that have a
+variance of their own, by the moments of \(\log s^2\): with \(e = \log s^2 - \psi(d/2) + \log(d/2)\), the variance
+of \(e\) across subsets beyond what their own sampling gives (the mean of \(\psi'(d/2)\)) is \(\psi'(d_0/2)\), and
+the mean of \(e\) gives \(s_0^2\). Where the subsets' variances spread no more than their sampling explains,
+\(d_0\) is infinite and every subset takes \(s_0^2\); where they spread much more, \(d_0\) is small and each keeps
+close to its own. A subset of one problem takes \(s_0^2\), and one whose problems all have one value
+\(d_0 s_0^2 / (d_0 + d)\). Nothing is set by hand: \(d_0\) and \(s_0^2\) come from the data, and the weight given to
+the prior moves smoothly from none (subsets whose variances differ) to all (subsets whose variances are alike). The prior
+is shared by all the subsets of one method and metric, not fitted per benchmark: a benchmark of one subset has nothing
+to borrow from inside it, and a prior from two or three subsets would itself be noise. With fewer than two subsets that
+have a variance of their own the spread across them cannot be measured, and a subset without a variance takes the
+variance pooled over the others. Rates are not affected; their variances are the binomial's. The interval keeps
+\(\sum (n - 1)\) degrees of freedom (the prior adds none), and medians keep \(n_0\) from the pooled variance.
+
+The moderation was adopted on a gate fixed before it was run, given in full in `scripts/averaging_simulation.py`:
+three structures (145 benchmarks of 255 subsets, 29 of 38, and 145 of 255 with four subsets in five of 1 to 4
+problems), the five spreads of [How well it works](#three-levels), and four kinds of spread within subsets (equal; a
+standard deviation spread log-normally across subsets, moderately and widely; one that grows with the subset's mean),
+60 settings of 800 redraws each. It was to be adopted only if, in every setting, its coverage was not below that of the
+rule it replaces (a subset without a variance takes the pooled one, every other its own) by more than twice the paired
+Monte Carlo error, and if it reached 95 % (less twice the Monte Carlo error) wherever the rule fell short of it.
+GATE_RESULT
 
 ## Rates
 
@@ -368,6 +404,9 @@ expressions of a single benchmark.
 - Skellam, J. G. (1948). A probability distribution derived from the binomial distribution by regarding the
   probability of success as variable between the sets of trials. *Journal of the Royal Statistical Society,
   Series B* 10(2), 257–261. [doi:10.1111/j.2517-6161.1948.tb00014.x](https://doi.org/10.1111/j.2517-6161.1948.tb00014.x)
+- Smyth, G. K. (2004). Linear models and empirical Bayes methods for assessing differential expression in microarray
+  experiments. *Statistical Applications in Genetics and Molecular Biology* 3(1), Article 3.
+  [doi:10.2202/1544-6115.1027](https://doi.org/10.2202/1544-6115.1027)
 - Sweeting, M. J., Sutton, A. J. and Lambert, P. C. (2004). What to add to nothing? Use and avoidance of continuity
   corrections in meta-analysis of sparse data. *Statistics in Medicine* 23(9), 1351–1375.
   [doi:10.1002/sim.1761](https://doi.org/10.1002/sim.1761)

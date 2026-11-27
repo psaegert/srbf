@@ -11,8 +11,23 @@ subsets) and "small" (29 benchmarks of 38 subsets).
              agreement of the two-stage estimate with the full nested beta-binomial model fitted by maximum likelihood
              (FullModel), and rho_S against its true value
   rho        rho_S by Williams' rule against a maximum-likelihood fit of rho_S with every benchmark's rate fitted too
+  moderated  the subsets' variances moderated by an empirical-Bayes prior (srbf.aggregate.set_estimates) against the
+             rule before it (a subset with one problem or one value took the pooled variance, every other its own),
+             on the gate below
 
-usage: python scripts/averaging_simulation.py {means,twolevel,rates,rho} OUT.json [--workers K] [--reps R]
+THE GATE FOR THE MODERATED VARIANCES (fixed before it was run). Settings: three structures ("release", "small", and
+"tiny": 145 benchmarks of 255 subsets, four in five of 1 to 4 problems) x the five spreads of "means" x four kinds of
+within-subset spread (every subset sd 1; sd log-normal across subsets, log sd ~ N(0, 0.5^2) and N(0, 1); log sd = 0.5
+times the subset's standardised true mean), 4 draws of the subsets x 200 redraws of the problems each, R = 800 redraws
+per setting. Per setting and estimator: coverage of what the interval claims (the weighted average of these subsets'
+true means, with the estimator's own weights) with its Monte Carlo standard error, the bias and the RMSE of the mean
+(against the generating mean, 0, and against that weighted average), and the mean interval width. The moderated
+variances are adopted only if, in every one of the 60 settings, (1) their coverage minus the rule's is at least -2 times
+the paired Monte Carlo standard error, sqrt(b + c - (b - c)^2 / R) / R with b and c the redraws only one of the two
+covers, and (2) where the rule's coverage is below 0.95 - 2 sqrt(0.95 0.05 / R), theirs is not. Otherwise they are not
+adopted. The interval's degrees of freedom stay sum (n - 1), EPS_VAR stays, and n0 keeps the pooled variance.
+
+usage: python scripts/averaging_simulation.py {means,twolevel,rates,rho,moderated} OUT.json [--workers K] [--reps R]
        [--full small:6,release:2]
 """
 from __future__ import annotations
@@ -35,7 +50,13 @@ from srbf import aggregate as ag  # noqa: E402
 
 # ---- structures -------------------------------------------------------------------------------------------------------
 def structure(kind: str) -> list[list[int]]:
-    """Subset sizes per benchmark. "release": 145 benchmarks, 255 subsets; "small": 29 benchmarks, 38 subsets."""
+    """Subset sizes per benchmark. "release": 145 benchmarks, 255 subsets; "small": 29 benchmarks, 38 subsets;
+    "tiny": the release's nesting with four subsets in five of 1 to 4 problems, the rest of 10 to 1,000."""
+    if kind == "tiny":
+        rng = np.random.default_rng(20261128)
+        counts = [1] * 95 + [2] * 25 + [3] * 12 + [4] * 8 + [6] * 3 + [12] * 2
+        return [[int(rng.integers(1, 5)) if rng.random() < 0.8 else int(round(10 ** rng.uniform(1, 3))) for _ in range(c)]
+                for c in counts]
     rng = np.random.default_rng(20261127 if kind == "release" else 20260927)
     if kind == "release":
         counts = [1] * 95 + [2] * 25 + [3] * 12 + [4] * 8 + [6] * 3 + [12] * 2
@@ -265,9 +286,99 @@ def rho_task(args: Any) -> dict[str, Any]:
             "williams": float(np.mean(w)), "profile_ml": float(np.mean(ml))}
 
 
+def set_estimates_before(sets: Any, scale: str) -> tuple[list[float], list[float]]:
+    """srbf.aggregate.set_estimates before the moderated variances: a set with one problem, or whose problems all have
+    one value, takes the variance pooled over the sets; every other set its own."""
+    sets = [st for st in sets if st.n > 0]
+    pooled = ag.pooled_variance(sets)
+    ys, vs = [], []
+    for st in sets:
+        own = st.var if st.var is not None and st.var > 0 else None
+        ys.append(st.mean)
+        vs.append(max(ag.EPS_VAR, (own if own is not None else pooled) / st.n))
+    return ys, vs
+
+
+SPREADS = [(1.0, 0.0), (1.0, 0.3), (1.0, 1.0), (0.3, 1.0), (0.0, 1.0)]
+SDS = ("equal", "lognormal-0.5", "lognormal-1", "mean-correlated")
+
+
+def moderated_task(args: Any) -> dict[str, Any]:
+    kind, tb, ts, sd_kind, draw, reps = args
+    sizes = structure(kind)
+    rng = np.random.default_rng([int(1000 * tb), int(1000 * ts), SDS.index(sd_kind), draw, 13, ["release", "small", "tiny"].index(kind)])
+    truth = [[rng.normal(ub, ts) for _ in g] for g, ub in ((g, rng.normal(0.0, tb)) for g in sizes)]
+    flat = np.array([m for g in truth for m in g])
+    if sd_kind == "equal":
+        sds = np.ones(flat.size)
+    elif sd_kind.startswith("lognormal"):
+        sds = np.exp(rng.normal(0.0, float(sd_kind.split("-")[1]), flat.size))
+    else:
+        sds = np.exp(0.5 * (flat - flat.mean()) / (flat.std() or 1.0))
+    sd_of, at = [], 0
+    for g in sizes:
+        sd_of.append(list(sds[at:at + len(g)]))
+        at += len(g)
+    out: dict[str, Any] = {"kind": kind, "tau_B": tb, "tau_S": ts, "sd": sd_kind, "draw": draw, "reps": reps}
+    hits = {"before": [], "moderated": []}
+    est = {"before": [], "moderated": []}
+    target = {"before": [], "moderated": []}
+    width = {"before": [], "moderated": []}
+    original = ag.set_estimates
+    for _ in range(reps):
+        groups = [[ag.SetStat(n, float(x.sum()), float((x * x).sum())) for n, x in
+                   ((n, rng.normal(mu, sd, n)) for n, mu, sd in zip(g, mus, sdg))] for g, mus, sdg in zip(sizes, truth, sd_of)]
+        for name in ("before", "moderated"):
+            ag.set_estimates = set_estimates_before if name == "before" else original
+            try:
+                c = ag.combine_nested(groups, "normal")
+            finally:
+                ag.set_estimates = original
+            assert c is not None and c.subset_weights is not None
+            t = sum(w * mu for ws, mus in zip(c.subset_weights, truth) for w, mu in zip(ws, mus))
+            hits[name].append(bool(c.lo <= t <= c.hi))
+            est[name].append(c.mu)
+            target[name].append(t)
+            width[name].append(c.hi - c.lo)
+    for name in hits:
+        e, t = np.array(est[name]), np.array(target[name])
+        out[name] = {"cover": float(np.mean(hits[name])), "bias": float(e.mean()), "rmse": float(np.sqrt((e ** 2).mean())),
+                     "bias_target": float((e - t).mean()), "rmse_target": float(np.sqrt(((e - t) ** 2).mean())),
+                     "width": float(np.mean(width[name]))}
+    b = sum(1 for x, y in zip(hits["moderated"], hits["before"]) if x and not y)
+    c_ = sum(1 for x, y in zip(hits["moderated"], hits["before"]) if y and not x)
+    out["only_moderated"], out["only_before"] = b, c_
+    return out
+
+
+def gate(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """The gate of the docstring over the draws of every setting: per setting the coverages with their Monte Carlo
+    standard errors, the paired difference, and whether (1) and (2) hold."""
+    by: dict[tuple[str, float, float, str], list[dict[str, Any]]] = {}
+    for r in results:
+        by.setdefault((r["kind"], r["tau_B"], r["tau_S"], r["sd"]), []).append(r)
+    rows, ok = [], True
+    for key, rs in sorted(by.items()):
+        R = sum(r["reps"] for r in rs)
+        cov = {name: sum(r[name]["cover"] * r["reps"] for r in rs) / R for name in ("before", "moderated")}
+        b, c = sum(r["only_moderated"] for r in rs), sum(r["only_before"] for r in rs)
+        se_diff = math.sqrt(max(0.0, b + c - (b - c) ** 2 / R)) / R
+        floor = 0.95 - 2 * math.sqrt(0.95 * 0.05 / R)
+        not_worse = cov["moderated"] - cov["before"] >= -2 * se_diff
+        nominal = cov["before"] >= floor or cov["moderated"] >= floor
+        ok = ok and not_worse and nominal
+        rows.append({"setting": list(key), "R": R, "cover_before": cov["before"], "cover_moderated": cov["moderated"],
+                     "se_before": math.sqrt(cov["before"] * (1 - cov["before"]) / R),
+                     "se_moderated": math.sqrt(cov["moderated"] * (1 - cov["moderated"]) / R), "se_diff": se_diff,
+                     "not_worse": not_worse, "nominal_where_short": nominal,
+                     **{f"{f}_{name}": float(np.mean([r[name][f] for r in rs])) for name in ("before", "moderated")
+                        for f in ("bias", "rmse", "bias_target", "rmse_target", "width")}})
+    return {"adopt": ok, "settings": rows}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("what", choices=["means", "twolevel", "rates", "rho"])
+    ap.add_argument("what", choices=["means", "twolevel", "rates", "rho", "moderated"])
     ap.add_argument("out")
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--reps", type=int, default=0)
@@ -284,6 +395,11 @@ def main() -> None:
         reps = a.reps or 150
         tasks = [(k, drop, d, reps) for k in kinds for drop in (False, True) for d in range(4)]
         fn = twolevel_task
+    elif a.what == "moderated":
+        reps = a.reps or 200
+        tasks = [(k, tb, ts, sd, d, reps) for k in ("release", "small", "tiny") for tb, ts in SPREADS for sd in SDS
+                 for d in range(4)]
+        fn = moderated_task
     elif a.what == "rho":
         reps = a.reps or 15
         tasks = [(k, m, nb, ns, reps) for k in kinds for m, nb, ns in ((0.3, 3.0, 3.0), (0.3, 20.0, 1.0), (0.05, 3.0, 3.0))]
@@ -299,6 +415,10 @@ def main() -> None:
         for i, r in enumerate(pool.imap_unordered(fn, tasks)):
             res.append(r)
             print(f"{i + 1}/{len(tasks)}", json.dumps(r), flush=True)
+    if a.what == "moderated":
+        verdict = gate(res)
+        res = {"draws": res, "gate": verdict}
+        print("gate:", "ADOPT" if verdict["adopt"] else "DO NOT ADOPT", flush=True)
     with open(a.out, "w") as fh:
         json.dump(res, fh, indent=1)
 
