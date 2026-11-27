@@ -79,6 +79,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its mean over problems is the Mean Improvability.
 
 ### Changed
+- **A run that is to keep its candidates does not start without them.** A candidate store that cannot be opened, or an
+  adapter without a SimpliPy engine to judge them with, stops the run with the reason before the method is prepared or
+  fits anything, instead of warning and running without candidates; `runner.candidates: false` runs without them.
 - **One MDL unit, bits, everywhere.** The Flash-ANSR adapter's raw `predicted_mdl` and the `mdl` column of its
   `candidate_store_dir` store were flash-ansr's thousandths of a bit; both are bits now, as `derive_metrics` and the
   table report them, and the store's `run_meta.mdl_dialect.unit` says `bits`. `CandidateStoreReader.mdl_bits(block)`

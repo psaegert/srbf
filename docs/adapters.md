@@ -159,8 +159,10 @@ answer, and the fingerprint of the judge; a checksum ends the log at a record th
 unfinished. Each shard of a run writes a log of its own into the same directory. A problem that is
 fitted again on resume appends a newer record, and readers take the newest one. `niter_000064.json`
 beside the log names the judge, its engine and versions. `runner.candidates` switches the store off
-(`false`) or moves it to another directory ([Running](running.md#the-config)). Stored, a candidate
-takes about 70 bytes (constants at full precision, written twice).
+(`false`) or moves it to another directory ([Running](running.md#the-config)). A run whose store
+cannot be opened, or whose adapter has no engine to judge with, stops with the reason before the
+method fits anything. Stored, a candidate takes about 70 bytes (constants at full precision, written
+twice).
 
 **Reading.** A run's judged candidates come back as arrays, one problem at a time:
 
@@ -324,7 +326,8 @@ joined by spaces in the names `x1, x2, ...`), `candidate_prediction` (the index 
 them, or `None`) and, optionally, `candidate_variables` (the column names, default the record's
 `variables`). The run takes them out of the record, judges them with the adapter's engine
 (`get_simplipy_engine()`, or a `simplipy_engine` attribute) and stores them; an adapter that hands
-none over has its answer as its only candidate. A sample carries `x_support`,
+none over has its answer as its only candidate. An adapter without an engine runs only with
+`runner.candidates: false`. A sample carries `x_support`,
 `y_support`, `y_support_noisy` (or `None`), `x_validation`, `y_validation` and `metadata`. The
 result is a dict started from `sample.clone_metadata()`, so that the ground truth travels with the prediction.
 An in-process adapter writes its expression in the names `x1, x2, ...`, by column position:

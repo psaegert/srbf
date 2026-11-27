@@ -12,7 +12,9 @@ driver is model- and data-layer-agnostic.
 
 After each problem the driver takes the method's candidates out of the record, judges them and
 stores them next to the result file (:class:`srbf.candidates.CandidateRecorder`), outside the time
-the method is measured for.
+the method is measured for. The store opens before the method is prepared: a store that cannot be
+opened, or an adapter without an engine to judge with, fails the run before anything is fitted
+(``runner.candidates: false`` runs without candidates).
 
 Setup before the clock (docs/fairness.md): building the adapter and its ``prepare`` happen before
 the first problem, and with ``runner.warmup`` srbf's warm-up problem (:mod:`srbf.warmup`) goes
@@ -360,37 +362,16 @@ class Benchmark:
         if output_path is not None:
             resolved_output = Path(substitute_root_path(output_path))
 
-        prepare_started = time.perf_counter()
-        prepare_adapter = getattr(self.model_adapter, "prepare", None)
-        if callable(prepare_adapter):
-            prepare_adapter(data_source=self.source)
-        self._setup = {"warmup": self.warmup, "build_time": self.build_time,
-                       "prepare_time": time.perf_counter() - prepare_started, "events": []}
-        if self.warmup:
-            self._warm_up()
-
-        # The RESOLVED ranking (values, not a hash) beside the label: the check whose absence let
-        # every earlier flash_ansr run rank at 0.0 while its config said 0.05. Read once the adapter is prepared: a
-        # worker reports its own (srbf.subprocess_adapter.SubprocessAdapter.ranking_config) when it is up.
-        ranking_fn = getattr(self.model_adapter, "ranking_config", None)
-        meta["ranking"] = ranking_fn() if callable(ranking_fn) else None
-        # The transformer's inference precision (bf16 / fp32): pools drawn in different precisions never mix.
-        precision_fn = getattr(self.model_adapter, "inference_precision", None)
-        if callable(precision_fn):
-            meta["inference_precision"] = precision_fn()
-
-        # What an out-of-process method reports about itself (its interpreter, package versions, checkpoint)
-        # is part of what ran: it is known once the worker is up, and goes beside the rest of the provenance.
-        worker_info = getattr(self.model_adapter, "worker_info", None)
-        if callable(worker_info):
-            meta["worker"] = worker_info() or None
-        meta["setup"] = self._setup_meta()
-
-        prepare_source = getattr(self.source, "prepare", None)
-        if callable(prepare_source):
-            prepare_source(adapter=self.model_adapter)
-
+        # Before the method is prepared or fits anything: a run that cannot keep its candidates fails here.
         recorder = self._candidate_recorder(resolved_output, meta)
+        try:
+            self._set_up(meta)
+        except BaseException:
+            if recorder is not None:
+                recorder.close()
+            raise
+        if recorder is not None:
+            recorder.update_run_meta({key: meta.get(key) for key in ("ranking", "inference_precision")})
 
         existing_results = self.result_store.size
         pending_target = limit if limit is not None else getattr(self.source, "size_hint", lambda: None)()
@@ -472,6 +453,39 @@ class Benchmark:
 
         return final_snapshot
 
+    def _set_up(self, meta: dict[str, Any]) -> None:
+        """Everything before the first timed problem, recorded in ``meta``: the adapter's ``prepare``, the warm-up, what
+        the prepared adapter reports about itself, and the source's ``prepare``."""
+        prepare_started = time.perf_counter()
+        prepare_adapter = getattr(self.model_adapter, "prepare", None)
+        if callable(prepare_adapter):
+            prepare_adapter(data_source=self.source)
+        self._setup = {"warmup": self.warmup, "build_time": self.build_time,
+                       "prepare_time": time.perf_counter() - prepare_started, "events": []}
+        if self.warmup:
+            self._warm_up()
+
+        # The RESOLVED ranking (values, not a hash) beside the label: the check whose absence let
+        # every earlier flash_ansr run rank at 0.0 while its config said 0.05. Read once the adapter is prepared: a
+        # worker reports its own (srbf.subprocess_adapter.SubprocessAdapter.ranking_config) when it is up.
+        ranking_fn = getattr(self.model_adapter, "ranking_config", None)
+        meta["ranking"] = ranking_fn() if callable(ranking_fn) else None
+        # The transformer's inference precision (bf16 / fp32): pools drawn in different precisions never mix.
+        precision_fn = getattr(self.model_adapter, "inference_precision", None)
+        if callable(precision_fn):
+            meta["inference_precision"] = precision_fn()
+
+        # What an out-of-process method reports about itself (its interpreter, package versions, checkpoint)
+        # is part of what ran: it is known once the worker is up, and goes beside the rest of the provenance.
+        worker_info = getattr(self.model_adapter, "worker_info", None)
+        if callable(worker_info):
+            meta["worker"] = worker_info() or None
+        meta["setup"] = self._setup_meta()
+
+        prepare_source = getattr(self.source, "prepare", None)
+        if callable(prepare_source):
+            prepare_source(adapter=self.model_adapter)
+
     def _warm_up(self) -> None:
         """Run srbf's warm-up problem through the method, untimed, its answer discarded. A worker-backed adapter warms
         its worker itself and again after every restart (``warm_up``); an in-process adapter is warmed here, through
@@ -498,8 +512,9 @@ class Benchmark:
         return {**self._setup, "events": [dict(event) for event in self._setup.get("events", [])]}
 
     def _candidate_recorder(self, output: Optional[Path], meta: Optional[Mapping[str, Any]]) -> Any:
-        """The run's candidate store (``self.candidates``), or None: switched off, no output to put it next to, or an
-        adapter without an engine to judge with."""
+        """The run's candidate store (``self.candidates``), or None when it is switched off or there is no output to put
+        it next to. Raises RuntimeError when the adapter has no engine to judge with or the store cannot be opened: a
+        run that is to keep its candidates does not start without them."""
         if self.candidates is False:
             return None
         if isinstance(self.candidates, str):
@@ -511,17 +526,20 @@ class Benchmark:
         get_engine = getattr(self.model_adapter, "get_simplipy_engine", None)
         engine = get_engine() if callable(get_engine) else getattr(self.model_adapter, "simplipy_engine", None)
         if engine is None:
-            warnings.warn("the adapter has no SimpliPy engine (get_simplipy_engine() or simplipy_engine) to judge "
-                          "candidates with: they are not stored", RuntimeWarning)
-            return None
+            raise RuntimeError(
+                f"runner.candidates: the adapter {type(self.model_adapter).__name__} has no SimpliPy engine to judge the "
+                f"method's candidates with (get_simplipy_engine() or simplipy_engine); give it one, or set "
+                f"runner.candidates: false to run without candidates")
         run_meta = {key: (meta or {}).get(key) for key in ("config_provenance", "ranking", "inference_precision", "shard",
                                                            "draws")}
         try:
             return CandidateRecorder(directory, engine=engine, tag=output.stem if output is not None else "run",
                                      engine_name=self.engine_name, run_meta={**run_meta, **self.label})
-        except OSError as exc:       # the run goes on without its candidates rather than not at all
-            warnings.warn(f"the candidate store {directory} cannot be opened ({exc}): candidates are not stored", RuntimeWarning)
-            return None
+        except OSError as exc:
+            raise RuntimeError(
+                f"runner.candidates: the candidate store {directory} cannot be opened ({exc}); make it writable, name "
+                f"another directory in runner.candidates, or set runner.candidates: false to run without candidates"
+            ) from exc
 
     @staticmethod
     def _record_candidates(recorder: Any, problem: Any, record: dict[str, Any]) -> None:

@@ -388,6 +388,21 @@ class _HandingAdapter:
         return EvaluationResult(record)
 
 
+class _WatchedAdapter(_HandingAdapter):
+    """A handing adapter that records whether it was prepared, warmed up or asked to fit; ``engine`` may be None."""
+
+    def __init__(self, engine):
+        super().__init__(engine)
+        self.calls = []
+
+    def prepare(self, *, data_source=None):
+        self.calls.append("prepare")
+
+    def evaluate_sample(self, sample):
+        self.calls.append("warm-up" if sample.metadata.get("warmup") else "fit")
+        return super().evaluate_sample(sample)
+
+
 class TestRun:
     def test_the_run_judges_and_stores_every_problem_outside_the_fit_time(self, engine, tmp_path):
         out = tmp_path / "fastsrb" / "choices_000004.pkl"
@@ -457,6 +472,38 @@ class TestRun:
                 output_path=str(tmp_path / "c.pkl"), progress=False, verbose=False, summary_interval=None)
         assert snap["prediction_success"] == [True] and snap["candidates_error"] == ["OSError: disk full"]
         assert "candidate_expressions" not in snap
+
+    def test_a_store_that_cannot_be_opened_fails_the_run_before_anything_is_fitted(self, engine, tmp_path):
+        blocked = tmp_path / "choices_000001.candidates"
+        blocked.write_text("a file where the store's directory goes")
+        adapter = _WatchedAdapter(engine)
+        bench = Benchmark(_ListSource([_toy(0)]), adapter, warmup=True)
+        with pytest.raises(RuntimeError, match=r"runner.candidates: the candidate store .*choices_000001.candidates "
+                                               r"cannot be opened .*runner.candidates: false"):
+            bench.run(output_path=str(tmp_path / "choices_000001.pkl"), progress=False, verbose=False, summary_interval=None)
+        assert adapter.calls == [] and not (tmp_path / "choices_000001.pkl").exists()
+
+    def test_an_adapter_without_an_engine_fails_the_run_before_anything_is_fitted(self, tmp_path):
+        adapter = _WatchedAdapter(None)
+        bench = Benchmark(_ListSource([_toy(0)]), adapter, warmup=True)
+        with pytest.raises(RuntimeError, match=r"runner.candidates: the adapter _WatchedAdapter has no SimpliPy engine"):
+            bench.run(output_path=str(tmp_path / "choices_000001.pkl"), progress=False, verbose=False, summary_interval=None)
+        assert adapter.calls == []
+
+    def test_switched_off_the_run_needs_neither_a_store_nor_an_engine(self, tmp_path):
+        (tmp_path / "choices_000001.candidates").write_text("a file where the store's directory goes")
+        adapter = _WatchedAdapter(None)
+        snap = Benchmark(_ListSource([_toy(0)]), adapter, candidates=False, warmup=True).run(
+            output_path=str(tmp_path / "choices_000001.pkl"), progress=False, verbose=False, summary_interval=None)
+        assert adapter.calls == ["prepare", "warm-up", "fit"] and snap["prediction_success"] == [True]
+        assert "candidate_expressions" not in snap
+
+    def test_what_the_method_reports_once_it_is_up_reaches_the_stores_manifest(self, engine, tmp_path):
+        adapter = _WatchedAdapter(engine)
+        adapter.ranking_config = lambda: {"mode": "mdl"}
+        Benchmark(_ListSource([_toy(0)]), adapter).run(output_path=str(tmp_path / "choices_000001.pkl"), progress=False,
+                                                       verbose=False, summary_interval=None)
+        assert read_manifests(tmp_path / "choices_000001.pkl")["choices_000001"]["run_meta"]["ranking"] == {"mode": "mdl"}
 
     def test_a_record_without_a_row_index_is_not_stored(self, engine, tmp_path):
         recorder = CandidateRecorder(tmp_path / "s.candidates", engine=engine)

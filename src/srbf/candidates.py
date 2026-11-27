@@ -500,6 +500,11 @@ class CandidateLog:
         self.rows.add(int(row))
         return len(record)
 
+    def update_run_meta(self, run_meta: Mapping[str, Any]) -> None:
+        """Add to the run's meta in ``<tag>.json`` what is known only once the method is up (its ranking, say)."""
+        self.run_meta = {**(self.run_meta or {}), **run_meta}
+        self._write_sidecar()
+
     def _write_sidecar(self) -> None:
         _write_json(self.path.with_suffix(".json"), {
             "kind": "candidates", "format": STORE_FORMAT, "judge": self.judge, "run_meta": self.run_meta,
@@ -597,6 +602,10 @@ class CandidateRecorder:
         record["n_candidates"] = len(expressions)
         record["candidates_judge_time"] = seconds
         return len(expressions)
+
+    def update_run_meta(self, run_meta: Mapping[str, Any]) -> None:
+        """See :meth:`CandidateLog.update_run_meta`."""
+        self.log.update_run_meta(run_meta)
 
     def close(self) -> None:
         self.log.close()
