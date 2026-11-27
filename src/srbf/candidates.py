@@ -2,9 +2,10 @@
 
 A method answers each problem with one expression, the record's prediction, and often ends with more: a hall of fame,
 a Pareto front, the samples or beams it fitted. A run keeps all of them, problem by problem, and judges every one the
-way it judges a prediction: its price in bits (:func:`srbf.pricing.price_bits`, the one price srbf computes), its FVU on the
-fitting and on the held-out points (:func:`srbf.metrics.numeric.fvu`, against the targets the table judges with) and
-whether it could be read, evaluated and priced at all (``status``). What a method reports about its own candidates is
+way it judges a prediction: its price in bits as written (:func:`srbf.pricing.price_bits`, the one price srbf computes,
+of the candidate as the engine's reader reads it), its FVU on the fitting and on the held-out points
+(:func:`srbf.metrics.numeric.fvu`, against the targets the table judges with) and whether it could be read, evaluated
+and priced at all (``status``, with the reason when it could not). What a method reports about its own candidates is
 never used.
 
 Who hands what over:
@@ -100,7 +101,9 @@ def spell_expression(expression: str, variables: Sequence[str]) -> str:
 
 
 def unknown_symbols(prefix: Sequence[str], operator_arity: Mapping[str, int]) -> list[str]:
-    """Tokens the judge cannot read: not an operator, a variable, a number or a named constant."""
+    """Tokens the judge cannot read: not a head of ``operator_arity`` (the engine's
+    :func:`srbf.spelling.written_arity`: its operators and the functions its config defines), ``sqrt``, a variable, a
+    number or a named constant."""
     def known(token: str) -> bool:
         if token in operator_arity or token in ("sqrt", "np.pi", "np.e", "<constant>") or re.fullmatch(r"x\d+", token):
             return True
@@ -113,23 +116,29 @@ def unknown_symbols(prefix: Sequence[str], operator_arity: Mapping[str, int]) ->
 
 
 def read_spelled(engine: Any, expression: str, variables: Sequence[str]) -> list[str]:
-    """The engine's prefix of an infix expression already passed through :func:`spell_expression`; raises when the
-    judge cannot read it."""
-    from symbolic_data.token_ops import desugar_sqrt
+    """The engine's prefix of an infix expression already passed through :func:`spell_expression`, as written; raises
+    when the judge cannot read it.
+
+    The prefix is what the engine's reader returns, the variables in the ground truth's names: the written form that
+    :func:`srbf.pricing.price_bits` prices. The one rewrite is the square root of an engine that does not define
+    ``sqrt`` (:func:`srbf.spelling.spell_square_roots`)."""
+    from srbf.spelling import spell_square_roots, written_arity
 
     # read_infix, not the raw infix_to_prefix: the reader's own tokens ('**', 'neg' on a
     # literal) are not the engine grammar, and simplify/complexity refuse them. The reader
     # takes any identifier as a variable, so the map runs FIRST: everything downstream --
     # the canonical form, the price, the judge -- then sees one spelling.
     prefix = rename_named_variables(list(engine.read_infix(expression)), variables) or []
-    # SymPy and most methods print the square root as sqrt(...); the engine's vocabulary spells it
-    # rootn(u, 2), and its lenient reader would pass the bare token on to a walk that rejects it.
     prefix = [str(token) for token in prefix]
-    unknown = unknown_symbols(prefix, engine.operator_arity)
+    arity = written_arity(engine)
+    unknown = unknown_symbols(prefix, arity)
     if unknown:
+        functions = sorted({k for k in arity if k.isalpha()} | {"sqrt"})
         raise ValueError(f"the judge does not read {', '.join(unknown)}; it reads + - * / ** and the functions "
-                         f"{' '.join(sorted(k for k, n in engine.operator_arity.items() if k.isalpha()))} and sqrt")
-    return list(desugar_sqrt(prefix, dict(engine.operator_arity)))
+                         f"{' '.join(functions)}")
+    # SymPy and most methods print the square root as sqrt(...); an engine that does not define it would pass the
+    # bare token on to a walk that rejects it.
+    return spell_square_roots(prefix, arity)
 
 
 def read_expression(engine: Any, expression: str, variables: Sequence[str]) -> list[str]:
@@ -139,12 +148,13 @@ def read_expression(engine: Any, expression: str, variables: Sequence[str]) -> l
 
 def evaluate_prefix(engine: Any, prefix: Sequence[str], variables: Sequence[str], *arrays: np.ndarray) -> tuple[np.ndarray, ...]:
     """Evaluate a prefix expression (numeric constants inlined) on each array of rows with the
-    engine's own operator realizations; one ``(n, 1)`` column per array, empty for empty input."""
+    engine's own operator realizations; one ``(n, 1)`` column per array, empty for empty input. A function the
+    engine's config defines (``sqrt``) is evaluated as its definition (``engine.to_realization``)."""
     import simplipy
     import simplipy.operators  # noqa: F401 - operator realizations reference it by dotted name
     from simplipy.utils import codify, safe_f
 
-    realized = engine.operators_to_realizations(list(prefix))
+    realized = engine.to_realization(list(prefix))
     code_string = engine.prefix_to_infix(realized, realization=True)
     code = codify(code_string, list(variables))
     namespace: dict[str, Any] = {"np": np, "numpy": np, "math": math, "simplipy": simplipy}
@@ -241,17 +251,18 @@ def _time_limit(seconds: float | None) -> Iterator[None]:
 
 
 def _read_candidate(engine: Any, text: str, notation: str, variables: Sequence[str]) -> list[str]:
-    """The prefix the judge prices and evaluates: read, in the ground truth's variable names, in the form the table
-    stores and judges a prediction in (``normalize_expression``, then the engine's ``convert_expression``)."""
+    """The prefix the judge prices and evaluates: read as written, in the ground truth's variable names, in the form the
+    table stores and judges a prediction in (``normalize_expression``, then the engine's ``convert_expression``)."""
     from symbolic_data.token_ops import normalize_expression
 
-    from srbf.spelling import engine_spelling
+    from srbf.spelling import engine_spelling, written_arity
 
     if notation == "infix":
         prefix = read_expression(engine, text, variables)
     elif notation == "prefix":
-        prefix = engine_spelling(rename_prediction(text.split(), variables) or [], engine.operator_arity)
-        unknown = unknown_symbols(prefix, engine.operator_arity)
+        arity = written_arity(engine)
+        prefix = engine_spelling(rename_prediction(text.split(), variables) or [], arity)
+        unknown = unknown_symbols(prefix, arity)
         if unknown:
             raise ValueError(f"the judge does not read {', '.join(unknown)}")
     else:
@@ -275,9 +286,10 @@ def judge_candidates(expressions: Sequence[str], *, engine: Any, variables: Sequ
 
     ``variables`` are the column names the method was handed; ``x_fit``/``y_fit`` and ``x_val``/``y_val`` the fitting
     and held-out points and the targets the table judges with (the noiseless ones). A candidate is read by the engine,
-    priced by :func:`srbf.pricing.price_bits` and evaluated with the engine's realizations; its FVU is
+    priced as written by :func:`srbf.pricing.price_bits` and evaluated with the engine's realizations; its FVU is
     :func:`srbf.metrics.numeric.fvu` on every point, so a non-finite value anywhere gives ``inf``. The held-out FVU is
-    NaN for a problem without held-out points.
+    NaN for a problem without held-out points. A candidate that is read and evaluated but that the engine refuses to
+    price is unpriced, with the engine's reason.
 
     One candidate gets ``timeout`` seconds (None: no limit) for all of it: a candidate the judge has not finished by
     then is unevaluable, with the reason, its FVUs NaN, its price kept if it was priced, and the judge goes on with the
@@ -310,7 +322,8 @@ def judge_candidates(expressions: Sequence[str], *, engine: Any, variables: Sequ
             status[i], reasons[i] = STATUS_UNREADABLE, _first_line(exc)
             return
         prefixes[i] = " ".join(prefix)
-        bits[i] = price(prefix)
+        refusals: list[str] = []
+        bits[i] = price(prefix, refusals=refusals)
         try:
             y_hat_fit, y_hat_val = evaluate_prefix(engine, prefix, names, X_fit, X_val)
             if y_hat_fit.shape[0] != X_fit.shape[0] or (has_val and y_hat_val.shape[0] != X_val.shape[0]):
@@ -322,7 +335,9 @@ def judge_candidates(expressions: Sequence[str], *, engine: Any, variables: Sequ
         if has_val:
             fvu_val[i] = fvu(Y_val, y_hat_val)
         if not np.isfinite(bits[i]):
-            status[i], reasons[i] = STATUS_UNPRICED, "the engine gives no finite price"
+            # the engine's refusal says why (a head its written price does not read, say)
+            status[i], reasons[i] = STATUS_UNPRICED, (f"the engine does not price it: {refusals[0]}"[:300] if refusals
+                                                      else "the engine gives no finite price")
 
     for i, text in enumerate(expressions):
         try:

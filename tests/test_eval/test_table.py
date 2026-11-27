@@ -234,6 +234,29 @@ def test_sympy_spellings_in_a_stored_prediction_are_read_the_engine_way(tmp_path
     assert _col(rows, "symbolic_recovery") == [1, 1]
 
 
+def test_a_square_root_the_engine_defines_is_priced_as_written(tmp_path, engine_defining_sqrt, engine_without_definitions):
+    """The same stored sqrt(x1*x2) and abs, judged by an engine whose config defines sqrt and by one that does not: the
+    first prices the root as written (sqrt's head, 6 bits), the second as rootn(u, 2) (8.585 bits more than u); both
+    find it to be the ground truth, which symbolic recovery reads in canonical form."""
+    x = np.linspace(0.5, 2.0, 16)
+    snap = _snapshot([["sqrt", "*", "x1", "x2"], ["abs", "x1"]])
+    snap["skeleton"] = [["rootn", "*", "x1", "x2", "<constant>"], ["abs", "x1"]]
+    snap["ground_truth_prefix"] = [["rootn", "*", "x1", "x2", "2"], ["abs", "x1"]]
+    y = [np.sqrt(x * x), np.abs(x)]
+    for key in ("y", "y_pred", "y_val", "y_pred_val"):
+        snap[key] = [v.copy() for v in y]
+    snap["predicted_expression_prefix"] = [["sqrt", "*", "x1", "x2"], ["Abs", "x1"]]
+    snap["predicted_skeleton_prefix"] = [["sqrt", "*", "x1", "x2"], ["Abs", "x1"]]
+    path = _write(tmp_path, "toy", "choices_000001.pkl", snap)
+    defined = judge_result_file(path, method="m", engine=engine_defining_sqrt)
+    plain = judge_result_file(path, method="m", engine=engine_without_definitions)
+    assert _col(defined, "symbolic_recovery") == [1, 1] == _col(plain, "symbolic_recovery")
+    assert _col(defined, "predicted_expression")[0] == "sqrt * x1 x2" and _col(plain, "predicted_expression")[0] == "rootn * x1 x2 2"
+    assert _col(defined, "predicted_mdl")[0] == 21.0 and _col(plain, "predicted_mdl")[0] == pytest.approx(23.585)
+    assert _col(defined, "ground_truth_mdl") == _col(plain, "ground_truth_mdl")      # the stored truth, as written
+    assert _col(defined, "predicted_mdl")[1] == _col(plain, "predicted_mdl")[1] == 12.0
+
+
 def test_a_prediction_the_spelling_cannot_walk_stays_as_written_and_the_file_is_judged(tmp_path, engine):
     """SymPy's conjugate is outside the engine's vocabulary: the walk that rewrites sqrt cannot place its argument.
     Such a prediction stays as written (unreadable, as before); the other problems of the file are judged."""

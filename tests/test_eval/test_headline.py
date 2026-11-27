@@ -36,9 +36,9 @@ def test_the_mean_is_written_as_the_shortest_round_trip_decimal():
 
 
 class _Engine:
-    """Prices a one-token number at 1000 milli-bits per character."""
+    """Prices a one-token number as written at 1000 milli-bits per character."""
 
-    def complexity(self, expression, certified=True, mode="f64", canon="default"):
+    def written_complexity(self, expression):
         return 1000 * sum(len(token) for token in expression)
 
 

@@ -903,8 +903,9 @@ class SubprocessAdapter(EvaluationModelAdapter):
                 y_support: np.ndarray) -> tuple[int | None, dict[str, Any]]:
         """Pick one of the worker's candidates by the configured rule; returns its index (None when no candidate has a
         finite score) and the record of the choice: every candidate with its FVU on the support points, its price in
-        bits and its score. ``mdl`` is :func:`two_part_score`, with Flash-ANSR's order: the score, then a diverged fit
-        last, then the shorter prefix, then the prefix's tokens."""
+        bits and its score. The price is the table's, of the candidate as written (:func:`srbf.pricing.price_bits` on
+        the prefix :meth:`_prefix` reads). ``mdl`` is :func:`two_part_score`, with Flash-ANSR's order: the score, then a
+        diverged fit last, then the shorter prefix, then the prefix's tokens."""
         finite = np.isfinite(np.asarray(y_support, dtype=float).reshape(-1))
         n_points = int(finite.sum())
         price = pricer(self.simplipy_engine)

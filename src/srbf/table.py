@@ -20,10 +20,10 @@ Row semantics:
   failed prediction takes;
 * ground-truth columns (``skeleton_length``, ``ground_truth_mdl``, ...) are defined for every problem.
 
-Description lengths are in bits (certified, f64 parse, default canon). A per-file cache (``cache_dir``) keeps the rows
-of every file judged before; its key names the file (path, size, modification time) and the judge
-(:func:`judge_fingerprint`: the source of the srbf modules the judge runs, the versions of the libraries they import,
-the engine), so a file is judged again exactly when it or the judge changed.
+Description lengths are in bits, of the expressions as written (:func:`srbf.pricing.price_bits`). A per-file cache
+(``cache_dir``) keeps the rows of every file judged before; its key names the file (path, size, modification time) and
+the judge (:func:`judge_fingerprint`: the source of the srbf modules the judge runs, the versions of the libraries they
+import, the engine), so a file is judged again exactly when it or the judge changed.
 """
 from __future__ import annotations
 
@@ -117,7 +117,8 @@ def result_files(tree: ResultTree, *, max_rung: int | None = None) -> list[str]:
 
 
 def mdl_bits(engine: Any) -> Callable[[list[str]], float]:
-    """The description length the table reports, in bits (:func:`srbf.pricing.price_bits`; NaN on failure)."""
+    """The description length the table reports, in bits: the price of an expression as written
+    (:func:`srbf.pricing.price_bits`; NaN on failure)."""
     from srbf.pricing import pricer
 
     return pricer(engine)
@@ -176,8 +177,10 @@ def _rename_predictions(snapshot: dict[str, Any], first_index: int | None) -> No
 
 def _spell_predictions(snapshot: dict[str, Any], operator_arity: Mapping[str, int]) -> None:
     """Bring the stored predictions into the engine's spelling (:mod:`srbf.spelling`), in place. A file written before
-    the in-process adapters did so carries SymPy's ``sqrt`` and ``Abs``, which the engine can neither price nor judge.
-    Only such predictions are rewritten, into the forms the adapters now store."""
+    the in-process adapters did so carries SymPy's ``sqrt`` and ``Abs``, which an engine without them in its config
+    can neither price nor judge. Only such predictions are rewritten, into the forms the adapters now store;
+    ``operator_arity`` is the engine's :func:`srbf.spelling.written_arity`, so a ``sqrt`` the engine defines stays as
+    written."""
     from symbolic_data.token_ops import normalize_expression, normalize_skeleton
 
     from srbf.spelling import SYMPY_ONLY, engine_spelling
@@ -199,6 +202,7 @@ def judge_result_file(path: str, *, method: str, draw: int = 1, engine: Any, fir
 
     from srbf.metrics.symbolic import total_nestedness
     from srbf.result_processing import WORST_VALUE, derive_metrics
+    from srbf.spelling import written_arity
 
     with open(path, "rb") as fh:
         snap = pickle.load(fh)
@@ -213,7 +217,7 @@ def judge_result_file(path: str, *, method: str, draw: int = 1, engine: Any, fir
     catalog = os.path.basename(os.path.dirname(path))
     sha = _model_sha(snap)
     _rename_predictions(snap, first_index)
-    _spell_predictions(snap, engine.operator_arity)
+    _spell_predictions(snap, written_arity(engine))
     arity = engine.operator_arity
     s = derive_metrics(snap, engine=engine, mdl_fn=mdl_bits(engine))
 

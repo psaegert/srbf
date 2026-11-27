@@ -12,11 +12,11 @@ from typing import Any, Callable, Iterable, Mapping, TYPE_CHECKING
 
 import numpy as np
 from symbolic_data.token_ops import normalize_expression, normalize_skeleton
-# sympy is imported lazily inside the two baseline adapters that use it (E2E, NeSymReS);
+# sympy is imported lazily inside the baseline adapter that uses it (NeSymReS);
 # it is an optional `[baselines]` extra, not a core runtime dependency.
 
 from srbf.core import EvaluationModelAdapter, EvaluationResult, EvaluationSample
-from srbf.spelling import engine_spelling
+from srbf.spelling import engine_spelling, written_arity
 from srbf.variable_renaming import (
     E2E_FIRST_INDEX, NESYMRES_FIRST_INDEX, rename_variable_tokens, rename_variables_in_infix, skeleton_variable_names)
 from srbf.candidate_store import MDL_UNIT, CandidateStoreWriter, milli_bits_to_bits
@@ -571,21 +571,14 @@ class E2EAdapter(EvaluationModelAdapter):
                 raise ValueError("E2E returned no tree")
 
             predicted_expression_raw = str(predicted_tree.infix())
-            canonical_infix = _canonicalize_e2e_infix(predicted_expression_raw)
-            try:
-                import sympy as sp  # lazy: only the E2E baseline adapter needs sympy
-                sympy_expr = sp.parse_expr(canonical_infix)
-                predicted_expression = str(sympy_expr)
-            except Exception:
-                predicted_expression = canonical_infix
-
-            # Normalize function casing for simplipy compatibility.
-            predicted_expression = re.sub(r"\bAbs\b", "abs", predicted_expression)
+            # E2E writes its binary operators as words (add, mul, pow, inv): only the notation is translated, so the
+            # stored answer is the expression E2E wrote, priced as written. Nothing simplifies it on the way (a SymPy
+            # round trip would collect terms, fold numbers and print the constants to 15 digits).
+            predicted_expression = _canonicalize_e2e_infix(predicted_expression_raw)
 
             if self.debug:
                 print("[E2EAdapter][debug] raw infix:", predicted_expression_raw, flush=True)
-                print("[E2EAdapter][debug] canonical infix:", canonical_infix, flush=True)
-                print("[E2EAdapter][debug] sympy infix:", predicted_expression, flush=True)
+                print("[E2EAdapter][debug] infix:", predicted_expression, flush=True)
 
             # E2E spells the columns it was handed x_0, x_1, ...; the ground truth spells the same
             # columns x1, x2, ... , so both the stored expression and its prefix are mapped back.
@@ -594,7 +587,7 @@ class E2EAdapter(EvaluationModelAdapter):
             record["predicted_expression"] = predicted_expression
             predicted_prefix = self.simplipy_engine.read_infix(predicted_expression)  # engine grammar, not the raw reader tokens
             predicted_prefix = rename_variable_tokens(predicted_prefix, names, first_index=E2E_FIRST_INDEX)
-            predicted_prefix = engine_spelling(predicted_prefix, self.simplipy_engine.operator_arity)   # sqrt -> rootn(u, 2)
+            predicted_prefix = engine_spelling(predicted_prefix, written_arity(self.simplipy_engine))   # sqrt -> rootn(u, 2) unless defined
             record["predicted_expression_prefix"] = normalize_expression(predicted_prefix)
             record["predicted_skeleton_prefix"] = normalize_skeleton(predicted_prefix)
 
@@ -694,7 +687,7 @@ class NeSymReSAdapter(EvaluationModelAdapter):
             record["predicted_expression"] = predicted_expression
             predicted_prefix = self.simplipy_engine.read_infix(predicted_expression)  # engine grammar, not the raw reader tokens
             predicted_prefix = rename_variable_tokens(predicted_prefix, names, first_index=NESYMRES_FIRST_INDEX)
-            predicted_prefix = engine_spelling(predicted_prefix, self.simplipy_engine.operator_arity)   # Abs -> abs, sqrt -> rootn(u, 2)
+            predicted_prefix = engine_spelling(predicted_prefix, written_arity(self.simplipy_engine))   # Abs -> abs, sqrt -> rootn(u, 2) unless defined
             record["predicted_expression_prefix"] = normalize_expression(predicted_prefix)
             record["predicted_skeleton_prefix"] = normalize_skeleton(predicted_prefix)
         except Exception as exc:  # pragma: no cover - parse errors
@@ -928,7 +921,8 @@ def _format_fvu_value(value: float) -> str:
 
 
 def _canonicalize_e2e_infix(expr: str) -> str:
-    """Map E2E operator tokens to standard infix symbols before SymPy parsing."""
+    """E2E's infix in the engine's notation: its operator words mapped to infix symbols, every other token as E2E
+    wrote it."""
     replacements = {
         "add": "+",
         "sub": "-",
