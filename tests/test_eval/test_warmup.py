@@ -177,7 +177,7 @@ def test_the_flash_ansr_adapter_keeps_the_warmup_out_of_its_ledger_store(tmp_pat
         def fit(self, *args, **kwargs):
             return _Result()
 
-    adapter.model, adapter.complexity = _Model(), "none"
+    adapter.model, adapter.complexity, adapter.seed = _Model(), "none", None
     with pytest.warns(UserWarning, match="no results"):
         adapter.evaluate_sample(warmup_sample())
     assert captured == []
