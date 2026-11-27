@@ -187,8 +187,9 @@ with the 5,000 candidates Flash-ANSR can fit. The table's judge stays apart: its
 every module it reaches, and a change there does not judge thousands of candidates per problem
 again. Each record keeps the fingerprint of the candidate judge that judged it
 (`CandidateSet.current`); when the judge changes, for example to another price,
-`srbf.candidates.rejudge_candidates(result_file, engine=engine)` judges a stored run again from the
-stored strings and the points the result file keeps.
+[`srbf rejudge`](cli.md#srbf-rejudge) (in Python `srbf.candidates.rejudge_candidates(result_file,
+engine=engine)`) judges a stored run again from the stored strings and the points the result file
+keeps.
 
 **The shipped methods.**
 

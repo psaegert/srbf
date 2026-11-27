@@ -567,6 +567,52 @@ class TestRun:
         assert (after[5].bits == 42.0).all() and not (after[2].bits == 42.0).any()
 
 
+# ---- srbf rejudge ---------------------------------------------------------------------------------------------------
+class TestRejudgeCommand:
+    @staticmethod
+    def _stored_run(engine, out, engine_name="acj-4-3"):
+        Benchmark(_ListSource([_toy(0), _toy(1)]), _HandingAdapter(engine), engine_name=engine_name).run(
+            output_path=str(out), progress=False, verbose=False, summary_interval=None)
+
+    def test_the_command_judges_a_stored_run_again_with_the_engine_its_store_names(self, engine, tmp_path, monkeypatch,
+                                                                                   capsys):
+        from simplipy import SimpliPyEngine
+        from srbf.__main__ import main
+        out = tmp_path / "choices_000002.pkl"
+        self._stored_run(engine, out)
+        loaded = []
+        monkeypatch.setattr(SimpliPyEngine, "load", classmethod(lambda cls, name, install=False: loaded.append(name) or engine))
+        monkeypatch.setattr(cand, "pricer", lambda e: (lambda prefix: 42.0))
+        monkeypatch.setattr(cand, "_FINGERPRINT", "another-judge")
+        main(["rejudge", str(out)])
+        assert loaded == ["acj-4-3"]
+        assert f"{out}: judged the candidates of 2 problem(s) again with acj-4-3" in capsys.readouterr().out
+        after = load_candidates(out)
+        assert all((c.bits == 42.0).all() and c.header["judge"] == "another-judge" for c in after.values())
+        main(["rejudge", str(out), "--engine", "another-engine"])            # --engine chooses another
+        assert loaded == ["acj-4-3", "another-engine"]
+        assert read_manifests(out)["choices_000002"]["judge"]["engine"] == "another-engine"
+
+    def test_a_store_naming_no_engine_needs_one_and_a_file_without_candidates_fails(self, engine, tmp_path,
+                                                                                    monkeypatch, capsys):
+        from simplipy import SimpliPyEngine
+        from srbf.__main__ import main
+        monkeypatch.setattr(SimpliPyEngine, "load", classmethod(lambda cls, name, install=False: engine))
+        out = tmp_path / "choices_000002.pkl"
+        self._stored_run(engine, out, engine_name=None)
+        with pytest.raises(SystemExit, match="names no engine; choose one with --engine"):
+            main(["rejudge", str(out)])
+        main(["rejudge", str(out), "--engine", "acj-4-3"])
+        bare = tmp_path / "bare" / "choices_000002.pkl"
+        Benchmark(_ListSource([_toy(0)]), _HandingAdapter(engine), candidates=False).run(
+            output_path=str(bare), progress=False, verbose=False, summary_interval=None)
+        with pytest.raises(SystemExit) as exit_info:
+            main(["rejudge", str(out), str(bare), "--engine", "acj-4-3"])
+        assert exit_info.value.code == 1 and f"{bare}: no stored candidates" in capsys.readouterr().out
+        with pytest.raises(SystemExit, match="no result file"):
+            main(["rejudge", str(tmp_path / "nothing.pkl")])
+
+
 # ---- the Flash-ANSR adapter ----------------------------------------------------------------------------------------
 def test_flash_ansr_hands_over_every_fitted_candidate(engine, monkeypatch):
     pytest.importorskip("flash_ansr", reason="the Flash-ANSR adapter needs flash-ansr")

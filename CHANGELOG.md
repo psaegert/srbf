@@ -60,6 +60,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   read a run's judged candidates back as arrays; `rejudge_candidates` judges a stored run again when the judge
   changes. The worker protocol keeps at most 100,000 candidates of at most 10,000 characters per problem. Producing
   the front is part of `fit_time` for DSO and Bingo, which report their own.
+- **`srbf rejudge <result files>`** judges the candidates stored with result files again with the installed srbf's
+  candidate judge (`rejudge_candidates`), with the engine the store names or `--engine`; the exit code is 1 when a file
+  has no stored candidates.
 - **A time limit per candidate in the candidate judge.** A candidate the judge has not read, priced and evaluated within
   `srbf.candidates.JUDGE_TIMEOUT_S` (10 s) is `unevaluable`, with the reason, and the judge goes on with the next one,
   so one pathological candidate cannot stall a problem. The limit is the main thread's interval timer (`SIGALRM`):
