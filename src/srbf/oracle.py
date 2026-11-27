@@ -250,7 +250,8 @@ class Recovery:
 
 def first_recovery(expression: Sequence[str], X: Any, y: Any, X_val: Any, y_val: Any, *, engine: Any, refine: Any = None,
                    ranking: Any = None, seed: int = 0, variable_names: Sequence[str] | None = None,
-                   accept: Callable[[OracleFit], bool] | None = None) -> Recovery:
+                   accept: Callable[[OracleFit], bool] | None = None,
+                   on_restart: Callable[[int], None] | None = None) -> Recovery:
     """The oracle stopped at its first recovery: whether the formula can be recovered from ``(X, y)`` at all.
 
     Restart ``r`` (``0 .. n_restarts - 1`` of ``refine``) is the whole oracle at one restart from the seed ``(seed, r)``
@@ -259,7 +260,8 @@ def first_recovery(expression: Sequence[str], X: Any, y: Any, X_val: Any, y_val:
     the judge's symbolic recognition, say) accepts it; the first restart that recovers ends the search, and none is
     passed to ``accept`` whose answer misses the held-out targets. Every stage counts: the constant ladder re-spells one
     constant and refits the others, which recovers formulas whose plain fit does not (a product of constants of very
-    different sizes, say). ``(X_val, y_val)`` are points the oracle is never fitted on.
+    different sizes, say). ``(X_val, y_val)`` are points the oracle is never fitted on. ``on_restart`` is told the
+    number of restarts done after each one (a caller that stops the search from outside knows how far it got).
     """
     from srbf.metrics.numeric import is_perfect_fit
 
@@ -274,6 +276,8 @@ def first_recovery(expression: Sequence[str], X: Any, y: Any, X_val: Any, y_val:
     for restart in range(settings.n_restarts):
         fit = refit_formula(expression, X_arr, y_arr, engine=engine, refine=one, ranking=ranking, seed=(int(seed), restart),
                             variable_names=variable_names)
+        if on_restart is not None:
+            on_restart(restart + 1)
         if fit.best is None:
             continue
         answered = True

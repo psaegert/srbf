@@ -50,6 +50,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   render, holdouts, or an output file holding rows of other draws are refused. Rows record `draws_sha256` and
   `draws_repeat`, `__meta__` records `draws` and the input `catalog_draws` (checked by paired comparisons), and
   `srbf merge` refuses shards of different draws. One draw per problem (`repeat: 1`) is the default.
+- **An acceptance attempt gets at most 1,000 CPU seconds** (`srbf.headline.T_MAX`, the end of the index's time axis),
+  measured on the machine that runs the check and not calibrated to the reference machine. At the cap the oracle is
+  stopped in the middle of its restart (a profiling-timer signal, raised as `srbf.draw_acceptance.AttemptTimeout`; no
+  thread or process is started) and the attempt fails with the kind `time`, recorded like the others (the attempts
+  document's `failures`, the render's records, `draws_failures`); the next seeded attempt follows, `max_trials` stays
+  the attempt limit, and a problem whose every attempt fails is flagged as before. The journal holds one line per
+  attempt (its header names the layout, so a journal of one line per problem is refused), so a shard stopped by its
+  job's time limit resumes at the next attempt of the problem it was judging; with workers, each attempt is a task
+  and a problem's next attempt is queued when its last one comes back.
 - **Frozen draws are accepted draws** (`srbf.draw_acceptance`, `scripts/accept_frozen_draws.py`). Each problem keeps
   the first seeded attempt (symbolic-data's `CatalogDraws`) on which its targets are finite with a defined FVU on both
   sides and, at some restart, the oracle (`type: oracle`: the ground truth with its constants refitted, no checkpoint)

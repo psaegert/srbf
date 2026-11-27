@@ -189,15 +189,18 @@ when none of its 1,024 restarts passes both (`srbf.oracle.first_recovery`), so t
 one restart's: where only a product or ratio of a law's constants is fixed by the data, restarts land on different
 members of the family of equivalent constants, and the judge recognizes some of them and not others. Each failed
 attempt is recorded with the first check it fails: `not_finite` or `fvu_undefined` (a), `no_prediction` or `numeric`
-(b), `symbolic` (c). Attempts differ only in what the benchmark leaves to chance (input
+(b), `symbolic` (c), or `time`: an attempt gets at most 1,000 CPU seconds (`srbf.headline.T_MAX`, the end of the
+index's time axis), measured on the machine that runs the check and not calibrated to the reference machine, and one
+that reaches the cap is stopped there and fails, and the next attempt follows. Attempts differ only in what the
+benchmark leaves to chance (input
 points, random constants, per-run values), never in the formula or its fixed constants. This is a deviation from
 every benchmark with random values: the points are conditioned on the formula being recoverable from them. A problem
 on which no attempt within `max_trials` passes keeps its first attempt and is flagged formula-inherent: what defeats
 recovery there is the formula, not the draw. Formulas that are constants by construction and data catalogs are not
 checked. `scripts/accept_frozen_draws.py` (`srbf.draw_acceptance`) chooses the attempts and writes the document
 symbolic-data renders with. Every problem is an independent task: `--shard K/N` judges every N-th problem of the plan
-with a journal of its own, which a restarted shard resumes from, and `--merge` writes the document from the shards'
-journals.
+with a journal of its own, one line per attempt, from which a restarted shard resumes, in the middle of a problem if
+it stopped there, and `--merge` writes the document from the shards' journals.
 
 A run is refused, before the model loads, when:
 
