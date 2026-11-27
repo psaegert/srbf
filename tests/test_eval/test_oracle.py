@@ -92,7 +92,7 @@ def test_twenty_variables_need_no_vocabulary(engine):
 
 def test_the_first_recovery_stops_at_the_first_restart_whose_answer_reproduces_the_held_out_points(engine):
     """A frequency far from the starting values: most restarts end in another minimum. The early stop is the oracle at
-    one restart per seed (seed, r), so it stops exactly where the full oracle at that seed first recovers."""
+    one restart per seed (seed, r), so it stops exactly where the oracle at that seed first recovers."""
     law = ["*", "1.3", "sin", "*", "7.3", "x1"]
     sample = _sample(law, f=lambda X: 1.3 * np.sin(7.3 * X[:, 0]), n_columns=1)
     refine = {"n_restarts": 64, "constant_ladder": False}
@@ -107,6 +107,17 @@ def test_the_first_recovery_stops_at_the_first_restart_whose_answer_reproduces_t
     again = refit_formula(law, sample.x_support, sample.y_support, engine=engine, refine={**refine, "n_restarts": 1},
                           seed=(4, first))
     assert again.best.prefix == recovery.fit.best.prefix
+
+
+def test_the_first_recovery_counts_what_the_constant_ladder_recovers(engine):
+    """A product of constants of very different sizes: the plain fit from N(0, 5^2) starting values cannot move the tiny
+    one, the constant ladder re-spells one constant and refits the rest, and the answer recovers on the first restart."""
+    law = ["/", "x1", "*", "*", "*", "4", "3.1415926535897", "8.854e-12", "x2"]
+    sample = _sample(law, f=lambda X: X[:, 0] / (4 * 3.1415926535897 * 8.854e-12 * X[:, 1]), n_columns=2)
+    recovery = first_recovery(law, sample.x_support, sample.y_support, sample.x_validation, sample.y_validation,
+                              engine=engine, refine={"n_restarts": 8}, seed=0)
+    assert recovery.recovered and is_perfect_fit(sample.y_validation, recovery.fit.best.predict(sample.x_validation))
+    assert recovery.fit.best.spelling is not None                  # the answer is the ladder's
 
 
 def test_a_formula_that_does_not_fit_the_data_is_not_recovered(engine):

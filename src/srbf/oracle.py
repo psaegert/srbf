@@ -250,51 +250,30 @@ def first_recovery(expression: Sequence[str], X: Any, y: Any, X_val: Any, y_val:
                    ranking: Any = None, seed: int = 0, variable_names: Sequence[str] | None = None) -> Recovery:
     """The oracle stopped at its first numeric recovery: whether the formula can be recovered from ``(X, y)`` at all.
 
-    Restart ``r`` (``0 .. n_restarts - 1`` of ``refine``) is the oracle at one restart from the seed ``(seed, r)``. Its
-    first stage, the fit of the formula as written from that restart's starting values, is the same as the full
-    oracle's; only a fit that reproduces the held-out targets ``y_val`` (``is_perfect_fit``) goes on to the rest (the
-    canonical form, the constant ladder, the duplicate and the ranking), and the first restart whose answer reproduces
-    them ends the search. A fit that misses the held-out targets is not passed on: the stages after it re-spell a fit
-    and do not search for another. ``(X_val, y_val)`` are points the oracle is never fitted on.
+    Restart ``r`` (``0 .. n_restarts - 1`` of ``refine``) is the whole oracle at one restart from the seed ``(seed, r)``
+    (:func:`refit_formula`: the fit, its canonical form, the constant ladder, the duplicate and the ranking), and the
+    first restart whose answer reproduces the held-out targets ``y_val`` (``is_perfect_fit``) ends the search. Every
+    stage counts: the constant ladder re-spells one constant and refits the others, which recovers formulas whose plain
+    fit does not (a product of constants of very different sizes, say). ``(X_val, y_val)`` are points the oracle is
+    never fitted on.
     """
-    from flash_ansr.refine import Refiner
-
     from srbf.metrics.numeric import is_perfect_fit
 
     settings = _settings(refine)
     X_arr, y_arr = _arrays(X, y)
     X_val_arr = np.asarray(X_val, dtype=float).reshape(-1, X_arr.shape[1])
     y_val_arr = np.asarray(y_val, dtype=float).reshape(-1)
-    prepared = _prepared_candidate(expression, engine, settings.typed_spans)
-    if prepared is None:
+    if oracle_candidate(expression, engine) is None:
         return Recovery(None, 0, False)
-    candidate, _typed_frozen = prepared
     one = dataclasses.replace(settings, n_restarts=1)
     answered = False
     for restart in range(settings.n_restarts):
-        job_seed = _candidate_seed((int(seed), restart))
-        state = np.random.get_state()
-        np.random.seed(job_seed)             # the starting values the oracle's own first fit draws from this seed
-        converged = perfect = False
-        try:
-            with np.errstate(all=settings.numpy_errors) if settings.numpy_errors is not None else nullcontext():
-                first = Refiner(simplipy_engine=engine, n_variables=int(X_arr.shape[1])).fit(
-                    expression=list(candidate), X=X_arr, y=y_arr, n_restarts=1, method=settings.method, p0=None,
-                    p0_noise=settings.p0_noise, p0_noise_kwargs=(None if settings.p0_noise_kwargs is None
-                                                                 else dict(settings.p0_noise_kwargs)),
-                    converge_error="ignore", refine_scope=settings.scope)
-                converged = bool(first.valid_fit)
-                perfect = converged and is_perfect_fit(y_val_arr, np.asarray(first.predict(X_val_arr)).reshape(-1))
-        except (NameError, KeyError, ValueError, OverflowError):   # unrealizable: as the full oracle, no candidate
-            pass
-        finally:
-            np.random.set_state(state)
-        answered = answered or converged
-        if not perfect:
-            continue
         fit = refit_formula(expression, X_arr, y_arr, engine=engine, refine=one, ranking=ranking, seed=(int(seed), restart),
                             variable_names=variable_names)
-        if fit.best is not None and is_perfect_fit(y_val_arr, fit.best.predict(X_val_arr)):
+        if fit.best is None:
+            continue
+        answered = True
+        if is_perfect_fit(y_val_arr, fit.best.predict(X_val_arr)):
             return Recovery(fit, restart + 1, True)
     return Recovery(None, settings.n_restarts, answered)
 
