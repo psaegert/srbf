@@ -64,7 +64,8 @@ def test_a_cache_is_carried_to_a_new_fingerprint_and_checked(tmp_path, monkeypat
     # a carried entry a fresh judgment does not reproduce (as after a change that DID touch judging) is caught
     tree_path, entry = r["carried"][0][1], table._cache_path(cache, table._cache_key(tree, r["carried"][0][1], "f" * 16))
     stored = pickle.loads(open(entry, "rb").read())
-    stored[0][table.COLUMNS.index("symbolic_recovery")] = 1 - stored[0][table.COLUMNS.index("symbolic_recovery")]
+    at = table.JUDGED_COLUMNS.index("symbolic_recovery")                     # the cache holds the judged rows
+    stored[0][at] = 1 - stored[0][at]
     os.remove(entry)                                                          # a new inode: the old entry stays as it was
     with open(entry, "wb") as fh:
         pickle.dump(stored, fh)

@@ -875,6 +875,63 @@ test('the explorer averages over problem sets exactly as the reference does', ()
   expect(core.holm([0.01, 0.04, 0.03]).map((x) => +x.toFixed(6))).toEqual([0.03, 0.06, 0.06]);
 });
 
+// ---- Benchmarks: the unit of every average --------------------------------------------------------------------------
+// A benchmark published as several problem sets (for licence or format reasons) is one set in every average: its sets'
+// counts and sums add up, every problem in it once. The page's merging (byBench) is cut out with reCombine and run on
+// stand-in sets, then on the release with two of its sets declared one benchmark, against what the page shows.
+function benchCore(CAT) {
+  const src = readFileSync(new URL('../explorer_v2.js', import.meta.url), 'utf8');
+  const a = src.indexOf('  function benchOf('), b = src.indexOf('  function binVal(');
+  expect(a).toBeGreaterThan(0); expect(b).toBeGreaterThan(a);
+  return new Function('CAT', src.slice(a, b) + '\nreturn { byBench: byBench, reCombine: reCombine, benchText: benchText };')(CAT);
+}
+
+test('the problem sets of one benchmark are averaged as one set, every problem once', () => {
+  const sets = { feynman: { n: 100, s1: 40, s2: 40 }, 'feynman-points': { n: 20, s1: 2, s2: 2 }, nguyen: { n: 12, s1: 9, s2: 9 },
+    keijzer: { n: 15, s1: 3, s2: 3 }, empty: { n: 0 } };
+  const cs = Object.keys(sets), of = (c) => sets[c];
+  const split = benchCore({ feynman: { benchmark: 'feynman' }, 'feynman-points': { benchmark: 'feynman' }, nguyen: {}, keijzer: { benchmark: 'keijzer' } });
+  const own = benchCore({});
+  expect(split.byBench(cs, of).map((q) => [q.b, q.n, q.s1, q.s2])).toEqual([['feynman', 120, 42, 42], ['nguyen', 12, 9, 9], ['keijzer', 15, 3, 3]]);
+  for (const scale of ['logit', 'normal']) {
+    const got = split.reCombine(split.byBench(cs, of), scale);
+    const want = split.reCombine([{ n: 120, s1: 42, s2: 42 }, sets.nguyen, sets.keijzer], scale);   // merged by hand
+    expect([got.S, got.n, got.mu, got.lo, got.hi]).toEqual([3, 147, want.mu, want.lo, want.hi]);
+    // every set its own benchmark (a release without the field): exactly the average over the sets
+    const plain = own.reCombine(cs.map(of), scale), same = own.reCombine(own.byBench(cs, of), scale);
+    expect([same.S, same.n, same.mu, same.lo, same.hi, same.tau2]).toEqual([plain.S, plain.n, plain.mu, plain.lo, plain.hi, plain.tau2]);
+    expect(got.mu).not.toBe(plain.mu);
+  }
+  expect([own.benchText(1), own.benchText(29)]).toEqual(['1 benchmark', '29 benchmarks']);
+});
+
+test('two problem sets declared one benchmark are one set in the explorer\'s averages, and keep their own rows', async ({ page }) => {
+  const errors = collectErrors(page);
+  const text = readFileSync(new URL('../data/2026-09/results.js', import.meta.url), 'utf8');
+  const D = new Function('window', text + '\nreturn window.RESULTS_V2;')({});
+  const pair = ['feynman', 'feynman-bonus'], m = 'e2e', r = '16', key = 'numeric_recovery_val';
+  const cs = D.catalogs.map((c) => c.key), of = (c) => { const t = D.cells[m][c][r].m[key]; return { n: t[0], s1: t[1], s2: t[2] }; };
+  const CAT = {}; D.catalogs.forEach((c) => { CAT[c.key] = pair.includes(c.key) ? { benchmark: 'feynman' } : {}; });
+  const merged = benchCore(CAT), apart = benchCore({});
+  const want = merged.reCombine(merged.byBench(cs, of), 'logit'), plain = apart.reCombine(apart.byBench(cs, of), 'logit');
+  const pct = (x) => (100 * x).toFixed(1) + ' %';
+  expect(want.S).toBe(cs.length - 1);
+  expect(pct(want.mu)).not.toBe(pct(plain.mu));   // the merge moves the shown number, so this test can fail
+  await page.route('**/data/2026-09/results.js', async (route) => {
+    const res = await route.fetch();
+    const add = `;window.RESULTS_V2.catalogs.forEach(function (c) { if (${JSON.stringify(pair)}.indexOf(c.key) >= 0) { c.benchmark = "feynman"; } });`;
+    await route.fulfill({ response: res, body: (await res.text()) + add });
+  });
+  await page.goto(`/explorer.html?release=2026-09&v=table&rows=rungs&p=${key}&x=rung&m=${m}&c=all`);
+  const row = page.locator(V2 + ' .v2table tbody tr').filter({ has: page.locator('td:first-child', { hasText: new RegExp('^' + r + '$') }) });
+  await expect(row).toBeVisible({ timeout: 15000 });
+  await expect(row.locator('td').nth(2)).toContainText(pct(want.mu));
+  // the per-set rows stay one per problem set: a split benchmark's sets are shown on their own
+  await page.goto(`/explorer.html?release=2026-09&v=table&rows=cats&p=${key}&pm=budget&r=${r}&m=${m}&c=all`);
+  for (const c of pair) { await expect(page.locator(V2 + ' .v2table tbody td:first-child', { hasText: new RegExp('^' + c + '$') })).toHaveCount(1); }
+  expect(errors).toEqual([]);
+});
+
 // ---- Positions between budgets -------------------------------------------------------------------------------------
 // Tables, problem sets and distributions read every method at one budget or one time, anywhere on a slider. Between two
 // budgets a method was run at, every sum of a problem set is blended in the logarithm of the position; nothing is

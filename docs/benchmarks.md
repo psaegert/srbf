@@ -12,6 +12,14 @@ on first use, checked against its SHA-256 and cached.
 `suite: srbf` names 29 catalogs with 6,660 expressions. In every one of them the targets are computed
 from the ground truth, so a perfect prediction exists for every problem.
 
+### Benchmarks and catalogs
+
+A catalog names the benchmark it belongs to in the `benchmark` field of its metadata. Most benchmarks are one catalog.
+A benchmark stored in several, for its licence (`-restricted`, `-share-alike`), for its fixed data points (`-points`)
+or as a formula and a data half, names the same benchmark in each of them, and results are averaged over benchmarks,
+not catalogs ([How results are averaged](averaging.md#a-problem-set-is-a-benchmark)). A catalog without the field is a
+benchmark of its own.
+
 ### Physics
 
 | catalog | expressions | variables | what it is | source and license |

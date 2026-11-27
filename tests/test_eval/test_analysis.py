@@ -205,3 +205,73 @@ def test_the_sites_scripts_use_the_package_averaging():
     a = ag.combine([ag.SetStat(n, k, k) for n, k in sets], "logit")
     b = site.combine([site.SetStat(n, k, k) for n, k in sets], "logit")
     assert (a.mu, a.lo, a.hi, a.pi_lo, a.pi_hi) == (b.mu, b.lo, b.hi, b.pi_lo, b.pi_hi)
+
+
+# ---- benchmarks: the catalogs of one benchmark are one problem set ------------------------------------------------
+_B, _B_POINTS, _C = [True] * 7 + [False], [False] * 4, [i % 3 == 0 for i in range(12)]
+
+
+def _split_runs():
+    """A benchmark B published as two catalogs (b and b-points; their rows both count from 0) and a benchmark C."""
+    return [RunResult(model="m", benchmark="B", catalog="b", snapshot=_fixed(_B)),
+            RunResult(model="m", benchmark="B", catalog="b-points", snapshot=_fixed(_B_POINTS)),
+            RunResult(model="m", benchmark="C", snapshot=_fixed(_C))]
+
+
+def test_the_catalogs_of_one_benchmark_are_averaged_as_one_problem_set():
+    from srbf.aggregate import average
+    lb = leaderboard(_split_runs(), metrics=["numeric_recovery_val"], operator_arity=ARITY)
+    hits = lambda flags: [[float(ok)] * 2 for ok in flags]   # noqa: E731 - two draws per problem
+    want = average({"B": hits(_B) + hits(_B_POINTS), "C": hits(_C)}, "rate")
+    label = DEFAULT_METRICS[0].label
+    assert (lb[label].iloc[0], lb[f"{label} lo"].iloc[0], lb[f"{label} hi"].iloc[0]) == pytest.approx(
+        (want.value, want.lo, want.hi), abs=1e-12)
+    assert lb["n_benchmarks"].iloc[0] == 2 and lb["n_expressions"].iloc[0] == 24   # row 0 of b and of b-points: two problems
+    # the catalogs as sets of their own weigh B's problems differently
+    apart = average({"b": hits(_B), "b-points": hits(_B_POINTS), "C": hits(_C)}, "rate")
+    assert abs(apart.value - want.value) > 0.03
+
+
+def test_every_catalog_its_own_benchmark_averages_as_before():
+    runs = _runs()
+    named = [RunResult(model=r.model, benchmark=r.benchmark, catalog=r.benchmark, scaling=r.scaling, snapshot=r.snapshot)
+             for r in runs]
+    assert leaderboard(named, operator_arity=ARITY).equals(leaderboard(runs, operator_arity=ARITY))
+    assert all(r.catalog == r.benchmark for r in runs)
+
+
+def test_the_per_benchmark_view_splits_by_benchmark_or_by_catalog():
+    from srbf.analysis import per_benchmark_table
+    runs = _split_runs()
+    by_benchmark = per_benchmark_table(runs, "numeric_recovery_val", operator_arity=ARITY)
+    assert list(by_benchmark.columns) == ["B", "C"] and by_benchmark.loc["m", "B"] == pytest.approx(7 / 12)
+    by_catalog = per_benchmark_table(runs, "numeric_recovery_val", operator_arity=ARITY, by="catalog")
+    assert list(by_catalog.columns) == ["C", "b", "b-points"] and by_catalog.loc["m", "b"] == pytest.approx(7 / 8)
+    with pytest.raises(ValueError, match="by must be one of"):
+        per_benchmark_table(runs, "numeric_recovery_val", operator_arity=ARITY, by="file")
+
+
+def test_a_catalog_in_two_benchmarks_is_an_error():
+    runs = [RunResult(model="m", benchmark="B", catalog="b", snapshot=_fixed([True])),
+            RunResult(model="m", benchmark="C", catalog="b", snapshot=_fixed([False]))]
+    with pytest.raises(ValueError, match="two benchmarks"):
+        leaderboard(runs, metrics=["numeric_recovery_val"], operator_arity=ARITY)
+
+
+def test_records_and_manifests_carry_the_catalog(tmp_path):
+    import json
+    import pickle
+
+    import yaml
+
+    from srbf.analysis import export_data, load_runs
+    out = export_data(_split_runs(), str(tmp_path / "d.json"), metrics=["numeric_recovery_val"], operator_arity=ARITY)
+    records = json.loads(open(out).read())["records"]
+    assert [(r["benchmark"], r["catalog"]) for r in records] == [("B", "b"), ("B", "b-points"), ("C", "C")]
+    with open(tmp_path / "r.pkl", "wb") as h:
+        pickle.dump(_fixed([True]), h)
+    with open(tmp_path / "manifest.yaml", "w") as h:
+        yaml.safe_dump({"runs": [{"model": "m", "benchmark": "B", "catalog": "b-points", "path": "r.pkl"},
+                                 {"model": "m", "benchmark": "C", "path": "r.pkl"}]}, h)
+    runs = load_runs(str(tmp_path / "manifest.yaml"))
+    assert [(r.benchmark, r.catalog) for r in runs] == [("B", "b-points"), ("C", "C")]

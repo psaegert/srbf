@@ -1,5 +1,5 @@
-"""The site's inputs are rebuilt from files in the repository: the time axis (complete rungs only, each catalog's
-mean averaged over the catalogs like every number on the site, failures left out) and the catalog descriptions."""
+"""The site's inputs are rebuilt from files in the repository: the time axis (complete rungs only, each benchmark's
+mean averaged over the benchmarks like every number on the site, failures left out) and the catalog descriptions."""
 import importlib.util
 import json
 import pickle
@@ -15,8 +15,9 @@ _SPEC.loader.exec_module(site_timing)
 
 
 def over_catalogs(*times: list[float]) -> float:
-    """The time the site shows for these catalogs' answered fit times (scripts/site_random_effects.py's average)."""
-    return round(site_timing.over_sets([np.asarray(t) for t in times]), 4)
+    """The time the site shows for these catalogs' answered fit times (scripts/site_random_effects.py's average), each
+    catalog a benchmark of its own."""
+    return round(site_timing.over_sets({str(i): np.asarray(t) for i, t in enumerate(times)}), 4)
 
 
 # two catalogs: "big" is 3/4 of the suite, "small" 1/4; the subset holds two problems of each
@@ -41,6 +42,22 @@ def test_a_subset_rung_averages_the_catalogs_and_waits_for_every_catalog(tmp_pat
     assert timing["m"] == {"1": over_catalogs([1.0, 3.0], [10.0, 10.0])}
     assert timing["m"]["1"] != 0.75 * 2 + 0.25 * 10                   # not in proportion to the catalogs' sizes
     assert timing["__provenance__"]["rows_timed"]["m"] == {"1": [4, 4]}
+
+
+def test_the_catalogs_the_manifest_places_in_one_benchmark_are_one_set(tmp_path: Path) -> None:
+    sub = tmp_path / "sub"
+    _write(sub, "big", "choices_000001.pkl", [1.0, 3.0])
+    _write(sub, "small", "choices_000001.pkl", [10.0, 10.0])
+    _write(sub, "other", "choices_000001.pkl", [0.5, 0.7])
+    catalogs = {"big": {"size": 6, "count": 2, "weight": 0.6, "benchmark": "b"},
+                "small": {"size": 2, "count": 2, "weight": 0.2, "benchmark": "b"},
+                "other": {"size": 2, "count": 2, "weight": 0.2}}
+    manifest = dict(MANIFEST, total_problems=6, catalogs=catalogs)
+    timing = site_timing.build(manifest, {"m": sub}, {}, "niter_{rung:05d}.pkl")
+    assert timing["m"] == {"1": over_catalogs([1.0, 3.0, 10.0, 10.0], [0.5, 0.7])}     # big and small: one set
+    apart = site_timing.build(dict(manifest, catalogs={c: {k: v for k, v in m.items() if k != "benchmark"}
+                                                       for c, m in catalogs.items()}), {"m": sub}, {}, "niter_{rung:05d}.pkl")
+    assert apart["m"] == {"1": over_catalogs([1.0, 3.0], [10.0, 10.0], [0.5, 0.7])} != timing["m"]
 
 
 def test_a_failed_fit_is_left_out_of_the_time(tmp_path: Path) -> None:
