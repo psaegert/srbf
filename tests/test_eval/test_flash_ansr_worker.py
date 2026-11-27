@@ -87,7 +87,7 @@ def test_the_worker_gets_the_policy_the_in_process_adapter_loads(no_engine_downl
     ({"complexity": "ground_truth"}, "ground truth"),
     ({"complexity": "auto"}, "complexity string"),
     ({"evaluation_config": {**_block()["evaluation_config"], "generation_config": {"method": "oracle"}},
-      "generation_overrides": None}, "the oracle needs"),
+      "generation_overrides": None}, "type: oracle"),
     ({"ranking": {"mode": "mdl", "penalty": 1}}, "unknown keys"),
     ({"node_penalty": 0.1}, "node_penalty"),
 ])
