@@ -207,7 +207,7 @@ def test_the_sites_scripts_use_the_package_averaging():
     assert (a.mu, a.lo, a.hi, a.pi_lo, a.pi_hi) == (b.mu, b.lo, b.hi, b.pi_lo, b.pi_hi)
 
 
-# ---- benchmarks: the catalogs of one benchmark are one problem set ------------------------------------------------
+# ---- benchmarks > subsets: the catalogs of one benchmark are its subsets ------------------------------------------
 _B, _B_POINTS, _C = [True] * 7 + [False], [False] * 4, [i % 3 == 0 for i in range(12)]
 
 
@@ -218,18 +218,50 @@ def _split_runs():
             RunResult(model="m", benchmark="C", snapshot=_fixed(_C))]
 
 
-def test_the_catalogs_of_one_benchmark_are_averaged_as_one_problem_set():
+def _hits(flags):
+    return [[float(ok)] * 2 for ok in flags]   # two draws per problem
+
+
+def test_the_catalogs_of_one_benchmark_are_its_subsets():
     from srbf.aggregate import average
     lb = leaderboard(_split_runs(), metrics=["numeric_recovery_val"], operator_arity=ARITY)
-    hits = lambda flags: [[float(ok)] * 2 for ok in flags]   # noqa: E731 - two draws per problem
-    want = average({"B": hits(_B) + hits(_B_POINTS), "C": hits(_C)}, "rate")
+    want = average({"b": _hits(_B), "b-points": _hits(_B_POINTS), "C": _hits(_C)}, "rate",
+                   benchmarks={"b": "B", "b-points": "B", "C": "C"})
     label = DEFAULT_METRICS[0].label
     assert (lb[label].iloc[0], lb[f"{label} lo"].iloc[0], lb[f"{label} hi"].iloc[0]) == pytest.approx(
         (want.value, want.lo, want.hi), abs=1e-12)
+    assert want.n_sets == 2 and want.n_subsets == 3
     assert lb["n_benchmarks"].iloc[0] == 2 and lb["n_expressions"].iloc[0] == 24   # row 0 of b and of b-points: two problems
-    # the catalogs as sets of their own weigh B's problems differently
-    apart = average({"b": hits(_B), "b-points": hits(_B_POINTS), "C": hits(_C)}, "rate")
-    assert abs(apart.value - want.value) > 0.03
+    # b (7 of 8) and b-points (0 of 4) differ far more than their problems explain: each counts about as much as a
+    # benchmark of its own, so B weighs about twice what C does
+    assert want.weights["B"] > 1.5 * want.weights["C"]
+
+
+def _with_subsets(snapshot, labels, draws=2):
+    out = dict(snapshot)
+    out["subset"] = [lab for lab in labels for _ in range(draws)]
+    return out
+
+
+def test_a_problems_subset_is_read_from_its_rows():
+    """A snapshot's subset column places each problem in its benchmark's subsets (else its catalog is the subset)."""
+    from srbf.aggregate import average
+    labels = ["easy"] * 4 + ["hard"] * 4
+    runs = [RunResult(model="m", benchmark="B", catalog="b", snapshot=_with_subsets(_fixed(_B), labels)),
+            RunResult(model="m", benchmark="C", snapshot=_fixed(_C))]
+    lb = leaderboard(runs, metrics=["numeric_recovery_val"], operator_arity=ARITY)
+    want = average({"b": _hits(_B), "C": _hits(_C)}, "rate", benchmarks={"b": "B"}, subsets={"b": labels})
+    label = DEFAULT_METRICS[0].label
+    assert (lb[label].iloc[0], lb[f"{label} lo"].iloc[0]) == pytest.approx((want.value, want.lo), abs=1e-12)
+    assert want.n_subsets == 3
+    plain = leaderboard([RunResult(model="m", benchmark="B", catalog="b", snapshot=_fixed(_B)), runs[1]],
+                        metrics=["numeric_recovery_val"], operator_arity=ARITY)
+    assert plain[label].iloc[0] != pytest.approx(lb[label].iloc[0])   # the subsets move the number
+    bad = _with_subsets(_fixed(_B), labels)
+    bad["subset"][1] = "hard"     # the second draw of problem 0 in another subset
+    with pytest.raises(ValueError, match="two subsets"):
+        leaderboard([RunResult(model="m", benchmark="B", catalog="b", snapshot=bad)], metrics=["numeric_recovery_val"],
+                    operator_arity=ARITY)
 
 
 def test_every_catalog_its_own_benchmark_averages_as_before():
@@ -244,7 +276,9 @@ def test_the_per_benchmark_view_splits_by_benchmark_or_by_catalog():
     from srbf.analysis import per_benchmark_table
     runs = _split_runs()
     by_benchmark = per_benchmark_table(runs, "numeric_recovery_val", operator_arity=ARITY)
-    assert list(by_benchmark.columns) == ["B", "C"] and by_benchmark.loc["m", "B"] == pytest.approx(7 / 12)
+    from srbf.aggregate import average
+    b_alone = average({"b": _hits(_B), "b-points": _hits(_B_POINTS)}, "rate", benchmarks={"b": "B", "b-points": "B"})
+    assert list(by_benchmark.columns) == ["B", "C"] and by_benchmark.loc["m", "B"] == pytest.approx(b_alone.value)
     by_catalog = per_benchmark_table(runs, "numeric_recovery_val", operator_arity=ARITY, by="catalog")
     assert list(by_catalog.columns) == ["C", "b", "b-points"] and by_catalog.loc["m", "b"] == pytest.approx(7 / 8)
     with pytest.raises(ValueError, match="by must be one of"):

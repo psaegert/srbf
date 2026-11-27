@@ -15,9 +15,10 @@ standardized views --
 :func:`build_report` renders all four to a Markdown page + PNG figures for the docs / github.io site.
 
 The averages are the results site's (:mod:`srbf.aggregate`, docs/averaging.md): a problem's value is the mean of its
-runs, each benchmark is a problem set (the catalogs of a benchmark split over several merge into one, every problem in
-it once), and the sets are combined by a random-effects average (rates by the beta-binomial model, ratios as geometric
-means, medians weighted by set), with an interval over these benchmarks.
+runs, problems sit within subsets within benchmarks (a problem's subset is the ``subset`` column of its rows when they
+carry one, else its catalog, so the catalogs of a benchmark split over several are its subsets), and the levels are
+combined by a three-level random-effects average (rates by the beta-binomial model, ratios as geometric means, medians
+weighted as the average weighs them), with an interval over these benchmarks.
 """
 from __future__ import annotations
 
@@ -111,9 +112,10 @@ DEFAULT_METRICS: tuple[Metric, ...] = (
 class RunResult:
     """One raw ``Benchmark.run()`` snapshot tagged with its coordinates in the results grid.
 
-    ``benchmark`` names the benchmark the run's problems belong to, the problem set the views average over, and
-    ``catalog`` the catalog the run read (empty: the benchmark's own name). A benchmark split over several catalogs
-    (for hosting or format reasons) is one problem set: its catalogs' problems merge, every problem in it once.
+    ``benchmark`` names the benchmark the run's problems belong to, the unit the views average over, and ``catalog``
+    the catalog the run read (empty: the benchmark's own name). Within its benchmark a problem belongs to a subset: the
+    ``subset`` column of the snapshot when it has one (the part of the benchmark its authors placed the problem in),
+    else its catalog, so a benchmark split over several catalogs (for hosting or format reasons) has them as subsets.
     ``scaling`` is the x-value of this run's sweep ``axis`` (e.g. inference-compute time, noise level,
     or n-support), or ``None`` for a single-point benchmark. ``axis`` names which sweep it belongs to
     (so one dataset can carry several sweeps -- ``"compute"``, ``"noise"``, ``"n_support"``, ...).
@@ -144,11 +146,18 @@ def _score(run: RunResult, *, engine: Any, operator_arity: Mapping[str, int] | N
     return run.scored
 
 
-def _problems(scored_snapshots: Iterable[Mapping[str, Sequence[Any]]], metric_key: str) -> list[list[Any]]:
-    """The runs' values of each problem of one catalog: a problem is a catalog row (``eval_row_index``, else the
-    expression ``benchmark_eq_id``, else the row's position), and its runs are its rows across the snapshots (the
-    draws). Placeholder rows are left out."""
+#: The snapshot column that names a problem's subset within its benchmark (absent: the problem's catalog).
+SUBSET_FIELD = "subset"
+
+
+def _problems_and_subsets(scored_snapshots: Iterable[Mapping[str, Sequence[Any]]],
+                          metric_key: str) -> tuple[list[list[Any]], list[str | None]]:
+    """The runs' values of each problem of one catalog, and each problem's subset: a problem is a catalog row
+    (``eval_row_index``, else the expression ``benchmark_eq_id``, else the row's position), its runs are its rows
+    across the snapshots (the draws), and its subset is the ``subset`` column of its rows (None where they have none;
+    two runs of one problem in two subsets is an error). Placeholder rows are left out."""
     by_problem: dict[Any, list[Any]] = {}
+    subset_of: dict[Any, str | None] = {}
     for snap in scored_snapshots:
         if metric_key not in snap:
             continue
@@ -156,12 +165,23 @@ def _problems(scored_snapshots: Iterable[Mapping[str, Sequence[Any]]], metric_ke
         rows = snap.get("eval_row_index")
         eq = snap.get("benchmark_eq_id")
         ph = snap.get("placeholder")
+        sub = snap.get(SUBSET_FIELD)
         for j, v in enumerate(col):
             if ph is not None and j < len(ph) and bool(ph[j]):
                 continue
             key = rows[j] if rows is not None and j < len(rows) else (eq[j] if eq is not None and j < len(eq) else j)
             by_problem.setdefault(key, []).append(v)
-    return list(by_problem.values())
+            label = str(sub[j]) if sub is not None and j < len(sub) and sub[j] not in (None, "") else None
+            prev = subset_of.get(key)
+            if label is not None and prev is not None and prev != label:
+                raise ValueError(f"problem {key!r} is in two subsets: {prev!r} and {label!r}")
+            subset_of[key] = label if label is not None else prev
+    return list(by_problem.values()), [subset_of.get(key) for key in by_problem]
+
+
+def _problems(scored_snapshots: Iterable[Mapping[str, Sequence[Any]]], metric_key: str) -> list[list[Any]]:
+    """The runs' values of each problem of one catalog (:func:`_problems_and_subsets`)."""
+    return _problems_and_subsets(scored_snapshots, metric_key)[0]
 
 
 def _benchmark_of(runs: Iterable[RunResult]) -> dict[str, str]:
@@ -184,11 +204,14 @@ def _by_catalog(runs: Iterable[RunResult], *, engine: Any,
 
 def _summary(runs: Sequence[RunResult], metric: Metric, *, engine: Any, operator_arity: Mapping[str, int] | None) -> Average | None:
     """``metric`` averaged over the benchmarks of ``runs``, the results site's average (:func:`srbf.aggregate.average`):
-    each benchmark is a problem set, the catalogs of one benchmark merged into it, and the runs of one catalog are its
-    draws."""
-    problems = {cat: _problems(snaps, metric.key) for cat, snaps in
-                _by_catalog(runs, engine=engine, operator_arity=operator_arity).items()}
-    return average({cat: p for cat, p in problems.items() if p}, metric_kind(metric), benchmarks=_benchmark_of(runs))
+    benchmarks > subsets > problems, a problem's subset from its rows (else its catalog), and the runs of one catalog
+    are its draws."""
+    found = {cat: _problems_and_subsets(snaps, metric.key) for cat, snaps in
+             _by_catalog(runs, engine=engine, operator_arity=operator_arity).items()}
+    found = {cat: ps for cat, ps in found.items() if ps[0]}
+    subsets = {cat: subs for cat, (_, subs) in found.items() if any(subs)}
+    return average({cat: p for cat, (p, _) in found.items()}, metric_kind(metric), benchmarks=_benchmark_of(runs),
+                   subsets=subsets)
 
 
 def _cells(avg: Average | None) -> tuple[float, float, float, int]:
@@ -295,9 +318,9 @@ def per_benchmark_table(
     scaling: float | str | None = "max",
     by: str = "benchmark",
 ) -> pd.DataFrame:
-    """A metric split by benchmark: rows = models, columns = benchmarks, each cell the benchmark's own value over all
-    its catalogs' problems (a rate: its plain rate; a median: its median). ``by="catalog"`` splits by catalog instead,
-    one column per catalog of a benchmark split over several."""
+    """A metric split by benchmark: rows = models, columns = benchmarks, each cell the benchmark's own value, the
+    average over its subsets (one subset: its plain rate, its mean, its median). ``by="catalog"`` splits by catalog
+    instead, one column per catalog of a benchmark split over several."""
     metric = as_metric(metric)
     key = _split_key(by)
     rows = []
