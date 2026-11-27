@@ -22,7 +22,7 @@ def test_bench_layout_under_the_asset_root(tmp_path, monkeypatch):
     assert model_cfg["type"] == "subprocess"
     assert model_cfg["worker"] == "{{ROOT}}/adapters/mymethod/worker.py"
     assert model_cfg["python"] == "{{ROOT}}/envs/mymethod/bin/python"
-    assert model_cfg["simplipy_engine"] == "acj-5-4-llm"
+    assert model_cfg["simplipy_engine"] == "acj2-5-4-llm"
     assert select_experiment(raw, "feynman")["runner"]["output"] == "{{ROOT}}/results/evaluation/mymethod/feynman.pkl"
     assert "python -m venv" in " ".join(scaffold.next_steps)
     assert (adapter_dir / "test_worker.py").read_text().count('"config.yaml"') == 1

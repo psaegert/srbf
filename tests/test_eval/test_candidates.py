@@ -28,7 +28,7 @@ from srbf.worker import runner
 
 @pytest.fixture(scope="module")
 def engine() -> SimpliPyEngine:
-    return SimpliPyEngine.load("acj-4-3", install=True)
+    return SimpliPyEngine.load("acj2-4-llm", install=True)
 
 
 EXACT = "2.0*v1 - 0.5*v2 + 1.0"     # toy_sample's law in the catalog's column names
@@ -63,15 +63,57 @@ class TestJudgement:
         assert j.bits[1] == price_bits(engine, ["*", "2.0", "x1"]) and j.bits[0] > j.bits[1] > 0
 
     def test_what_the_judge_cannot_read_evaluate_or_price_says_so(self, engine, monkeypatch):
-        j = _judge(engine, ["erf(v1)", "", "x9 + 1.0", "v1 + v2"], notation="infix")
+        j = _judge(engine, ["zeta(v1)", "", "x9 + 1.0", "v1 + v2"], notation="infix")
         assert list(j.status[:2]) == [STATUS_UNREADABLE, STATUS_UNREADABLE]
-        assert "erf" in j.reasons[0] and np.isnan(j.bits[0]) and np.isnan(j.fvu_fit[0]) and j.prefixes[0] == ""
+        assert "zeta" in j.reasons[0] and np.isnan(j.bits[0]) and np.isnan(j.fvu_fit[0]) and j.prefixes[0] == ""
         # a variable the problem does not have is read, priced, and cannot be evaluated
         assert j.status[2] == STATUS_UNEVALUABLE and np.isfinite(j.bits[2]) and np.isnan(j.fvu_val[2])
         assert j.status[3] == STATUS_JUDGED
-        monkeypatch.setattr(cand, "pricer", lambda e: (lambda prefix: float("nan") if "x2" in prefix else price_bits(e, prefix)))
+        # a price as srbf.pricing.pricer gives it, the keyword for the engine's refusals included
+        monkeypatch.setattr(cand, "pricer", lambda e: (lambda prefix, refusals=None: float("nan") if "x2" in prefix else price_bits(e, prefix)))
         j = _judge(engine, ["v1 + v2", "v1"])
         assert list(j.status) == [STATUS_UNPRICED, STATUS_JUDGED] and np.isfinite(j.fvu_fit[0])
+        assert j.reasons[0] == "the engine gives no finite price"          # a NaN without a refusal
+
+    def test_a_candidate_the_written_price_refuses_is_unpriced_with_the_engines_reason(self, engine, monkeypatch):
+        """Read and evaluated, but refused by the engine's written price: the status is unpriced and the reason is the
+        engine's own (here the strict reader's message for a head the engine neither declares nor defines)."""
+        written = engine.written_complexity
+
+        def refusing(expression):
+            if "x2" in expression:
+                raise ValueError("unknown function 'x2' in 'x1 + x2': this engine declares no operator by that name")
+            return written(expression)
+        monkeypatch.setattr(engine, "written_complexity", refusing)
+        j = _judge(engine, ["v1 + v2", "v1"])
+        assert list(j.status) == [STATUS_UNPRICED, STATUS_JUDGED] and np.isfinite(j.fvu_fit[0]) and np.isnan(j.bits[0])
+        assert j.reasons[0] == ("the engine does not price it: ValueError: unknown function 'x2' in 'x1 + x2': this "
+                                "engine declares no operator by that name")
+        assert j.reasons[1] == "" and j.bits[1] == 6.0
+
+    def test_a_candidate_is_priced_as_written(self, engine):
+        """Two spellings of one function, one canonical form: the judge prices each as the method wrote it."""
+        j = _judge(engine, ["-v1 - v2", "-(v1 + v2)", "v1*v1", "v1**2"])
+        assert list(j.status) == [STATUS_JUDGED] * 4
+        assert list(j.bits) == [17.0, 16.0, 15.0, pytest.approx(11.585)]
+        assert j.fvu_fit[0] == j.fvu_fit[1] and j.fvu_fit[2] == j.fvu_fit[3]
+
+    def test_a_defined_function_is_read_priced_and_evaluated_as_written(self, engine_defining_sqrt,
+                                                                        engine_without_definitions):
+        """An engine whose config defines sqrt and cot keeps their heads: sqrt(u) is priced at 12 bits for a variable
+        u and evaluated as rootn(u, 2). Without the definitions srbf writes the root rootn(u, 2) (14.585 bits), and
+        cot is a function the judge does not read."""
+        sample = _toy()
+        defined = _judge(engine_defining_sqrt, ["sqrt(v1**2)", "sqrt(v1)", "cot(v1)"], sample)
+        defined_prefix = _judge(engine_defining_sqrt, ["+ sqrt x1 x2"], sample, notation="prefix")
+        assert defined.prefixes == ["sqrt pow x1 2", "sqrt x1", "cot x1"] and defined_prefix.prefixes == ["+ sqrt x1 x2"]
+        assert list(defined.bits[1:]) == [12.0, 12.0]
+        x = sample.x_support
+        assert defined.status[0] == STATUS_JUDGED and defined.fvu_fit[0] == fvu(sample.y_support, np.abs(x[:, 0]))
+        assert defined.status[2] == STATUS_JUDGED and defined.fvu_fit[2] == fvu(sample.y_support, 1.0 / np.tan(x[:, 0]))
+        plain = _judge(engine_without_definitions, ["sqrt(v1)", "cot(v1)"], sample)
+        assert plain.prefixes[0] == "rootn x1 2" and plain.bits[0] == pytest.approx(14.585)
+        assert plain.status[1] == STATUS_UNREADABLE and "does not read cot" in plain.reasons[1]
 
     def test_a_placeholder_is_unreadable_candidates_carry_their_constants(self, engine):
         j = _judge(engine, ["* <constant> x1"], notation="prefix")
@@ -147,7 +189,7 @@ class TestJudgeTimeout:
         assert timer != (0.0, 0.0) or signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
 
     def test_code_that_catches_every_exception_cannot_swallow_the_timeout(self, engine, monkeypatch):
-        def price(prefix):
+        def price(prefix, refusals=None):
             try:
                 time.sleep(60)
             except Exception:  # noqa: BLE001 - as the engine's own guards do
@@ -202,7 +244,7 @@ class TestStore:
         assert candidate_store_path(tmp_path) == tmp_path
 
     def test_a_problem_round_trips_with_its_strings_its_judgement_and_its_pick(self, engine, tmp_path):
-        expressions = ["2.0*v1", EXACT, "erf(v1)", "v1*π"]
+        expressions = ["2.0*v1", EXACT, "zeta(v1)", "v1*π"]
         j = _judge(engine, expressions)
         j.fvu_fit[0] = 1e-50                       # float64 columns: a tiny FVU must not read as a perfect fit
         log = CandidateLog(tmp_path / "s.candidates", "choices_000001", judge={"fingerprint": "abc"}, run_meta={"ladder": 1})
@@ -220,7 +262,7 @@ class TestStore:
         np.testing.assert_array_equal(c.fvu_val, j.fvu_val)
         np.testing.assert_array_equal(c.status, j.status)
         assert list(c.prediction) == [False, True, False, False] and c.predicted == 1
-        assert list(c.valid) == [True, True, False, False] and "erf" in c.reasons[2]
+        assert list(c.valid) == [True, True, False, False] and "zeta" in c.reasons[2]
         assert c.meta["benchmark_eq_id"] == "toy-7" and c.variables == ["v1", "v2"] and c.notation == "infix"
         assert not c.current                       # judged by a judge named "abc", not this one
 
@@ -322,22 +364,22 @@ class TestProtocol:
     def test_the_picked_candidate_is_the_pick_and_without_a_pick_the_candidates_stay(self, tmp_path, engine):
         body = f'''
             def fit(x, y, *, x_val, variables, meta, options, state):
-                return {{"candidates": ["2.0*v1", "{EXACT}", "erf(v1)"]}}
+                return {{"candidates": ["2.0*v1", "{EXACT}", "zeta(v1)"]}}
         '''
         record = self._record(self._adapter(tmp_path, engine, body, selection={"mode": "mdl"}))
         assert record["prediction_success"] and record["selection"]["chosen"] == 1
-        assert record["candidate_expressions"] == ["2.0*v1", EXACT, "erf(v1)"] and record["candidate_prediction"] == 1
+        assert record["candidate_expressions"] == ["2.0*v1", EXACT, "zeta(v1)"] and record["candidate_prediction"] == 1
         record = self._record(self._adapter(tmp_path, engine, body))
         assert not record["prediction_success"] and "no single answer" in record["error"]
-        assert record["candidate_expressions"] == ["2.0*v1", EXACT, "erf(v1)"] and record["candidate_prediction"] is None
+        assert record["candidate_expressions"] == ["2.0*v1", EXACT, "zeta(v1)"] and record["candidate_prediction"] is None
 
     def test_an_unreadable_answer_fails_the_record_and_stays_the_pick(self, tmp_path, engine):
         adapter = self._adapter(tmp_path, engine, '''
             def fit(x, y, *, x_val, variables, meta, options, state):
-                return {"expression": "erf(v1)", "candidates": ["v1"]}
+                return {"expression": "zeta(v1)", "candidates": ["v1"]}
         ''')
         record = self._record(adapter)
-        assert not record["prediction_success"] and record["candidate_expressions"] == ["v1", "erf(v1)"]
+        assert not record["prediction_success"] and record["candidate_expressions"] == ["v1", "zeta(v1)"]
         assert record["candidate_prediction"] == 1
 
     def test_a_failed_fit_hands_nothing_over(self, tmp_path, engine):
@@ -407,7 +449,7 @@ class TestRun:
     def test_the_run_judges_and_stores_every_problem_outside_the_fit_time(self, engine, tmp_path):
         out = tmp_path / "fastsrb" / "choices_000004.pkl"
         bench = Benchmark(_ListSource([_toy(0), _toy(1)]), _HandingAdapter(engine), result_store=ResultStore(),
-                          engine_name="acj-4-3", label={"ladder": 4})
+                          engine_name="acj2-4-llm", label={"ladder": 4})
         bench.run(output_path=str(out), progress=False, verbose=False, summary_interval=None)
         with open(out, "rb") as fh:
             snapshot = pickle.load(fh)
@@ -422,7 +464,7 @@ class TestRun:
         assert problems[1].predicted == 1 and problems[1].fvu_val[1] == 0.0 and problems[1].current
         assert problems[1].meta["prediction_success"] is True
         manifest = read_manifests(out)["choices_000004"]
-        assert manifest["judge"]["engine"] == "acj-4-3" and manifest["judge"]["fingerprint"] == cand.candidate_judge_fingerprint()
+        assert manifest["judge"]["engine"] == "acj2-4-llm" and manifest["judge"]["fingerprint"] == cand.candidate_judge_fingerprint()
         assert manifest["run_meta"]["ladder"] == 4 and manifest["problems"] == 2
 
     def test_an_adapter_that_hands_nothing_over_has_its_prediction_as_its_only_candidate(self, engine, tmp_path):
@@ -544,9 +586,9 @@ class TestRun:
         Benchmark(_ListSource([_toy(0), _toy(1)]), _HandingAdapter(engine)).run(
             output_path=str(out), progress=False, verbose=False, summary_interval=None)
         before = load_candidates(out)
-        monkeypatch.setattr(cand, "pricer", lambda e: (lambda prefix: 42.0))
+        monkeypatch.setattr(cand, "pricer", lambda e: (lambda prefix, refusals=None: 42.0))
         monkeypatch.setattr(cand, "_FINGERPRINT", "another-judge")
-        assert rejudge_candidates(out, engine=engine, engine_name="acj-4-3") == 2
+        assert rejudge_candidates(out, engine=engine, engine_name="acj2-4-llm") == 2
         after = load_candidates(out)
         for row in (0, 1):
             assert (after[row].bits == 42.0).all() and after[row].expressions == before[row].expressions
@@ -561,7 +603,7 @@ class TestRun:
             Benchmark(_ListSource([_toy(seed)]), _HandingAdapter(engine), shard=(index, 2)).run(
                 output_path=str(tmp_path / f"choices_000008.shard-{index}-of-2.pkl"), progress=False, verbose=False,
                 summary_interval=None)
-        monkeypatch.setattr(cand, "pricer", lambda e: (lambda prefix: 42.0))
+        monkeypatch.setattr(cand, "pricer", lambda e: (lambda prefix, refusals=None: 42.0))
         assert rejudge_candidates(tmp_path / "choices_000008.shard-1-of-2.pkl", engine=engine) == 1
         after = load_candidates(tmp_path / "choices_000008.pkl")
         assert (after[5].bits == 42.0).all() and not (after[2].bits == 42.0).any()
@@ -570,7 +612,7 @@ class TestRun:
 # ---- srbf rejudge ---------------------------------------------------------------------------------------------------
 class TestRejudgeCommand:
     @staticmethod
-    def _stored_run(engine, out, engine_name="acj-4-3"):
+    def _stored_run(engine, out, engine_name="acj2-4-llm"):
         Benchmark(_ListSource([_toy(0), _toy(1)]), _HandingAdapter(engine), engine_name=engine_name).run(
             output_path=str(out), progress=False, verbose=False, summary_interval=None)
 
@@ -582,15 +624,15 @@ class TestRejudgeCommand:
         self._stored_run(engine, out)
         loaded = []
         monkeypatch.setattr(SimpliPyEngine, "load", classmethod(lambda cls, name, install=False: loaded.append(name) or engine))
-        monkeypatch.setattr(cand, "pricer", lambda e: (lambda prefix: 42.0))
+        monkeypatch.setattr(cand, "pricer", lambda e: (lambda prefix, refusals=None: 42.0))
         monkeypatch.setattr(cand, "_FINGERPRINT", "another-judge")
         main(["rejudge", str(out)])
-        assert loaded == ["acj-4-3"]
-        assert f"{out}: judged the candidates of 2 problem(s) again with acj-4-3" in capsys.readouterr().out
+        assert loaded == ["acj2-4-llm"]
+        assert f"{out}: judged the candidates of 2 problem(s) again with acj2-4-llm" in capsys.readouterr().out
         after = load_candidates(out)
         assert all((c.bits == 42.0).all() and c.header["judge"] == "another-judge" for c in after.values())
         main(["rejudge", str(out), "--engine", "another-engine"])            # --engine chooses another
-        assert loaded == ["acj-4-3", "another-engine"]
+        assert loaded == ["acj2-4-llm", "another-engine"]
         assert read_manifests(out)["choices_000002"]["judge"]["engine"] == "another-engine"
 
     def test_a_store_naming_no_engine_needs_one_and_a_file_without_candidates_fails(self, engine, tmp_path,
@@ -602,12 +644,12 @@ class TestRejudgeCommand:
         self._stored_run(engine, out, engine_name=None)
         with pytest.raises(SystemExit, match="names no engine; choose one with --engine"):
             main(["rejudge", str(out)])
-        main(["rejudge", str(out), "--engine", "acj-4-3"])
+        main(["rejudge", str(out), "--engine", "acj2-4-llm"])
         bare = tmp_path / "bare" / "choices_000002.pkl"
         Benchmark(_ListSource([_toy(0)]), _HandingAdapter(engine), candidates=False).run(
             output_path=str(bare), progress=False, verbose=False, summary_interval=None)
         with pytest.raises(SystemExit) as exit_info:
-            main(["rejudge", str(out), str(bare), "--engine", "acj-4-3"])
+            main(["rejudge", str(out), str(bare), "--engine", "acj2-4-llm"])
         assert exit_info.value.code == 1 and f"{bare}: no stored candidates" in capsys.readouterr().out
         with pytest.raises(SystemExit, match="no result file"):
             main(["rejudge", str(tmp_path / "nothing.pkl")])
@@ -661,4 +703,4 @@ def test_the_judge_fingerprint_names_the_candidate_judge_and_not_the_table():
     candidate_sources = {p.name for p in judge_dependencies(root, entry="srbf.candidates")[0]}
     assert "candidates.py" not in table_sources and {"candidates.py", "pricing.py", "numeric.py"} <= candidate_sources
     assert len(cand.candidate_judge_fingerprint()) == 16
-    json.dumps(cand.judge_identity("acj-4-3"))
+    json.dumps(cand.judge_identity("acj2-4-llm"))

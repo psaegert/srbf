@@ -28,7 +28,7 @@ def toy_catalog(monkeypatch):
 
 
 def _write(tmp_path, **model_overrides) -> str:
-    model = {"type": "subprocess", "worker": "example", "python": sys.executable, "simplipy_engine": "acj-4-3",
+    model = {"type": "subprocess", "worker": "example", "python": sys.executable, "simplipy_engine": "acj2-4-llm",
              "config_provenance": "harness_tuned", "timeout": 120}
     model.update(model_overrides)
     config = {"run": {"data_source": {"catalog": "toy", "sampling": {"n_support": 48}}, "model_adapter": model,
@@ -94,7 +94,7 @@ def test_checks_the_chosen_experiment_of_a_suite(tmp_path, toy_catalog):
             type: subprocess
             worker: example
             python: {sys.executable}
-            simplipy_engine: acj-4-3
+            simplipy_engine: acj2-4-llm
             config_provenance: harness_tuned
           runner:
             output: '{tmp_path}/{{catalog}}.pkl'
@@ -130,9 +130,9 @@ def test_the_candidates_are_judged_and_an_unreadable_one_is_named(tmp_path, toy_
     worker = tmp_path / "worker.py"
     worker.write_text(textwrap.dedent('''
         def fit(x, y, *, x_val, variables, meta, options, state):
-            return {"expression": "2.0*x1 - 0.5*x2 + 1.0", "candidates": ["erf(x1)", "x1"]}
+            return {"expression": "2.0*x1 - 0.5*x2 + 1.0", "candidates": ["zeta(x1)", "x1"]}
     '''))
     report = check_config(_write(tmp_path, worker=str(worker)), log=lambda _: None)
     assert [step.name for step in report.failed] == ["candidates", "candidates"]
-    assert "3 candidates: 2 judged, 1 unreadable" in report.failed[0].detail and "erf" in report.failed[0].detail
+    assert "3 candidates: 2 judged, 1 unreadable" in report.failed[0].detail and "zeta" in report.failed[0].detail
     assert "docs/adapters.md#candidates" in report.failed[0].hint

@@ -1,11 +1,11 @@
 """Describe the suite's catalogs for the results site: every problem's ground-truth description length.
 
-For every catalog of the srbf suite, the description length (certified, f64 parse, default canon, in bits) of each
+For every catalog of the srbf suite, the description length as written (srbf.pricing.price_bits, in bits) of each
 problem's ground-truth expression, one problem per expression, in catalog order; a placeholder (an expression the
 catalog cannot realize) is null. The results explorer shows each catalog's size and the quartiles of these values
 (scripts/site_export_v2.py --sizes).
 
-  catalog_mu.py --out catalog_mu.json [--engine acj-5-4-llm] [--catalogs a,b,...]
+  catalog_mu.py --out catalog_mu.json [--engine acj2-5-4-llm] [--catalogs a,b,...]
 """
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ def describe(catalogs: list[str], engine_name: str, log: Callable[[str], None] =
             "n_pooled": int(pooled.size),
             "catalog_medians": {c: float(np.median([v for v in vs if v is not None])) for c, vs in per_catalog.items()
                                 if any(v is not None for v in vs)},
-            "pricing": f"certified f64 default-canon description length in bits, engine {engine_name}"}
+            "pricing": f"written description length in bits (srbf.pricing.price_bits), engine {engine_name}"}
 
 
 def main() -> int:
@@ -54,7 +54,7 @@ def main() -> int:
 
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--engine", default="acj-5-4-llm")
+    ap.add_argument("--engine", default="acj2-5-4-llm")
     ap.add_argument("--catalogs", default=",".join(SRBF_CATALOGS))
     a = ap.parse_args()
     out = describe([c for c in a.catalogs.split(",") if c], a.engine)

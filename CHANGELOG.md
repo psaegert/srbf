@@ -6,6 +6,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (SimpliPy 0.15)
+
+- **Requires SimpliPy 0.15, symbolic-data 0.19 and, for the flash-ansr adapters, flash-ansr 0.20.** SimpliPy 0.15
+  refuses every pre-0.15 rule file, so the judge's engine moves from `acj-5-4-llm` to `acj2-5-4-llm` (0.15's default,
+  rules to length 5) everywhere: `srbf table`, `srbf analyze`, the scaffold, `srbf check`, the shipped configs and the
+  docs. The test helper's small engine moves from `acj-4-3` to `acj2-4-llm`.
+- **The description length is the price of the formula as written** (`srbf.pricing.price_bits` calls SimpliPy 0.15's
+  `engine.written_complexity`: the engine's code book applied to the expression without simplifying it). MDL is
+  measured on the form exactly as written, for both sides: a ground truth as its catalog writes it (the prepared
+  formula, read by the engine's reader), and a prediction as the method returned it (its string read by the engine's
+  reader, or the prefix an in-process method returns), every stored candidate likewise. srbf never simplifies before
+  pricing; symbolic recovery still decides equivalence on canonical forms. A longer spelling of one function costs
+  more: `-x1 - x2` 17 bits against `-(x1 + x2)` 16, `x1*x1` 15 against `x1**2` 11.6, `2*x1 + 3*x1` 26.6 against
+  `5*x1` 12.6, and the written form can be the shorter one (`x1*x2/(4*pi*x3)`: 34.3 bits written, 35.3 canonical).
+  **MDL values are not comparable across the 0.15 bump, neither with earlier releases (canonical price, 0.14) nor
+  with the canonical 0.15 price: every row is re-priced** (ground_truth_mdl, predicted_mdl, the MDL ratio, the stored
+  candidates' bits, the `selection: {mode: mdl}` scores, the headline box's left edge, the results explorer's
+  catalog sizes and everything built on them).
+- **A square root is priced as written where the engine defines it.** An engine whose config declares
+  `defined_functions:` (`sqrt`, `cot`, `sec`, `csc` and their inverses) reads, prices and evaluates them with their
+  own heads: the candidate judge, the subprocess adapter, the E2E and NeSymReS adapters and the table keep `sqrt(u)`
+  (12 bits for a variable `u`). For an engine without the section srbf writes `rootn(u, 2)` as before (14.6 bits).
+  `srbf.spelling.written_arity(engine)` is the operators plus the defined functions; `srbf.spelling.spell_square_roots`
+  makes the one rewrite; `srbf.candidates.evaluate_prefix` evaluates a defined function as its definition
+  (`engine.to_realization`). The catalogs' square roots still reach srbf as `rootn(u, 2)` (symbolic-data's catalog
+  reader).
+- **The E2E adapter stores the expression E2E wrote**: its operator words are translated to infix symbols and nothing
+  else, where a SymPy round trip used to collect terms, fold numbers and print the constants to 15 digits before the
+  answer was stored and priced.
+- **A candidate the engine refuses to price is `unpriced` with the engine's reason** (`the engine does not price it:
+  ValueError: ...`); `price_bits(engine, prefix, refusals=[])` appends the refusal's first line and still returns NaN.
+- `explicit_constant_placeholders` lost `convert_numbers_to_constant=` (0.15 never converts numerals); the
+  decontamination probe drops the keyword.
+- Every judged number changes with the engine: the release re-judges every result once (the judge fingerprint names
+  the SimpliPy version and the engine).
+
 ### Added
 - **Setup before the clock, one rule for every method.** Anything that does not depend on the data may happen before
   the clock starts: loading weights, compiling, warming up on a fixed synthetic problem. This happens once per worker

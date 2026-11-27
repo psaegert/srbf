@@ -122,7 +122,7 @@ def main() -> int:
     ap.add_argument("--from-frozen", help="an existing frozen subset: nest the timing rows in its files")
     ap.add_argument("--subset-rule", default=DEFAULT_RULE)
     ap.add_argument("--experiments", help="comma-separated subset of the config's experiments (default: all)")
-    ap.add_argument("--engine", default="acj-5-4-llm", help="simplipy engine for a fresh (non-nested) freeze")
+    ap.add_argument("--engine", default="acj2-5-4-llm", help="simplipy engine for a fresh (non-nested) freeze")
     ap.add_argument("--check", action="store_true", help="verify --out-dir against its manifest and exit")
     a = ap.parse_args()
     out_dir = Path(a.out_dir)

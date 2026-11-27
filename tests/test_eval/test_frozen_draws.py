@@ -22,7 +22,7 @@ from srbf.frozen_draws import FrozenDrawsError, check_resume, noised
 from srbf.shards import merge_shards
 
 SETTINGS = {"n_support": 6, "n_validation": 4, "layout": "random", "max_trials": 100, "seed_root": "test",
-            "simplipy_engine": "acj-4"}
+            "simplipy_engine": "acj2-4-llm"}
 
 
 def _sha(path) -> str:
@@ -163,7 +163,7 @@ def _config(tmp_path, catalog, draws, output, **data_source):
     config = {"run": {"data_source": {"catalog": str(catalog), "sampling": {"n_support": 6, "n_validation": 4, "noise": 0.0},
                                       "draws": {"root": str(draws), "repeat": 1}, **data_source},
                       "model_adapter": {"type": "subprocess", "worker": "example", "python": sys.executable,
-                                        "simplipy_engine": "acj-4", "config_provenance": "harness_tuned", "timeout": 120},
+                                        "simplipy_engine": "acj2-4-llm", "config_provenance": "harness_tuned", "timeout": 120},
                       "runner": {"output": str(output), "save_every": 2}}}
     path = tmp_path / f"{output.stem}.yaml"
     path.write_text(yaml.safe_dump(config))
@@ -300,7 +300,7 @@ def test_reads_a_render_written_by_symbolic_data(tmp_path):
     path.write_text(yaml.safe_dump({"metadata": {"name": "toy", "version": 1}, "expressions": {
         "a": {"prepared": "v1 * v2 + 2.5", "vars": {"v1": dict(unit), "v2": dict(unit)}},
         "c": {"prepared": "1.5 * v1", "vars": {"v1": dict(unit)}, "per_run": {"params": {"c1": dict(unit)}, "prepared": "c1 * v1"}}}}))
-    settings = draws_module.DrawsSettings(n_support=16, n_validation=8, simplipy_engine="acj-4")
+    settings = draws_module.DrawsSettings(n_support=16, n_validation=8, simplipy_engine="acj2-4-llm")
     draws_module.render([str(path)], tmp_path / "draws", settings, log=lambda _: None)
     samples = list(CatalogSource.from_catalog(str(path), sampling={"n_support": 16, "noise": 0.1}, draws={"root": str(tmp_path / "draws")}))
     meta = draws_module.read_meta(tmp_path / "draws" / "toy" / "repeat-1.npz")

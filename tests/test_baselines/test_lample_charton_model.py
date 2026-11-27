@@ -9,7 +9,7 @@ from srbf.baselines.lample_charton_model import LampleChartonModel  # noqa: E402
 
 @pytest.fixture(scope="module")
 def simplipy_engine() -> SimpliPyEngine:
-    return SimpliPyEngine.load("acj-4-3", install=True)
+    return SimpliPyEngine.load("acj2-4-llm", install=True)
 
 
 def _build_toy_pool(engine: SimpliPyEngine) -> LampleChartonCatalog:

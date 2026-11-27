@@ -16,7 +16,7 @@ run:
     worker: dso
     python: '{{ROOT}}/envs/dso/bin/python'
     config_provenance: author_blessed
-    simplipy_engine: acj-5-4-llm
+    simplipy_engine: acj2-5-4-llm
     timeout: 7200
     hang_after_idle_s: 120      # a fit whose process tree idles 2 min is a hang: retried once in a fresh worker
     options:

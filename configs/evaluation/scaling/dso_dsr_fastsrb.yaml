@@ -15,7 +15,7 @@ run:
     worker: dso
     python: '{{ROOT}}/envs/dso/bin/python'
     config_provenance: upstream_default
-    simplipy_engine: acj-5-4-llm
+    simplipy_engine: acj2-5-4-llm
     timeout: 7200
     # Every fit runs in a fresh child process (docs/models.md), so DSO's reward pool is never forked from a process
     # that already runs threads. srbf's hang policy (docs/adapters.md) stays as a backstop: a hung problem is retried

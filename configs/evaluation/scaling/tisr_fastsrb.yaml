@@ -17,7 +17,7 @@ run:
     worker: tisr
     python: '{{ROOT}}/envs/tisr/bin/python'
     config_provenance: harness_tuned     # TiSR's defaults, but srbf picks its answer (selection): docs/fairness.md
-    simplipy_engine: acj-5-4-llm
+    simplipy_engine: acj2-5-4-llm
     timeout: 7200
     selection: {mode: mdl}
     options:

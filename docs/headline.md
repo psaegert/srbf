@@ -19,8 +19,9 @@ such as their samples or beams. A failed run hands in nothing.
 
 srbf's judge gives every candidate formula \(c\) two numbers:
 
-- \(L(c)\), its **length** in bits: the description length the SimpliPy engine prices it at, constants included
-  ([Metrics](metrics.md#predicted_mdl-ground_truth_mdl-mdl_ratio));
+- \(L(c)\), its **length** in bits: the description length the SimpliPy engine prices it at, constants included, on
+  the formula exactly as the method wrote it, nothing simplified
+  ([Metrics](metrics.md#formula-length-predicted_mdl-ground_truth_mdl-mdl_ratio));
 - \(F(c)\), its **error**: the FVU on the validation points, floored at \(\varepsilon = 2^{-52}\), the float64 machine
   epsilon, as for `log10_fvu_val` ([Metrics](metrics.md#log10_fvu_fit-log10_fvu_val)).
 
@@ -48,8 +49,9 @@ by a choice of weights: the box contains no exchange rate between length and err
 
 The simplest formula is a constant, and the constant that fits the support points best is their mean, whose FVU is 1
 by definition. \(L_{\mathrm{lo}}\) is the price of that formula: the mean of the support targets written as the
-shortest decimal that reads back as the same float64 number, priced by the same function as every prediction. With
-the suite's engine `acj-5-4-llm`, a mean of `3.5` costs 5.6 bits and a mean of `2.3333333333333335` costs 59.5 bits.
+shortest decimal that reads back as the same float64 number, priced as written by the same function as every
+prediction, every digit of that decimal paid for. With the suite's engine `acj-5-4-llm`, a mean of `3.5` costs 5.6
+bits and a mean of `2.3333333333333335` costs 59.5 bits.
 
 ### The right edge: writing the targets out
 
@@ -201,7 +203,8 @@ with its 95 % interval for these problem sets. Values are reported in %. Two hea
 ## In the package
 
 The definitions are `srbf.headline`, and every price goes through `srbf.pricing.price_bits`, the function the judge's
-MDL columns use:
+MDL columns use. It prices a candidate as written: the expression the method returned, read by the engine's reader,
+with nothing simplified (the data flow is in [Metrics](metrics.md#formula-length-predicted_mdl-ground_truth_mdl-mdl_ratio)):
 
 ```python
 from srbf.headline import average_over_problems, box_edges, budget_time, front_area, time_index

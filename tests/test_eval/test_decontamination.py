@@ -21,7 +21,7 @@ from srbf.decontamination import CatalogCoverage, DecontaminationReport, Problem
 
 @pytest.fixture(scope="module")
 def simplipy_engine() -> SimpliPyEngine:
-    return SimpliPyEngine.load("acj-4-3", install=True)
+    return SimpliPyEngine.load("acj2-4-llm", install=True)
 
 
 def _problem(skeleton, variables, *, eq_id, gt_kind=None):

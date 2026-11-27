@@ -9,7 +9,7 @@ import pytest
 
 from srbf.table import COLUMNS, ResultTree, build_table, judge_result_file, parse_index_bases
 
-ENGINE = "acj-4-3"
+ENGINE = "acj2-4-llm"
 
 
 @pytest.fixture(scope="module")
@@ -206,14 +206,14 @@ def test_a_new_worker_does_not_change_the_judge(tmp_path, monkeypatch):
     (pkg / "reporting.py").write_text("REPORT = 1\n")
     (pkg / "worker" / "models" / "one_worker.py").write_text("X = 1\n")
     monkeypatch.setattr(srbf, "__file__", str(pkg / "__init__.py"))
-    before = judge_fingerprint("acj-5-4-llm")
+    before = judge_fingerprint("acj2-5-4-llm")
     (pkg / "worker" / "models" / "another_worker.py").write_text("Y = 2\n")
     (pkg / "worker" / "models" / "one_worker.py").write_text("X = 3\n")
     (pkg / "rungs.py").write_text("RUNG_PREFIXES = ('choices', 'another_unit')\n")   # a new budget unit
     (pkg / "reporting.py").write_text("REPORT = 2\n")                                   # not judging code
-    assert judge_fingerprint("acj-5-4-llm") == before
+    assert judge_fingerprint("acj2-5-4-llm") == before
     (pkg / "result_processing.py").write_text("JUDGE = 2\n")
-    assert judge_fingerprint("acj-5-4-llm") != before
+    assert judge_fingerprint("acj2-5-4-llm") != before
 
 
 def test_sympy_spellings_in_a_stored_prediction_are_read_the_engine_way(tmp_path, engine):
@@ -232,6 +232,29 @@ def test_sympy_spellings_in_a_stored_prediction_are_read_the_engine_way(tmp_path
     rows = judge_result_file(path, method="m", engine=engine)
     assert _col(rows, "predicted_mdl") != ["", ""] and "" not in _col(rows, "predicted_mdl")   # priced
     assert _col(rows, "symbolic_recovery") == [1, 1]
+
+
+def test_a_square_root_the_engine_defines_is_priced_as_written(tmp_path, engine_defining_sqrt, engine_without_definitions):
+    """The same stored sqrt(x1*x2) and abs, judged by an engine whose config defines sqrt and by one that does not: the
+    first prices the root as written (sqrt's head, 6 bits), the second as rootn(u, 2) (8.585 bits more than u); both
+    find it to be the ground truth, which symbolic recovery reads in canonical form."""
+    x = np.linspace(0.5, 2.0, 16)
+    snap = _snapshot([["sqrt", "*", "x1", "x2"], ["abs", "x1"]])
+    snap["skeleton"] = [["rootn", "*", "x1", "x2", "<constant>"], ["abs", "x1"]]
+    snap["ground_truth_prefix"] = [["rootn", "*", "x1", "x2", "2"], ["abs", "x1"]]
+    y = [np.sqrt(x * x), np.abs(x)]
+    for key in ("y", "y_pred", "y_val", "y_pred_val"):
+        snap[key] = [v.copy() for v in y]
+    snap["predicted_expression_prefix"] = [["sqrt", "*", "x1", "x2"], ["Abs", "x1"]]
+    snap["predicted_skeleton_prefix"] = [["sqrt", "*", "x1", "x2"], ["Abs", "x1"]]
+    path = _write(tmp_path, "toy", "choices_000001.pkl", snap)
+    defined = judge_result_file(path, method="m", engine=engine_defining_sqrt)
+    plain = judge_result_file(path, method="m", engine=engine_without_definitions)
+    assert _col(defined, "symbolic_recovery") == [1, 1] == _col(plain, "symbolic_recovery")
+    assert _col(defined, "predicted_expression")[0] == "sqrt * x1 x2" and _col(plain, "predicted_expression")[0] == "rootn * x1 x2 2"
+    assert _col(defined, "predicted_mdl")[0] == 21.0 and _col(plain, "predicted_mdl")[0] == pytest.approx(23.585)
+    assert _col(defined, "ground_truth_mdl") == _col(plain, "ground_truth_mdl")      # the stored truth, as written
+    assert _col(defined, "predicted_mdl")[1] == _col(plain, "predicted_mdl")[1] == 12.0
 
 
 def test_a_prediction_the_spelling_cannot_walk_stays_as_written_and_the_file_is_judged(tmp_path, engine):

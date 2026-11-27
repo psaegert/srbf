@@ -36,9 +36,9 @@ def test_the_mean_is_written_as_the_shortest_round_trip_decimal():
 
 
 class _Engine:
-    """Prices a one-token number at 1000 milli-bits per character."""
+    """Prices a one-token number as written at 1000 milli-bits per character."""
 
-    def complexity(self, expression, certified=True, mode="f64", canon="default"):
+    def written_complexity(self, expression):
         return 1000 * sum(len(token) for token in expression)
 
 
@@ -52,7 +52,7 @@ def test_the_box_through_the_engine():
 
     from srbf.pricing import price_bits
 
-    engine = SimpliPyEngine.load("acj-4-3", install=True)
+    engine = SimpliPyEngine.load("acj2-4-llm", install=True)
     l_lo, l_hi = hl.box_edges(np.array([3.0, 4.0]), engine)
     assert l_lo == price_bits(engine, ["3.5"]) == pytest.approx(5.585) and l_hi == 52.0
 

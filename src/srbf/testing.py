@@ -52,7 +52,7 @@ def fit_once(
     worker: str | Path | None = None,
     python: str | None = None,
     options: Mapping[str, Any] | None = None,
-    engine: Any = "acj-4-3",
+    engine: Any = "acj2-4-llm",
     sample: EvaluationSample | None = None,
     timeout: float = 600.0,
 ) -> dict[str, Any]:

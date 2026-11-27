@@ -41,7 +41,7 @@ WORKER_ARMS = {
     'flash-ansr-v25.0-T8-3M-worker': 'psaegert/flash-ansr-v25.0-T8-3M',
 }
 WORKER_PYTHON = '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-WORKER_ENGINE = 'acj-5-4-llm'
+WORKER_ENGINE = 'acj2-5-4-llm'
 RESTART_LADDER = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 

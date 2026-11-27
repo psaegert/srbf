@@ -20,7 +20,7 @@ from srbf.worker import RUNNER_PATH, srbf_worker_helpers as helpers
 
 @pytest.fixture(scope="module")
 def engine() -> SimpliPyEngine:
-    return SimpliPyEngine.load("acj-4-3", install=True)
+    return SimpliPyEngine.load("acj2-4-llm", install=True)
 
 
 def _target(rows: np.ndarray) -> np.ndarray:

@@ -43,7 +43,7 @@ def main() -> int:
     ap.add_argument("--out", required=True)
     ap.add_argument("--ladder", default=",".join(map(str, LADDER)), help="iteration counts, bottom up")
     ap.add_argument("--guard-seconds", type=int, default=3600, help="PySR's timeout_in_seconds: a runaway guard, not the budget")
-    ap.add_argument("--engine", default="acj-5-4-llm", help="the SimpliPy engine PySR's answers are parsed with")
+    ap.add_argument("--engine", default="acj2-5-4-llm", help="the SimpliPy engine PySR's answers are parsed with")
     ap.add_argument("--save-every", type=int, default=8)
     ap.add_argument("--hang-after-idle-s", type=float, default=60.0, help="seconds without CPU activity that make a hang")
     ap.add_argument("--hang-overdue-factor", type=float, default=30.0, help="a fit is overdue after this many times the median answered fit of its unit")

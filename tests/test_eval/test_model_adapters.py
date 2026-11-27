@@ -434,6 +434,41 @@ class TestBaselineVariableDialect:
         # the engine stub tokenises without reordering, so this is E2E's own infix, mapped
         assert mapping["predicted_skeleton_prefix"] == ["x1", "+", "x2"]
 
+    def test_e2e_adapter_stores_the_expression_e2e_wrote(self) -> None:
+        """E2E writes its operators as words; srbf translates the notation and nothing else, so the stored answer is the
+        one E2E wrote and the judge prices it as written: (x_0 add x_0) mul 1.0 is not collected to 2.0*x1."""
+        from simplipy import SimpliPyEngine
+
+        class _Tree:
+            def infix(self):  # noqa: D401 - simple stub
+                return "((x_0 add x_0) mul 1.0)"
+
+        class _Estimator:
+            def fit(self, X, y, verbose=False):  # noqa: D401 - simple stub
+                return None
+
+            def predict(self, X):  # noqa: D401 - simple stub
+                return 2.0 * X[:, 0]
+
+            def retrieve_tree(self, with_infos=True):  # noqa: D401 - simple stub
+                return {"predicted_tree": _Tree()}
+
+        engine = SimpliPyEngine.load("acj2-4-llm", install=True)
+        adapter = model_adapters.E2EAdapter(model_path="unused", simplipy_engine=engine)
+        adapter._estimator = _Estimator()
+        sample = EvaluationSample(
+            x_support=np.ones((2, 1), dtype=float),
+            y_support=np.full((2, 1), 2.0),
+            x_validation=np.zeros((0, 1), dtype=float),
+            y_validation=np.zeros((0, 1), dtype=float),
+            metadata={"variables": ["v1"], "skeleton": ["*", "<constant>", "x1"]},
+        )
+
+        mapping = adapter.evaluate_sample(sample).to_mapping()
+
+        assert mapping["predicted_expression"] == "( ( x1 + x1 ) * 1.0 )"
+        assert mapping["predicted_expression_prefix"] == ["*", "+", "x1", "x1", "1.0"]
+
 
 class TestWorkerVariableDialect:
     """An out-of-process worker is told the problem's variable names and answers in them: PySR says

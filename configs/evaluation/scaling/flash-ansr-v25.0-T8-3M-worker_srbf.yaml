@@ -16,7 +16,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/fastsrb.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -74,7 +74,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/feynman.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -132,7 +132,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/feynman-bonus.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -190,7 +190,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/srsd-dummy.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -248,7 +248,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/erbench-syneq.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -306,7 +306,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/erbench-densities.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -364,7 +364,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/erbench-phybench.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -422,7 +422,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/soose-fc.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -480,7 +480,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/soose-nc.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -538,7 +538,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/soose-wc.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -596,7 +596,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/physo-astro.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -654,7 +654,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/physo-class.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -712,7 +712,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/nguyen.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -770,7 +770,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/keijzer.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -828,7 +828,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/korns.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -886,7 +886,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/koza.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -944,7 +944,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/livermore.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -1002,7 +1002,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/livermore2.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -1060,7 +1060,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/vladislavleva.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -1118,7 +1118,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/jin.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -1176,7 +1176,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/neat.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -1234,7 +1234,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/pagie.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -1292,7 +1292,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/poly.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -1350,7 +1350,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/nonic.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -1408,7 +1408,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/sine.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -1466,7 +1466,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/meier.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -1524,7 +1524,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/r-rationals.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -1582,7 +1582,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/constant.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'
@@ -1640,7 +1640,7 @@ experiments:
       config_provenance: author_blessed
       type: flash_ansr_worker
       python: '{{ROOT}}/envs/flash-ansr-0.19/bin/python'
-      simplipy_engine: acj-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
+      simplipy_engine: acj2-5-4-llm     # the judge's engine; the checkpoint keeps its own in its environment
       precision: auto
       worker_log: '{{ROOT}}/results/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker/worker_logs/grammarvae.log'
       model_path: '{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M'

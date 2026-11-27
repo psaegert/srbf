@@ -249,15 +249,38 @@ one the ground truth needs.
 | `n_constants_delta` | predicted minus true number of constants; positive means excess free parameters |
 | `total_nestedness`, `predicted_total_nestedness` | the most functions of one argument on any path from the root to a leaf: `sin(x)` counts 1, `sin(cos(x))` 2, `sin(x) + cos(x)` 1, `sin(x + cos(y))` 2. `neg` and `inv`, SimpliPy's spelling of subtraction and division, do not count, and powers and roots are binary operators |
 
-### `predicted_mdl`, `ground_truth_mdl`, `mdl_ratio`
+### Formula length: `predicted_mdl`, `ground_truth_mdl`, `mdl_ratio`
 
-The description length of an expression, with its constants, as priced by the SimpliPy engine
-(`engine.complexity`), in bits. Unlike a token count it charges a long constant
-more than a short one: with `acj-5-4-llm`, `x1` costs 6 bits, `sin(x1)` 12 bits, `x1 + 1.5` 13.6
-bits and `x1 + 3.14159` 30.8 bits. `mdl_ratio` is the prediction's length over the ground truth's; 1 is as
-long as the ground truth. These columns need an engine and are added only when `derive_metrics` is given
-one. Every price srbf computes goes through one function, `srbf.pricing.price_bits`; the same price places a run's
-candidates in the box of the [headline index](headline.md).
+The description length of an expression exactly as it is written, with its constants, in bits: the SimpliPy
+engine's written price (`engine.written_complexity`), its code book applied to the expression without simplifying
+it. Unlike a token count it charges a long constant more than a short one: with `acj2-5-4-llm`, `x1` costs 6 bits,
+`sin(x1)` 12 bits, `x1 + 1.5` 13.6 bits and `x1 + 3.14159` 30.8 bits. Since nothing is simplified, a longer way of
+writing the same function costs more: `-x1 - x2` costs 17 bits and `-(x1 + x2)` 16, `x1 * x1` 15 bits and `x1 ** 2`
+11.6, `2*x1 + 3*x1` 26.6 bits and `5*x1` 12.6. The canonical form is not always the shorter one:
+`x1*x2/(4*pi*x3)` costs 34.3 bits as written and 35.3 in the engine's canonical form, which spreads the reciprocal
+over the factors. `mdl_ratio` is the prediction's length over the ground truth's; 1 is as long as the ground truth.
+These columns need an engine and are added only when `derive_metrics` is given one.
+
+Both sides are priced in the form they were written in:
+
+| column | the expression that is priced |
+|---|---|
+| `predicted_mdl` | the method's answer as it returned it: the string read by the engine's reader (`engine.read_infix`), or the prefix tokens an in-process method returns, with the variables renamed to the ground truth's `x1, x2, ...` |
+| `ground_truth_mdl` | the formula as the benchmark's catalog writes it (its `prepared` expression), read by the same reader, with the values of the run written in where the catalog draws them per run |
+
+The reading changes the notation and nothing else: `x1^2`, `x1**2` and `pow(x1, 2)` are one expression, SymPy's
+`Abs` is `abs` and its `E` is the constant `e`. The square root is the one function whose spelling depends on the
+engine. An engine whose config defines it (`defined_functions:`, which declares `sqrt` with `cot`, `sec`, `csc` and
+their inverses) reads `sqrt(u)` and prices it as written, at 12 bits for a variable `u`; for an engine without that
+section srbf writes it `rootn(u, 2)`, the operator the engine has, at 14.6 bits. The catalogs' square roots reach
+srbf as `rootn(u, 2)`, the spelling symbolic-data gives them when it reads a catalog.
+
+Every price srbf computes goes through one function, `srbf.pricing.price_bits`: these columns, the price of every
+stored candidate, the `selection: {mode: mdl}` rule for a worker's candidates
+([Adapters](adapters.md)) and the box of the [headline index](headline.md). srbf never simplifies an expression before
+pricing it; the canonical forms belong to [symbolic agreement](#symbolic-agreement), which asks whether two
+expressions are one function. An expression the engine refuses to price, such as a function it neither declares nor
+defines, has no length: the column is empty, and a stored candidate is `unpriced`, with the engine's reason.
 
 ## What the method reports itself
 

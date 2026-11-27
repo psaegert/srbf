@@ -19,7 +19,7 @@ experiments:
       worker: operon
       python: '{{ROOT}}/envs/operon/bin/python'
       config_provenance: harness_tuned
-      simplipy_engine: acj-5-4-llm
+      simplipy_engine: acj2-5-4-llm
       timeout: 7200
       options:
         max_evaluations: 1000000
@@ -48,7 +48,7 @@ experiments:
       worker: operon
       python: '{{ROOT}}/envs/operon/bin/python'
       config_provenance: harness_tuned
-      simplipy_engine: acj-5-4-llm
+      simplipy_engine: acj2-5-4-llm
       timeout: 7200
       options:
         max_evaluations: 1000000

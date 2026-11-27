@@ -15,7 +15,7 @@ run:
     worker: bingo
     python: '{{ROOT}}/envs/bingo/bin/python'
     config_provenance: author_blessed
-    simplipy_engine: acj-5-4-llm
+    simplipy_engine: acj2-5-4-llm
     timeout: 7200
     options:
       max_evals: !sweep

@@ -54,7 +54,7 @@ srbf check: bench/adapters/mymethod/config.yaml
   ok   worker: .../bench/adapters/mymethod/worker.py
   ok   python: .../bin/python
   ok   options: {}
-  ok   engine: acj-5-4-llm in 5.5s
+  ok   engine: acj2-5-4-llm in 5.5s
   ok   catalog: fastsrb: 2 problem(s) in 1.8s
   ok   adapter: subprocess ready in 6.0s; worker info {"worker": "mymethod", "numpy": "2.5.2", ...}
   ok   fit: II.38.3: -1.451171665650517e-06*x1 + -0.09355526213720297*x2 + 0.06288670740... | fit 0.01s | FVU val 0.935 | not recovered

@@ -153,8 +153,7 @@ def _probe_rendering(training: LampleChartonCatalog, tokens: Sequence[str]) -> t
 
     try:
         realized = engine.operators_to_realizations(prototype)
-        with_placeholders, constants = explicit_constant_placeholders(
-            realized, inplace=True, convert_numbers_to_constant=False)
+        with_placeholders, constants = explicit_constant_placeholders(realized, inplace=True)
         code_string = engine.prefix_to_infix(with_placeholders, realization=True)
         code = codify(code_string, list(training.variables) + constants)
     except Exception as exc:  # noqa: BLE001 - an unrealizable probe is UNVERIFIED, fail-closed

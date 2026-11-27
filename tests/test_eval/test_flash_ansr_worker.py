@@ -23,7 +23,7 @@ def _block(**extra):
     """A flash_ansr block as the scaling configs write it."""
     block = {
         "type": "flash_ansr_worker", "config_provenance": "author_blessed",
-        "python": "{{ROOT}}/envs/flash-ansr-0.19/bin/python", "simplipy_engine": "acj-5-4-llm",
+        "python": "{{ROOT}}/envs/flash-ansr-0.19/bin/python", "simplipy_engine": "acj2-5-4-llm",
         "model_path": "{{ROOT}}/models/psaegert/flash-ansr-v25.0-T8-3M",
         "emission": "fittable", "refine_scope": "fittable", "constant_ladder": True, "complexity": "none", "device": "cuda",
         "evaluation_config": {
@@ -105,7 +105,8 @@ def test_the_type_needs_no_flash_ansr_in_srbfs_environment():
         f"block = {_block()!r}\n"
         "print(type(c.build_model_adapter(block)).__name__)\n")
     done = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=300,
-                          env={**os.environ, "SRBF_ROOT": "/bench", "PYTHONPATH": str(ROOT / "src")})
+                          env={**os.environ, "SRBF_ROOT": "/bench",
+                               "PYTHONPATH": os.pathsep.join(filter(None, [str(ROOT / "src"), os.environ.get("PYTHONPATH")]))})
     assert done.returncode == 0, done.stderr[-2000:]
     assert done.stdout.strip().splitlines()[-1] == "SubprocessAdapter"
 
@@ -124,7 +125,7 @@ def test_prefix_to_infix_renames_leaves_and_spells_constants_and_signs():
 
 def test_prefix_to_infix_round_trips_through_the_judge():
     from simplipy import SimpliPyEngine
-    engine = SimpliPyEngine.load("acj-5-4-llm", install=True)
+    engine = SimpliPyEngine.load("acj2-5-4-llm", install=True)
     for tokens in (["+", "*", "-1.5", "x1", "-", "pow", "x2", "-0.5", "*", "np.pi", "sin", "x1"],
                    ["rootn", "abs", "neg", "x1", "3"], ["/", "inv", "x2", "-", "x1", "-2.5e-17"],
                    ["exp", "*", "np.e", "atanh", "tanh", "x1"]):
@@ -271,7 +272,7 @@ def test_the_real_checkpoint_answers_in_its_own_interpreter():
     block = _block(model_path=model, device="cpu", refiner_workers=2,
                    evaluation_config={**_block()["evaluation_config"], "device": "cpu"})
     options = run_config.flash_ansr_settings(block)
-    adapter = SubprocessAdapter(worker="flash_ansr", python=python, simplipy_engine=SimpliPyEngine.load("acj-5-4-llm", install=True),
+    adapter = SubprocessAdapter(worker="flash_ansr", python=python, simplipy_engine=SimpliPyEngine.load("acj2-5-4-llm", install=True),
                                 options={k: options[k] for k in ("model_path", "generation", "refine", "ranking", "compute",
                                                                  "complexity", "device")} | {"seed": 0},
                                 env={"CUDA_VISIBLE_DEVICES": ""})

@@ -18,7 +18,7 @@ run:
     worker: gpgomea
     python: '{{ROOT}}/envs/gpgomea/bin/python'
     config_provenance: author_blessed
-    simplipy_engine: acj-5-4-llm
+    simplipy_engine: acj2-5-4-llm
     timeout: 9600
     options:
       threads: all              # every method gets the whole reference machine (owner 2026-09-30)

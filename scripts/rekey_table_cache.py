@@ -11,7 +11,7 @@ the installed srbf and compares their rows with the carried ones. Any difference
 carried links stay, so delete them (or the cache) before the next table.
 
   rekey_table_cache.py --cache DIR --from FINGERPRINT --tree METHOD:DRAW:PATH [--tree ...]
-      [--index-variables METHOD=FIRST ...] [--engine acj-5-4-llm] [--max-rung R] [--check N]
+      [--index-variables METHOD=FIRST ...] [--engine acj2-5-4-llm] [--max-rung R] [--check N]
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from srbf.table import (ResultTree, _cache_key, _cache_load, _cache_path, _worke
                         judge_result_file, parse_index_bases, result_files)
 
 
-def rekey(trees: list[ResultTree], cache_dir: str, old: str, engine: str = "acj-5-4-llm",
+def rekey(trees: list[ResultTree], cache_dir: str, old: str, engine: str = "acj2-5-4-llm",
           max_rung: int | None = None) -> dict:
     """Link every file's entry under fingerprint ``old`` to its key under the current one.
 
@@ -87,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--from", dest="old", required=True, metavar="FINGERPRINT", help="the fingerprint the entries were judged with")
     ap.add_argument("--tree", action="append", required=True, metavar="METHOD:DRAW:PATH")
     ap.add_argument("--index-variables", action="append", default=None, metavar="METHOD=FIRST")
-    ap.add_argument("--engine", default="acj-5-4-llm")
+    ap.add_argument("--engine", default="acj2-5-4-llm")
     ap.add_argument("--max-rung", type=int, default=None)
     ap.add_argument("--check", type=int, default=0, metavar="N", help="judge N carried files afresh and compare")
     a = ap.parse_args(argv)

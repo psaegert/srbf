@@ -178,7 +178,7 @@ RELEASE_VERSIONS = ("PySR: version 2.3.0, with SymbolicRegression.jl 2.4.0. ",
                     ("dsr", "DSR and uDSR*: DSO 3.0.0 (deep-symbolic-optimization), with three fixes srbf documents. "),
                     ("rilsrols", "RILS-ROLS: version 1.6.7, the release its authors submitted to SRBench. "),
                     ("qlattice", "QLattice: feyn 3.5.0 (community edition, for non-commercial use). "),
-                    "Simplification: SimpliPy (a formula-simplification library), with its rule set acj-5-4-llm.")
+                    "Simplification: SimpliPy (a formula-simplification library), with its rule set acj2-5-4-llm.")
 
 
 def release_versions(keys: Any) -> str:
@@ -267,7 +267,7 @@ METRICS = [
      "down to -100 %: the share of the best error it saves. Problems without held-out points have no value."),
     # ---- comparisons of the prediction with the ground truth ----
     ("mdl_ratio", "MDL Ratio", "MDL Ratio", "Size Compared to the Ground Truth", "cont", None, "main", "ratio", (-4.0, 4.0, "log2"),
-     "The length of the predicted formula in bits divided by the length of the true formula. Length in bits (MDL, minimum description length) is how many bits it takes to write the formula down, including the digits of its numbers, measured by SimpliPy after simplification. 1 means as long as the true formula, 2 twice as long. Means are taken on a log scale, so ×2 and ×0.5 cancel. Flash-ANSR picks its prediction with this same length measure."),
+     "The length of the predicted formula in bits divided by the length of the true formula. Length in bits (MDL, minimum description length) is how many bits it takes to write the formula down, including the digits of its numbers, measured by SimpliPy on each formula exactly as written, nothing simplified. 1 means as long as the true formula, 2 twice as long. Means are taken on a log scale, so ×2 and ×0.5 cancel."),
     ("expr_length_ratio", "Token Count Ratio", "Token Ratio", "Size Compared to the Ground Truth", "cont", None, "main", "ratio", (-4.0, 4.0, "log2"),
      "The number of symbols in the predicted formula divided by the number in the simplified true formula; every operator, variable and number counts as one symbol. 1 means the same length. Means are taken on a log scale, so ×2 and ×0.5 cancel."),
     ("expr_length_ratio_abserr", "Token Count Mismatch", "|log2 Ratio|", "Size Compared to the Ground Truth", "cont", False, "more", "num2", (0.0, 4.0, None),
@@ -298,9 +298,9 @@ METRICS = [
      "The cost of turning the predicted formula's tree into the simplified true formula's tree by inserting, deleting or renaming nodes (Zhang-Shasha tree edit distance). In such a tree each operator is a node, and its arguments are its children. The cost follows the spelling of the node names: each step costs the number of characters it changes, so deleting sin costs 3 and renaming sin to tan costs 2."),
     # ---- properties of ONE expression, the prediction or the ground truth: no comparison ----
     ("predicted_mdl", "MDL of the Prediction", "Prediction MDL", "Expression Properties", "cont", False, "more", "num1", (0.0, 256.0, None),
-     "The length of the predicted formula in bits: how many bits it takes to write the formula down (MDL, minimum description length), measured by SimpliPy after simplification."),
+     "The length of the predicted formula in bits: how many bits it takes to write the formula down (MDL, minimum description length), measured by SimpliPy on the formula exactly as the method wrote it, nothing simplified."),
     ("ground_truth_mdl", "MDL of the Ground Truth", "GT MDL", "Expression Properties", "cont", None, "more", "num1", (0.0, 256.0, None),
-     "The length of the true formula in bits, measured the same way."),
+     "The length of the true formula in bits, measured the same way, on the formula as its benchmark writes it."),
     ("predicted_skeleton_prefix_length", "Token Count of the Prediction", "Prediction Tokens", "Expression Properties", "cont", False, "more", "num1", (0.0, 64.0, None),
      "The number of symbols in the predicted formula; every operator, variable and number counts as one."),
     ("skeleton_length", "Token Count of the Ground Truth", "GT Tokens", "Expression Properties", "cont", None, "more", "num1", (0.0, 64.0, None),
@@ -1703,7 +1703,7 @@ def main() -> None:
     ap.add_argument("out")
     ap.add_argument("--title", default=None)
     ap.add_argument("--notes", default="")
-    ap.add_argument("--engine", default="acj-5-4-llm", help="the SimpliPy engine the judge used (srbf table's default): the ground truths' canonical forms")
+    ap.add_argument("--engine", default="acj2-5-4-llm", help="the SimpliPy engine the judge used (srbf table's default): the ground truths' canonical forms")
     ap.add_argument("--sizes", default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results-site", "data", "catalog_mu.json"),
                     help="every catalog's ground-truth description lengths (scripts/catalog_mu.py; default: results-site/data/catalog_mu.json)")
     ap.add_argument("--site-dir", default=None, help="results-site directory (default: two levels above out.js); the private overlay's base path is relative to it (the release's is data/<release>/)")
