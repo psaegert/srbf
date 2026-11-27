@@ -55,6 +55,10 @@ BUILTIN_WORKERS: dict[str, Path] = {
 #: Seconds between two looks at a worker while a request is in flight, and how long a worker that has exited is
 #: given to deliver a reply it may have written just before it went.
 _POLL_S = 2.0
+#: Seconds a worker whose socket has closed is given to finish exiting, so that its exit code can be read. A dying
+#: process's files, its socket among them, are closed before it can be reaped, so srbf can see the end of the stream
+#: while the process is not yet reaped (it takes milliseconds).
+_REAP_S = 2.0
 
 #: Process groups of the workers this interpreter started and has not reaped yet. A worker runs in a group of its
 #: own so that what it forked can be killed with it: a pool child that outlives its parent keeps the worker's socket
@@ -432,8 +436,7 @@ class WorkerProcess:
                                 f"no CPU activity: {self.last_window_cpu_s:.2f} CPU s in the last {window:.0f} s")) from None
                 continue
             if line is None:
-                code = self._proc.poll() if self._proc is not None else None
-                raise WorkerCrashed(self._describe(f"worker exited (returncode {code})"))
+                raise WorkerCrashed(self._describe(f"worker exited (returncode {self._exit_code()})"))
             try:
                 message = json.loads(line)
             except ValueError:
@@ -445,6 +448,16 @@ class WorkerProcess:
             if kind == expect:
                 return message
             self._output.append(f"[protocol] unexpected message {kind!r} while waiting for {expect!r}")
+
+    def _exit_code(self) -> int | None:
+        """The exit code of a worker whose socket has closed, once it has finished exiting (within :data:`_REAP_S`);
+        None for one that closed its socket and lives on."""
+        if self._proc is None:
+            return None
+        try:
+            return self._proc.wait(timeout=_REAP_S)
+        except subprocess.TimeoutExpired:
+            return None
 
     def request(self, payload: Mapping[str, Any], timeout: float | None, overdue_s: float | None = None) -> dict[str, Any]:
         """Send one ``fit`` request and return its ``result`` (a worker-side error is inside it)."""

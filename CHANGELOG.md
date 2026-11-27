@@ -129,6 +129,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `precision=2`), so the table priced and judged a rounded formula while `y_pred` came from the exact constants. The
   answer is written as its candidate is, each constant the shortest string that reads back as the same float, and
   evaluates to `y_pred`.
+- **A worker that crashes is recorded with its exit code.** A dying process's socket closes before the process can be
+  reaped, so srbf could see the end of the stream first and record `worker exited (returncode None)`. srbf now waits
+  up to two seconds for the worker to finish exiting before it reads the code.
 - **Results site: the interval of a rate average near 0 % and 100 %.** The beta-binomial average's interval was the
   delta method on the log-odds, which fails where many problem sets sit at 0 % or 100 %: one success in 6,660 problems
   (E2E, Symbolic Recovery at 8 candidates) showed 0.05 % with an interval of 0 % to 88 %, and 104 of the 2026-09
