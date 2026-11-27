@@ -114,6 +114,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (storage key .9), so an earlier visit cannot keep the old default.
 
 ### Fixed
+- **The sampling and enumeration baselines record their answer at full precision.** `predicted_expression` and
+  `predicted_expression_prefix` carried the constants rounded to two decimals (`get_expression`'s former default
+  `precision=2`), so the table priced and judged a rounded formula while `y_pred` came from the exact constants. The
+  answer is written as its candidate is, each constant the shortest string that reads back as the same float, and
+  evaluates to `y_pred`.
 - **Results site: the interval of a rate average near 0 % and 100 %.** The beta-binomial average's interval was the
   delta method on the log-odds, which fails where many problem sets sit at 0 % or 100 %: one success in 6,660 problems
   (E2E, Symbolic Recovery at 8 candidates) showed 0.05 % with an interval of 0 % to 88 %, and 104 of the 2026-09

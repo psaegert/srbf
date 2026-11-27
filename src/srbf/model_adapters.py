@@ -360,8 +360,9 @@ def _evaluate_refiner_baseline(model: Any, sample: EvaluationSample) -> Evaluati
         return EvaluationResult(record)
 
     try:
-        predicted_expression = model.get_expression(nth_best=0, return_prefix=False)
-        predicted_prefix = model.get_expression(nth_best=0, return_prefix=True)
+        # constants at full precision: the recorded answer evaluates to y_pred, as its candidate below does
+        predicted_expression = model.get_expression(nth_best=0, return_prefix=False, precision=None)
+        predicted_prefix = model.get_expression(nth_best=0, return_prefix=True, precision=None)
         record["predicted_expression"] = predicted_expression
         record["predicted_expression_prefix"] = normalize_expression(predicted_prefix)
         record["predicted_skeleton_prefix"] = normalize_skeleton(predicted_prefix)
