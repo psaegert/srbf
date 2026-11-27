@@ -118,6 +118,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   catalog, as before; a subset must be a non-empty name without "/" (the site keys a subset's cells
   `<catalog>/<subset>`). The judged rows and the per-file cache hold neither column (`srbf.table.CATALOG_COLUMNS`).
   `srbf analyze -c` gives a snapshot without the column its catalog's subsets (by `eval_row_index`).
+- **The time axis nests each problem in its own subset.** `scripts/site_timing.py` averages the seconds per problem
+  over benchmarks > subsets by the problems' subsets (`over_sets(..., subsets=)`), as every other metric is averaged,
+  no longer by catalog: `scripts/freeze_timing_subset.py` records each catalog's `subsets` in the timing manifest
+  (`names`, and `rows` for more than one), a subset ladder's row is placed by its `source_row_index` and a whole-suite
+  row by its `eval_row_index`. A manifest that records no subsets for a catalog makes it one subset, the time of the
+  catalogs nested within their benchmarks to the last bit.
 - **Averages have three levels: benchmarks > subsets > problems** (nested random effects). Within a benchmark, problems
   sit in subsets: the parts its authors published it in (a problem's `subset`, from its rows), else the catalogs it is
   stored in. The structure is fixed by the data, never chosen by looking at results; the spread between benchmarks and

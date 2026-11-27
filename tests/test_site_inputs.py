@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "scripts"))
 _SPEC = importlib.util.spec_from_file_location("site_timing", Path(__file__).parents[1] / "scripts" / "site_timing.py")
@@ -60,6 +61,56 @@ def test_the_catalogs_the_manifest_places_in_one_benchmark_are_its_subsets(tmp_p
     apart = site_timing.build(dict(manifest, catalogs={c: {k: v for k, v in m.items() if k != "benchmark"}
                                                        for c, m in catalogs.items()}), {"m": sub}, {}, "niter_{rung:05d}.pkl")
     assert apart["m"] == {"1": over_catalogs([1.0, 3.0], [10.0, 10.0], [0.5, 0.7])} != timing["m"]
+
+
+def test_the_time_nests_each_problem_in_the_subset_the_manifest_records_for_its_row(tmp_path: Path) -> None:
+    """Seconds per problem average over benchmarks > subsets as every other metric does: a subset ladder's row j is
+    the catalog's row source_row_index[j], a whole-suite row its eval_row_index, and each takes the subset the manifest
+    records for that row of the catalog (scripts/freeze_timing_subset.py's "subsets")."""
+    from site_random_effects import SetStat, combine_nested
+
+    catalogs = {"big": {"size": 6, "count": 4, "weight": 0.75, "benchmark": "b", "source_row_index": [0, 2, 3, 5],
+                        "subsets": {"names": ["easy", "hard"], "rows": [0, 0, 0, 1, 1, 1]}},
+                "small": {"size": 2, "count": 2, "weight": 0.25, "benchmark": "b", "subsets": {"names": ["small"]}},
+                "other": {"size": 2, "count": 2, "weight": 0.2}}
+    manifest = dict(MANIFEST, total_problems=8, catalogs=catalogs)
+    sub = tmp_path / "sub"
+    _write(sub, "big", "choices_000001.pkl", [1.0, 2.0, 9.0, 11.0])          # catalog rows 0, 2 easy; 3, 5 hard
+    _write(sub, "small", "choices_000001.pkl", [4.0, 5.0])
+    _write(sub, "other", "choices_000001.pkl", [0.5, 0.7])
+    timing = site_timing.build(manifest, {"m": sub}, {}, "niter_{rung:05d}.pkl")
+
+    def stat(xs):
+        t = np.asarray(xs)
+        return SetStat(t.size, float(t.sum()), float((t * t).sum()))
+    want = combine_nested([[stat([1.0, 2.0]), stat([9.0, 11.0]), stat([4.0, 5.0])], [stat([0.5, 0.7])]], "normal").mu
+    assert timing["m"] == {"1": round(want, 4)}
+    by_catalog = site_timing.over_sets({"big": np.asarray([1.0, 2.0, 9.0, 11.0]), "small": np.asarray([4.0, 5.0]),
+                                        "other": np.asarray([0.5, 0.7])}, {"big": "b", "small": "b"})
+    assert round(by_catalog, 4) != timing["m"]["1"]                          # the row subsets move the number
+    # a whole-suite rung: every row of the catalog, by its eval_row_index
+    suite = tmp_path / "suite"
+    _write(suite, "big", "niter_00001.pkl", [1.0, 1.5, 2.0, 9.0, 10.0, 11.0])
+    _write(suite, "small", "niter_00001.pkl", [4.0, 5.0])
+    _write(suite, "other", "niter_00001.pkl", [0.5, 0.7])
+    whole = site_timing.build(manifest, {}, {"s": suite}, "niter_{rung:05d}.pkl")
+    want = combine_nested([[stat([1.0, 1.5, 2.0]), stat([9.0, 10.0, 11.0]), stat([4.0, 5.0])], [stat([0.5, 0.7])]], "normal").mu
+    assert whole["s"] == {"1": round(want, 4)}
+
+
+def test_a_catalog_without_recorded_subsets_is_one_subset_bit_for_bit() -> None:
+    """Without the manifest's subsets the time is the nesting of catalogs within benchmarks, to the last bit."""
+    from site_random_effects import SetStat, combine_nested, nest_sets
+
+    times = {"big": np.asarray([1.0, 3.0, 2.5]), "small": np.asarray([10.0, 10.5]), "other": np.asarray([0.5, 0.7])}
+    benchmarks = {"big": "b", "small": "b"}
+    stats = {c: SetStat(int(t.size), float(t.sum()), float((t * t).sum())) for c, t in times.items()}
+    want = combine_nested(nest_sets(stats, benchmarks), "normal").mu
+    assert site_timing.over_sets(times, benchmarks) == want
+    labels = {c: np.asarray([c] * t.size, dtype=object) for c, t in times.items()}
+    assert site_timing.over_sets(times, benchmarks, labels) == want
+    with pytest.raises(ValueError, match="2 subsets for 3 times"):
+        site_timing.over_sets(times, benchmarks, {"big": ["x", "y"]})
 
 
 def test_a_failed_fit_is_left_out_of_the_time(tmp_path: Path) -> None:
@@ -138,3 +189,19 @@ def test_rungs_wider_than_the_padding_are_found(tmp_path) -> None:
     assert site_timing.rungs_in(tmp_path, "evals_{rung:07d}.pkl") == [8388608, 16777216, 268435456]
     assert site_timing.rungs_in(tmp_path, "choices_{rung:06d}.pkl") == [1234567]
     assert site_timing.rungs_in(tmp_path, "evals_{rung}.pkl") == [8388608, 16777216, 268435456]
+
+
+def test_the_timing_manifest_records_a_catalogs_subsets_compactly() -> None:
+    """scripts/freeze_timing_subset.py writes the names, and each row's index into them when there are several; what
+    it writes, site_timing reads back row by row."""
+    spec = importlib.util.spec_from_file_location("freeze_timing_subset", Path(__file__).parents[1] / "scripts" / "freeze_timing_subset.py")
+    freeze = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(freeze)
+    rec = freeze.subset_record(["easy", "easy", "hard", "easy"], "srsd")
+    assert rec == {"names": ["easy", "hard"], "rows": [0, 0, 1, 0]}
+    assert freeze.subset_record(None, "gone") == {"names": ["gone"]} == freeze.subset_record(["gone"] * 3, "gone")
+    of = site_timing.subset_of_row("srsd", {"subsets": rec})
+    assert [of(r) for r in range(4)] == ["easy", "easy", "hard", "easy"]
+    assert site_timing.subset_of_row("nguyen", {})(7) == "nguyen"
+    with pytest.raises(ValueError, match="row 4 is not among its 4 problems"):
+        of(4)

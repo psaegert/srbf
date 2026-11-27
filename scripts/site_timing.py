@@ -6,11 +6,11 @@ measurement, both read from result files:
   * a timing ladder on the frozen subset (scripts/freeze_timing_subset.py);
   * a method evaluated on the whole suite on the reference machine itself.
 
-Either way the rung's seconds are each benchmark's mean fit time over the problems it answered, averaged over the
-benchmarks like every other number on the site (owner 2026-09-27: random effects, scripts/site_random_effects.py), so
-no benchmark decides the time on its own. A benchmark split over several catalogs is one set (the manifest's
-"benchmark" of each catalog, written by scripts/freeze_timing_subset.py from the catalogs' metadata; a catalog without
-one is a benchmark of its own).
+Either way the rung's seconds are the mean fit time over the problems answered, averaged over benchmarks > subsets
+like every other number on the site (random effects, scripts/site_random_effects.py), so no benchmark decides the time
+on its own. The manifest records each catalog's benchmark ("benchmark") and the subset of each of its problems
+("subsets"), both written by scripts/freeze_timing_subset.py from the catalogs; a catalog without them is a benchmark
+of its own and one subset.
 
 A rung is timed only once it is complete: every catalog has its file with every problem (the subset's count, or the
 catalog's full size). Failed problems do not count towards the time: a row with an error, prediction_success False, or
@@ -38,7 +38,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from site_random_effects import SetStat, combine_nested, nest_sets  # noqa: E402
+from site_random_effects import SetStat, combine_nested  # noqa: E402
 from timing_readout import load_rung  # noqa: E402
 
 import numpy as np  # noqa: E402
@@ -48,20 +48,60 @@ NOTE = ("Measured on one workstation (16 CPU cores, one RTX 4090 GPU), one metho
         "as in every other average on the site.")
 
 
-def over_sets(per_catalog: dict[str, Any], benchmarks: dict[str, str] | None = None) -> float | None:
-    """The seconds per problem: the mean over the answered (finite) problems, averaged over benchmarks > catalogs as
+def over_sets(per_catalog: dict[str, Any], benchmarks: dict[str, str] | None = None,
+              subsets: dict[str, Any] | None = None) -> float | None:
+    """The seconds per problem: the mean over the answered (finite) problems, averaged over benchmarks > subsets as
     every average on the site (srbf.aggregate.combine_nested). ``per_catalog`` holds each catalog's times;
-    ``benchmarks`` maps a catalog to its benchmark (a catalog it does not name is a benchmark of its own), and the
-    catalogs of one benchmark are its subsets."""
-    stats = {c: SetStat(int(t.size), float(t.sum()), float((t * t).sum()))
-             for c, t in ((c, np.asarray(x, float)) for c, x in per_catalog.items()) if t.size}
-    c = combine_nested(nest_sets(stats, benchmarks or {}), "normal")
-    return None if c is None else c.mu
+    ``benchmarks`` maps a catalog to its benchmark (a catalog it does not name is a benchmark of its own), and
+    ``subsets`` a catalog to the subset of each of its times (aligned with them; a catalog it does not name is one
+    subset, named after itself). Times of one benchmark and one subset name are one subset, whichever catalog holds
+    them."""
+    groups: dict[str, dict[str, list[np.ndarray]]] = {}
+    for c, x in per_catalog.items():
+        t = np.asarray(x, float)
+        if not t.size:
+            continue
+        subs = groups.setdefault((benchmarks or {}).get(c, c), {})
+        labels = (subsets or {}).get(c)
+        if labels is None:
+            subs.setdefault(c, []).append(t)
+            continue
+        labels = np.asarray(labels, dtype=object)
+        if labels.shape != t.shape:
+            raise ValueError(f"catalog {c!r}: {labels.size} subsets for {t.size} times")
+        for u in dict.fromkeys(labels.tolist()):
+            subs.setdefault(str(u), []).append(t[labels == u])
+    stats = []
+    for subs in groups.values():
+        g = []
+        for parts in subs.values():
+            t = parts[0] if len(parts) == 1 else np.concatenate(parts)
+            g.append(SetStat(int(t.size), float(t.sum()), float((t * t).sum())))
+        stats.append(g)
+    fit = combine_nested(stats, "normal")
+    return None if fit is None else fit.mu
 
 
 def benchmarks_of(catalogs: dict[str, Any]) -> dict[str, str]:
     """{catalog: benchmark} from the manifest's catalog entries; an entry without one is a benchmark of its own."""
     return {c: str(m.get("benchmark") or c) for c, m in catalogs.items()}
+
+
+def subset_of_row(catalog: str, meta: dict[str, Any]) -> Any:
+    """The subset of a catalog's problem from its row (its eval_row_index in the full catalog), as the manifest records
+    the catalog's subsets (scripts/freeze_timing_subset.py: "subsets", {"names": [...], "rows": [each row's index into
+    names]}, "rows" left out when there is one name); a catalog the manifest records none for is one subset, named
+    after itself."""
+    rec = meta.get("subsets") or {}
+    names, rows = rec.get("names") or [catalog], rec.get("rows")
+
+    def of(row: int) -> str:
+        if rows is None:
+            return str(names[0])
+        if not 0 <= int(row) < len(rows):
+            raise ValueError(f"catalog {catalog!r}: row {row} is not among its {len(rows)} problems")
+        return str(names[rows[int(row)]])
+    return of
 
 
 def note(suite_keys: list[str]) -> str:
@@ -93,7 +133,10 @@ def subset_rung(directory: Path, catalogs: dict[str, Any], rung: int, pattern: s
     if missing or short:
         return None
     times = {e: c["fit_time"][np.isfinite(c["fit_time"])] for e, c in cols.items()}
-    seconds = over_sets(times, benchmarks_of(catalogs))
+    # the subset ladder's row j is the catalog's row source_row_index[j]
+    labels = {e: np.asarray([subset_of_row(e, catalogs[e])(r) for r in catalogs[e].get("source_row_index", range(len(c["fit_time"])))],
+                            dtype=object)[np.isfinite(c["fit_time"])] for e, c in cols.items()}
+    seconds = over_sets(times, benchmarks_of(catalogs), labels)
     if seconds is None:
         return None
     return {"seconds": seconds, "n_ok": int(sum(t.size for t in times.values())), "n": int(sum(c["fit_time"].size for c in cols.values()))}
@@ -102,6 +145,7 @@ def subset_rung(directory: Path, catalogs: dict[str, Any], rung: int, pattern: s
 def suite_rung(directory: Path, catalogs: dict[str, Any], rung: int, pattern: str) -> dict[str, Any] | None:
     """The seconds of one complete rung of a whole-suite evaluation, or None."""
     per: dict[str, list[float]] = {}
+    labels: dict[str, list[str]] = {}
     n, hung = 0, 0
     for catalog, meta in catalogs.items():
         path = directory / catalog / pattern.format(rung=rung)
@@ -114,7 +158,9 @@ def suite_rung(directory: Path, catalogs: dict[str, Any], rung: int, pattern: st
             return None
         errors, success = snap.get("error") or [], snap.get("prediction_success") or []
         hangs = snap.get("worker_hangs") or []
-        per[catalog] = []
+        rows = snap.get("eval_row_index") or list(range(len(times)))
+        of = subset_of_row(catalog, meta)
+        per[catalog], labels[catalog] = [], []
         for j, t in enumerate(times):
             n += 1
             hung += 1 if j < len(hangs) and hangs[j] else 0
@@ -122,8 +168,9 @@ def suite_rung(directory: Path, catalogs: dict[str, Any], rung: int, pattern: st
             if failed or t is None or t != t or t == float("inf"):
                 continue
             per[catalog].append(float(t))
+            labels[catalog].append(of(rows[j]))
     ok = sum(len(x) for x in per.values())
-    seconds = over_sets({c: np.asarray(x) for c, x in per.items()}, benchmarks_of(catalogs)) if ok else None
+    seconds = over_sets({c: np.asarray(x) for c, x in per.items()}, benchmarks_of(catalogs), labels) if ok else None
     if seconds is None:
         return None
     return {"seconds": seconds, "n_ok": ok, "n": n, "hung": hung}
