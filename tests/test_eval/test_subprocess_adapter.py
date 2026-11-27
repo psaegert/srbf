@@ -264,6 +264,29 @@ class TestFailureHandling:
         finally:
             adapter.close()
 
+    def test_the_exit_code_is_read_once_the_worker_has_exited(self, engine, tmp_path) -> None:
+        """A dying process's socket closes before the process can be reaped, so the end of the stream can arrive while
+        the worker is still exiting; the record still carries its exit code. Here the window is widened to 0.5 s."""
+        worker = _write_worker(tmp_path, '''
+            import os, stat, time
+            def fit(x, y, *, x_val, variables, meta, options, state):
+                for fd in range(3, 1024):            # close the protocol's socket, then take a while to exit
+                    try:
+                        if stat.S_ISSOCK(os.fstat(fd).st_mode):
+                            os.close(fd)
+                    except OSError:
+                        pass
+                time.sleep(0.5)
+                os._exit(3)
+        ''')
+        adapter = SubprocessAdapter(worker=worker, simplipy_engine=engine, max_restarts=0, drop_unused_variables=False)
+        adapter.prepare()
+        try:
+            crashed = adapter.evaluate_sample(_sample()).to_mapping()
+            assert crashed["error"] == "WorkerCrashed: worker exited (returncode 3)"
+        finally:
+            adapter.close()
+
     def test_unparseable_expression_is_an_error_record(self, engine, tmp_path) -> None:
         worker = _write_worker(tmp_path, '''
             def fit(x, y, *, x_val, variables, meta, options, state):

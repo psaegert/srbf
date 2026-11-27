@@ -97,6 +97,11 @@ never in a `fit_time`. Put into `setup` what your method would otherwise do on i
 warm-up problem catches what is left. A warm-up that fails is recorded with its reason and reported
 as a warning, and one that takes the worker down counts as a crash.
 
+A `setup` that warms up on a throwaway fit of its own can leave that to srbf's warm-up problem when
+it follows: written as `setup(state, options, *, warmup)`, it is told whether the warm-up problem
+follows (`warmup=True`), and the method is warmed up once, not twice. The shipped PySR, TiSR and
+DSO workers do this ([Models](models.md)).
+
 ### How an expression is read
 
 The expression is parsed by the judge's SimpliPy engine. It reads
@@ -146,7 +151,9 @@ and evaluated on the support and validation points. Its FVU is `srbf.metrics.num
 the noiseless targets, as the table judges a prediction; a value that is not finite at some point
 gives an FVU of infinity. Every candidate gets a status: `judged` (read, evaluated and priced),
 `unreadable`, `unevaluable` or `unpriced`, with the reason. Nothing a method reports about its
-candidates is used.
+candidates is used. A candidate the judge has not finished with after 10 seconds (reading, pricing
+and evaluating it; a candidate usually takes half a millisecond) is `unevaluable`, with the reason,
+and the judge goes on with the next one, so one pathological candidate cannot stall a run.
 
 **Storage.** The candidates of `results/.../fastsrb/niter_000064.pkl` go to the directory
 `results/.../fastsrb/niter_000064.candidates/`, into the log `niter_000064.log`: one compressed
@@ -157,8 +164,10 @@ answer, and the fingerprint of the judge; a checksum ends the log at a record th
 unfinished. Each shard of a run writes a log of its own into the same directory. A problem that is
 fitted again on resume appends a newer record, and readers take the newest one. `niter_000064.json`
 beside the log names the judge, its engine and versions. `runner.candidates` switches the store off
-(`false`) or moves it to another directory ([Running](running.md#the-config)). Stored, a candidate
-takes about 70 bytes (constants at full precision, written twice).
+(`false`) or moves it to another directory ([Running](running.md#the-config)). A run whose store
+cannot be opened, or whose adapter has no engine to judge with, stops with the reason before the
+method fits anything. Stored, a candidate takes about 70 bytes (constants at full precision, written
+twice).
 
 **Reading.** A run's judged candidates come back as arrays, one problem at a time:
 
@@ -183,8 +192,9 @@ with the 5,000 candidates Flash-ANSR can fit. The table's judge stays apart: its
 every module it reaches, and a change there does not judge thousands of candidates per problem
 again. Each record keeps the fingerprint of the candidate judge that judged it
 (`CandidateSet.current`); when the judge changes, for example to another price,
-`srbf.candidates.rejudge_candidates(result_file, engine=engine)` judges a stored run again from the
-stored strings and the points the result file keeps.
+[`srbf rejudge`](cli.md#srbf-rejudge) (in Python `srbf.candidates.rejudge_candidates(result_file,
+engine=engine)`) judges a stored run again from the stored strings and the points the result file
+keeps.
 
 **The shipped methods.**
 
@@ -322,7 +332,8 @@ joined by spaces in the names `x1, x2, ...`), `candidate_prediction` (the index 
 them, or `None`) and, optionally, `candidate_variables` (the column names, default the record's
 `variables`). The run takes them out of the record, judges them with the adapter's engine
 (`get_simplipy_engine()`, or a `simplipy_engine` attribute) and stores them; an adapter that hands
-none over has its answer as its only candidate. A sample carries `x_support`,
+none over has its answer as its only candidate. An adapter without an engine runs only with
+`runner.candidates: false`. A sample carries `x_support`,
 `y_support`, `y_support_noisy` (or `None`), `x_validation`, `y_validation` and `metadata`. The
 result is a dict started from `sample.clone_metadata()`, so that the ground truth travels with the prediction.
 An in-process adapter writes its expression in the names `x1, x2, ...`, by column position:

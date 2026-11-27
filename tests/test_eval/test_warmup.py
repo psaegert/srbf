@@ -248,6 +248,27 @@ def fit(x, y, *, x_val, variables, meta, options, state):
 '''
 
 
+TOLD_WORKER = '''
+import os
+
+TOLD = {}
+
+
+def setup(state, options, *, warmup):
+    TOLD["warmup"] = warmup
+
+
+def info(state):
+    return {"told": TOLD.get("warmup")}
+
+
+def fit(x, y, *, x_val, variables, meta, options, state):
+    if meta.get("eq_id") == "crash":
+        os._exit(3)
+    return {"expression": variables[0], "extra": {"told": TOLD.get("warmup")}}
+'''
+
+
 def _write(tmp_path: Path, body: str, name: str = "worker.py") -> Path:
     path = tmp_path / name
     path.write_text(textwrap.dedent(body))
@@ -273,6 +294,54 @@ def test_the_runner_reports_load_and_setup_times(tmp_path):
     wfile.flush()
     assert json.loads(rfile.readline())["type"] == "closed"
     assert proc.wait(timeout=10) == 0
+
+
+def _init(tmp_path, body, message):
+    """Start the runner on a worker, send ``message`` as its init and return the ready reply."""
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    proc = subprocess.Popen([sys.executable, str(RUNNER_PATH), "--connect", f"127.0.0.1:{listener.getsockname()[1]}",
+                             str(_write(tmp_path, body))], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+    listener.settimeout(30)
+    conn, _ = listener.accept()
+    rfile, wfile = conn.makefile("r", encoding="utf-8"), conn.makefile("w", encoding="utf-8")
+    try:
+        wfile.write(json.dumps(message) + "\n")
+        wfile.flush()
+        return json.loads(rfile.readline())
+    finally:
+        wfile.write(json.dumps({"type": "close"}) + "\n")
+        wfile.flush()
+        proc.wait(timeout=10)
+
+
+def test_the_runner_tells_a_setup_that_asks_whether_srbfs_warmup_follows(tmp_path):
+    assert _init(tmp_path, TOLD_WORKER, {"type": "init", "options": {}, "warmup": True})["info"] == {"told": True}
+    assert _init(tmp_path, TOLD_WORKER, {"type": "init", "options": {}, "warmup": False})["info"] == {"told": False}
+    assert _init(tmp_path, TOLD_WORKER, {"type": "init", "options": {}})["info"] == {"told": False}
+    keywords = TOLD_WORKER.replace("def setup(state, options, *, warmup):", "def setup(state, options, **context):") \
+                          .replace('TOLD["warmup"] = warmup', 'TOLD["warmup"] = context["warmup"]')
+    assert _init(tmp_path, keywords, {"type": "init", "options": {}, "warmup": True})["info"] == {"told": True}
+    # a setup(state, options) is called as it is written (SETUP_WORKER, test_the_runner_reports_load_and_setup_times)
+
+
+def test_the_run_arms_the_warmup_before_the_first_worker_starts(engine, tmp_path):
+    """Every worker the run starts, the first and a restarted one alike, is told that the warm-up problem follows."""
+    adapter = SubprocessAdapter(worker=_write(tmp_path, TOLD_WORKER), simplipy_engine=engine, max_restarts=1)
+    out = tmp_path / "run.pkl"
+    bench = Benchmark(_ListSource([_sample("a"), _sample("crash"), _sample("b")]), adapter, result_store=ResultStore(),
+                      warmup=True, candidates=False)
+    snapshot = bench.run(progress=False, verbose=False, output_path=str(out), meta={"config_provenance": "harness_tuned"})
+    assert snapshot["prediction_success"] == [True, False, True] and snapshot["told"] == [True, None, True]
+    meta = pickle.loads(out.read_bytes())["__meta__"]
+    assert meta["worker"]["told"] is True
+    assert [e["reason"] for e in meta["setup"]["events"]] == ["start", "restart"]
+    assert all(e["warmup_error"] is None and "warmup_time" in e for e in meta["setup"]["events"])
+    adapter = SubprocessAdapter(worker=_write(tmp_path, TOLD_WORKER), simplipy_engine=engine)
+    snapshot = Benchmark(_ListSource([_sample("a")]), adapter, result_store=ResultStore(), candidates=False).run(
+        progress=False, verbose=False, meta={"config_provenance": "harness_tuned"})
+    assert snapshot["told"] == [False]                                        # no warm-up problem: the worker's own
 
 
 def test_a_worker_without_the_setup_hook_reports_none_and_warms_up(engine):

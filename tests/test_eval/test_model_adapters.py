@@ -129,12 +129,15 @@ def _patch_pysr_factory(monkeypatch):
     return created
 
 
-def test_pysr_worker_load_runs_a_warmup_fit_by_default(monkeypatch):
-    # Julia precompile makes the first fit an order-of-magnitude timing outlier; load()
-    # must pay it on a THROWAWAY model so problem 0's fit_time starts warm.
+def test_pysr_worker_setup_runs_a_warmup_fit_by_default(monkeypatch):
+    # Julia's compilation makes the first fit an order-of-magnitude timing outlier; setup() runs
+    # before the clock and pays it on a THROWAWAY model so problem 0's fit_time starts warm.
     from srbf.worker.models import pysr_worker
     created = _patch_pysr_factory(monkeypatch)
-    state = pysr_worker.load({"timeout_in_seconds": 10, "niterations": 5})
+    options = {"timeout_in_seconds": 10, "niterations": 5}
+    state = pysr_worker.load(options)
+    assert len(created) == 1 and created[0].n_fits == 0               # load builds the timed model only
+    assert pysr_worker.setup(state, options, warmup=False) is None    # the state stays
 
     assert len(created) == 2                      # the timed model + the warmup model
     timed, warmup = created
@@ -146,13 +149,15 @@ def test_pysr_worker_load_runs_a_warmup_fit_by_default(monkeypatch):
     assert warmup.maxsize is None
 
 
-def test_pysr_worker_warmup_can_be_disabled(monkeypatch):
+def test_pysr_worker_warmup_can_be_disabled_and_leaves_it_to_srbfs_warmup_problem(monkeypatch):
     from srbf.worker.models import pysr_worker
     created = _patch_pysr_factory(monkeypatch)
-    pysr_worker.load({"timeout_in_seconds": 10, "niterations": 5, "warmup": False})
+    off = {"timeout_in_seconds": 10, "niterations": 5, "warmup": False}
+    pysr_worker.setup(pysr_worker.load(off), off, warmup=False)
+    on = {"timeout_in_seconds": 10, "niterations": 5}
+    pysr_worker.setup(pysr_worker.load(on), on, warmup=True)          # srbf's warm-up problem compiles the same code
 
-    assert len(created) == 1
-    assert created[0].n_fits == 0
+    assert len(created) == 2 and all(model.n_fits == 0 for model in created)   # two timed models, no warmup fit
 
 
 class _FittedPySRModel:

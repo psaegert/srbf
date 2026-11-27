@@ -2,7 +2,10 @@
 judgement, the store, the run's side (Benchmark + CandidateRecorder), the worker protocol and the reading API."""
 import json
 import pickle
+import signal
 import textwrap
+import threading
+import time
 from pathlib import Path
 
 import numpy as np
@@ -109,6 +112,85 @@ class TestJudgement:
         assert j.bits[0] == price_bits(engine, record["predicted_expression_prefix"])
         assert j.fvu_fit[0] == fvu(sample.y_support, record["y_pred"])
         assert j.fvu_val[0] == fvu(sample.y_validation, record["y_pred_val"])
+
+
+# ---- a candidate that takes too long ------------------------------------------------------------------------------
+class TestJudgeTimeout:
+    """One pathological candidate must not stall a problem: past its time it is unevaluable and the judge goes on."""
+
+    @staticmethod
+    def _spinning_evaluation(monkeypatch, token="sin"):
+        real = cand.evaluate_prefix
+
+        def evaluate(engine, prefix, *args):
+            if token in prefix:
+                while True:                    # a candidate whose evaluation never ends
+                    pass
+            return real(engine, prefix, *args)
+        monkeypatch.setattr(cand, "evaluate_prefix", evaluate)
+
+    def test_a_candidate_whose_evaluation_never_ends_is_unevaluable_and_the_rest_are_judged(self, engine, monkeypatch):
+        self._spinning_evaluation(monkeypatch)
+        threads, handler, timer = threading.active_count(), signal.getsignal(signal.SIGALRM), signal.getitimer(signal.ITIMER_REAL)
+        started = time.monotonic()
+        sample = _toy()
+        j = judge_candidates([EXACT, "sin(v1)", "2.0*v1"], engine=engine, variables=["v1", "v2"], x_fit=sample.x_support,
+                             y_fit=sample.y_support, x_val=sample.x_validation, y_val=sample.y_validation, timeout=0.3)
+        assert time.monotonic() - started < 5.0
+        assert list(j.status) == [STATUS_JUDGED, STATUS_UNEVALUABLE, STATUS_JUDGED]
+        assert j.reasons[1] == "judging it took longer than 0.3 s"
+        assert j.prefixes[1] == "sin x1" and np.isfinite(j.bits[1])        # it was read and priced before it stalled
+        assert np.isnan(j.fvu_fit[1]) and np.isnan(j.fvu_val[1])
+        assert j.fvu_val[0] == 0.0 and np.isfinite(j.fvu_val[2])
+        assert threading.active_count() == threads                          # nothing was started to time it
+        assert signal.getsignal(signal.SIGALRM) == handler                 # the alarm is put back as it was
+        assert timer != (0.0, 0.0) or signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
+
+    def test_code_that_catches_every_exception_cannot_swallow_the_timeout(self, engine, monkeypatch):
+        def price(prefix):
+            try:
+                time.sleep(60)
+            except Exception:  # noqa: BLE001 - as the engine's own guards do
+                return 1.0
+            return 1.0
+        monkeypatch.setattr(cand, "pricer", lambda e: price)
+        started = time.monotonic()
+        j = _judge_with_timeout(engine, ["v1"], 0.2)
+        assert time.monotonic() - started < 5.0
+        assert j.status[0] == STATUS_UNEVALUABLE and np.isnan(j.bits[0]) and "longer than 0.2 s" in j.reasons[0]
+
+    def test_an_alarm_set_before_survives_the_judgement(self, engine, monkeypatch):
+        self._spinning_evaluation(monkeypatch)
+        fired = []
+        previous = signal.signal(signal.SIGALRM, lambda *a: fired.append(True))
+        try:
+            signal.setitimer(signal.ITIMER_REAL, 30.0)
+            _judge_with_timeout(engine, ["sin(v1)", "v1"], 0.2)
+            remaining, _ = signal.getitimer(signal.ITIMER_REAL)
+            assert 25.0 < remaining < 30.0 and not fired          # still armed, less the time the judgement took
+            signal.setitimer(signal.ITIMER_REAL, 0.05)
+            time.sleep(0.5)
+            assert fired                                            # and its own handler answers it
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0.0)
+            signal.signal(signal.SIGALRM, previous)
+
+    def test_off_the_main_thread_the_judgement_runs_without_a_limit(self, engine):
+        out = {}
+        worker = threading.Thread(target=lambda: out.update(j=_judge_with_timeout(engine, [EXACT], 0.2)))
+        worker.start()
+        worker.join(60)
+        assert list(out["j"].status) == [STATUS_JUDGED]
+
+    def test_the_run_judges_with_the_default_limit(self):
+        import inspect
+        assert inspect.signature(judge_candidates).parameters["timeout"].default == cand.JUDGE_TIMEOUT_S == 10.0
+
+
+def _judge_with_timeout(engine, expressions, timeout):
+    sample = _toy()
+    return judge_candidates(expressions, engine=engine, variables=["v1", "v2"], x_fit=sample.x_support,
+                            y_fit=sample.y_support, x_val=sample.x_validation, y_val=sample.y_validation, timeout=timeout)
 
 
 # ---- the store ----------------------------------------------------------------------------------------------------
@@ -306,6 +388,21 @@ class _HandingAdapter:
         return EvaluationResult(record)
 
 
+class _WatchedAdapter(_HandingAdapter):
+    """A handing adapter that records whether it was prepared, warmed up or asked to fit; ``engine`` may be None."""
+
+    def __init__(self, engine):
+        super().__init__(engine)
+        self.calls = []
+
+    def prepare(self, *, data_source=None):
+        self.calls.append("prepare")
+
+    def evaluate_sample(self, sample):
+        self.calls.append("warm-up" if sample.metadata.get("warmup") else "fit")
+        return super().evaluate_sample(sample)
+
+
 class TestRun:
     def test_the_run_judges_and_stores_every_problem_outside_the_fit_time(self, engine, tmp_path):
         out = tmp_path / "fastsrb" / "choices_000004.pkl"
@@ -376,6 +473,38 @@ class TestRun:
         assert snap["prediction_success"] == [True] and snap["candidates_error"] == ["OSError: disk full"]
         assert "candidate_expressions" not in snap
 
+    def test_a_store_that_cannot_be_opened_fails_the_run_before_anything_is_fitted(self, engine, tmp_path):
+        blocked = tmp_path / "choices_000001.candidates"
+        blocked.write_text("a file where the store's directory goes")
+        adapter = _WatchedAdapter(engine)
+        bench = Benchmark(_ListSource([_toy(0)]), adapter, warmup=True)
+        with pytest.raises(RuntimeError, match=r"runner.candidates: the candidate store .*choices_000001.candidates "
+                                               r"cannot be opened .*runner.candidates: false"):
+            bench.run(output_path=str(tmp_path / "choices_000001.pkl"), progress=False, verbose=False, summary_interval=None)
+        assert adapter.calls == [] and not (tmp_path / "choices_000001.pkl").exists()
+
+    def test_an_adapter_without_an_engine_fails_the_run_before_anything_is_fitted(self, tmp_path):
+        adapter = _WatchedAdapter(None)
+        bench = Benchmark(_ListSource([_toy(0)]), adapter, warmup=True)
+        with pytest.raises(RuntimeError, match=r"runner.candidates: the adapter _WatchedAdapter has no SimpliPy engine"):
+            bench.run(output_path=str(tmp_path / "choices_000001.pkl"), progress=False, verbose=False, summary_interval=None)
+        assert adapter.calls == []
+
+    def test_switched_off_the_run_needs_neither_a_store_nor_an_engine(self, tmp_path):
+        (tmp_path / "choices_000001.candidates").write_text("a file where the store's directory goes")
+        adapter = _WatchedAdapter(None)
+        snap = Benchmark(_ListSource([_toy(0)]), adapter, candidates=False, warmup=True).run(
+            output_path=str(tmp_path / "choices_000001.pkl"), progress=False, verbose=False, summary_interval=None)
+        assert adapter.calls == ["prepare", "warm-up", "fit"] and snap["prediction_success"] == [True]
+        assert "candidate_expressions" not in snap
+
+    def test_what_the_method_reports_once_it_is_up_reaches_the_stores_manifest(self, engine, tmp_path):
+        adapter = _WatchedAdapter(engine)
+        adapter.ranking_config = lambda: {"mode": "mdl"}
+        Benchmark(_ListSource([_toy(0)]), adapter).run(output_path=str(tmp_path / "choices_000001.pkl"), progress=False,
+                                                       verbose=False, summary_interval=None)
+        assert read_manifests(tmp_path / "choices_000001.pkl")["choices_000001"]["run_meta"]["ranking"] == {"mode": "mdl"}
+
     def test_a_record_without_a_row_index_is_not_stored(self, engine, tmp_path):
         recorder = CandidateRecorder(tmp_path / "s.candidates", engine=engine)
         record = {"candidate_expressions": ["v1"], "variables": ["v1", "v2"]}
@@ -436,6 +565,52 @@ class TestRun:
         assert rejudge_candidates(tmp_path / "choices_000008.shard-1-of-2.pkl", engine=engine) == 1
         after = load_candidates(tmp_path / "choices_000008.pkl")
         assert (after[5].bits == 42.0).all() and not (after[2].bits == 42.0).any()
+
+
+# ---- srbf rejudge ---------------------------------------------------------------------------------------------------
+class TestRejudgeCommand:
+    @staticmethod
+    def _stored_run(engine, out, engine_name="acj-4-3"):
+        Benchmark(_ListSource([_toy(0), _toy(1)]), _HandingAdapter(engine), engine_name=engine_name).run(
+            output_path=str(out), progress=False, verbose=False, summary_interval=None)
+
+    def test_the_command_judges_a_stored_run_again_with_the_engine_its_store_names(self, engine, tmp_path, monkeypatch,
+                                                                                   capsys):
+        from simplipy import SimpliPyEngine
+        from srbf.__main__ import main
+        out = tmp_path / "choices_000002.pkl"
+        self._stored_run(engine, out)
+        loaded = []
+        monkeypatch.setattr(SimpliPyEngine, "load", classmethod(lambda cls, name, install=False: loaded.append(name) or engine))
+        monkeypatch.setattr(cand, "pricer", lambda e: (lambda prefix: 42.0))
+        monkeypatch.setattr(cand, "_FINGERPRINT", "another-judge")
+        main(["rejudge", str(out)])
+        assert loaded == ["acj-4-3"]
+        assert f"{out}: judged the candidates of 2 problem(s) again with acj-4-3" in capsys.readouterr().out
+        after = load_candidates(out)
+        assert all((c.bits == 42.0).all() and c.header["judge"] == "another-judge" for c in after.values())
+        main(["rejudge", str(out), "--engine", "another-engine"])            # --engine chooses another
+        assert loaded == ["acj-4-3", "another-engine"]
+        assert read_manifests(out)["choices_000002"]["judge"]["engine"] == "another-engine"
+
+    def test_a_store_naming_no_engine_needs_one_and_a_file_without_candidates_fails(self, engine, tmp_path,
+                                                                                    monkeypatch, capsys):
+        from simplipy import SimpliPyEngine
+        from srbf.__main__ import main
+        monkeypatch.setattr(SimpliPyEngine, "load", classmethod(lambda cls, name, install=False: engine))
+        out = tmp_path / "choices_000002.pkl"
+        self._stored_run(engine, out, engine_name=None)
+        with pytest.raises(SystemExit, match="names no engine; choose one with --engine"):
+            main(["rejudge", str(out)])
+        main(["rejudge", str(out), "--engine", "acj-4-3"])
+        bare = tmp_path / "bare" / "choices_000002.pkl"
+        Benchmark(_ListSource([_toy(0)]), _HandingAdapter(engine), candidates=False).run(
+            output_path=str(bare), progress=False, verbose=False, summary_interval=None)
+        with pytest.raises(SystemExit) as exit_info:
+            main(["rejudge", str(out), str(bare), "--engine", "acj-4-3"])
+        assert exit_info.value.code == 1 and f"{bare}: no stored candidates" in capsys.readouterr().out
+        with pytest.raises(SystemExit, match="no result file"):
+            main(["rejudge", str(tmp_path / "nothing.pkl")])
 
 
 # ---- the Flash-ANSR adapter ----------------------------------------------------------------------------------------

@@ -52,7 +52,7 @@ run:
 | `save_every` | none | write the file every N problems; needs `output`. A final save always happens when the run completes |
 | `resume` | `true` | continue an existing result file instead of starting over |
 | `limit` | `null` | the number of problems to evaluate |
-| `candidates` | `true` | where every problem's [candidates](adapters.md#candidates) are judged and stored: next to `output` (`true`), in a directory you name, or nowhere (`false`) |
+| `candidates` | `true` | where every problem's [candidates](adapters.md#candidates) are judged and stored: next to `output` (`true`), in a directory you name, or nowhere (`false`). A store that cannot be opened, or an adapter without an engine to judge with, stops the run before the method fits anything |
 | `warmup` | `false` | send srbf's warm-up problem through the method before the first timed problem, and again after every worker restart ([Setup before the clock](fairness.md#setup-before-the-clock)). The timing runs turn it on |
 
 The number of problems of a run is the first of these that is set: `--limit` on the command line,

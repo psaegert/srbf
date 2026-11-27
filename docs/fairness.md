@@ -66,7 +66,8 @@ srbf applies it in three steps before a method's first timed problem:
 1. **Loading.** A worker's `load` runs when its process starts; an in-process adapter loads its
    model when it is built and moves it to its device in `prepare`.
 2. **Preparing.** A worker may define `setup`, which runs after `load`: compiling, or warming up on
-   a problem of the worker's own ([The worker](adapters.md#the-worker)).
+   a problem of the worker's own, which it can skip when srbf's warm-up problem follows
+   ([Before the clock](adapters.md#before-the-clock)).
 3. **The warm-up problem.** With `runner.warmup: true`, srbf sends one fixed problem through the
    method's fit: \(1.5\,x_1 \sin(x_2) + 0.5\) on 512 support and 512 validation points drawn
    uniformly from \([-5, 5]^2\) with seed 0, without noise. Its answer is discarded: it is never

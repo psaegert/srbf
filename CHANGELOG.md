@@ -60,6 +60,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   read a run's judged candidates back as arrays; `rejudge_candidates` judges a stored run again when the judge
   changes. The worker protocol keeps at most 100,000 candidates of at most 10,000 characters per problem. Producing
   the front is part of `fit_time` for DSO and Bingo, which report their own.
+- **`srbf rejudge <result files>`** judges the candidates stored with result files again with the installed srbf's
+  candidate judge (`rejudge_candidates`), with the engine the store names or `--engine`; the exit code is 1 when a file
+  has no stored candidates.
+- **A time limit per candidate in the candidate judge.** A candidate the judge has not read, priced and evaluated within
+  `srbf.candidates.JUDGE_TIMEOUT_S` (10 s) is `unevaluable`, with the reason, and the judge goes on with the next one,
+  so one pathological candidate cannot stall a problem. The limit is the main thread's interval timer (`SIGALRM`):
+  nothing is started that could outlive the candidate; a judgement off the main thread runs without a limit.
 - **`srbf.aggregate`: the results site's averaging in the package.** `average(problems, kind)` averages per-problem
   run values over problem sets: `"mean"` (random-effects average, Paule-Mandel between-set variance), `"rate"`
   (beta-binomial), `"ratio"` (in log2, a geometric mean) or `"median"` (each set weighted as the average weighs it,
@@ -75,6 +82,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its mean over problems is the Mean Improvability.
 
 ### Changed
+- **A run that is to keep its candidates does not start without them.** A candidate store that cannot be opened, or an
+  adapter without a SimpliPy engine to judge them with, stops the run with the reason before the method is prepared or
+  fits anything, instead of warning and running without candidates; `runner.candidates: false` runs without them.
+- **The PySR, TiSR and DSO workers warm up in `setup`, and only once.** Their throwaway fit (`warmup`, on by default)
+  moved from `load` to the new `setup` hook, before the clock as before, and is skipped when srbf's warm-up problem
+  follows (`runner.warmup: true`), which is a fit at the run's own options and compiles the same code; timing runs no
+  longer warm these methods twice. A worker's `setup(state, options, *, warmup)` is told whether the warm-up problem
+  follows (`init` carries `warmup`); a `setup(state, options)` is called as before. The run arms a worker-backed
+  adapter with the warm-up before it starts its first worker.
 - **One MDL unit, bits, everywhere.** The Flash-ANSR adapter's raw `predicted_mdl` and the `mdl` column of its
   `candidate_store_dir` store were flash-ansr's thousandths of a bit; both are bits now, as `derive_metrics` and the
   table report them, and the store's `run_meta.mdl_dialect.unit` says `bits`. `CandidateStoreReader.mdl_bits(block)`
@@ -114,6 +130,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (storage key .9), so an earlier visit cannot keep the old default.
 
 ### Fixed
+- **The sampling and enumeration baselines record their answer at full precision.** `predicted_expression` and
+  `predicted_expression_prefix` carried the constants rounded to two decimals (`get_expression`'s former default
+  `precision=2`), so the table priced and judged a rounded formula while `y_pred` came from the exact constants. The
+  answer is written as its candidate is, each constant the shortest string that reads back as the same float, and
+  evaluates to `y_pred`.
+- **A worker that crashes is recorded with its exit code.** A dying process's socket closes before the process can be
+  reaped, so srbf could see the end of the stream first and record `worker exited (returncode None)`. srbf now waits
+  up to two seconds for the worker to finish exiting before it reads the code.
 - **Results site: the interval of a rate average near 0 % and 100 %.** The beta-binomial average's interval was the
   delta method on the log-odds, which fails where many problem sets sit at 0 % or 100 %: one success in 6,660 problems
   (E2E, Symbolic Recovery at 8 candidates) showed 0.05 % with an interval of 0 % to 88 %, and 104 of the 2026-09
