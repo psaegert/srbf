@@ -7,7 +7,7 @@ import weakref
 import numpy as np
 import pytest
 
-from srbf.table import COLUMNS, ResultTree, build_table, judge_result_file, parse_index_bases
+from srbf.table import COLUMNS, JUDGED_COLUMNS, ResultTree, build_table, judge_result_file, parse_index_bases
 
 ENGINE = "acj-4-3"
 
@@ -50,13 +50,14 @@ def _write(tmp_path, catalog, name, snapshot):
 
 
 def _col(rows, name):
-    return [r[COLUMNS.index(name)] for r in rows]
+    """A column of judged rows (judge_result_file: every column but the benchmark)."""
+    return [r[JUDGED_COLUMNS.index(name)] for r in rows]
 
 
 def test_a_file_becomes_one_row_per_problem_with_the_identity_columns(tmp_path, engine):
     path = _write(tmp_path, "toy", "choices_000064.pkl", _snapshot([["+", "x1", "x2"], ["+", "x2", "x1"], ["*", "x1", "x2"], None]))
     rows = judge_result_file(path, method="m", draw=2, engine=engine)
-    assert len(rows) == 4 and all(len(r) == len(COLUMNS) for r in rows)
+    assert len(rows) == 4 and all(len(r) == len(JUDGED_COLUMNS) for r in rows)
     assert _col(rows, "model") == ["m"] * 4 and _col(rows, "draw") == [2] * 4
     assert _col(rows, "catalog") == ["toy"] * 4 and _col(rows, "rung") == [64] * 4 and _col(rows, "row") == [0, 1, 2, 3]
     assert _col(rows, "symbolic_recovery") == [1, 1, 0, 0]
@@ -65,7 +66,7 @@ def test_a_file_becomes_one_row_per_problem_with_the_identity_columns(tmp_path, 
 def test_a_failed_problem_is_a_miss_in_the_rates_and_takes_the_worst_value_only_where_there_is_one(tmp_path, engine):
     path = _write(tmp_path, "toy", "choices_000001.pkl", _snapshot([["+", "x1", "x2"], None]))
     ok, failed = judge_result_file(path, method="m", engine=engine)
-    at = COLUMNS.index
+    at = JUDGED_COLUMNS.index
     assert failed[at("success")] == 0 and failed[at("numeric_recovery_val")] == 0 and failed[at("symbolic_recovery")] == 0
     assert failed[at("f1_score")] == 0.0          # a worst value exists: a failure takes it
     assert failed[at("log10_fvu_val")] == ""      # none exists: nothing is filled in
@@ -81,10 +82,10 @@ def test_index_spelled_variables_are_renamed_when_the_tree_says_how_they_are_cou
     for first, snap in ((0, e2e_style), (1, nesymres_style), (None, named)):
         path = _write(tmp_path, f"toy{first}", "choices_000001.pkl", snap)
         (row,) = judge_result_file(path, method="m", engine=engine, first_index=first)
-        assert row[COLUMNS.index("symbolic_recovery")] == 1
+        assert row[JUDGED_COLUMNS.index("symbolic_recovery")] == 1
     path = _write(tmp_path, "toy_unmapped", "choices_000001.pkl", _snapshot([["+", "x_0", "x_1"]]))
     (row,) = judge_result_file(path, method="m", engine=engine)
-    assert row[COLUMNS.index("symbolic_recovery")] == 0   # without the count the spelling is left alone
+    assert row[JUDGED_COLUMNS.index("symbolic_recovery")] == 0   # without the count the spelling is left alone
 
 
 def _read(path):
@@ -110,6 +111,39 @@ def test_the_cache_serves_a_file_until_it_changes(tmp_path):
     changed = build_table([tree], out, engine=ENGINE, workers=1, cache_dir=cache, log=None)
     assert (changed.judged, changed.from_cache) == (1, 1)
     assert sum(int(r[COLUMNS.index("symbolic_recovery")]) for r in _read(out)[1:]) == 1
+
+
+def test_every_row_names_its_catalogs_benchmark_and_the_cache_does_not_hold_it(tmp_path):
+    """The benchmark column sits next to the catalog: the benchmarks mapping places two catalogs in one benchmark, and a
+    catalog it does not name is a benchmark of its own. The cache holds the judged rows only, so a benchmark that
+    changes is written without judging any file again."""
+    for catalog in ("feynman", "feynman-points", "nguyen"):
+        _write(tmp_path, catalog, "choices_000001.pkl", _snapshot([["+", "x1", "x2"], ["*", "x1", "x2"]]))
+    tree = ResultTree("m", 1, str(tmp_path / "tree"))
+    cache, out = str(tmp_path / "cache"), str(tmp_path / "t.csv")
+    first = build_table([tree], out, engine=ENGINE, workers=1, cache_dir=cache, log=None,
+                        benchmarks={"feynman": "feynman", "feynman-points": "feynman"})
+    header, *rows = _read(out)
+    assert header == COLUMNS and header[header.index("catalog") + 1] == "benchmark"
+    pairs = {(r[COLUMNS.index("catalog")], r[COLUMNS.index("benchmark")]) for r in rows}
+    assert pairs == {("feynman", "feynman"), ("feynman-points", "feynman"), ("nguyen", "nguyen")}
+    assert first.rows == 6
+    # the same files, a different mapping: nothing is judged again, and only the benchmark column moves
+    again = build_table([tree], out, engine=ENGINE, workers=1, cache_dir=cache, log=None)
+    assert (again.judged, again.from_cache) == (0, 3)
+    header2, *rows2 = _read(out)
+    assert {r[COLUMNS.index("benchmark")] for r in rows2} == {"feynman", "feynman-points", "nguyen"}
+    at = COLUMNS.index("benchmark")
+    assert [r[:at] + r[at + 1:] for r in rows2] == [r[:at] + r[at + 1:] for r in rows]
+
+
+def test_the_catalogs_of_the_trees_are_their_directories(tmp_path):
+    from srbf.table import tree_catalogs
+
+    for catalog in ("b", "a"):
+        _write(tmp_path, catalog, "choices_000001.pkl", _snapshot([["+", "x1", "x2"]]))
+    (tmp_path / "tree" / "empty").mkdir()
+    assert tree_catalogs([ResultTree("m", 1, str(tmp_path / "tree"))]) == ["a", "b"]
 
 
 def test_cached_rows_are_read_one_file_at_a_time(tmp_path, monkeypatch):
@@ -171,7 +205,7 @@ def test_a_ladder_counting_evaluations_samples_epochs_or_generations_is_read_lik
     _write(tmp_path, "toy", "notes_000001.pkl", _snapshot([["+", "x1", "x2"]]))     # not a rung file
     out = str(tmp_path / "t.csv")
     report = build_table([ResultTree("m", 1, str(tmp_path / "tree"))], out, engine=ENGINE, workers=1, log=None)
-    assert report.files == 5 and sorted(_col(_read(out)[1:], "rung")) == ["16", "4096", "512", "64", "8"]
+    assert report.files == 5 and sorted(r[COLUMNS.index("rung")] for r in _read(out)[1:]) == ["16", "4096", "512", "64", "8"]
 
 
 def test_an_unreadable_file_is_reported_and_left_out(tmp_path):

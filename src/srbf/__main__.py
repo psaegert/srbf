@@ -193,14 +193,15 @@ def main(argv: list[str] | None = None) -> None:
                 runs = []
                 for index, config_path in enumerate(args.config):
                     model_name = names[index] if index < len(names) else None
-                    runs.extend(runs_from_config(config_path, model=model_name, warn=lambda text: print(f"skip: {text}")))
+                    runs.extend(runs_from_config(config_path, model=model_name, warn=lambda text: print(f"analyze: {text}")))
             if not runs:
                 sys.exit("analyze: no run outputs found")
             engine = SimpliPyEngine.load(args.engine, install=True)
             out = build_report(runs, args.out_dir, engine=engine, title=args.title)
             print(f"Wrote {out}")
         case 'table':
-            from srbf.table import ResultTree, build_table, parse_index_bases
+            from srbf.suites import catalog_benchmarks
+            from srbf.table import ResultTree, build_table, parse_index_bases, tree_catalogs
 
             try:
                 bases = parse_index_bases(args.index_variables)
@@ -208,8 +209,13 @@ def main(argv: list[str] | None = None) -> None:
             except ValueError as exc:
                 parser.error(str(exc))
             trees = [ResultTree(t.method, t.draw, t.path, bases.get(t.method)) for t in trees]
+            # every catalog's benchmark, from its metadata: the unit the site and srbf analyze average over
+            catalogs = tree_catalogs(trees)
+            benchmarks = catalog_benchmarks(catalogs, warn=lambda text: print(f"WARN {text}"))
+            print(f"{len(catalogs)} catalogs in {len(set(benchmarks.values()))} benchmarks")
             report = build_table(trees, args.out, engine=args.engine, workers=args.workers, cache_dir=args.cache,
-                                 max_rung=args.max_rung, stall_timeout=args.stall_timeout, progress_path=args.progress)
+                                 max_rung=args.max_rung, stall_timeout=args.stall_timeout, progress_path=args.progress,
+                                 benchmarks=benchmarks)
             if report.stalled:
                 sys.exit(1)
         case 'rejudge':

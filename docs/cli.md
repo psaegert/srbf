@@ -96,7 +96,11 @@ Instead of `-c`, a manifest file can list the runs by hand:
 ```yaml
 runs:
   - {model: mymethod, benchmark: nguyen, scaling: 32, path: results/mymethod/nguyen.pkl}
+  - {model: mymethod, benchmark: nguyen, catalog: nguyen-points, scaling: 32, path: results/mymethod/nguyen-points.pkl}
 ```
+
+`benchmark` is the problem set the run is averaged in; `catalog`, by default the benchmark itself, names the catalog
+of a benchmark stored in several. With `-c`, each catalog's benchmark is read from its metadata.
 
 Figures need the `analysis` extra. See [Results](results.md#the-standard-report).
 
@@ -104,6 +108,9 @@ Figures need the `analysis` extra. See [Results](results.md#the-standard-report)
 
 Judge the result files of whole evaluations into one CSV: a row per problem and rung, with every
 metric of [Metrics](metrics.md) as a column. This is the table the results explorer is built from.
+Each row also names the benchmark of its catalog, read from the catalog's metadata before judging; a
+catalog whose metadata cannot be read is a benchmark of its own, with a warning
+([How results are averaged](averaging.md#a-problem-set-is-a-benchmark)).
 
 ```bash
 srbf table --tree mymethod:1:results/evaluation/scaling/mymethod \

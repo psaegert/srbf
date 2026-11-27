@@ -109,6 +109,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its mean over problems is the Mean Improvability.
 
 ### Changed
+- **Results are averaged over benchmarks, not catalogs.** A benchmark stored in several catalogs for hosting or format
+  reasons (a licence repository, `-restricted` or `-share-alike`; fixed-point companions, `-points`; its formula and
+  data halves) is one problem set: its catalogs' problems are put together and every problem in it counts once, so the
+  way a benchmark is stored no longer changes its weight. A catalog names its benchmark in the `benchmark` field of its
+  metadata; a catalog without it is a benchmark of its own, as every catalog was before, and averages over such
+  catalogs are unchanged. No benchmark is guessed from a catalog's name. `srbf.aggregate` gains `by_benchmark`,
+  `merge_sets` and `average(..., benchmarks=)`; `srbf.suites.catalog_benchmark` / `catalog_benchmarks` read the field.
+  `srbf table` writes a `benchmark` column next to `catalog` (`build_table(..., benchmarks=)`); the judged rows and the
+  per-file cache do not hold it (`srbf.table.JUDGED_COLUMNS`, the columns `judge_result_file` returns), so a changed
+  benchmark needs no file judged again, and `scripts/rekey_table_cache.py` carries a cache over this change.
+  `srbf analyze` reads each catalog's benchmark from its metadata: `RunResult` gains `catalog` (by default the
+  benchmark), `runs_from_config` sets both (or takes `benchmarks=`), a run manifest may give `catalog:`, export records
+  carry it, and `per_benchmark_table(..., by="catalog")` keeps the per-catalog view. The site export names every
+  catalog's benchmark from the rows, and the explorer averages over benchmarks everywhere it averages (means, rates,
+  medians and distributions, ranks, paired differences, correlations); its problem-set picker and per-set rows stay
+  per catalog, as views. The time axis (`scripts/site_timing.py`) averages over the benchmarks the timing manifest
+  names (`scripts/freeze_timing_subset.py` records them). docs/averaging.md says what a benchmark is and why.
 - **The oracle needs no checkpoint, tokenizer or vocabulary** (`model_adapter.type: oracle`, `srbf.oracle`,
   `configs/evaluation/scaling/oracle_srbf.yaml`, results under `results/evaluation/scaling/oracle/`). The oracle was a
   mode of the `flash_ansr` adapter (`generation_config.method: oracle`) that passed the ground truth through the T8-3M

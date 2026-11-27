@@ -1,13 +1,15 @@
 """Averages over problem sets: the averaging of srbf's results site and of ``srbf analyze``.
 
-Results are organised as problem sets (catalogs) > problems > runs. A problem's value is the mean of its runs, and a
-set is summarised by the number of its problems with a value, their mean and their variance. The sets are combined by
-a random-effects average (DerSimonian and Laird 1986): every set has its own true value, and the sets are weighted by
-1 / (tau^2 + the set's own sampling variance), with the between-set variance tau^2 by Paule and Mandel's estimator.
-Rates (shares of problems solved) are combined by the beta-binomial model (Skellam 1948): a set's sum of problem
-values is binomial with the set's rate, and the rates follow a beta distribution whose mean is the average; its
-likelihood is closed-form, so sets at 0 % or 100 % enter as they are. Ratios are averaged in log2 (geometric means),
-and medians weigh each set as the average does, with Woodruff's interval.
+Results are organised as problem sets > problems > runs, and a problem set is a benchmark: the catalogs of one
+benchmark (split over several files for hosting or format reasons) merge into one set, in which every problem counts
+once (:func:`by_benchmark`, :func:`merge_sets`), and a catalog that names no benchmark is a set of its own. A problem's
+value is the mean of its runs, and a set is summarised by the number of its problems with a value, their mean and their
+variance. The sets are combined by a random-effects average (DerSimonian and Laird 1986): every set has its own true
+value, and the sets are weighted by 1 / (tau^2 + the set's own sampling variance), with the between-set variance tau^2
+by Paule and Mandel's estimator. Rates (shares of problems solved) are combined by the beta-binomial model (Skellam
+1948): a set's sum of problem values is binomial with the set's rate, and the rates follow a beta distribution whose
+mean is the average; its likelihood is closed-form, so sets at 0 % or 100 % enter as they are. Ratios are averaged in
+log2 (geometric means), and medians weigh each set as the average does, with Woodruff's interval.
 
 Every interval covers these problem sets: the weights (for rates, the beta's concentration) are held at their
 estimates and only the sampling of problems within each set counts, with t on the problems' degrees of freedom,
@@ -24,7 +26,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Iterable, Mapping, Sequence
+from typing import Iterable, Mapping, Sequence, TypeVar
 
 import numpy as np
 from scipy import special as _sp
@@ -545,6 +547,31 @@ def holm(pvalues: Iterable[float]) -> list[float]:
     return out
 
 
+# ---- benchmarks: the problem sets ------------------------------------------------------------------------------------
+_T = TypeVar("_T")
+
+
+def by_benchmark(problems: Mapping[str, Sequence[_T]], benchmarks: Mapping[str, str]) -> dict[str, list[_T]]:
+    """The problems of each catalog, merged into one problem set per benchmark: the catalogs ``benchmarks`` maps to the
+    same benchmark become one set, every problem in it once, and a catalog it does not name is a benchmark of its own
+    (its name is the benchmark's). Keyed by benchmark, in the order the benchmarks first appear."""
+    out: dict[str, list[_T]] = {}
+    for catalog, values in problems.items():
+        out.setdefault(benchmarks.get(catalog, catalog), []).extend(values)
+    return out
+
+
+def merge_sets(sets: Mapping[str, SetStat], benchmarks: Mapping[str, str]) -> dict[str, SetStat]:
+    """Per-catalog summaries merged into one per benchmark, as :func:`by_benchmark` merges the problems: the counts,
+    sums and sums of squares add up. A catalog ``benchmarks`` does not name is a benchmark of its own."""
+    out: dict[str, SetStat] = {}
+    for catalog, st in sets.items():
+        name = benchmarks.get(catalog, catalog)
+        prev = out.get(name)
+        out[name] = st if prev is None else SetStat(prev.n + st.n, prev.s1 + st.s1, prev.s2 + st.s2)
+    return out
+
+
 # ---- averages from per-problem run values ----------------------------------------------------------------------------
 KINDS = ("mean", "rate", "ratio", "median")
 
@@ -652,9 +679,11 @@ def _median(problems: Mapping[str, Sequence[Sequence[object]]]) -> Average | Non
                    {name: w / total_w for name, w in set_w.items()})
 
 
-def average(problems: Mapping[str, Sequence[Sequence[object]]], kind: str = "mean") -> Average | None:
+def average(problems: Mapping[str, Sequence[Sequence[object]]], kind: str = "mean", *,
+            benchmarks: Mapping[str, str] | None = None) -> Average | None:
     """The average over problem sets of per-problem run values: ``problems[set]`` lists, for each problem of the set,
-    the values of its runs. ``kind``:
+    the values of its runs. With ``benchmarks`` ({catalog: benchmark}), ``problems`` is keyed by catalog and the
+    catalogs of one benchmark are one set (:func:`by_benchmark`); the weights are then keyed by benchmark. ``kind``:
 
     * ``"mean"``: the random-effects average of the sets' means (a problem's value is the mean of its runs' finite
       values; problems without one are left out);
@@ -665,6 +694,8 @@ def average(problems: Mapping[str, Sequence[Sequence[object]]], kind: str = "mea
     None when no set has a value. One set alone is its own mean (a rate: its plain rate with the Wilson interval)."""
     if kind not in KINDS:
         raise ValueError(f"kind must be one of {KINDS}, not {kind!r}")
+    if benchmarks is not None:
+        problems = by_benchmark(problems, benchmarks)
     if kind == "median":
         return _median(problems)
     names, stats = _set_stats(problems, kind)
