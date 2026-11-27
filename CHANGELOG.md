@@ -60,7 +60,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   document symbolic-data renders with, which records the kind of each failed attempt (`failures`); `--shard K/N`
   splits the run into independent tasks, each resumable from its own journal, and `--merge` writes the document from
   their journals. Rows record `draws_attempt`, `draws_formula_inherent` and `draws_failures`, `__meta__.draws` the
-  acceptance. `srbf.table.judge_snapshot` is the judge on one snapshot (what `judge_result_file`
+  acceptance. Judging only the first restart that recovers numerically made the kept attempt depend on the oracle's
+  seed where only a product or ratio of a law's constants is fixed by the data. Checked again at three oracle seeds on
+  the ten problems where that was seen (21 attempts: seven AI-Feynman laws, the BMS prior expression, decomposable-NSR
+  E9 and AI Feynman 2.0 table 4 equation 12), every attempt gets the same verdict at all three seeds, so each problem
+  keeps the same attempt: attempt 1 for nine, attempt 3 for table 4 equation 12, whose first two attempts fail
+  numerically at every seed. The passing restart came between the 3rd and the 716th of 1,024. `srbf.table.judge_snapshot` is the judge on one snapshot (what `judge_result_file`
   runs).
 - **`model_adapter.seed` (flash_ansr)**: seeds every fit, so that the same problem gives the same answer.
 - **Every candidate of every method, stored and judged by srbf.** A worker returns its own front (PySR's hall of fame,
