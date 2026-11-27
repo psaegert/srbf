@@ -38,7 +38,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from site_random_effects import SetStat, combine, merge_sets  # noqa: E402
+from site_random_effects import SetStat, combine_nested, nest_sets  # noqa: E402
 from timing_readout import load_rung  # noqa: E402
 
 import numpy as np  # noqa: E402
@@ -49,12 +49,13 @@ NOTE = ("Measured on one workstation (16 CPU cores, one RTX 4090 GPU), one metho
 
 
 def over_sets(per_catalog: dict[str, Any], benchmarks: dict[str, str] | None = None) -> float | None:
-    """The seconds per problem: each benchmark's mean over its answered (finite) problems, averaged over the benchmarks.
-    ``per_catalog`` holds each catalog's times; ``benchmarks`` maps a catalog to its benchmark (a catalog it does not
-    name is a benchmark of its own)."""
+    """The seconds per problem: the mean over the answered (finite) problems, averaged over benchmarks > catalogs as
+    every average on the site (srbf.aggregate.combine_nested). ``per_catalog`` holds each catalog's times;
+    ``benchmarks`` maps a catalog to its benchmark (a catalog it does not name is a benchmark of its own), and the
+    catalogs of one benchmark are its subsets."""
     stats = {c: SetStat(int(t.size), float(t.sum()), float((t * t).sum()))
              for c, t in ((c, np.asarray(x, float)) for c, x in per_catalog.items()) if t.size}
-    c = combine(list(merge_sets(stats, benchmarks or {}).values()), "normal")
+    c = combine_nested(nest_sets(stats, benchmarks or {}), "normal")
     return None if c is None else c.mu
 
 

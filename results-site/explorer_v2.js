@@ -524,17 +524,32 @@
     return state.cats.length && state.cats.every(function (c) { return cell(m, c, r); }) ? state.cats.slice() : [];
   }
   function laws(cs) { return cs.reduce(function (a, c) { return a + CAT[c].laws; }, 0); }
-  // ---- benchmarks, the unit of every average (owner 2026-11-28) ----------------------------------------------------
-  // A benchmark split over several problem sets for hosting or format reasons (a licence, fixed points, its formulas and
-  // its data) is ONE set wherever the page averages: its sets' counts, sums and sums of squares add up, so every problem
-  // in it counts once and the split moves no weight. A problem set the release names no benchmark for is one of its own.
-  // The problem-set picker, the per-set rows and the matrix stay per set: a subset is a view, never an averaging unit.
+  // ---- benchmarks > subsets, the units of every average (2026-11-27) -------------------------------------------------
+  // Every average is over benchmarks, and within a benchmark over its subsets: the parts its authors published it in,
+  // or the problem sets it is stored in (a licence, fixed points, its formulas and its data). A problem set is one
+  // subset of its benchmark (named by the release, CAT[c].subset, else after itself), unless the release splits it
+  // into several (CAT[c].subsets), whose cells are keyed c + "/" + subset. A problem set the release names no benchmark
+  // for is a benchmark of its own. The problem-set picker, the per-set rows and the matrix stay per set: a selection is
+  // a view, never an averaging unit.
   function benchOf(c) { return (CAT[c] && CAT[c].benchmark) || c; }
-  // setOf(c) -> {n, s1, s2} or null for each set c of cs: one {n, s1, s2} per benchmark, in the order they first appear
+  function unitsOf(c) {
+    var C = CAT[c];
+    return C && C.subsets && C.subsets.length > 1 ? C.subsets.map(function (u) { return [c + "/" + u, u]; }) : [[c, (C && C.subset) || c]];
+  }
+  // setOf(key) -> {n, s1, s2} or null for each subset of the sets cs (key: a set, or one of its subsets): the subsets of
+  // each benchmark, [[{b, u, n, s1, s2}, ...], ...], those of one name in one benchmark added up, in the order they first
+  // appear. A set split into subsets whose subsets have no cells is taken whole.
   function byBench(cs, setOf) {
-    var at = {}, out = [];
-    cs.forEach(function (c) { var st = setOf(c); if (!st || !(st.n > 0)) { return; } var b = benchOf(c), q = at[b];
-      if (!q) { q = at[b] = { b: b, n: 0, s1: 0, s2: 0 }; out.push(q); } q.n += st.n; q.s1 += st.s1 || 0; q.s2 += st.s2 || 0; });
+    var at = {}, out = [], idx = {};
+    cs.forEach(function (c) {
+      var units = unitsOf(c), sts = units.map(function (u) { return setOf(u[0]); });
+      if (units.length > 1 && !sts.some(function (st) { return st; })) { units = [[c, c]]; sts = [setOf(c)]; }
+      var b = benchOf(c);
+      units.forEach(function (u, i) { var st = sts[i]; if (!st || !(st.n > 0)) { return; }
+        if (!(b in idx)) { idx[b] = out.length; out.push([]); at[b] = {}; }
+        var q = at[b][u[1]]; if (!q) { q = at[b][u[1]] = { b: b, u: u[1], n: 0, s1: 0, s2: 0 }; out[idx[b]].push(q); }
+        q.n += st.n; q.s1 += st.s1 || 0; q.s2 += st.s2 || 0; });
+    });
     return out;
   }
   function benchText(S) { return S + (S === 1 ? " benchmark" : " benchmarks"); }
@@ -603,14 +618,52 @@
   // The interval covers these problem sets (owner 2026-09-27): the weights held fixed, only each set's own noise,
   // Var(mu) = sum w^2 v / (sum w)^2, t on the problems' degrees of freedom (sum of n - 1). One set is its own mean with
   // the t interval on its problems. The range for one more problem set is the prediction interval, t with S - 2.
-  function combineScale(y, v, df) {
-    var S = y.length, i, tau2 = S > 1 ? pauleMandel(y, v) : 0, w = [], sw = 0, mu = 0, q = 0;
+  // For benchmarks made of subsets (combineScaleNested): v[i] a benchmark's variance given its own true value, sampling[i]
+  // the part of it that is the problems' sampling (the only part the interval counts), tau2W the spread between the
+  // subsets of a benchmark, which widens the range for one more benchmark.
+  function combineScale(y, v, df, sampling, tau2W) {
+    var S = y.length, i, tau2 = S > 1 ? pauleMandel(y, v) : 0, w = [], sw = 0, mu = 0, q = 0, sv = sampling || v;
+    tau2W = tau2W || 0;
     for (i = 0; i < S; i++) { w.push(1 / (v[i] + tau2)); sw += w[i]; mu += w[i] * y[i]; }
-    mu /= sw; for (i = 0; i < S; i++) { q += w[i] * w[i] * v[i]; }
+    mu /= sw; for (i = 0; i < S; i++) { q += w[i] * w[i] * sv[i]; }
     df = Math.max(1, df || 1);
-    var se = Math.sqrt(q) / sw, tq = tq975(df), half = S >= 3 ? tq975(S - 2) * Math.sqrt(tau2 + 1 / sw) : null;
+    var se = Math.sqrt(q) / sw, tq = tq975(df), half = S >= 3 ? tq975(S - 2) * Math.sqrt(tau2 + tau2W + 1 / sw) : null;
     return { mu: mu, lo: mu - tq * se, hi: mu + tq * se, piLo: half === null ? null : mu - half, piHi: half === null ? null : mu + half,
-             tau2: tau2, w: w.map(function (x) { return x / sw; }), S: S, p: se > 0 ? tP(mu / se, df) : (mu !== 0 ? 0 : 1) };
+             tau2: tau2, tau2W: tau2W, w: w.map(function (x) { return x / sw; }), S: S, p: se > 0 ? tP(mu / se, df) : (mu !== 0 ? 0 : 1) };
+  }
+  // ---- three levels: benchmarks > subsets > problems (2026-11-27) ----------------------------------------------------
+  // A benchmark's subsets (its authors' parts, or the problem sets it is stored in) are fixed by the data, never by the
+  // results. A subset's true value scatters around its benchmark's (tau_S^2), a benchmark's around the average
+  // (tau_B^2); both are estimated for every average and only set the weights: subsets that differ count more on their
+  // own, subsets that are alike collapse into their benchmark. One subset per benchmark is the two-level average, bit
+  // for bit. The reference's within_tau2, combine_scale_nested, within_rho, effective_sets, step for step.
+  function withinTau2(ys, vs) {
+    var gi = [], df = 0, b; for (b = 0; b < ys.length; b++) { if (ys[b].length > 1) { gi.push(b); df += ys[b].length - 1; } }
+    function excess(t2) {
+      var q = 0; gi.forEach(function (b) {
+        var y = ys[b], v = vs[b], w = [], sw = 0, swy = 0, mu, i;
+        for (i = 0; i < y.length; i++) { w.push(1 / (v[i] + t2)); sw += w[i]; swy += w[i] * y[i]; }
+        mu = swy / sw; var qb = 0; for (i = 0; i < y.length; i++) { qb += w[i] * Math.pow(y[i] - mu, 2); } q += qb;
+      });
+      return q - df;
+    }
+    if (df === 0 || excess(0) <= 0) { return 0; }
+    var lo = 0, hi = 1, i, mid; while (excess(hi) > 0) { hi *= 2; }
+    for (i = 0; i < 80; i++) { mid = (lo + hi) / 2; if (excess(mid) > 0) { lo = mid; } else { hi = mid; } }
+    return (lo + hi) / 2;
+  }
+  function combineScaleNested(ys, vs, df) {
+    var t2s = withinTau2(ys, vs), yb = [], vb = [], sb = [], shares = [];
+    ys.forEach(function (y, b) {
+      var v = vs[b], i;
+      if (y.length === 1) { yb.push(y[0]); vb.push(v[0] + t2s); sb.push(v[0]); shares.push([1]); return; }
+      var w = [], W = 0, wy = 0; for (i = 0; i < y.length; i++) { w.push(1 / (v[i] + t2s)); W += w[i]; wy += w[i] * y[i]; }
+      var sh = w.map(function (x) { return x / W; }), q = 0; for (i = 0; i < y.length; i++) { q += sh[i] * sh[i] * v[i]; }
+      yb.push(wy / W); vb.push(1 / W); sb.push(q); shares.push(sh);
+    });
+    var c = combineScale(yb, vb, df, sb, t2s);
+    c.sw = c.w.map(function (wb, b) { return shares[b].map(function (x) { return wb * x; }); });
+    return c;
   }
   // ---- rates: the beta-binomial model (owner 2026-11-17) -----------------------------------------------------------
   // A set's sum k of n problem values is binomial with its set's rate, and the rates follow Beta(m s, (1 - m) s): m is
@@ -766,16 +819,47 @@
     }
     return [ends[0] === -Infinity ? 0 : sig(ends[0]), ends[1] === Infinity ? 1 : sig(ends[1])];
   }
-  // rates over problem sets on the 0-1 scale; one set: its plain rate and the Wilson interval. The interval inverts Rao's
-  // score test (see the reference's combine_rates). rateCore is the fit without the interval; the interval is the part
-  // that costs (about 5 ms over 29 sets, up to 60 ms over 192), added by rateFinish
-  function rateCore(sets) {
-    var S = sets.length, N = 0, K = 0, df = 0, j;
-    for (j = 0; j < S; j++) { N += sets[j].n; K += sets[j].s1; df += sets[j].n - 1; }
+  // rho_S within the benchmarks by Williams' rule (the reference's within_rho): a subset of n problems counts c = 1 / (1 +
+  // (n - 1) rho) of them, a benchmark's rate is sum c k / sum c n, and Pearson's chi-square of its subsets about that rate
+  // equals its degrees of freedom; a benchmark whose subsets are all at 0 % or all at 100 % is left out
+  function withinRho(groups) {
+    var use = groups.filter(function (g) { var k = 0; g.forEach(function (st) { k += st.s1; }); return g.length > 1 && k > 0 && g.some(function (st) { return st.s1 < st.n; }); });
+    var df = 0; use.forEach(function (g) { df += g.length - 1; });
+    function excess(rho) {
+      var x2 = 0; use.forEach(function (g) {
+        var c = g.map(function (st) { return 1 / (1 + (st.n - 1) * rho); }), ck = 0, cn = 0, i;
+        for (i = 0; i < g.length; i++) { ck += c[i] * g[i].s1; } for (i = 0; i < g.length; i++) { cn += c[i] * g[i].n; }
+        var p = ck / cn, ss = 0; for (i = 0; i < g.length; i++) { ss += c[i] * g[i].n * Math.pow(g[i].s1 / g[i].n - p, 2); }
+        x2 += ss / (p * (1 - p));
+      });
+      return x2 - df;
+    }
+    if (df === 0 || excess(0) <= 0) { return 0; }
+    if (excess(1) >= 0) { return 1; }
+    var lo = 0, hi = 1, i, mid; for (i = 0; i < 80; i++) { mid = (lo + hi) / 2; if (excess(mid) > 0) { lo = mid; } else { hi = mid; } }
+    return (lo + hi) / 2;
+  }
+  // each benchmark as one set of effective counts (Kish): its subsets' counts, each scaled by c; rho = 0 merges them
+  function effectiveSets(groups, rho) {
+    return groups.map(function (g) {
+      if (g.length === 1 && rho === 0) { return g[0]; }
+      var n = 0, k = 0, k2 = 0; g.forEach(function (st) { var c = 1 / (1 + (st.n - 1) * rho); n += c * st.n; k += c * st.s1; k2 += c * (st.s2 || 0); });
+      return { n: n, s1: k, s2: k2 };
+    });
+  }
+  // rates over benchmarks > subsets on the 0-1 scale: rho_S, the benchmarks' effective counts, and the beta-binomial over
+  // them; one benchmark: its effective rate and the Wilson interval. The interval inverts Rao's score test (see the
+  // reference's combine_rates). rateCore is the fit without the interval; the interval is the part that costs (about 5 ms
+  // over 29 benchmarks, up to 60 ms over 192), added by rateFinish
+  function rateCore(groups) {
+    var rho = withinRho(groups), sets = effectiveSets(groups, rho), S = sets.length, N = 0, K = 0, df = 0, j;
+    for (j = 0; j < S; j++) { N += sets[j].n; K += sets[j].s1; }
+    groups.forEach(function (g) { g.forEach(function (st) { df += st.n - 1; }); });
+    var tau2W = rho < 1 ? rho / (1 - rho) : Infinity, sub = function (w) { return w.map(function (wb, b) { var g = groups[b], e = sets[b]; return g.length === 1 ? [wb] : g.map(function (st) { return wb * st.n / (1 + (st.n - 1) * rho) / e.n; }); }); };
     var f = S > 1 ? rateFit(sets) : { eta: 0, lam: 0 };
     if (S === 1 || !isFinite(f.eta)) {
-      var wi = wilson(K, N);
-      return { mu: K / N, lo: wi[0], hi: wi[1], piLo: null, piHi: null, tau2: 0, w: sets.map(function (st) { return st.n / N; }), S: S, p: null, ci: null };
+      var wi = wilson(K, N), w0 = sets.map(function (st) { return st.n / N; });
+      return { mu: K / N, lo: wi[0], hi: wi[1], piLo: null, piHi: null, tau2: 0, tau2W: tau2W, w: w0, sw: sub(w0), S: S, p: null, ci: null, eff: sets };
     }
     var lam = Math.min(f.lam, LAM_MAX), m = 1 / (1 + Math.exp(-f.eta)), s = Math.exp(lam), a = m * s, b = (1 - m) * s, q = m * (1 - m);
     var tgA = trigamma(a), tgB = trigamma(b), info = [], tot = 0;
@@ -783,16 +867,20 @@
       var fisher = -Math.pow(s * q, 2) * (trigamma(sets[j].s1 + a) - tgA + trigamma(sets[j].n - sets[j].s1 + b) - tgB);
       info.push(fisher); tot += fisher;
     }
-    var tq = tq975(Math.max(1, df));
-    return { mu: m, lo: NaN, hi: NaN, piLo: S >= 3 ? betaPpf(0.025, a, b) : null, piHi: S >= 3 ? betaPpf(0.975, a, b) : null,
-             tau2: isFinite(f.lam) ? 1 / s : 0, w: info.map(function (x) { return x / tot; }), S: S, p: null, ci: { eta: f.eta, lam: f.lam, t2: tq * tq } };
+    var tq = tq975(Math.max(1, df)), pa = a, pb = b;
+    if (S >= 3 && rho > 0) {   // one more benchmark of one subset: its spread between benchmarks and that of its subset
+      var rhoB = 1 / (s + 1), nu = Math.max(Math.exp(LAM_MIN), 1 / (rhoB + (1 - rhoB) * rho) - 1); pa = m * nu; pb = (1 - m) * nu;
+    }
+    var w = info.map(function (x) { return x / tot; });
+    return { mu: m, lo: NaN, hi: NaN, piLo: S >= 3 ? betaPpf(0.025, pa, pb) : null, piHi: S >= 3 ? betaPpf(0.975, pa, pb) : null,
+             tau2: isFinite(f.lam) ? 1 / s : 0, tau2W: tau2W, w: w, sw: sub(w), S: S, p: null, ci: { eta: f.eta, lam: f.lam, t2: tq * tq }, eff: sets };
   }
-  function rateFinish(core, sets) {
+  function rateFinish(core) {
     var lo = core.lo, hi = core.hi;
-    if (core.ci) { var ci = rateInterval(sets, core.ci.eta, core.ci.lam, core.ci.t2); lo = Math.min(ci[0], core.mu); hi = Math.max(ci[1], core.mu); }
-    return { mu: core.mu, lo: lo, hi: hi, piLo: core.piLo, piHi: core.piHi, tau2: core.tau2, w: core.w, S: core.S, p: null };
+    if (core.ci) { var ci = rateInterval(core.eff, core.ci.eta, core.ci.lam, core.ci.t2); lo = Math.min(ci[0], core.mu); hi = Math.max(ci[1], core.mu); }
+    return { mu: core.mu, lo: lo, hi: hi, piLo: core.piLo, piHi: core.piHi, tau2: core.tau2, tau2W: core.tau2W, w: core.w, sw: core.sw, S: core.S, p: null };
   }
-  function combineRates(sets) { return rateFinish(rateCore(sets), sets); }
+  function combineRates(groups) { return rateFinish(rateCore(groups)); }
   // Rate intervals in idle time. A drawing computes the intervals it needs while it is within RATE_SYNC_MS of its start;
   // the rest are drawn without one (no whisker, "…" for the numbers), queued, computed while the browser is idle, and
   // drawn once they are all in (on a long queue, at most every RATE_REDRAW_MS). A new drawing drops the queue the last one left, so a
@@ -807,7 +895,7 @@
       if (!first && left < 2) { break; }
       first = false;
       var job = RATEQ.shift(); delete RATEQUEUED[job.key];
-      if (!(job.key in RATEMEMO)) { RATEMEMO[job.key] = rateFinish(job.core, job.sets); rateFresh = true; }
+      if (!(job.key in RATEMEMO)) { RATEMEMO[job.key] = rateFinish(job.core); rateFresh = true; }
     }
     if (rateFresh && (!RATEQ.length || Date.now() - rateDrawnAt >= RATE_REDRAW_MS)) { rateFresh = false; ratePumping = false; rateRedraw(); return; }
     if (RATEQ.length) { rateIdle(ratePump); } else { ratePumping = false; }
@@ -833,24 +921,31 @@
     document.documentElement.setAttribute("data-rate-intervals", RATEQ.length ? "pending" : "done");
     if (RATEQ.length && !ratePumping) { ratePumping = true; rateIdle(ratePump); }
   }
-  // sets: [{n, s1, s2, ...}]; a rate ("logit") comes back on its own 0-1 scale. Also: the problems behind it, and n0,
-  // the number of problems at which a set counts half as much as a very large one (sigma^2 / tau^2; not for rates)
+  // groups: [[{n, s1, s2, ...}, ...], ...], the subsets of each benchmark (byBench), or [{n, s1, s2}, ...], each set a
+  // benchmark of its own; a rate ("logit") comes back on its own 0-1 scale. Also: the problems behind it, and n0 (n0S),
+  // the number of problems at which a benchmark (a subset within its benchmark) counts half as much as a very large one
+  // (sigma^2 / tau_B^2, sigma^2 / tau_S^2; not for rates)
   function reCombine(sets, scale) {
-    sets = sets.filter(function (st) { return st.n > 0; }); if (!sets.length) { return null; }
-    var c, n0 = Infinity;
+    var groups = (sets.length && Array.isArray(sets[0]) ? sets : sets.map(function (st) { return [st]; }))
+      .map(function (g) { return g.filter(function (st) { return st.n > 0; }); }).filter(function (g) { return g.length; });
+    if (!groups.length) { return null; }
+    var c, n0 = Infinity, n0S = Infinity, flat = [];
+    groups.forEach(function (g) { g.forEach(function (st) { flat.push(st); }); });
     if (scale === "logit") {   // the same sets give the same fit: remembered, a chart asks for many
-      var key = sets.map(function (st) { return st.n + ":" + st.s1; }).join(",");
+      var key = groups.map(function (g) { return g.map(function (st) { return st.n + ":" + st.s1; }).join(","); }).join(";");
       if (!(key in RATEMEMO)) {
-        var core = RATECORE[key] || (RATECORE[key] = rateCore(sets));
-        if (!core.ci || Date.now() < rateSyncEnd) { RATEMEMO[key] = rateFinish(core, sets); }
-        else if (!(key in RATEQUEUED)) { RATEQUEUED[key] = true; RATEQ.push({ key: key, core: core, sets: sets }); }
+        var core = RATECORE[key] || (RATECORE[key] = rateCore(groups));
+        if (!core.ci || Date.now() < rateSyncEnd) { RATEMEMO[key] = rateFinish(core); }
+        else if (!(key in RATEQUEUED)) { RATEQUEUED[key] = true; RATEQ.push({ key: key, core: core }); }
       }
-      c = key in RATEMEMO ? Object.assign({}, RATEMEMO[key]) : Object.assign({}, rateFinish({ mu: RATECORE[key].mu, lo: NaN, hi: NaN, piLo: RATECORE[key].piLo, piHi: RATECORE[key].piHi, tau2: RATECORE[key].tau2, w: RATECORE[key].w, S: RATECORE[key].S, ci: null }, sets), { ciPending: true });
+      c = key in RATEMEMO ? Object.assign({}, RATEMEMO[key]) : Object.assign({}, rateFinish(Object.assign({}, RATECORE[key], { ci: null, lo: NaN, hi: NaN })), { ciPending: true });
     } else {
-      var e = setEstimates(sets); c = combineScale(e.y, e.v, sets.reduce(function (a, st) { return a + st.n - 1; }, 0));
-      n0 = c.tau2 > 0 ? e.pooled / c.tau2 : Infinity;
+      var e = setEstimates(flat), ys = [], vs = [], at = 0;
+      groups.forEach(function (g) { ys.push(e.y.slice(at, at + g.length)); vs.push(e.v.slice(at, at + g.length)); at += g.length; });
+      c = combineScaleNested(ys, vs, flat.reduce(function (a, st) { return a + st.n - 1; }, 0));
+      n0 = c.tau2 > 0 ? e.pooled / c.tau2 : Infinity; n0S = c.tau2W > 0 ? e.pooled / c.tau2W : Infinity;
     }
-    c.n = sets.reduce(function (a, st) { return a + st.n; }, 0); c.sets = sets; c.n0 = n0;
+    c.n = flat.reduce(function (a, st) { return a + st.n; }, 0); c.sets = groups; c.n0 = n0; c.n0S = n0S;
     return c;
   }
   function holm(ps) {
@@ -867,31 +962,49 @@
   function reading(c, k) { return c ? (leftOut(k) ? c.a && c.a[k] : c.m[k]) : null; }   // [problems with a value, with a finite one, sum, sum of squares]
   function histKey(k) { return leftOut(k) ? k + "@answered" : k; }
   function histFile(k) { return "hist/" + histKey(k).replace("@answered", "_answered") + ".js"; }
-  // A distribution over the selected problem sets weighs each set the way the average does: n / (n + n0), with n0 from the
-  // fit of the metric's mean (its median_via for R^2), so a set counts about once whatever its size, and a set of a few
-  // problems less. Within a set every problem weighs 1 (the exporter shares it among its runs). Returned scaled to the
-  // number of problems, so a share is h / n as before.
+  // A distribution over the selected problem sets weighs each subset the way the average does (the reference's
+  // nested_set_weights): within its benchmark a subset of n problems counts n / (1 + n / n0S), a benchmark counts
+  // N* = their sum and weighs N* / (N* + n0), shared among its subsets by their counts; n0 and n0S from the fit of the
+  // metric's mean (its median_via for R^2). So a benchmark counts about once whatever its size, a subset of a few
+  // problems less, and subsets that differ count more on their own. Within a subset every problem weighs 1 (the exporter
+  // shares it among its runs). setWeights returns the weights of one benchmark's subsets from their numbers of
+  // problems, scaled so that a benchmark of one subset weighs n / (n + n0) as before.
+  function nestedWeights(ns, n0S, n0) {
+    var each = ns.map(function (n) { return n / (1 + n / n0S); }), nstar = 0; each.forEach(function (e) { nstar += e; });
+    var bench = isFinite(n0) ? nstar / (nstar + n0) : nstar;
+    return ns.length === 1 ? [bench] : each.map(function (e) { return bench * e / nstar; });
+  }
   function setWeights(k, m, r, cs) {
     var mk = METRIC[k] && METRIC[k].median_via ? METRIC[k].median_via : k;
-    var sets = byBench(cs, function (c) { var t = reading(cell(m, c, r), mk); return t && t[1] > 0 ? { n: t[1], s1: t[2], s2: t[3] } : null; });
-    var fit = sets.length >= 2 ? reCombine(sets, "normal") : null;
-    return function (n) { return fit && isFinite(fit.n0) ? n / (n + fit.n0) : n; };
+    var groups = byBench(cs, function (c) { var t = reading(cell(m, c, r), mk); return t && t[1] > 0 ? { n: t[1], s1: t[2], s2: t[3] } : null; });
+    var units = groups.reduce(function (a, g) { return a + g.length; }, 0), fit = units >= 2 ? reCombine(groups, "normal") : null;
+    var n0 = fit ? fit.n0 : Infinity, n0S = fit ? fit.n0S : Infinity;
+    return function (ns) { return nestedWeights(ns, n0S, n0); };
   }
   function pooledHist(k, m, r, cs) {
     var H = histOf(histKey(k)); if (!H || !H.cells[m]) { return null; }
     var weigh = setWeights(k, m, r, cs), acc = new Array(H.nb).fill(0), N = 0, parts = [], at = {}, order = [];
-    cs.forEach(function (c) { var hc = histCell(H, m, c, r); if (!hc) { return; } var b = benchOf(c), pt = at[b];   // a benchmark's sets: one histogram
-      if (!pt) { pt = at[b] = { c: b, h: new Array(H.nb).fill(0) }; order.push(pt); } addHist(pt.h, hc, H.nb); });
-    order.forEach(function (pt) { var tot = pt.h.reduce(function (a, b) { return a + b; }, 0); if (tot > 0) { pt.tot = tot; pt.w = weigh(tot); parts.push(pt); N += tot; } });
+    cs.forEach(function (c) {   // one histogram per subset of a benchmark (a subset in two sets of one benchmark: one)
+      var units = unitsOf(c), hcs = units.map(function (u) { return histCell(H, m, u[0], r); });
+      if (units.length > 1 && !hcs.some(function (h) { return h; })) { units = [[c, c]]; hcs = [histCell(H, m, c, r)]; }
+      var b = benchOf(c);
+      units.forEach(function (u, i) { var hc = hcs[i]; if (!hc) { return; } var id = b + "\u0000" + u[1], pt = at[id];
+        if (!pt) { pt = at[id] = { c: b, b: b, u: u[1], h: new Array(H.nb).fill(0) }; order.push(pt); } addHist(pt.h, hc, H.nb); });
+    });
+    var byB = {}, bs = [];
+    order.forEach(function (pt) { var tot = pt.h.reduce(function (a, b) { return a + b; }, 0); if (tot > 0) { pt.tot = tot; N += tot; if (!byB[pt.b]) { byB[pt.b] = []; bs.push(pt.b); } byB[pt.b].push(pt); parts.push(pt); } });
+    bs.forEach(function (b) { var ws = weigh(byB[b].map(function (pt) { return pt.tot; })); byB[b].forEach(function (pt, i) { pt.w = ws[i]; }); });
     var W = parts.reduce(function (a, pt) { return a + pt.w; }, 0); if (!N || !W) { return null; }
     parts.forEach(function (pt) { for (var i = 0; i < H.nb; i++) { acc[i] += (pt.w / W) * pt.h[i] / pt.tot * N; } });
-    return { h: acc, n: N, lo: H.lo, hi: H.hi, nb: H.nb, parts: parts, W: W };
+    return { h: acc, n: N, lo: H.lo, hi: H.hi, nb: H.nb, parts: parts, W: W, S: bs.length };
   }
-  // The interval of a median (Woodruff): the share of each set below the pooled median, averaged over the sets like any
-  // rate, gives an interval for that share; the pooled distribution maps it back to the metric.
+  // The interval of a median (Woodruff): the share of each subset below the pooled median, averaged over the benchmarks
+  // like any value, gives an interval for that share; the pooled distribution maps it back to the metric.
   function medianShareHalf(ph, mid) {
-    var sets = ph.parts.map(function (pt) { var below = 0; for (var i = 0; i <= mid; i++) { below += pt.h[i]; } var p = Math.min(1, below / pt.tot); return { n: Math.max(1, Math.round(pt.tot)), s1: p * Math.max(1, Math.round(pt.tot)), s2: p * Math.max(1, Math.round(pt.tot)) }; });
-    var c = reCombine(sets, "normal"); return c ? Math.max(0, (c.hi - c.lo) / 2) : 0;
+    var idx = {}, groups = [];
+    ph.parts.forEach(function (pt) { var below = 0; for (var i = 0; i <= mid; i++) { below += pt.h[i]; } var p = Math.min(1, below / pt.tot), k = Math.max(1, Math.round(pt.tot));
+      if (!(pt.b in idx)) { idx[pt.b] = groups.length; groups.push([]); } groups[idx[pt.b]].push({ n: k, s1: p * k, s2: p * k }); });
+    var c = reCombine(groups, "normal"); return c ? Math.max(0, (c.hi - c.lo) / 2) : 0;
   }
   function quantileBin(h, kth) { var cum = 0; for (var i = 0; i < h.nb; i++) { cum += h.h[i]; if (cum >= kth) { return i; } } return h.nb - 1; }
   function tfOf(metric) { return metric.hist && metric.hist.tf; }
@@ -958,12 +1071,12 @@
     if (metric.median_via) {
       var pf = pooledHist(metric.median_via, m, r, cs); if (!pf) { return null; }
       var q = function (share_) { return r2Quantile(ph, pf, Math.max(1e-9, Math.min(ph.n, share_ * ph.n))); }, half0 = medianShareHalf(pf, quantileBin(pf, pf.n / 2)), qm = q(0.5);
-      out = { v: qm.v, lo: q(Math.max(0, 0.5 - half0)).v, hi: q(Math.min(1, 0.5 + half0)).v, n: ph.n, S: ph.parts.length, edge: qm.edge, share: share };
+      out = { v: qm.v, lo: q(Math.max(0, 0.5 - half0)).v, hi: q(Math.min(1, 0.5 + half0)).v, n: ph.n, S: ph.S, edge: qm.edge, share: share };
       return out;
     }
     var mid = quantileBin(ph, ph.n / 2), half = medianShareHalf(ph, mid);
     var lo = quantileBin(ph, Math.max(1e-9, (0.5 - half) * ph.n)), hi = quantileBin(ph, Math.min(ph.n, (0.5 + half) * ph.n));
-    return { v: binVal(ph, mid), lo: binVal(ph, lo), hi: binVal(ph, hi), n: ph.n, S: ph.parts.length, edge: mid === 0 ? -1 : (mid === ph.nb - 1 ? 1 : 0), share: share };
+    return { v: binVal(ph, mid), lo: binVal(ph, lo), hi: binVal(ph, hi), n: ph.n, S: ph.S, edge: mid === 0 ? -1 : (mid === ph.nb - 1 ? 1 : 0), share: share };
   }
 
   function fmt(metric, x, edge) {
@@ -1758,8 +1871,10 @@
       has.push(c); dsets[c] = { n: t[0], s1: sgn * t[1], s2: t[2] };
       if (rate) { wins += flip ? t[4] : t[3]; losses += flip ? t[3] : t[4]; }
       else { ssets[c] = { n: t[3], s1: sgn * t[4], s2: t[5] }; wins += flip ? t[7] : t[6]; losses += flip ? t[6] : t[7]; } });
-    var fd = reCombine(byBench(has, function (c) { return dsets[c]; }), "normal"); if (!fd) { return null; }
-    var ft = rate ? fd : reCombine(byBench(has, function (c) { return ssets[c]; }), "normal");
+    var dOf = function (key) { if (key in dsets) { return dsets[key]; } var pc = cellOf(key), t = pc && pc.m[pk]; return t ? { n: t[0], s1: sgn * t[1], s2: t[2] } : null; };
+    var sOf = function (key) { if (key in ssets) { return ssets[key]; } var pc = cellOf(key), t = pc && pc.m[pk]; return t ? { n: t[3], s1: sgn * t[4], s2: t[5] } : null; };
+    var fd = reCombine(byBench(has, dOf), "normal"); if (!fd) { return null; }   // a set's subsets: their own cells
+    var ft = rate ? fd : reCombine(byBench(has, sOf), "normal");
     return { v: fd.mu, lo: fd.lo, hi: fd.hi, piLo: fd.piLo, piHi: fd.piHi, n: ft ? ft.n : fd.n, S: fd.S, p: ft ? ft.p : null, wins: wins, losses: losses };
   }
   function fmtDelta(metric, d) { if (!isFinite(d)) { return "–"; } var tf = tfOf(metric); if (metric.kind === "rate" || metric.fmt === "pct") { return (d >= 0 ? "+" : "") + (100 * d).toFixed(1) + " pp"; } if (tf === "log2") { return "× " + Math.pow(2, d).toFixed(2); } if (tf === "log10") { return "× " + Math.pow(10, d).toFixed(2); } return (d >= 0 ? "+" : "") + d.toFixed(metric.fmt === "num3" ? 3 : 2); }
@@ -1946,13 +2061,21 @@
     return out;
   }
   // the methods' positions on the problem sets, decoded once per drawing
+  // A subset of a problem set (key c + "/" + subset) is read from its set's files, its problems picked by the
+  // release's subset_rows (a problem's id is its row).
   function pvReader(entries) {
     var memo = {};
-    return function (x, c) {
+    var read = function (x, c) {
       var id = x.m.key + "|" + c; if (id in memo) { return memo[id]; }
+      if (!x.places[c]) {
+        var cut = c.indexOf("/"), base = cut > 0 ? c.slice(0, cut) : null, C = base && CAT[base], at = C && C.subsets ? C.subsets.indexOf(c.slice(cut + 1)) : -1;
+        var P = at >= 0 && x.places[base] ? read(x, base) : null;
+        return (memo[id] = P ? PAIRSTATS.restrict(P, function (row) { return C.subset_rows[row] === at; }) : null);
+      }
       var b = x.places[c], lo = PAIRSTATS.file(REL, x.m.key, b.r1, c), hi = b.r2 === b.r1 ? lo : PAIRSTATS.file(REL, x.m.key, b.r2, c);
       return (memo[id] = lo && hi ? PAIRSTATS.at(lo, hi, b.w) : null);
     };
+    return read;
   }
   // the budget (or the two) a method is read at, as the tables name it
   function placeText(m, places, time) {
@@ -2245,15 +2368,23 @@
   // Every run's weight (0 where a metric of ks has no value), summing to 1; n: the problems behind them; neff: the number
   // of equally weighted problems that would be as precise (Kish), for the intervals.
   function ppWeights(cl, ks) {
-    // a run's set is counted by its benchmark (bi): the sets of one benchmark share its weight, every problem in it once
-    var idx = {}, nb = 0, bi = cl.cs.map(function (c) { var b = benchOf(c); if (!(b in idx)) { idx[b] = nb++; } return idx[b]; });
-    var w = new Float64Array(cl.n), cnt = new Array(nb).fill(0), ok = new Uint8Array(cl.n), i, j;
-    for (i = 0; i < cl.n; i++) { var good = true; for (j = 0; j < ks.length; j++) { if (!ppOk(cl, ks[j], i)) { good = false; break; } } if (good) { ok[i] = 1; cnt[bi[cl.cat[i]]] += cl.share[i]; } }
-    var weigh = setWeights("log10_fvu_val", cl.m.key, cl.r, cl.cs), W = cnt.map(function (x) { return x > 0 ? weigh(x) : 0; });
-    var tot = W.reduce(function (a, b) { return a + b; }, 0), q = 0;
-    W.forEach(function (x, bj) { if (cnt[bj] > 0) { q += x * x / cnt[bj]; } });
-    for (i = 0; i < cl.n; i++) { if (ok[i] && tot > 0) { w[i] = W[bi[cl.cat[i]]] * cl.share[i] / cnt[bi[cl.cat[i]]] / tot; } }
-    var all = cl.cs.reduce(function (a, c) { return a + CAT[c].laws; }, 0), have = cnt.reduce(function (a, b) { return a + b; }, 0);
+    // a run counts in its subset of its benchmark (ui): a subset's problems share its weight, as the average weighs it
+    var idx = {}, units = [], ui = new Int32Array(cl.n), i, j;
+    var subOf = cl.cs.map(function (c) { var C = CAT[c] || {}; return function (row) { return C.subsets && C.subset_rows ? C.subsets[C.subset_rows[row]] : (C.subset || c); }; });
+    for (i = 0; i < cl.n; i++) {
+      var c = cl.cs[cl.cat[i]], b = benchOf(c), id = b + "\u0000" + subOf[cl.cat[i]](cl.row[i]);
+      if (!(id in idx)) { idx[id] = units.length; units.push({ b: b, cnt: 0, W: 0 }); }
+      ui[i] = idx[id];
+    }
+    var w = new Float64Array(cl.n), ok = new Uint8Array(cl.n);
+    for (i = 0; i < cl.n; i++) { var good = true; for (j = 0; j < ks.length; j++) { if (!ppOk(cl, ks[j], i)) { good = false; break; } } if (good) { ok[i] = 1; units[ui[i]].cnt += cl.share[i]; } }
+    var weigh = setWeights("log10_fvu_val", cl.m.key, cl.r, cl.cs), byB = {}, bs = [];
+    units.forEach(function (u) { if (u.cnt > 0) { if (!byB[u.b]) { byB[u.b] = []; bs.push(u.b); } byB[u.b].push(u); } });
+    bs.forEach(function (b) { var ws = weigh(byB[b].map(function (u) { return u.cnt; })); byB[b].forEach(function (u, k) { u.W = ws[k]; }); });
+    var tot = units.reduce(function (a, u) { return a + u.W; }, 0), q = 0;
+    units.forEach(function (u) { if (u.cnt > 0) { q += u.W * u.W / u.cnt; } });
+    for (i = 0; i < cl.n; i++) { if (ok[i] && tot > 0) { var un = units[ui[i]]; w[i] = un.W * cl.share[i] / un.cnt / tot; } }
+    var all = cl.cs.reduce(function (a, c) { return a + CAT[c].laws; }, 0), have = units.reduce(function (a, u) { return a + u.cnt; }, 0);
     return { w: w, n: have, all: all, neff: q > 0 ? tot * tot / q : 0 };
   }
   // An axis: the range on screen, from where 99 % of the values inside the frame lie (as in the Distribution view), and

@@ -172,3 +172,5 @@ def test_the_sites_parity_cases_are_current():
     _FIX.loader.exec_module(fixture)
     with open(fixture.OUT) as fh:
         assert json.load(fh) == json.loads(json.dumps(fixture.cases())), "regenerate: python scripts/site_random_effects_fixture.py"
+    with open(fixture.OUT_NESTED) as fh:
+        assert json.load(fh) == json.loads(json.dumps(fixture.nested_cases())), "regenerate: python scripts/site_random_effects_fixture.py"

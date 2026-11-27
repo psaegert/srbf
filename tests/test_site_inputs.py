@@ -44,7 +44,7 @@ def test_a_subset_rung_averages_the_catalogs_and_waits_for_every_catalog(tmp_pat
     assert timing["__provenance__"]["rows_timed"]["m"] == {"1": [4, 4]}
 
 
-def test_the_catalogs_the_manifest_places_in_one_benchmark_are_one_set(tmp_path: Path) -> None:
+def test_the_catalogs_the_manifest_places_in_one_benchmark_are_its_subsets(tmp_path: Path) -> None:
     sub = tmp_path / "sub"
     _write(sub, "big", "choices_000001.pkl", [1.0, 3.0])
     _write(sub, "small", "choices_000001.pkl", [10.0, 10.0])
@@ -54,7 +54,9 @@ def test_the_catalogs_the_manifest_places_in_one_benchmark_are_one_set(tmp_path:
                 "other": {"size": 2, "count": 2, "weight": 0.2}}
     manifest = dict(MANIFEST, total_problems=6, catalogs=catalogs)
     timing = site_timing.build(manifest, {"m": sub}, {}, "niter_{rung:05d}.pkl")
-    assert timing["m"] == {"1": over_catalogs([1.0, 3.0, 10.0, 10.0], [0.5, 0.7])}     # big and small: one set
+    times = {"big": np.asarray([1.0, 3.0]), "small": np.asarray([10.0, 10.0]), "other": np.asarray([0.5, 0.7])}
+    nested = round(site_timing.over_sets(times, {"big": "b", "small": "b"}), 4)
+    assert timing["m"] == {"1": nested}                                                  # big and small: subsets of b
     apart = site_timing.build(dict(manifest, catalogs={c: {k: v for k, v in m.items() if k != "benchmark"}
                                                        for c, m in catalogs.items()}), {"m": sub}, {}, "niter_{rung:05d}.pkl")
     assert apart["m"] == {"1": over_catalogs([1.0, 3.0], [10.0, 10.0], [0.5, 0.7])} != timing["m"]

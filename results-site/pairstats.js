@@ -111,13 +111,26 @@
     var m = merge(lo.ids, hi.ids);
     return { ids: m.ids, terms: [{ f: lo, w: 1 - w, ix: m.ia }, { f: hi, w: w, ix: m.ib }], memo: {} };
   }
+  // The method at a position on some of its problems only (keep(id) says which): a subset of the problem set, whose
+  // cells the exporter computes from the subset's rows alone. The problems keep their order, so every sum is the
+  // exporter's.
+  function restrict(P, keep) {
+    var pick = [], i;
+    for (i = 0; i < P.ids.length; i++) { if (keep(P.ids[i])) { pick.push(i); } }
+    return { ids: pick.map(function (j) { return P.ids[j]; }), sub: true, memo: {},
+      terms: P.terms.map(function (t) { return { f: t.f, w: t.w, ix: pick.map(function (j) { return t.ix[j]; }) }; }) };
+  }
   // per problem of the position: a value (part "v") or a share (part "r"), interpolated between two budgets
   function perProblem(P, part, key) {
     var id = part + ":" + key;
     if (P.memo[id]) { return P.memo[id]; }
     var t = P.terms, out;
-    if (t.length === 1) {
+    if (t.length === 1 && !P.sub) {
       out = col(t[0].f, part, key);
+    } else if (t.length === 1) {
+      var c0 = col(t[0].f, part, key), i0 = t[0].ix;
+      out = new Float64Array(P.ids.length);
+      for (var j = 0; j < out.length; j++) { out[j] = c0[i0[j]]; }
     } else {
       var a = col(t[0].f, part, key), b = col(t[1].f, part, key), ia = t[0].ix, ib = t[1].ix;
       out = new Float64Array(P.ids.length);
@@ -300,7 +313,7 @@
   }
 
   var API = { ANSWERED: ANSWERED, PAIRED_KEYS: PAIRED_KEYS, RATE_KEYS: RATE_KEYS, WORST: WORST,
-    framePath: framePath, keyPath: keyPath, file: file, decode: decode, column: column, at: at, bracketIn: bracketIn, logd: logd,
+    framePath: framePath, keyPath: keyPath, file: file, decode: decode, column: column, at: at, restrict: restrict, bracketIn: bracketIn, logd: logd,
     pairedCell: pairedCell, rankPairCell: rankPairCell, sums: sums, round6: round6, pairwise: pairwise };
   if (typeof module === "object" && module.exports) { module.exports = API; } else { root.PAIRSTATS = API; }
 })(typeof globalThis !== "undefined" ? globalThis : this);

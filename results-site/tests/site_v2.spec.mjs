@@ -875,37 +875,98 @@ test('the explorer averages over problem sets exactly as the reference does', ()
   expect(core.holm([0.01, 0.04, 0.03]).map((x) => +x.toFixed(6))).toEqual([0.03, 0.06, 0.06]);
 });
 
-// ---- Benchmarks: the unit of every average --------------------------------------------------------------------------
-// A benchmark published as several problem sets (for licence or format reasons) is one set in every average: its sets'
-// counts and sums add up, every problem in it once. The page's merging (byBench) is cut out with reCombine and run on
-// stand-in sets, then on the release with two of its sets declared one benchmark, against what the page shows.
+// Benchmarks > subsets > problems: the three-level average (both variance components estimated, the subsets' and the
+// benchmarks' weights from them) and the weights a median gives each subset, against the reference on random nested
+// structures (scripts/site_random_effects_fixture.py).
+test('the explorer averages over benchmarks and their subsets exactly as the reference does', () => {
+  const src = readFileSync(new URL('../explorer_v2.js', import.meta.url), 'utf8');
+  const a = src.indexOf('  var EPS_VAR = '), b = src.indexOf('  function binVal(');
+  const w0 = src.indexOf('  function nestedWeights('), w1 = src.indexOf('  function setWeights(');
+  expect(a).toBeGreaterThan(0); expect(b).toBeGreaterThan(a); expect(w1).toBeGreaterThan(w0); expect(w0).toBeGreaterThan(b);
+  const core = new Function(src.slice(a, b) + src.slice(w0, w1) + '\nreturn { reCombine: reCombine, nestedWeights: nestedWeights };')();
+  const cases = JSON.parse(readFileSync(new URL('./fixtures/random_effects_nested_cases.json', import.meta.url), 'utf8'));
+  expect(cases.filter((c) => c.groups).length).toBeGreaterThan(50);
+  const close = (x, y) => Math.abs(x - y) <= 1e-6 * Math.max(1, Math.abs(y));
+  const inf = (x) => (x === null ? Infinity : x);
+  const off = [];
+  cases.forEach((c, i) => {
+    if (c.weights) {
+      const got = c.weights.ns.map((ns) => core.nestedWeights(ns, inf(c.weights.n0S), inf(c.weights.n0))).flat(), want = c.out.flat();
+      got.forEach((x, j) => { if (!close(x, want[j])) { off.push(i + ': weight ' + j + ' ' + x + ' vs ' + want[j]); } });
+      return;
+    }
+    const got = core.reCombine(c.groups, c.scale);
+    if (got.S !== c.out.S) { off.push(i + ': S ' + got.S + ' vs ' + c.out.S); }
+    for (const k of ['mu', 'lo', 'hi', 'tau2', 'tau2W', 'p', 'piLo', 'piHi']) {
+      const want = c.out[k], have = got[k];
+      if (want === null ? have !== null && isFinite(have) : !close(have, want)) { off.push(i + ' ' + c.scale + ': ' + k + ' ' + have + ' vs ' + want); }
+    }
+    got.w.forEach((x, j) => { if (!close(x, c.out.w[j])) { off.push(i + ': weight of benchmark ' + j); } });
+    const sw = got.sw.flat(), want = c.out.sw.flat();
+    sw.forEach((x, j) => { if (!close(x, want[j])) { off.push(i + ': weight of subset ' + j); } });
+  });
+  expect(off).toEqual([]);
+});
+
+// The three-level average at the release's size (145 benchmarks of 255 subsets): a mean at once, a rate's fit within a
+// drawing's budget, its interval in idle time within a fraction of a second.
+test('an average over the release\'s benchmarks and subsets is quick enough to draw', () => {
+  const src = readFileSync(new URL('../explorer_v2.js', import.meta.url), 'utf8');
+  const a = src.indexOf('  var EPS_VAR = '), b = src.indexOf('  function binVal(');
+  const core = new Function(src.slice(a, b) + '\nreturn { reCombine: reCombine, rateCore: rateCore, rateFinish: rateFinish };')();
+  let seed = 7; const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  const counts = [].concat(Array(95).fill(1), Array(25).fill(2), Array(12).fill(3), Array(8).fill(4), Array(3).fill(6), Array(2).fill(12));
+  expect([counts.length, counts.reduce((x, y) => x + y, 0)]).toEqual([145, 255]);
+  for (const m of [0.005, 0.3, 0.995]) {
+    const groups = counts.map((S) => { const pb = Math.min(0.999, Math.max(0.001, m + (rnd() - 0.5) * 2 * Math.min(m, 1 - m)));
+      return Array(S).fill(0).map(() => { const n = Math.round(Math.pow(10, 3 * rnd())), ps = Math.min(1, Math.max(0, pb + (rnd() - 0.5) * 0.8 * Math.min(pb, 1 - pb)));
+        let k = 0; for (let i = 0; i < n; i++) { if (rnd() < ps) { k++; } } return { n: n, s1: k, s2: k }; }); });
+    const t0 = performance.now(), fit = core.rateCore(groups), t1 = performance.now(), done = core.rateFinish(fit), t2 = performance.now();
+    core.reCombine(groups.map((g) => g.map((st) => ({ n: st.n, s1: 1.3 * st.s1, s2: 2 * st.s1 + st.n }))), 'normal');
+    const t3 = performance.now();
+    expect(done.lo).toBeLessThanOrEqual(done.mu); expect(done.hi).toBeGreaterThanOrEqual(done.mu);
+    expect(t1 - t0).toBeLessThan(200); expect(t2 - t1).toBeLessThan(1000); expect(t3 - t2).toBeLessThan(100);
+  }
+});
+
+// ---- Benchmarks > subsets: the units of every average --------------------------------------------------------------
+// A benchmark published as several problem sets (for licence or format reasons) has them as its subsets: problems
+// within subsets within benchmarks, every problem once. The page's grouping (byBench) is cut out with reCombine and run
+// on stand-in sets, then on the release with two of its sets declared one benchmark, against what the page shows.
 function benchCore(CAT) {
   const src = readFileSync(new URL('../explorer_v2.js', import.meta.url), 'utf8');
   const a = src.indexOf('  function benchOf('), b = src.indexOf('  function binVal(');
   expect(a).toBeGreaterThan(0); expect(b).toBeGreaterThan(a);
-  return new Function('CAT', src.slice(a, b) + '\nreturn { byBench: byBench, reCombine: reCombine, benchText: benchText };')(CAT);
+  return new Function('CAT', src.slice(a, b) + '\nreturn { byBench: byBench, reCombine: reCombine, benchText: benchText, unitsOf: unitsOf };')(CAT);
 }
 
-test('the problem sets of one benchmark are averaged as one set, every problem once', () => {
+test('the problem sets of one benchmark are its subsets, and a set split into subsets is read subset by subset', () => {
   const sets = { feynman: { n: 100, s1: 40, s2: 40 }, 'feynman-points': { n: 20, s1: 2, s2: 2 }, nguyen: { n: 12, s1: 9, s2: 9 },
-    keijzer: { n: 15, s1: 3, s2: 3 }, empty: { n: 0 } };
-  const cs = Object.keys(sets), of = (c) => sets[c];
-  const split = benchCore({ feynman: { benchmark: 'feynman' }, 'feynman-points': { benchmark: 'feynman' }, nguyen: {}, keijzer: { benchmark: 'keijzer' } });
+    keijzer: { n: 15, s1: 3, s2: 3 }, empty: { n: 0 }, 'srsd/easy': { n: 30, s1: 20, s2: 20 }, 'srsd/hard': { n: 30, s1: 4, s2: 4 }, srsd: { n: 60, s1: 24, s2: 24 } };
+  const cs = ['feynman', 'feynman-points', 'nguyen', 'keijzer', 'empty', 'srsd'], of = (c) => sets[c];
+  const split = benchCore({ feynman: { benchmark: 'feynman' }, 'feynman-points': { benchmark: 'feynman' }, nguyen: {}, keijzer: { benchmark: 'keijzer' },
+    srsd: { benchmark: 'srsd', subsets: ['easy', 'hard'] } });
   const own = benchCore({});
-  expect(split.byBench(cs, of).map((q) => [q.b, q.n, q.s1, q.s2])).toEqual([['feynman', 120, 42, 42], ['nguyen', 12, 9, 9], ['keijzer', 15, 3, 3]]);
+  expect(split.byBench(cs, of).map((g) => g.map((q) => [q.b, q.u, q.n, q.s1]))).toEqual([
+    [['feynman', 'feynman', 100, 40], ['feynman', 'feynman-points', 20, 2]], [['nguyen', 'nguyen', 12, 9]], [['keijzer', 'keijzer', 15, 3]],
+    [['srsd', 'easy', 30, 20], ['srsd', 'hard', 30, 4]]]);
+  expect(split.unitsOf('srsd')).toEqual([['srsd/easy', 'easy'], ['srsd/hard', 'hard']]);
   for (const scale of ['logit', 'normal']) {
     const got = split.reCombine(split.byBench(cs, of), scale);
-    const want = split.reCombine([{ n: 120, s1: 42, s2: 42 }, sets.nguyen, sets.keijzer], scale);   // merged by hand
-    expect([got.S, got.n, got.mu, got.lo, got.hi]).toEqual([3, 147, want.mu, want.lo, want.hi]);
-    // every set its own benchmark (a release without the field): exactly the average over the sets
+    const want = split.reCombine([[sets.feynman, sets['feynman-points']], [sets.nguyen], [sets.keijzer], [sets['srsd/easy'], sets['srsd/hard']]], scale);   // nested by hand
+    expect([got.S, got.n, got.mu, got.lo, got.hi]).toEqual([4, 207, want.mu, want.lo, want.hi]);
+    // every set its own benchmark of one subset (a release without the fields): exactly the average over the sets
     const plain = own.reCombine(cs.map(of), scale), same = own.reCombine(own.byBench(cs, of), scale);
     expect([same.S, same.n, same.mu, same.lo, same.hi, same.tau2]).toEqual([plain.S, plain.n, plain.mu, plain.lo, plain.hi, plain.tau2]);
     expect(got.mu).not.toBe(plain.mu);
   }
+  // a set the release splits into subsets without cells per subset is taken whole
+  const whole = benchCore({ srsd: { subsets: ['easy', 'hard'] } });
+  expect(whole.byBench(['srsd'], (c) => (c === 'srsd' ? sets.srsd : null)).map((g) => g.map((q) => [q.u, q.n]))).toEqual([[['srsd', 60]]]);
   expect([own.benchText(1), own.benchText(29)]).toEqual(['1 benchmark', '29 benchmarks']);
 });
 
-test('two problem sets declared one benchmark are one set in the explorer\'s averages, and keep their own rows', async ({ page }) => {
+test('two problem sets declared one benchmark are its subsets in the explorer\'s averages, and keep their own rows', async ({ page }) => {
   const errors = collectErrors(page);
   const text = readFileSync(new URL('../data/2026-09/results.js', import.meta.url), 'utf8');
   const D = new Function('window', text + '\nreturn window.RESULTS_V2;')({});
@@ -916,7 +977,7 @@ test('two problem sets declared one benchmark are one set in the explorer\'s ave
   const want = merged.reCombine(merged.byBench(cs, of), 'logit'), plain = apart.reCombine(apart.byBench(cs, of), 'logit');
   const pct = (x) => (100 * x).toFixed(1) + ' %';
   expect(want.S).toBe(cs.length - 1);
-  expect(pct(want.mu)).not.toBe(pct(plain.mu));   // the merge moves the shown number, so this test can fail
+  expect(pct(want.mu)).not.toBe(pct(plain.mu));   // the nesting moves the shown number, so this test can fail
   await page.route('**/data/2026-09/results.js', async (route) => {
     const res = await route.fetch();
     const add = `;window.RESULTS_V2.catalogs.forEach(function (c) { if (${JSON.stringify(pair)}.indexOf(c.key) >= 0) { c.benchmark = "feynman"; } });`;
@@ -929,6 +990,38 @@ test('two problem sets declared one benchmark are one set in the explorer\'s ave
   // the per-set rows stay one per problem set: a split benchmark's sets are shown on their own
   await page.goto(`/explorer.html?release=2026-09&v=table&rows=cats&p=${key}&pm=budget&r=${r}&m=${m}&c=all`);
   for (const c of pair) { await expect(page.locator(V2 + ' .v2table tbody td:first-child', { hasText: new RegExp('^' + c + '$') })).toHaveCount(1); }
+  expect(errors).toEqual([]);
+});
+
+test('a problem set the release splits into subsets is averaged subset by subset in the explorer', async ({ page }) => {
+  const errors = collectErrors(page);
+  const text = readFileSync(new URL('../data/2026-09/results.js', import.meta.url), 'utf8');
+  const D = new Function('window', text + '\nreturn window.RESULTS_V2;')({});
+  const m = 'e2e', r = '16', key = 'numeric_recovery_val', t = D.cells[m].feynman[r].m[key];
+  // feynman's problems in two subsets that differ: the first half solved far more often than the second
+  const half = Math.floor(t[0] / 2), a = [half, Math.min(half, t[1]), Math.min(half, t[1])], b = [t[0] - half, t[1] - a[1], t[1] - a[1]];
+  const parts = { 'feynman/a': { [r]: { state: 'complete', d: 1, n: a[0], ok: a[0], m: { [key]: a } } }, 'feynman/b': { [r]: { state: 'complete', d: 1, n: b[0], ok: b[0], m: { [key]: b } } } };
+  const cs = D.catalogs.map((c) => c.key), cells = Object.assign({}, D.cells[m], parts);
+  const of = (c) => { const x = cells[c] && cells[c][r], u = x && x.m[key]; return u ? { n: u[0], s1: u[1], s2: u[2] } : null; };
+  const CAT = {}; D.catalogs.forEach((c) => { CAT[c.key] = c.key === 'feynman' ? { subsets: ['a', 'b'] } : {}; });
+  const want = benchCore(CAT).reCombine(benchCore(CAT).byBench(cs, of), 'logit'), plain = benchCore({}).reCombine(benchCore({}).byBench(cs, of), 'logit');
+  const pct = (x) => (100 * x).toFixed(1) + ' %';
+  expect(want.S).toBe(cs.length); expect(want.tau2W).toBeGreaterThan(0);
+  expect(pct(want.mu)).not.toBe(pct(plain.mu));   // the split moves the shown number, so this test can fail
+  await page.route('**/data/2026-09/results.js', async (route) => {
+    const res = await route.fetch();
+    const add = `;(function (D) { D.catalogs.forEach(function (c) { if (c.key === "feynman") { c.subsets = ["a", "b"]; c.subset_rows = []; } });
+      Object.assign(D.cells[${JSON.stringify(m)}], ${JSON.stringify(parts)}); })(window.RESULTS_V2);`;
+    await route.fulfill({ response: res, body: (await res.text()) + add });
+  });
+  await page.goto(`/explorer.html?release=2026-09&v=table&rows=rungs&p=${key}&x=rung&m=${m}&c=all`);
+  const row = page.locator(V2 + ' .v2table tbody tr').filter({ has: page.locator('td:first-child', { hasText: new RegExp('^' + r + '$') }) });
+  await expect(row).toBeVisible({ timeout: 15000 });
+  await expect(row.locator('td').nth(2)).toContainText(pct(want.mu));
+  // the problem set keeps its one row, its value the average over its two subsets
+  await page.goto(`/explorer.html?release=2026-09&v=table&rows=cats&p=${key}&pm=budget&r=${r}&m=${m}&c=all`);
+  await expect(page.locator(V2 + ' .v2table tbody td:first-child', { hasText: /^feynman$/ })).toHaveCount(1);
+  await expect(page.locator(V2 + ' .v2table tbody td:first-child', { hasText: /feynman\/a/ })).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 

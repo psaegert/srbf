@@ -4,7 +4,10 @@ Reads the per-problem judged rows of a campaign root (rows_full_<name>.csv or <n
 `srbf table`: one row per problem and rung, every metric) and writes
 
   <out.js>                       window.RESULTS_V2: release, catalogs (each with the benchmark it belongs to, from the
-                                 rows' benchmark column: the unit the page averages over), rungs, methods, the METRIC
+                                 rows' benchmark column: the unit the page averages over, and its subsets within it, from
+                                 the rows' subset column: a catalog of several has "subsets" and "subset_rows", and its
+                                 cells, histograms and pair cells are also written per subset, keyed
+                                 "<catalog>/<subset>"; part_cells), rungs, methods, the METRIC
                                  REGISTRY, and per method x catalog x rung cell: n problems, n successful, and for every metric
                                  [n defined, n finite, sum, sum of squares] (rates: [hits, n]); "e": the problems a
                                  metric can be defined for, where that is not every problem; "w": how many values of a
@@ -522,13 +525,17 @@ class Row(Mapping[str, Any]):
 Rows = dict[tuple[int, int], Row]   # (draw, row) -> {metric: value}
 
 
-def load_rows(root: str, benchmarks: dict[str, str] | None = None) -> dict[str, dict[tuple[str, int], Rows]]:
+def load_rows(root: str, benchmarks: dict[str, str] | None = None,
+              subsets: dict[str, dict[int, str]] | None = None) -> dict[str, dict[tuple[str, int], Rows]]:
     """{method: {(catalog, rung): {(draw, row): {metric: value}}}}: every draw the rows carry (a model is run twice
     with different seeds; a cell averages each problem's runs, see problems_of).
 
     ``benchmarks``, when given, is filled with {catalog: benchmark} from the rows' benchmark column (srbf table): the
     benchmark each catalog belongs to, which the page averages over. A catalog whose rows name none (rows written
-    before the column) is a benchmark of its own; a catalog the rows place in two benchmarks is an error."""
+    before the column) is a benchmark of its own; a catalog the rows place in two benchmarks is an error.
+    ``subsets``, when given, is filled with {catalog: {row: subset}} from the rows' subset column, where they name one:
+    the subset of its benchmark a problem belongs to (problems within subsets within benchmarks); a problem the rows
+    place in two subsets is an error."""
     data: dict[str, dict[tuple[str, int], Rows]] = defaultdict(lambda: defaultdict(dict))
     files = sorted(set(glob.glob(os.path.join(root, "rows_full_*.csv")) + glob.glob(os.path.join(root, "*_rows_full.csv"))))
     for path in files:
@@ -552,7 +559,67 @@ def load_rows(root: str, benchmarks: dict[str, str] | None = None) -> dict[str, 
                     bench = benchmarks.setdefault(catalog, r.get("benchmark") or catalog)
                     if bench != (r.get("benchmark") or catalog):
                         raise ValueError(f"{path}: catalog {catalog!r} is in two benchmarks, {bench!r} and {r.get('benchmark')!r}")
+                if subsets is not None and r.get("subset"):
+                    row = int(r["row"])
+                    if subsets.setdefault(r["catalog"], {}).setdefault(row, r["subset"]) != r["subset"]:
+                        raise ValueError(f"{path}: problem {row} of catalog {r['catalog']!r} is in two subsets, "
+                                         f"{subsets[r['catalog']][row]!r} and {r['subset']!r}")
     return data
+
+
+# ---- subsets: the level between a benchmark and its problems -------------------------------------------------------
+# A catalog whose problems lie in several subsets of their benchmark (the authors' parts of it) is averaged subset by
+# subset (benchmarks > subsets > problems, srbf.aggregate). Its cells, histograms and pair cells are written once more
+# per subset under "<catalog>/<subset>", from its rows restricted to that subset, so the page combines them like any
+# cell; its pv/ and pp/ files stay per catalog, and the page picks a subset's problems out of them by "subset_rows".
+PART_SEP = "/"
+
+
+def catalog_subsets(subsets: Mapping[str, Mapping[int, str]], sizes: Mapping[str, int]) -> dict[str, dict[str, Any]]:
+    """{catalog: {"subsets": [names], "rows": [each row's index into names]}} for the catalogs of several subsets (a
+    problem the rows name no subset for is in the subset named after its catalog), and {catalog: {"subset": name}} for
+    a catalog all of whose problems lie in one subset named otherwise."""
+    out: dict[str, dict[str, Any]] = {}
+    for c, by_row in subsets.items():
+        n = max(sizes.get(c, 0), max(by_row, default=-1) + 1)
+        labels = [by_row.get(i, c) for i in range(n)]
+        names = list(dict.fromkeys(labels))
+        if len(names) > 1:
+            out[c] = {"subsets": names, "rows": [names.index(x) for x in labels]}
+        elif names and names[0] != c:
+            out[c] = {"subset": names[0]}
+    return out
+
+
+def part_cells(data: dict[str, dict[tuple[str, int], Rows]], parts: Mapping[str, Mapping[str, Any]]
+               ) -> tuple[dict[str, dict[tuple[str, int], Rows]], dict[str, int]]:
+    """The rows of every catalog of several subsets, cut by subset: ({method: {("<catalog>/<subset>", rung): rows}},
+    {"<catalog>/<subset>": its problems}). A row keeps its (draw, row) key."""
+    out: dict[str, dict[tuple[str, int], Rows]] = defaultdict(dict)
+    sizes: dict[str, int] = {}
+    for c, p in parts.items():
+        if "subsets" not in p:
+            continue
+        for i, name in enumerate(p["subsets"]):
+            sizes[c + PART_SEP + name] = sum(1 for j in p["rows"] if j == i)
+    for m, cells in data.items():
+        for (c, r), rows in cells.items():
+            split = parts.get(c)
+            if not split or "subsets" not in split:
+                continue
+            for i, name in enumerate(split["subsets"]):
+                keep = {k: v for k, v in rows.items() if (k[1] if isinstance(k, tuple) else k) < len(split["rows"])
+                        and split["rows"][k[1] if isinstance(k, tuple) else k] == i}
+                if keep:
+                    out[m][(c + PART_SEP + name, r)] = keep
+    return dict(out), sizes
+
+
+def with_part_places(at: dict[str, dict[str, dict[str, list[float]]]], parts: Mapping[str, Mapping[str, Any]]
+                     ) -> dict[str, dict[str, dict[str, list[float]]]]:
+    """The brackets of `at` (brackets()) with every subset of a catalog placed where its catalog is."""
+    return {m: {slot: {**per, **{c + PART_SEP + name: b for c, b in per.items() for name in parts.get(c, {}).get("subsets", [])}}
+                for slot, per in by_slot.items()} for m, by_slot in at.items()}
 
 
 def improvability_pool(public: list[str]) -> list[str]:
@@ -1667,10 +1734,12 @@ def summary_payload(payload: dict[str, Any]) -> dict[str, Any]:
             "summary": payload["summary"]}
 
 
-def catalog_meta(sizes_path: str | None, present: dict[str, int], benchmarks: Mapping[str, str] | None = None) -> list[dict[str, Any]]:
-    """Every catalog the page lists: its problems ("laws"), its group, its ground truths' description lengths, and the
+def catalog_meta(sizes_path: str | None, present: dict[str, int], benchmarks: Mapping[str, str] | None = None,
+                 parts: Mapping[str, Mapping[str, Any]] | None = None) -> list[dict[str, Any]]:
+    """Every catalog the page lists: its problems ("laws"), its group, its ground truths' description lengths, the
     benchmark it belongs to (``benchmarks``; a catalog it does not name is a benchmark of its own), the unit the page
-    averages over: the catalogs of one benchmark are one problem set there, every problem in it once."""
+    averages over, and its subsets within that benchmark (``parts``, catalog_subsets: "subsets" and "subset_rows", or
+    one "subset"; by default the catalog is one subset named after itself)."""
     groups = {c: g for g, cs in CATALOG_GROUPS.items() for c in cs}
     per = json.load(open(sizes_path)).get("per_catalog", {}) if sizes_path and os.path.exists(sizes_path) else {}
     cats: list[dict[str, Any]] = []
@@ -1679,6 +1748,11 @@ def catalog_meta(sizes_path: str | None, present: dict[str, int], benchmarks: Ma
         cats.append({"key": c, "laws": int(mu.size) if mu.size else int(present.get(c, 0)), "group": groups.get(c, "other"),
                      "benchmark": (benchmarks or {}).get(c, c),
                      "mu": [round(float(np.percentile(mu, q)), 1) for q in (25, 50, 75)] if mu.size else None})
+        p = (parts or {}).get(c, {})
+        if "subsets" in p:
+            cats[-1].update(subsets=p["subsets"], subset_rows=p["rows"])
+        elif "subset" in p:
+            cats[-1]["subset"] = p["subset"]
     return cats
 
 
@@ -1745,14 +1819,20 @@ def main() -> None:
     if os.path.exists(dpath):
         DNF.update({k: int(v["rung"]) for k, v in json.load(open(dpath)).items() if isinstance(v, dict) and "rung" in v})
     benchmarks: dict[str, str] = {}
-    data = load_rows(a.root, benchmarks)
+    row_subsets: dict[str, dict[int, str]] = {}
+    data = load_rows(a.root, benchmarks, row_subsets)
     derive_improvability(data, improvability_pool(public), usable)
     present: dict[str, int] = defaultdict(int)
     for mk in data:
         for (c, r), rows in data[mk].items():
             present[c] = max([present[c]] + [len(rs) for rs in by_draw(rows).values()])
-    cats = catalog_meta(a.sizes, present, benchmarks)
+    sizes0 = {c["key"]: c["laws"] for c in catalog_meta(a.sizes, present, benchmarks)}
+    parts = catalog_subsets(row_subsets, sizes0)
+    cats = catalog_meta(a.sizes, present, benchmarks, parts)
     sizes = {c["key"]: c["laws"] for c in cats}
+    pdata, psizes = part_cells(data, parts)   # the catalogs of several subsets, cut by subset
+    data_all = {m: {**data.get(m, {}), **pdata.get(m, {})} for m in set(data) | set(pdata)}
+    sizes_all = {**sizes, **psizes}
 
     tpath0 = os.path.join(a.root, "timing.json")
     timing_all: dict[str, Any] = {}
@@ -1768,11 +1848,11 @@ def main() -> None:
         plans: dict[str, set[tuple[int, str, int]] | None] = {}
         for key, label, param, color, group, prov, ukey, _sel in methods:
             cells[key] = {}
-            for (c, r), rows in sorted(data.get(key, {}).items()):
+            for (c, r), rows in sorted(data_all.get(key, {}).items()):
                 if not usable(key, r):
                     continue
-                cells[key].setdefault(c, {})[str(r)] = summarize_cell(rows, sizes.get(c))
-                problems = problems_of(rows, sizes.get(c))[0]
+                cells[key].setdefault(c, {})[str(r)] = summarize_cell(rows, sizes_all.get(c))
+                problems = problems_of(rows, sizes_all.get(c))[0]
                 for hk, (lo, hi, _tf) in HIST_SPECS.items():
                     for name, answered in [(hk, False)] + ([(hk + ANSWERED, True)] if hk in WORST else []):
                         h = hist_of(problems, hk, lo, hi, answered)
@@ -1837,7 +1917,8 @@ def main() -> None:
     slots = [str(r) for r in payload["rungs"]] + [budget_key(t) for t in TIME_SLOTS]
     at = brackets(data, public, sizes, timing_all, slots)
     pub = order(public)
-    cells = slot_cells(data, [(ka, kb) for i, ka in enumerate(pub) for kb in pub[i + 1:]], at, slots, payload["rank_keys"])
+    cells = slot_cells(data_all, [(ka, kb) for i, ka in enumerate(pub) for kb in pub[i + 1:]], with_part_places(at, parts), slots,
+                       payload["rank_keys"])
     payload["slots"] = {"rungs": payload["rungs"], "budgets": [budget_key(t) for t in TIME_SLOTS], "seconds": TIME_SLOTS,
                         "at": at, "stamp": stamps(at), "basis": {}}
     pred_all, truth = load_expressions(a.root, public + private)   # the rows are read once; each side keeps its own
@@ -1866,7 +1947,8 @@ def main() -> None:
         pslots = [str(r) for r in sorted(set(payload["rungs"]).union(*(units[m][0]["rungs"] for m in priv)))] + times
         pat = brackets(data, priv + pub, sizes, timing_all, pslots)
         pairs = [(ka, kb) for i, ka in enumerate(priv) for kb in priv[i + 1:]]
-        pcells = slot_cells(data, pairs + [(ka, kb) for ka in priv for kb in pub], pat, pslots, payload["rank_keys"])
+        pcells = slot_cells(data_all, pairs + [(ka, kb) for ka in priv for kb in pub], with_part_places(pat, parts), pslots,
+                            payload["rank_keys"])
 
         def cut(take: Any, keep: set[str]) -> tuple[dict[str, Any], dict[str, Any]]:
             """The cells of the pairs `take(pair key)` accepts, at the slots in `keep`."""
