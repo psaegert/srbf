@@ -69,9 +69,51 @@ class TestJudgement:
         # a variable the problem does not have is read, priced, and cannot be evaluated
         assert j.status[2] == STATUS_UNEVALUABLE and np.isfinite(j.bits[2]) and np.isnan(j.fvu_val[2])
         assert j.status[3] == STATUS_JUDGED
-        monkeypatch.setattr(cand, "pricer", lambda e: (lambda prefix: float("nan") if "x2" in prefix else price_bits(e, prefix)))
+        # a price as srbf.pricing.pricer gives it, the keyword for the engine's refusals included
+        monkeypatch.setattr(cand, "pricer", lambda e: (lambda prefix, refusals=None: float("nan") if "x2" in prefix else price_bits(e, prefix)))
         j = _judge(engine, ["v1 + v2", "v1"])
         assert list(j.status) == [STATUS_UNPRICED, STATUS_JUDGED] and np.isfinite(j.fvu_fit[0])
+        assert j.reasons[0] == "the engine gives no finite price"          # a NaN without a refusal
+
+    def test_a_candidate_the_written_price_refuses_is_unpriced_with_the_engines_reason(self, engine, monkeypatch):
+        """Read and evaluated, but refused by the engine's written price: the status is unpriced and the reason is the
+        engine's own (here the strict reader's message for a head the engine neither declares nor defines)."""
+        written = engine.written_complexity
+
+        def refusing(expression):
+            if "x2" in expression:
+                raise ValueError("unknown function 'x2' in 'x1 + x2': this engine declares no operator by that name")
+            return written(expression)
+        monkeypatch.setattr(engine, "written_complexity", refusing)
+        j = _judge(engine, ["v1 + v2", "v1"])
+        assert list(j.status) == [STATUS_UNPRICED, STATUS_JUDGED] and np.isfinite(j.fvu_fit[0]) and np.isnan(j.bits[0])
+        assert j.reasons[0] == ("the engine does not price it: ValueError: unknown function 'x2' in 'x1 + x2': this "
+                                "engine declares no operator by that name")
+        assert j.reasons[1] == "" and j.bits[1] == 6.0
+
+    def test_a_candidate_is_priced_as_written(self, engine):
+        """Two spellings of one function, one canonical form: the judge prices each as the method wrote it."""
+        j = _judge(engine, ["-v1 - v2", "-(v1 + v2)", "v1*v1", "v1**2"])
+        assert list(j.status) == [STATUS_JUDGED] * 4
+        assert list(j.bits) == [17.0, 16.0, 15.0, pytest.approx(11.585)]
+        assert j.fvu_fit[0] == j.fvu_fit[1] and j.fvu_fit[2] == j.fvu_fit[3]
+
+    def test_a_defined_function_is_read_priced_and_evaluated_as_written(self, engine_defining_sqrt,
+                                                                        engine_without_definitions):
+        """An engine whose config defines sqrt and cot keeps their heads: sqrt(u) is priced at 12 bits for a variable
+        u and evaluated as rootn(u, 2). Without the definitions srbf writes the root rootn(u, 2) (14.585 bits), and
+        cot is a function the judge does not read."""
+        sample = _toy()
+        defined = _judge(engine_defining_sqrt, ["sqrt(v1**2)", "sqrt(v1)", "cot(v1)"], sample)
+        defined_prefix = _judge(engine_defining_sqrt, ["+ sqrt x1 x2"], sample, notation="prefix")
+        assert defined.prefixes == ["sqrt pow x1 2", "sqrt x1", "cot x1"] and defined_prefix.prefixes == ["+ sqrt x1 x2"]
+        assert list(defined.bits[1:]) == [12.0, 12.0]
+        x = sample.x_support
+        assert defined.status[0] == STATUS_JUDGED and defined.fvu_fit[0] == fvu(sample.y_support, np.abs(x[:, 0]))
+        assert defined.status[2] == STATUS_JUDGED and defined.fvu_fit[2] == fvu(sample.y_support, 1.0 / np.tan(x[:, 0]))
+        plain = _judge(engine_without_definitions, ["sqrt(v1)", "cot(v1)"], sample)
+        assert plain.prefixes[0] == "rootn x1 2" and plain.bits[0] == pytest.approx(14.585)
+        assert plain.status[1] == STATUS_UNREADABLE and "does not read cot" in plain.reasons[1]
 
     def test_a_placeholder_is_unreadable_candidates_carry_their_constants(self, engine):
         j = _judge(engine, ["* <constant> x1"], notation="prefix")
@@ -147,7 +189,7 @@ class TestJudgeTimeout:
         assert timer != (0.0, 0.0) or signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
 
     def test_code_that_catches_every_exception_cannot_swallow_the_timeout(self, engine, monkeypatch):
-        def price(prefix):
+        def price(prefix, refusals=None):
             try:
                 time.sleep(60)
             except Exception:  # noqa: BLE001 - as the engine's own guards do
@@ -544,7 +586,7 @@ class TestRun:
         Benchmark(_ListSource([_toy(0), _toy(1)]), _HandingAdapter(engine)).run(
             output_path=str(out), progress=False, verbose=False, summary_interval=None)
         before = load_candidates(out)
-        monkeypatch.setattr(cand, "pricer", lambda e: (lambda prefix: 42.0))
+        monkeypatch.setattr(cand, "pricer", lambda e: (lambda prefix, refusals=None: 42.0))
         monkeypatch.setattr(cand, "_FINGERPRINT", "another-judge")
         assert rejudge_candidates(out, engine=engine, engine_name="acj2-4-llm") == 2
         after = load_candidates(out)
@@ -561,7 +603,7 @@ class TestRun:
             Benchmark(_ListSource([_toy(seed)]), _HandingAdapter(engine), shard=(index, 2)).run(
                 output_path=str(tmp_path / f"choices_000008.shard-{index}-of-2.pkl"), progress=False, verbose=False,
                 summary_interval=None)
-        monkeypatch.setattr(cand, "pricer", lambda e: (lambda prefix: 42.0))
+        monkeypatch.setattr(cand, "pricer", lambda e: (lambda prefix, refusals=None: 42.0))
         assert rejudge_candidates(tmp_path / "choices_000008.shard-1-of-2.pkl", engine=engine) == 1
         after = load_candidates(tmp_path / "choices_000008.pkl")
         assert (after[5].bits == 42.0).all() and not (after[2].bits == 42.0).any()
@@ -582,7 +624,7 @@ class TestRejudgeCommand:
         self._stored_run(engine, out)
         loaded = []
         monkeypatch.setattr(SimpliPyEngine, "load", classmethod(lambda cls, name, install=False: loaded.append(name) or engine))
-        monkeypatch.setattr(cand, "pricer", lambda e: (lambda prefix: 42.0))
+        monkeypatch.setattr(cand, "pricer", lambda e: (lambda prefix, refusals=None: 42.0))
         monkeypatch.setattr(cand, "_FINGERPRINT", "another-judge")
         main(["rejudge", str(out)])
         assert loaded == ["acj2-4-llm"]

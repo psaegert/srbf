@@ -664,10 +664,12 @@ def compute_derived_metrics(
                     )
                 ])
 
-                # ── MDL: the description length of the REALIZED expressions ──
+                # ── MDL: the description length of the REALIZED expressions, as written ──
                 # ``mdl_fn`` is the price in bits (``srbf.pricing.price_bits`` unless the caller
-                # passes its own). Priced on the realized
-                # expressions, numeric constants inlined: a prefix that still carries a
+                # passes its own). Priced on the realized expressions as they were written, numeric
+                # constants inlined: the stored prediction (the method's answer as the engine's reader
+                # read it, in the engine grammar) and the ground truth as its catalog writes it, never
+                # the judged forms above, which are simplified. A prefix that still carries a
                 # ``<constant>`` placeholder is not priced (a skeleton price would masquerade as a
                 # realized one), and an unpriceable expression is None, never a made-up number.
                 if mdl_fn is not None:
@@ -784,8 +786,9 @@ def derive_metrics(
         Skeleton simplifier; defaults to the engine's ``simplify`` when an ``engine`` is given, else
         ``None`` (simplified skeletons then fall back to the raw skeletons).
     mdl_fn : callable, optional
-        The price of a realized prefix, for ``predicted_mdl``, ``ground_truth_mdl`` and ``mdl_ratio``; defaults to
-        :func:`srbf.pricing.price_bits` with the engine (bits) when an ``engine`` is given, else no price.
+        The price of a realized prefix as written, for ``predicted_mdl``, ``ground_truth_mdl`` and ``mdl_ratio``;
+        defaults to :func:`srbf.pricing.price_bits` with the engine (bits) when an ``engine`` is given, else no price.
+        It is given ``predicted_expression_prefix`` and ``ground_truth_prefix`` as stored, never a simplified form.
     convert_fn : callable, optional
         Converts the stored predicted prefixes into the engine grammar before they are judged or
         priced; defaults to the engine's ``convert_expression`` when an ``engine`` is given (the

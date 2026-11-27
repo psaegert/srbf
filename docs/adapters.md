@@ -114,7 +114,9 @@ The expression is parsed by the judge's SimpliPy engine. It reads
 
 What sympy prints is read as it is: `str(expression)` may contain `sqrt`, `Abs` and the constant
 `E`. Print constants at full precision (`repr(float)`); a rounded constant costs the prediction its
-numeric recovery.
+numeric recovery. The length srbf reports is the price of the expression as you print it, nothing
+simplified ([Metrics](metrics.md#formula-length-predicted_mdl-ground_truth_mdl-mdl_ratio)): `x1*x1`
+costs more bits than `x1**2`.
 
 srbf then evaluates the expression on the support and validation points and judges it like every
 other method's prediction. The stored prediction names the columns `x1, x2, ...` by position, whatever the
@@ -145,7 +147,7 @@ fitted constants: a `<constant>` placeholder makes it unreadable. Per problem, s
 a worker that reports its own `fit_time` includes it. srbf judges them after the method has
 answered, outside `fit_time`, and records the seconds in `candidates_judge_time`.
 
-**Judging.** Each candidate is read by the run's engine like an expression (above), priced by
+**Judging.** Each candidate is read by the run's engine like an expression (above), priced as written by
 `srbf.pricing.price_bits`, the description length in bits that the table reports as `predicted_mdl`,
 and evaluated on the support and validation points. Its FVU is `srbf.metrics.numeric.fvu` against
 the noiseless targets, as the table judges a prediction; a value that is not finite at some point
@@ -264,7 +266,7 @@ complete config and the job array that runs it.
 **Picking among candidates.** With `selection: {mode: mdl}`, srbf evaluates every candidate as the
 worker returned it on the support points and scores it by the two-part code: the support points coded
 under the candidate's residual variance, (n/2) log2 FVU for n finite points, plus the candidate's own
-description length in bits, as the judge's engine prices it. The candidate with the shortest code is
+description length in bits as written, as the judge's engine prices it. The candidate with the shortest code is
 the prediction. A candidate that fits better than float64 precision counts as fitting to that
 precision, so between two such candidates the shorter one wins. A candidate the engine cannot read,
 evaluate or price is never picked. The row keeps every candidate with its FVU, bits and score under

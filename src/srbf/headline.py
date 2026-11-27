@@ -1,7 +1,7 @@
 """The headline metrics: the front area of a run and the time index of a method.
 
 A run is a method at one budget on one problem. It returns candidates, each with a price in bits (its description
-length, :func:`srbf.pricing.price_bits`) and an FVU on the validation points (:func:`srbf.metrics.numeric.fvu`).
+length as written, :func:`srbf.pricing.price_bits`) and an FVU on the validation points (:func:`srbf.metrics.numeric.fvu`).
 
 * :func:`front_area`: the share of the problem's box that the run's candidates dominate. The box spans lengths from
   the price of the support targets' mean written as a number (:func:`lower_edge_bits`) to 26 bits per support point
@@ -59,7 +59,8 @@ def mean_prefix(y_support: Any) -> list[str]:
 
 def lower_edge_bits(y_support: Any, engine: Any) -> float:
     """The box's left edge, L_lo: the price in bits of the support targets' mean written as a number
-    (:func:`mean_prefix`), priced by :func:`srbf.pricing.price_bits` like every prediction."""
+    (:func:`mean_prefix`), priced as written by :func:`srbf.pricing.price_bits` like every prediction: the literal
+    code of that decimal, every digit of it."""
     return price_bits(engine, mean_prefix(y_support))
 
 

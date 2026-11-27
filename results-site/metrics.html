@@ -290,12 +290,14 @@
             The length \(L\) of the prediction in bits, divided by the ground truth's. The length in
             bits (the description length, as in the minimum description length principle, MDL) is
             the number of bits needed to write the formula down: SimpliPy counts bits for every
-            operator and variable, and for the digits every number needs, on the simplified formula.
-            Unlike a count of symbols, it charges a long number more than a short one. 1 means as
-            long as the ground truth. Means are taken on a \(\log_2\) scale, so a formula twice as
-            long and one half as long cancel. Flash-ANSR picks its prediction with this same length
-            measure (see its selection score below), so this metric measures a quantity Flash-ANSR
-            optimizes.
+            operator and variable, and for the digits every number needs, on the formula exactly as
+            it is written, nothing simplified: the prediction as the method returned it, the ground
+            truth as its benchmark writes it. Unlike a count of symbols, it charges a long number more
+            than a short one. 1 means as long as the ground truth. Means are taken on a \(\log_2\)
+            scale, so a formula twice as long and one half as long cancel. Flash-ANSR picks its
+            prediction with SimpliPy's length of the simplified formula (see its selection score
+            below), a close relative of this measure, so this metric is close to a quantity
+            Flash-ANSR optimizes.
           </p>
         </article>
 

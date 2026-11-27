@@ -103,18 +103,25 @@ def test_mdl_ratio_absent_without_a_pricer_and_inf_on_failure():
 
 
 def test_mdl_ratio_through_the_engine():
+    """Priced as written: a literal 2.5 costs more than the integer 2, and x1 + x1, the same function as 2*x1, costs
+    what it writes (two variables and a sum), not the price of its canonical form 2*x1."""
     from simplipy import SimpliPyEngine
+
+    from srbf.pricing import price_bits
 
     engine = SimpliPyEngine.load("acj2-4-llm", install=True)
     snapshot = _mdl_snapshot()
     snapshot['skeleton'] = [['*', '<constant>', 'x1']] * 4  # the engine's vocabulary, not the fake arity map's
-    snapshot['predicted_skeleton_prefix'] = [['+', 'x1', 'x1'], ['*', '<constant>', 'x1'], ['+', 'x1', 'x1'], ['+', 'x1', 'x1']]
-    snapshot['predicted_expression_prefix'] = [['+', 'x1', 'x1'], ['*', '2.5', 'x1'], ['+', 'x1', 'x1'], ['+', 'x1', 'x1']]
+    snapshot['predicted_skeleton_prefix'] = [['*', '<constant>', 'x1'], ['*', '<constant>', 'x1'], ['+', 'x1', 'x1'], ['+', 'x1', 'x1']]
+    snapshot['predicted_expression_prefix'] = [['*', '2', 'x1'], ['*', '2.5', 'x1'], ['+', 'x1', 'x1'], ['+', 'x1', 'x1']]
     snapshot['ground_truth_prefix'] = [['*', '2', 'x1']] * 4
     scored = derive_metrics(snapshot, engine=engine)
-    expected = float(engine.complexity(['*', '2', 'x1'], certified=True, mode='f64')) / 1000.0
-    assert list(scored['ground_truth_mdl']) == [expected] * 4     # in bits, as the table reports it
-    assert scored['mdl_ratio'][1] > scored['mdl_ratio'][0] > 0  # a literal 2.5 costs more than the integer 2
+    expected = price_bits(engine, ['*', '2', 'x1'])
+    assert list(scored['ground_truth_mdl']) == [expected] * 4 and expected == pytest.approx(11.585)   # in bits
+    assert scored['mdl_ratio'][0] == 1.0
+    assert scored['mdl_ratio'][1] > scored['mdl_ratio'][0]       # a literal 2.5 costs more than the integer 2
+    assert scored['predicted_mdl'][2] == 15.0 > expected         # x1 + x1 as written
+    assert engine.complexity(['+', 'x1', 'x1']) == engine.complexity(['*', '2', 'x1'])   # one canonical price
 
 
 def test_converts_legacy_reader_prefixes_before_judging():
