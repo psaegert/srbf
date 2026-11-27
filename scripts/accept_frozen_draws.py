@@ -4,7 +4,9 @@ Writes the attempts document that ``symbolic-data render-draws --attempts`` (or 
 ``tools/catalog_build/render_draws.py --attempts``) renders with; ``srbf.draw_acceptance`` holds the rule. The catalogs
 come from a plan (``render_draws.py --plan``: the release catalogs and their frozen ids) or are named directly. The
 oracle is the ``oracle`` adapter of ``--config`` (the oracle's scaling config), at most ``--n-restarts`` seeded restarts
-per attempt, stopping at the first that recovers the held-out points.
+and ``srbf.headline.T_MAX`` (1,000) CPU seconds of this machine per attempt, stopping at the first restart that recovers
+the held-out points and is recognized by the judge. The journal holds one line per attempt: a run started again on it
+resumes in the middle of a problem.
 
   accept_frozen_draws.py --plan plan.json --out attempts.json --jobs 10 [--journal j.jsonl] [--timing t.json]
   accept_frozen_draws.py CATALOG [CATALOG ...] --out attempts.json
@@ -29,6 +31,7 @@ def main() -> None:
     from symbolic_data.draws import DrawsSettings
 
     from srbf.draw_acceptance import RULE, accept_draws, merge_journals, oracle_check
+    from srbf.headline import T_MAX
 
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("catalogs", nargs="*", help="catalog references (instead of --plan)")
@@ -50,7 +53,7 @@ def main() -> None:
         refs, ids = refs + list(plan["catalogs"]), dict(plan.get("ids") or {})
     if not refs:
         ap.error("name catalogs or give --plan")
-    rule = RULE.format(n_restarts=a.n_restarts)
+    rule = RULE.format(n_restarts=a.n_restarts, time_cap=T_MAX)
     if a.merge:
         summary = merge_journals(refs, a.out, a.merge, rule=rule, settings=DrawsSettings(), ids=ids)
         print(f"{summary['problems']} problems, {summary['checked']} checked, {summary['later_attempt']} on a later "
@@ -66,7 +69,8 @@ def main() -> None:
     if a.timing:
         Path(a.timing).write_text(json.dumps({k: v for k, v in summary.items()}, indent=1) + "\n", encoding="utf-8")
     print(f"{summary['problems']} problems, {summary['checked']} checked, {summary['later_attempt']} on a later attempt, "
-          f"{summary['formula_inherent']} formula-inherent, {summary['wall_seconds']:.0f} s -> {a.out}")
+          f"{summary['formula_inherent']} formula-inherent, {summary['time']} attempts at the time cap, "
+          f"{summary['wall_seconds']:.0f} s -> {a.out}")
 
 
 if __name__ == "__main__":
