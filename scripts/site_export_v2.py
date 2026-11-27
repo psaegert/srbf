@@ -3,8 +3,9 @@
 Reads the per-problem judged rows of a campaign root (rows_full_<name>.csv or <name>_rows_full.csv, written by
 `srbf table`: one row per problem and rung, every metric) and writes
 
-  <out.js>                       window.RESULTS_V2: release, catalogs, rungs, methods, the METRIC REGISTRY, and per
-                                 method x catalog x rung cell: n problems, n successful, and for every metric
+  <out.js>                       window.RESULTS_V2: release, catalogs (each with the benchmark it belongs to, from the
+                                 rows' benchmark column: the unit the page averages over), rungs, methods, the METRIC
+                                 REGISTRY, and per method x catalog x rung cell: n problems, n successful, and for every metric
                                  [n defined, n finite, sum, sum of squares] (rates: [hits, n]); "e": the problems a
                                  metric can be defined for, where that is not every problem; "w": how many values of a
                                  worst-value metric were filled in for failed predictions; status; timing.
@@ -384,6 +385,19 @@ def listed_metrics(cells: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 RATE_KEYS = [m[0] for m in METRICS if m[4] == "rate"]
+#: Rates that are not defined for a run: the validation rates of a problem without validation points (a data catalog
+#: whose authors give no test split, owner 2026-10-17), and the numeric rates of a split whose target is the same value
+#: on every point (owner 2026-11-03). srbf's table leaves them empty, and every summary leaves the problem out of them.
+VALIDATION_RATES = {"numeric_recovery_val", "numeric_recovery_relative_val", "symbolic_recovery_mask_none"}
+FIT_RATES = {"numeric_recovery_fit", "numeric_recovery_relative_fit"}
+
+
+def problem_share(runs: list[Mapping[str, Any]], key: str) -> float | None:
+    """A problem's share of hits over the runs where the rate is defined; None where it is defined for none."""
+    defined = [r[key] for r in runs if r[key] is not None]
+    return sum(1.0 if v else 0.0 for v in defined) / len(defined) if defined else None
+
+
 CONT_KEYS = [m[0] for m in METRICS if m[4] == "cont"]
 HIST_SPECS = {m[0]: m[8] for m in METRICS if m[8]}
 METRIC_HIGHER = {m[0]: m[5] for m in METRICS}
@@ -508,22 +522,36 @@ class Row(Mapping[str, Any]):
 Rows = dict[tuple[int, int], Row]   # (draw, row) -> {metric: value}
 
 
-def load_rows(root: str) -> dict[str, dict[tuple[str, int], Rows]]:
+def load_rows(root: str, benchmarks: dict[str, str] | None = None) -> dict[str, dict[tuple[str, int], Rows]]:
     """{method: {(catalog, rung): {(draw, row): {metric: value}}}}: every draw the rows carry (a model is run twice
-    with different seeds; a cell averages each problem's runs, see problems_of)."""
+    with different seeds; a cell averages each problem's runs, see problems_of).
+
+    ``benchmarks``, when given, is filled with {catalog: benchmark} from the rows' benchmark column (srbf table): the
+    benchmark each catalog belongs to, which the page averages over. A catalog whose rows name none (rows written
+    before the column) is a benchmark of its own; a catalog the rows place in two benchmarks is an error."""
     data: dict[str, dict[tuple[str, int], Rows]] = defaultdict(lambda: defaultdict(dict))
     files = sorted(set(glob.glob(os.path.join(root, "rows_full_*.csv")) + glob.glob(os.path.join(root, "*_rows_full.csv"))))
     for path in files:
         with open(path) as fh:
             for r in csv.DictReader(fh):
                 vals: dict[str, float | None] = {}
+                no_val = fnum(r.get("n_validation")) == 0 or fnum(r.get("constant_target_val")) == 1
+                no_fit = fnum(r.get("constant_target_fit")) == 1
                 for k in RATE_KEYS:
                     v = fnum(r.get(k))
+                    if v is None and ((no_val and k in VALIDATION_RATES) or (no_fit and k in FIT_RATES)):
+                        vals[k] = None   # not defined for this run (no test split, or a target without variance): not a miss
+                        continue
                     vals[k] = (0.0 if v is None else v) if k in r else None   # a column these rows do not have is no rate of 0
                 for k in CONT_KEYS:
                     v = fnum(r.get(k))
                     vals[k] = None if v is not None and NOT_COMPUTED.get(k) == v else v
                 data[r["model"]][(r["catalog"], int(r["rung"]))][(int(r.get("draw") or 1), int(r["row"]))] = Row(vals)
+                if benchmarks is not None:
+                    catalog = r["catalog"]
+                    bench = benchmarks.setdefault(catalog, r.get("benchmark") or catalog)
+                    if bench != (r.get("benchmark") or catalog):
+                        raise ValueError(f"{path}: catalog {catalog!r} is in two benchmarks, {bench!r} and {r.get('benchmark')!r}")
     return data
 
 
@@ -976,7 +1004,7 @@ def summarize_cell(rows: Mapping[Any, Mapping[str, Any]], expected: int | None) 
                             "ok": int(sum(1 for runs in problems.values() if any(r["success"] for r in runs))), "m": {}}
     for k in RATE_KEYS:
         if any(r[k] is not None for runs in problems.values() for r in runs):
-            xs = [sum(1.0 if r[k] else 0.0 for r in runs) / len(runs) for runs in problems.values()]
+            xs = [x for x in (problem_share(runs, k) for runs in problems.values()) if x is not None]
             cell["m"][k] = [len(xs)] + _sums(xs)
     for k in CONT_KEYS:
         tf = HIST_SPECS[k][2] if k in HIST_SPECS else None
@@ -1080,10 +1108,11 @@ def value_matrix(rows: dict[Any, dict[str, Any]], key: str, answered: bool = Fal
 
 
 def rate_matrix(rows: dict[Any, dict[str, Any]], key: str) -> tuple[np.ndarray, np.ndarray]:
-    """(problem ids, each problem's share of hits over its runs)."""
+    """(problem ids, each problem's share of hits over its runs; NaN where the rate is defined for none of them)."""
     def build() -> tuple[np.ndarray, np.ndarray]:
         ids, runs = _problem_runs(rows)
-        return ids, np.asarray([sum(1.0 if r[key] else 0.0 for r in rs) / len(rs) for rs in runs])
+        shares = [problem_share(rs, key) for rs in runs]
+        return ids, np.asarray([np.nan if x is None else x for x in shares], dtype=float)
     return _cached(rows, ("rate", key), build)
 
 
@@ -1209,6 +1238,7 @@ def paired_cell_at(a: Position, b: Position, cache: dict[Any, Any] | None = None
             def share(rows: Any, k: str = k) -> np.ndarray:
                 return rate_matrix(rows, k)[1]
             ds = _at_problems(a, ja, share) - _at_problems(b, jb, share)
+            ds = ds[np.isfinite(ds)]          # a problem without validation points has no validation rate to compare
             out[k] = [int(ds.size)] + _sums(list(ds)) + [int((ds > 0).sum()), int((ds < 0).sum())]
             continue
         for name, answered in [(k, False)] + ([(k + ANSWERED, True)] if k in WORST else []):
@@ -1637,13 +1667,17 @@ def summary_payload(payload: dict[str, Any]) -> dict[str, Any]:
             "summary": payload["summary"]}
 
 
-def catalog_meta(sizes_path: str | None, present: dict[str, int]) -> list[dict[str, Any]]:
+def catalog_meta(sizes_path: str | None, present: dict[str, int], benchmarks: Mapping[str, str] | None = None) -> list[dict[str, Any]]:
+    """Every catalog the page lists: its problems ("laws"), its group, its ground truths' description lengths, and the
+    benchmark it belongs to (``benchmarks``; a catalog it does not name is a benchmark of its own), the unit the page
+    averages over: the catalogs of one benchmark are one problem set there, every problem in it once."""
     groups = {c: g for g, cs in CATALOG_GROUPS.items() for c in cs}
     per = json.load(open(sizes_path)).get("per_catalog", {}) if sizes_path and os.path.exists(sizes_path) else {}
     cats: list[dict[str, Any]] = []
     for c in sorted(set(per) | set(present), key=lambda c: (-(len(per.get(c, [])) or present.get(c, 0)), c)):   # size, then name: deterministic
         mu = np.asarray(per.get(c, []), float)
         cats.append({"key": c, "laws": int(mu.size) if mu.size else int(present.get(c, 0)), "group": groups.get(c, "other"),
+                     "benchmark": (benchmarks or {}).get(c, c),
                      "mu": [round(float(np.percentile(mu, q)), 1) for q in (25, 50, 75)] if mu.size else None})
     return cats
 
@@ -1710,13 +1744,14 @@ def main() -> None:
     dpath = os.path.join(a.root, "dnf.json")
     if os.path.exists(dpath):
         DNF.update({k: int(v["rung"]) for k, v in json.load(open(dpath)).items() if isinstance(v, dict) and "rung" in v})
-    data = load_rows(a.root)
+    benchmarks: dict[str, str] = {}
+    data = load_rows(a.root, benchmarks)
     derive_improvability(data, improvability_pool(public), usable)
     present: dict[str, int] = defaultdict(int)
     for mk in data:
         for (c, r), rows in data[mk].items():
             present[c] = max([present[c]] + [len(rs) for rs in by_draw(rows).values()])
-    cats = catalog_meta(a.sizes, present)
+    cats = catalog_meta(a.sizes, present, benchmarks)
     sizes = {c["key"]: c["laws"] for c in cats}
 
     tpath0 = os.path.join(a.root, "timing.json")

@@ -252,6 +252,8 @@ def test_a_fit_runs_to_the_budget_and_returns_the_best_expression_with_its_recor
     assert extra["model_complexity"] == 8.0 and extra["model_length"] == 4 and "complexity" not in extra
     assert [e["complexity"] for e in extra["front"]] == [3.0, 8.0]
     assert extra["front"][0]["expression"] == "(0.12345678900000578 * v1)"
+    # DSO's front goes to srbf as the candidates (computed inside fit_time), the answer among them
+    assert out["candidates"] == [e["expression"] for e in extra["front"]] and out["expression"] in out["candidates"]
     assert Program.cache == {} and Optimizer.instances[-1].sess.closed   # nothing left behind for the next fit
 
 
@@ -331,11 +333,20 @@ def test_the_arm_is_required(fake_dso):
         w.load({})
 
 
-def test_load_warms_up_with_a_small_run_of_the_arm(fake_dso):
-    w.load({"arm": "udsr", "n_samples": 10**6})
+def test_setup_warms_up_with_a_small_run_of_the_arm(fake_dso):
+    options = {"arm": "udsr", "n_samples": 10**6}
+    state = w.load(options)
+    assert not Optimizer.instances                                   # load fits nothing
+    assert w.setup(state, options, warmup=False) is None
     (warmup,) = Optimizer.instances
     assert warmup.config["training"]["n_samples"] == 1 and warmup.config["training"]["batch_size"] == 20
     assert warmup.config["gp_meld"]["population_size"] == 20 and warmup.config["policy_optimizer"]["pqt_k"] == 10
+
+
+def test_setup_leaves_the_warm_up_to_srbfs_problem_or_to_nobody(fake_dso):
+    for options, srbf_warmup in (({"arm": "udsr"}, True), ({"arm": "udsr", "warmup": False}, False)):
+        w.setup(w.load(options), options, warmup=srbf_warmup)
+    assert not Optimizer.instances
 
 
 def test_the_front_keeps_the_non_dominated_valid_expressions():

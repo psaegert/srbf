@@ -22,6 +22,9 @@ class _FakeFlash:
     def ranking_config(self):
         return {"mode": "mdl", "mdl_strength": 1e-2}
 
+    def inference_precision(self):
+        return "fp32"
+
     def prepare(self, *, data_source=None):
         self.prepared = True
 

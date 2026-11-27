@@ -64,6 +64,9 @@ which GP-GOMEA uses to shuffle and which its ``--seed`` leaves alone, starts fro
 stays in the child; and a crash of the C++ code costs one problem, not the worker. The child dies with its parent.
 The returned ``fit_time`` is GP-GOMEA's own fit, measured in the child; forking and rewriting its string are not
 part of it. GP-GOMEA's own predictions are not returned (they come from the same tree): srbf evaluates the string.
+
+GP-GOMEA ends with one model and returns it alone, without ``candidates``: in srbf's candidate store the answer is
+the problem's only candidate.
 """
 import ctypes
 import hashlib

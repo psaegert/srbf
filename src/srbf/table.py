@@ -7,19 +7,30 @@ expressions), each file possibly split into shards
 :func:`build_table` judges any number of trees in parallel and writes the rows as CSV (``srbf table``). The results
 site is built from this table.
 
+Every row names its catalog (the directory the result file is in) and the catalog's benchmark, the unit results are
+averaged over (docs/averaging.md): the ``benchmarks`` mapping :func:`build_table` is given, which ``srbf table`` reads
+from the catalogs' metadata (:func:`srbf.suites.catalog_benchmarks`); a catalog it does not name is a benchmark of its
+own. The benchmark is a property of the catalog, not of the result file, so the judge's rows and the per-file cache do
+not hold it (:data:`JUDGED_COLUMNS`): it is added when the table is written, and a catalog whose benchmark changes
+needs no file judged again.
+
 Row semantics:
 
 * rate columns (``success``, the numeric and symbolic recoveries, ``skeleton_match_raw``) are defined for every
-  problem: a failed prediction is a miss (0), not a missing value;
+  problem: a failed prediction is a miss (0), not a missing value. The exceptions are rates that are not defined: a
+  problem without validation points (a data catalog whose authors give no test split, ``n_validation`` 0) has no
+  validation-split rates (``numeric_recovery_val``, ``numeric_recovery_relative_val``, ``symbolic_recovery_mask_none``),
+  and a split whose target is the same value on every point has no numeric rates for that split (its FVU is 0/0 or x/0
+  whatever the prediction): they are empty, as that split's analysis columns are. Empty means undefined, never a miss;
 * analysis columns (FVU, R², distances, lengths, MDL, ...) describe the predictions that were made and are empty for a
   failed one, except the metrics whose range has a worst value (:data:`srbf.result_processing.WORST_VALUE`), which a
   failed prediction takes;
 * ground-truth columns (``skeleton_length``, ``ground_truth_mdl``, ...) are defined for every problem.
 
 Description lengths are in bits (certified, f64 parse, default canon). A per-file cache (``cache_dir``) keeps the rows
-of every file judged before; its key names the file (path, size, modification time) and the judge (a hash of the
-installed srbf source, the simplipy, sympy and numpy versions and the engine), so a file is judged again exactly when it
-or the judge changed.
+of every file judged before; its key names the file (path, size, modification time) and the judge
+(:func:`judge_fingerprint`: the source of the srbf modules the judge runs, the versions of the libraries they import,
+the engine), so a file is judged again exactly when it or the judge changed.
 """
 from __future__ import annotations
 
@@ -29,6 +40,8 @@ import hashlib
 import math
 import os
 import pickle
+import sys
+import tempfile
 import time
 import warnings
 from collections.abc import Callable, Iterable, Sequence
@@ -41,7 +54,7 @@ from typing import Any, Mapping
 from srbf.rungs import RESULT_FILE, RUNG_PREFIXES  # a result file's name: the rung and, for a shard, its index and count
 
 
-ID_COLUMNS = ["model", "draw", "catalog", "rung", "shard", "row", "sha"]
+ID_COLUMNS = ["model", "draw", "catalog", "benchmark", "rung", "shard", "row", "sha"]
 RATE_COLUMNS = ["success", "numeric_recovery_val", "numeric_recovery_fit", "numeric_recovery_relative_val",
                 "numeric_recovery_relative_fit", "symbolic_recovery", "symbolic_recovery_mask_fittable",
                 "symbolic_recovery_mask_none", "skeleton_match_raw"]
@@ -52,15 +65,25 @@ ANALYSIS_COLUMNS = ["log10_fvu_val", "log10_fvu_fit", "r2_val", "r2_fit", "mdl_r
                     "total_nestedness_delta", "f1_score_unique_variables", "precision_unique_variables",
                     "recall_unique_variables", "predicted_log_prob", "predicted_score", "predicted_pareto_rank",
                     "fit_time", "generation_time"]
-GROUND_TRUTH_COLUMNS = ["skeleton_length", "ground_truth_mdl", "n_constants", "total_nestedness", "n_variables", "n_support"]
+GROUND_TRUTH_COLUMNS = ["skeleton_length", "ground_truth_mdl", "n_constants", "total_nestedness", "n_variables", "n_support",
+                        "n_validation", "constant_target_fit", "constant_target_val"]
 #: The expressions themselves, as the judge read them: prefix tokens joined by spaces, numbers at full precision. The
 #: prediction is in the ground truth's variable names and the engine's spelling; empty when the method gave none.
 EXPRESSION_COLUMNS = ["predicted_expression", "ground_truth_expression"]
 #: The table's columns, in order.
 COLUMNS = ID_COLUMNS + RATE_COLUMNS + ANALYSIS_COLUMNS + GROUND_TRUTH_COLUMNS + EXPRESSION_COLUMNS
+#: The columns of the judge's rows (:func:`judge_result_file`, the per-file cache), in order: every column but the
+#: benchmark, which :func:`build_table` adds from the catalog when it writes the table.
+JUDGED_COLUMNS = [c for c in COLUMNS if c != "benchmark"]
 #: Bumped whenever a row's content changes without a change to srbf's source (it is part of the cache key).
-TABLE_VERSION = 1
+TABLE_VERSION = 2   # 2: n_validation, constant targets, and empty rates where they are not defined
+# A fresh pool counts as stalled when nothing is in flight and nothing finishes for stall_timeout; before its first file
+# has started it gets at least this long, since its workers may still be starting (over 3 s at load 16, 2026-11-17).
+POOL_START_GRACE = 60.0
 
+#: The rates read on the validation points: empty for a problem without them.
+_VALIDATION_RATES = {"numeric_recovery_val", "numeric_recovery_relative_val", "symbolic_recovery_mask_none"}
+_FIT_RATES = {"numeric_recovery_fit", "numeric_recovery_relative_fit"}
 _RECOVERIES = ["numeric_recovery_val", "numeric_recovery_fit", "numeric_recovery_relative_val", "numeric_recovery_relative_fit",
                "symbolic_recovery", "symbolic_recovery_mask_fittable", "symbolic_recovery_mask_none"]
 _DERIVED_WHEN_ANSWERED = ["log10_fvu_val", "log10_fvu_fit", "r2_val", "r2_fit", "mdl_ratio", "predicted_mdl", "f1_score",
@@ -104,16 +127,10 @@ def result_files(tree: ResultTree, *, max_rung: int | None = None) -> list[str]:
 
 
 def mdl_bits(engine: Any) -> Callable[[list[str]], float]:
-    """The description length the table reports, in bits: certified, f64 parse, the default canon (NaN on failure)."""
-    from simplipy.engine import Mode
+    """The description length the table reports, in bits (:func:`srbf.pricing.price_bits`; NaN on failure)."""
+    from srbf.pricing import pricer
 
-    def price(prefix: list[str]) -> float:
-        try:
-            return float(engine.complexity(list(prefix), certified=True, mode=Mode.f64, canon="default")) / 1000.0
-        except Exception:  # noqa: BLE001 - an expression the engine cannot price has no description length
-            return float("nan")
-
-    return price
+    return pricer(engine)
 
 
 def _number(x: Any) -> float | str:
@@ -183,15 +200,27 @@ def _spell_predictions(snapshot: dict[str, Any], operator_arity: Mapping[str, in
                          if prefix is not None and SYMPY_ONLY.intersection(map(str, prefix)) else prefix for prefix in seq]
 
 
+def judge_snapshot(snap: dict[str, Any], *, engine: Any, first_index: int | None = None) -> dict[str, Any]:
+    """The judge on one raw snapshot: its predictions brought into the ground truth's variable names and the engine's
+    spelling (in place), then :func:`srbf.derive_metrics` with the engine and its description length. Returns the
+    derived snapshot; :func:`judge_result_file` and the acceptance of frozen draws read it."""
+    from srbf.result_processing import derive_metrics
+
+    _rename_predictions(snap, first_index)
+    _spell_predictions(snap, engine.operator_arity)
+    return derive_metrics(snap, engine=engine, mdl_fn=mdl_bits(engine))
+
+
 def judge_result_file(path: str, *, method: str, draw: int = 1, engine: Any, first_index: int | None = None) -> list[list[Any]]:
-    """The table rows (in :data:`COLUMNS` order) of one result file; an empty list for a file without problems.
+    """The judged rows (in :data:`JUDGED_COLUMNS` order: the table's columns but the benchmark, which
+    :func:`build_table` adds) of one result file; an empty list for a file without problems.
 
     ``engine`` is a loaded ``SimpliPyEngine``. Raises when the file cannot be read or judged.
     """
     import numpy as np  # noqa: F401 - the snapshots hold numpy arrays
 
     from srbf.metrics.symbolic import total_nestedness
-    from srbf.result_processing import WORST_VALUE, derive_metrics
+    from srbf.result_processing import WORST_VALUE
 
     with open(path, "rb") as fh:
         snap = pickle.load(fh)
@@ -205,10 +234,8 @@ def judge_result_file(path: str, *, method: str, draw: int = 1, engine: Any, fir
     shard = f"{m.group(2)}/{m.group(3)}" if m.group(2) else ""
     catalog = os.path.basename(os.path.dirname(path))
     sha = _model_sha(snap)
-    _rename_predictions(snap, first_index)
-    _spell_predictions(snap, engine.operator_arity)
+    s = judge_snapshot(snap, engine=engine, first_index=first_index)
     arity = engine.operator_arity
-    s = derive_metrics(snap, engine=engine, mdl_fn=mdl_bits(engine))
 
     def got(k: str, i: int) -> Any:
         return s[k][i] if k in s and i < len(s[k]) else None
@@ -229,8 +256,14 @@ def judge_result_file(path: str, *, method: str, draw: int = 1, engine: Any, fir
         ps = list(ps) if (ok and ps is not None) else None
         # rates: a miss unless the prediction succeeded and the judge said yes
         r["success"] = int(ok)
+        n_val = got("n_validation", i)
+        undefined_val = (n_val is not None and int(n_val) == 0) or bool(got("fit_quality_undefined_val", i))
+        undefined_fit = bool(got("fit_quality_undefined_fit", i))
         for k in _RECOVERIES:
             v = got(k, i)
+            if (undefined_val and k in _VALIDATION_RATES) or (undefined_fit and k in _FIT_RATES):
+                r[k] = ""            # no points, or a target without variance: not a miss, not defined
+                continue
             r[k] = int(bool(v)) if (ok and v is not None) else 0
         r["skeleton_match_raw"] = int(ok and ps is not None and sk is not None and ps == sk)
         # ground truth
@@ -240,6 +273,9 @@ def judge_result_file(path: str, *, method: str, draw: int = 1, engine: Any, fir
         r["total_nestedness"] = _number(got("total_nestedness", i))
         r["n_variables"] = _number(got("n_variables", i))
         r["n_support"] = _number(raw("n_support", i))
+        r["n_validation"] = _number(n_val)
+        r["constant_target_fit"] = int(undefined_fit)
+        r["constant_target_val"] = int(bool(got("fit_quality_undefined_val", i)) and not (n_val is not None and int(n_val) == 0))
         pe, ge = raw("predicted_expression_prefix", i), raw("ground_truth_prefix", i)
         r["predicted_expression"] = " ".join(map(str, pe)) if (ok and pe is not None) else ""
         r["ground_truth_expression"] = " ".join(map(str, ge)) if ge is not None else ""
@@ -271,32 +307,106 @@ def judge_result_file(path: str, *, method: str, draw: int = 1, engine: Any, fir
             # a failed problem sits at the bad end of every metric whose range has one
             for k in WORST_VALUE:
                 r[k] = _number(got(k, i))
-        rows.append([r.get(c, "") for c in COLUMNS])
+        rows.append([r.get(c, "") for c in JUDGED_COLUMNS])
     return rows
 
 
+_CATALOG_AT = JUDGED_COLUMNS.index("catalog")
+_BENCHMARK_AT = COLUMNS.index("benchmark")
+
+
+def with_benchmark(row: Sequence[Any], benchmarks: Mapping[str, str]) -> list[Any]:
+    """A judged row (:data:`JUDGED_COLUMNS`) as a table row (:data:`COLUMNS`): its catalog's benchmark put in, from
+    ``benchmarks``, or the catalog itself when ``benchmarks`` does not name it."""
+    catalog = row[_CATALOG_AT]
+    return [*row[:_BENCHMARK_AT], benchmarks.get(catalog, catalog), *row[_BENCHMARK_AT:]]
+
+
 # ---- the judge's fingerprint and the per-file cache ---------------------------------------------------------------
-def judge_fingerprint(engine_name: str) -> str:
-    """Names the judge: the installed srbf source, the simplipy / sympy / numpy versions, the engine, the table version.
+JUDGE_ENTRY = "srbf.table"
+# Read by the judge through other libraries (simplipy's simplification), so no import of the judge's modules names it.
+JUDGE_LIBRARIES = ("sympy",)
 
-    The out-of-process workers (``srbf/worker/``) are left out: they run in the methods' own interpreters and the
-    judge never imports them, so a new baseline worker does not re-judge every result file. So is the list of rung
-    file names (``srbf/rungs.py``): it decides which files are read, not how a row is judged."""
-    import srbf
 
-    h = hashlib.sha256()
-    root = Path(srbf.__file__).resolve().parent
-    for p in sorted(root.rglob("*.py")):
-        if "__pycache__" in p.parts or p.relative_to(root).parts[0] == "worker" or p.relative_to(root).as_posix() == "rungs.py":
+def _imported_modules(name: str, path: Path, modules: Mapping[str, Path]) -> tuple[set[str], set[str]]:
+    """(srbf modules, top-level third-party packages) one srbf module imports, at module level or inside functions.
+
+    An import names the module that defines what it takes: ``from srbf.x import y`` is ``srbf.x`` (or ``srbf.x.y`` when
+    that is a module), never the packages above it, whose ``__init__`` only re-exports. A bare ``import srbf`` (to
+    locate the sources) is not a dependency."""
+    import ast
+
+    package = name if path.name == "__init__.py" else name.rsplit(".", 1)[0]
+    ours: set[str] = set()
+    theirs: set[str] = set()
+    for node in ast.walk(ast.parse(path.read_text())):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.startswith("srbf."):
+                    ours.add(alias.name)
+                elif alias.name != "srbf":
+                    theirs.add(alias.name.split(".")[0])
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                parts = package.split(".")
+                module = ".".join(parts[:len(parts) - (node.level - 1)] + ([node.module] if node.module else []))
+            else:
+                module = node.module or ""
+            if module == "srbf" or module.startswith("srbf."):
+                ours |= {f"{module}.{a.name}" if f"{module}.{a.name}" in modules else module for a in node.names}
+            elif module:
+                theirs.add(module.split(".")[0])
+    stdlib = set(getattr(sys, "stdlib_module_names", ())) | {"__future__"}
+    return {m for m in ours if m in modules}, theirs - stdlib
+
+
+def judge_dependencies(root: Path, entry: str = JUDGE_ENTRY) -> tuple[list[Path], list[str]]:
+    """The judge's sources and libraries: every srbf module ``entry`` reaches through its imports (read from the
+    source, so a new dependency joins by itself), and the third-party packages those modules import. The out-of-process
+    workers (``srbf/worker/``) and the list of rung file names (``srbf/rungs.py``, which decides which files are read,
+    not how a row is judged) are left out."""
+    modules: dict[str, Path] = {}
+    for p in root.rglob("*.py"):
+        if "__pycache__" in p.parts:
             continue
+        rel = p.relative_to(root.parent).with_suffix("")
+        modules[".".join(rel.parts[:-1] if rel.name == "__init__" else rel.parts)] = p
+    seen: set[str] = set()
+    libraries: set[str] = set()
+    todo = [entry]
+    while todo:
+        name = todo.pop()
+        if name in seen or name not in modules:
+            continue
+        seen.add(name)
+        ours, theirs = _imported_modules(name, modules[name], modules)
+        libraries |= theirs
+        todo += sorted(ours - seen)
+    skipped = {f"{root.name}.rungs"}
+    sources = [modules[m] for m in sorted(seen) if m not in skipped and not m.startswith(f"{root.name}.worker")]
+    return sources, sorted(libraries | set(JUDGE_LIBRARIES))
+
+
+def judge_fingerprint(engine_name: str) -> str:
+    """Names the judge: the source of the srbf modules it runs and the versions of the libraries they import
+    (:func:`judge_dependencies`), the engine and the table version. A change anywhere else in srbf (the site export,
+    the reports, a baseline worker) does not re-judge every result file."""
+    import srbf
+    from importlib.metadata import PackageNotFoundError, packages_distributions, version as dist_version
+
+    root = Path(srbf.__file__).resolve().parent
+    sources, libraries = judge_dependencies(root)
+    h = hashlib.sha256()
+    for p in sources:
         h.update(str(p.relative_to(root)).encode())
         h.update(p.read_bytes())
-    for name in ("simplipy", "sympy", "numpy"):
+    distributions = packages_distributions()
+    for name in libraries:
         try:
-            version = __import__(name).__version__
-        except Exception:  # noqa: BLE001 - a missing library is part of the judge too
-            version = "?"
-        h.update(f"{name}={version}".encode())
+            v = dist_version((distributions.get(name) or [name])[0])
+        except PackageNotFoundError:   # a missing library is part of the judge too
+            v = "?"
+        h.update(f"{name}={v}".encode())
     h.update(f"engine={engine_name}|table={TABLE_VERSION}".encode())
     return h.hexdigest()[:16]
 
@@ -345,44 +455,52 @@ def _worker_engine(name: str) -> Any:
     return _ENGINE
 
 
-def _mark(progress_path: str | None, tag: str, path: str) -> None:
+def _mark(progress_path: str | None, tag: str, index: int, path: str) -> None:
     if not progress_path:
         return
     try:
         with open(progress_path, "a") as fh:
-            fh.write(f"{tag} {path}\n")
+            fh.write(f"{tag} {index} {time.time():.3f} {path}\n")
     except OSError:
         pass
 
 
-def _judge_job(job: tuple[ResultTree, str, str, str | None]) -> tuple[str, list[list[Any]], str | None]:
-    """(path, rows, error). The file is marked in flight while it is judged, so a stall can name its suspects."""
-    tree, path, engine_name, progress_path = job
-    _mark(progress_path, "S", path)
+def _judge_job(job: tuple[int, ResultTree, str, str, str | None]) -> tuple[int, list[list[Any]], str | None]:
+    """(job index, rows, error). The file is marked in flight while it is judged, so a file that does not finish can be
+    found and stopped. The worker's engine is loaded first (once per worker): its start is not the file's time."""
+    index, tree, path, engine_name, progress_path = job
+    warnings.simplefilter("ignore")
     try:
-        warnings.simplefilter("ignore")
+        engine = _worker_engine(engine_name)
+    except Exception as e:  # noqa: BLE001 - reported for the file, as a failed judgement would be
+        return index, [], f"{path}: {type(e).__name__}: {e}"
+    _mark(progress_path, "S", index, path)
+    try:
         try:
-            rows = judge_result_file(path, method=tree.method, draw=tree.draw, engine=_worker_engine(engine_name),
+            rows = judge_result_file(path, method=tree.method, draw=tree.draw, engine=engine,
                                      first_index=tree.first_index)
         except Exception as e:  # noqa: BLE001 - a file that cannot be judged is reported, not fatal
-            return path, [], f"{path}: {type(e).__name__}: {e}"
-        return path, rows, None
+            return index, [], f"{path}: {type(e).__name__}: {e}"
+        return index, rows, None
     finally:
-        _mark(progress_path, "D", path)
+        _mark(progress_path, "D", index, path)
 
 
-def _in_flight(progress_path: str | None) -> list[str] | str:
+def _in_flight(progress_path: str | None) -> dict[int, tuple[float, str]]:
+    """The jobs started and not done: {job index: (start time, path)}."""
     if not progress_path or not os.path.exists(progress_path):
-        return "unknown (no progress file)"
-    started: list[str] = []
-    done: set[str] = set()
+        return {}
+    running: dict[int, tuple[float, str]] = {}
     for line in open(progress_path):
-        tag, _, p = line.partition(" ")
+        parts = line.rstrip("\n").split(" ", 3)
+        if len(parts) < 4:
+            continue
+        tag, index, started, path = parts
         if tag == "S":
-            started.append(p.strip())
+            running[int(index)] = (float(started), path)
         elif tag == "D":
-            done.add(p.strip())
-    return [p for p in started if p not in done] or "none (the worker pool itself is wedged)"
+            running.pop(int(index), None)
+    return running
 
 
 @dataclass
@@ -400,19 +518,28 @@ class TableReport:
 
 def build_table(trees: Iterable[ResultTree], out: str, *, engine: str = "acj-5-4-llm", workers: int = 4,
                 cache_dir: str | None = None, max_rung: int | None = None, stall_timeout: float = 1800.0,
-                progress_path: str | None = None, log: Callable[[str], None] | None = print) -> TableReport:
+                progress_path: str | None = None, log: Callable[[str], None] | None = print,
+                benchmarks: Mapping[str, str] | None = None,
+                _judge: Callable[..., tuple[int, list[list[Any]], str | None]] = _judge_job) -> TableReport:
     """Judge every result file of ``trees`` and write the table to ``out`` (CSV, written atomically).
 
-    Files are judged by ``workers`` processes, largest first; the rows are written in that order, whether they were
-    judged now or read from ``cache_dir``. A file that cannot be read or judged is reported in ``errors`` and left out
-    (a result file that is still being written is the usual cause). When no file finishes for ``stall_timeout``
-    seconds the pool is stopped and the table is written with what was judged (``stalled``); ``progress_path``
-    then names the files that were in flight.
+    ``benchmarks`` maps a catalog to the benchmark it belongs to, the table's ``benchmark`` column; a catalog it does
+    not name (every catalog, without it) is a benchmark of its own.
 
-    A cached file's rows are read when they are written, one file at a time: holding every cached file's rows until
-    the pool is through took 5 GB for the board's 23,000 files (2026-10-08), and the machine's memory guard stopped
-    the table on every refresh. A cache entry that cannot be read then is a miss like any other: the file is judged
-    in this process and stored again.
+    Files are judged by ``workers`` processes, largest first, and taken as they finish. A file still running
+    ``stall_timeout`` seconds after it started is stopped with its pool and judged once more in a fresh one; a file
+    that does not finish twice is left out and reported (``STALLED``, ``stalled``), and every other file is judged. A
+    pool in which nothing is in flight and nothing finishes for ``stall_timeout`` (``POOL_START_GRACE`` at least, until
+    its first file has started) is stopped too, and its files are reported. A
+    file that cannot be read or judged is reported in ``errors`` and left out (a result file that is still being
+    written is the usual cause). ``progress_path`` (a temporary file when not given) records which files are in flight.
+
+    The rows are written in the files' order, judged now or read from ``cache_dir``, one file at a time: holding every
+    file's rows until the pool is through took 5 GB for the board's 23,000 files (2026-10-08). A cache entry that cannot
+    be read then is a miss like any other: the file is judged in this process and stored again. Without a cache the
+    rows judged now are held until they are written.
+
+    ``_judge`` is the job function (a test stands in a slow one).
     """
     say = log or (lambda _msg: None)
     t0 = time.time()
@@ -430,63 +557,129 @@ def build_table(trees: Iterable[ResultTree], out: str, *, engine: str = "acj-5-4
                 cached.add(i)
     pending = [i for i in range(len(jobs)) if i not in cached]
     say(f"{len(jobs)} files: {len(pending)} to judge, {len(cached)} from the cache")
-    if progress_path:
-        open(progress_path, "w").close()
+    own_progress = progress_path is None
+    if progress_path is None:
+        fd, progress = tempfile.mkstemp(prefix=".srbf-table-", suffix=".progress", dir=os.path.dirname(os.path.abspath(out)))
+        os.close(fd)
+    else:
+        progress = progress_path
+    open(progress, "w").close()
     errors: list[str] = []
-    n_rows, judged, from_cache, stalled = 0, 0, 0, False
+    held: dict[int, list[list[Any]]] = {}      # rows judged now, without a cache
+    failed: set[int] = set()
+    judged, stalled = 0, False
 
-    def judged_now(i: int, rows: list[list[Any]], err: str | None) -> list[list[Any]]:
+    def keep(i: int, rows: list[list[Any]], err: str | None) -> None:
         if err:
             errors.append(err)
+            failed.add(i)
         elif cache_dir:
             _cache_store(cache_dir, keys[i], rows)
-        return rows
-    tmp = out + ".tmp"
-    with open(tmp, "w", newline="") as fh:
-        writer = csv.writer(fh)
-        writer.writerow(COLUMNS)
-        # forkserver: a fork of a process that already runs threads (the engine's, numpy's) can deadlock the child
-        methods = multiprocessing.get_all_start_methods()
-        context = multiprocessing.get_context("forkserver" if "forkserver" in methods else "spawn")
-        pool = context.Pool(max(1, workers), maxtasksperchild=25) if pending else None
-        try:
-            results = pool.imap(_judge_job, [(jobs[i][0], jobs[i][1], engine, progress_path) for i in pending], chunksize=1) if pool else iter(())
-            for i in range(len(jobs)):
-                if i in cached:
-                    hit = _cache_load(cache_dir, keys[i]) if cache_dir else None
-                    if hit is not None:
-                        rows = hit
-                        from_cache += 1
-                    else:
-                        _path, rows, err = _judge_job((jobs[i][0], jobs[i][1], engine, progress_path))
-                        rows = judged_now(i, rows, err)
-                        judged += 1
-                elif stalled:
-                    continue
-                else:
+        else:
+            held[i] = rows
+
+    # forkserver: a fork of a process that already runs threads (the engine's, numpy's) can deadlock the child
+    methods = multiprocessing.get_all_start_methods()
+    context = multiprocessing.get_context("forkserver" if "forkserver" in methods else "spawn")
+    poll = max(0.5, min(30.0, stall_timeout / 10))
+    timeouts: dict[int, int] = {}
+    queue = list(pending)
+    try:
+        while queue:
+            remaining = set(queue)
+            pool = context.Pool(max(1, workers), maxtasksperchild=25)
+            restart, last, begun = False, time.time(), False
+            try:
+                results = pool.imap_unordered(_judge, [(i, jobs[i][0], jobs[i][1], engine, progress) for i in queue],
+                                              chunksize=1)
+                while remaining:
                     try:
-                        _path, rows, err = results.next(timeout=stall_timeout)  # type: ignore[attr-defined]
+                        i, rows, err = results.next(timeout=poll)  # type: ignore[attr-defined]
                     except PoolTimeout:
-                        say(f"STALLED after {judged}/{len(pending)} files: none finished for {stall_timeout:.0f}s; in flight: {_in_flight(progress_path)}")
-                        stalled = True
+                        now = time.time()
+                        running = {i: v for i, v in _in_flight(progress).items() if i in remaining}
+                        begun = begun or bool(running)
+                        late = [i for i, (started, _p) in running.items() if now - started > stall_timeout]
+                        if late:
+                            for i in late:
+                                timeouts[i] = timeouts.get(i, 0) + 1
+                                if timeouts[i] >= 2:
+                                    say(f"STALLED: {jobs[i][1]} did not finish in {stall_timeout:.0f}s twice; left out")
+                                    errors.append(f"{jobs[i][1]}: did not finish in {stall_timeout:.0f}s, twice")
+                                    failed.add(i)
+                                    remaining.discard(i)
+                                    stalled = True
+                                else:
+                                    say(f"RETRY {jobs[i][1]}: not finished after {stall_timeout:.0f}s; judging it once more in a fresh worker")
+                            restart = True
+                            break
+                        # nothing in flight and nothing finishing; before a fresh pool has started any file its workers
+                        # may still be starting (over 3 s on a busy machine), so it gets at least POOL_START_GRACE
+                        quiet = stall_timeout if begun else max(stall_timeout, POOL_START_GRACE)
+                        if not running and now - last > quiet:
+                            say(f"STALLED after {judged}/{len(pending)} files: none finished for {stall_timeout:.0f}s and none in flight")
+                            failed |= remaining
+                            remaining.clear()
+                            stalled = True
+                            restart = True
+                            break
                         continue
+                    except StopIteration:
+                        break
+                    last, begun = time.time(), True
+                    remaining.discard(i)
                     judged += 1
-                    rows = judged_now(i, rows, err)
+                    keep(i, rows, err)
                     if judged % 50 == 0 or judged == len(pending):
                         say(f"{judged}/{len(pending)} files judged, {time.time() - t0:.0f}s")
-                writer.writerows(rows)
-                n_rows += len(rows)
-        finally:
-            if pool is not None:
-                pool.terminate() if stalled else pool.close()
+            finally:
+                pool.terminate() if restart else pool.close()
                 pool.join()
-    os.replace(tmp, out)
+            if not restart:
+                break
+            queue = sorted(remaining, key=lambda i: (-timeouts.get(i, 0), i))   # a retried file first, alone if need be
+            open(progress, "w").close()
+
+        n_rows, from_cache = 0, 0
+        tmp = out + ".tmp"
+        with open(tmp, "w", newline="") as fh:
+            writer = csv.writer(fh)
+            writer.writerow(COLUMNS)
+            for i in range(len(jobs)):
+                if i in failed:
+                    continue
+                stored: list[list[Any]] | None = held.pop(i) if i in held else None
+                if stored is None and cache_dir:
+                    stored = _cache_load(cache_dir, keys[i])
+                    if stored is not None and i in cached:
+                        from_cache += 1
+                if stored is None:                             # a cache entry that cannot be read is a miss
+                    _i, stored, err = _judge_job((i, jobs[i][0], jobs[i][1], engine, None))
+                    keep(i, stored, err)
+                    held.pop(i, None)
+                    judged += 1
+                    if err:
+                        continue
+                writer.writerows(with_benchmark(row, benchmarks or {}) for row in stored)
+                n_rows += len(stored)
+        os.replace(tmp, out)
+    finally:
+        if own_progress:
+            try:
+                os.remove(progress)
+            except OSError:
+                pass
     report = TableReport(files=len(jobs), judged=judged, from_cache=from_cache, rows=n_rows, errors=errors,
                          stalled=stalled, seconds=time.time() - t0)
     for e in errors:
         say(f"ERR {e}")
     say(f"done: {n_rows} rows, {len(errors)} errors, {report.seconds:.0f}s -> {out}")
     return report
+
+
+def tree_catalogs(trees: Iterable[ResultTree]) -> list[str]:
+    """The catalogs the trees hold result files for: the names of their catalog directories, sorted."""
+    return sorted({os.path.basename(os.path.dirname(f)) for tree in trees for f in result_files(tree)})
 
 
 def parse_index_bases(specs: Sequence[str] | None) -> dict[str, int]:

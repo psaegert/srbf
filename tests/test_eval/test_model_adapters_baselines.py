@@ -146,6 +146,44 @@ def test_brute_force_adapter_identity(simplipy_engine: SimpliPyEngine) -> None:
     np.testing.assert_allclose(values["y_pred_val"].squeeze(), sample.y_validation.squeeze(), atol=1e-3)
     assert values["predicted_expression"]
     assert values["predicted_skeleton_prefix"] is not None
+    # every expression it fitted goes to the run as a candidate, constants at full precision, the best first
+    assert len(values["candidate_expressions"]) == len(model._results) >= 1
+    assert values["candidate_notation"] == "prefix" and values["candidate_prediction"] == 0
+    assert values["candidate_expressions"][0].split() == list(model.get_expression(nth_best=0, return_prefix=True, precision=None))
+
+
+@needs_flash_ansr
+@pytest.mark.parametrize("which", ["brute_force", "lample_charton"])
+def test_the_recorded_answer_carries_its_constants_at_full_precision(simplipy_engine: SimpliPyEngine, which) -> None:
+    """The answer the table prices and judges is the formula behind y_pred: its constants are written at full float64
+    precision, not rounded to two decimals (1.23456789 * x1 recorded as 1.23 * x1 would be judged as another law)."""
+    from srbf.baselines import BruteForceModel, LampleChartonModel
+    from srbf.candidates import evaluate_prefix
+
+    pool = _build_toy_pool(simplipy_engine)
+    pool.skeletons = {("*", "<constant>", "x1")}
+    if which == "brute_force":
+        model = BruteForceModel(simplipy_engine=simplipy_engine, catalog=pool, max_expressions=512, max_length=3,
+                                include_constant_token=True, ignore_holdouts=True, n_restarts=1, refiner_p0_noise=None)
+        adapter = BruteForceAdapter(model)
+    else:
+        model = LampleChartonModel(simplipy_engine=simplipy_engine, catalog=pool, samples=1, unique=True,
+                                   ignore_holdouts=True, seed=0, n_restarts=1, refiner_p0_noise=None)
+        adapter = LampleChartonAdapter(model)
+    x = np.linspace(-1.0, 1.0, 16).reshape(-1, 1)
+    sample = EvaluationSample(x_support=x, y_support=1.23456789 * x, x_validation=np.linspace(-0.5, 0.5, 4).reshape(-1, 1),
+                              y_validation=1.23456789 * np.linspace(-0.5, 0.5, 4).reshape(-1, 1),
+                              metadata={"skeleton": ["*", "<constant>", "x1"], "variables": ["x1"], "variable_names": ["x1"]})
+    values = adapter.evaluate_sample(sample).to_mapping()
+    assert values["prediction_success"] is True, values.get("error")
+    prefix = list(values["predicted_expression_prefix"])
+    (constant,) = [float(t) for t in prefix if t not in ("*", "x1")]
+    assert constant == values["predicted_constants"][0] and abs(constant - 1.23456789) < 1e-6     # not 1.23
+    (y_answer,) = evaluate_prefix(simplipy_engine, prefix, ["x1"], sample.x_support)
+    np.testing.assert_array_equal(y_answer.ravel(), np.asarray(values["y_pred"], dtype=float).ravel())
+    assert repr(constant) in values["predicted_expression"]
+    assert values["candidate_expressions"][0].split() == [str(t) for t in model.get_expression(nth_best=0, return_prefix=True)]
+
 
 # ---- a failed fit is NOT a timed fit -----------------------------------------------------------------------------
 # Failures do not count towards the time. The compute axis is the cost of the problems a method

@@ -300,7 +300,7 @@ class _RefiningBaselineModel(BaseEstimator):
         X_np = self._truncate_input(np.asarray(X_np))
         return refiner.predict(X_np)
 
-    def get_expression(self, nth_best: int = 0, *, return_prefix: bool = False, precision: int = 2) -> list[str] | str:
+    def get_expression(self, nth_best: int = 0, *, return_prefix: bool = False, precision: int | None = None) -> list[str] | str:
         """Return the ``nth_best`` fitted candidate's expression with its refined constants substituted.
 
         Parameters
@@ -309,8 +309,10 @@ class _RefiningBaselineModel(BaseEstimator):
             Rank (by ascending score) of the fitted candidate to return; 0 is the best.
         return_prefix : bool, default False
             If True, return the prefix token list; otherwise return the infix string.
-        precision : int, default 2
-            Number of decimal places used when formatting the substituted constants.
+        precision : int or None, default None
+            Decimal places the substituted constants are rounded to, for display. None writes each constant at full
+            float64 precision (the shortest string that reads back as the same float), so the expression evaluates to
+            what ``predict`` returns: a rounded constant changes the formula srbf prices and judges.
 
         Returns
         -------

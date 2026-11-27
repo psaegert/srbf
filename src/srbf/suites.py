@@ -15,11 +15,19 @@ filled in and every ``{catalog}`` in a string (outputs, logs, sweep values) is s
 ``srbf run -c`` runs the suite, ``--experiment <catalog>`` selects one, and ``!sweep`` inside the
 template applies to every experiment. The reference configs under ``configs/evaluation/scaling``
 are the expanded form of the same thing.
+
+A catalog belongs to a benchmark, the unit results are averaged over (docs/averaging.md): one benchmark can be split
+over several catalogs for hosting or format reasons, and each of them names it in the ``benchmark`` field of its
+metadata. :func:`catalog_benchmark` reads that field, and :func:`catalog_benchmarks` maps catalogs to their benchmarks,
+a catalog without the field being a benchmark of its own.
 """
 from __future__ import annotations
 
 import copy
-from typing import Any, Mapping
+import functools
+import os
+import types
+from typing import Any, Callable, Iterable, Mapping
 
 SRBF_CATALOGS: tuple[str, ...] = (
     'fastsrb', 'feynman', 'feynman-bonus', 'srsd-dummy',
@@ -80,4 +88,65 @@ def expand_suite(raw: Mapping[str, Any]) -> dict[str, Any]:
     return expanded
 
 
-__all__ = ["SRBF_CATALOGS", "SUITES", "expand_suite", "suite_catalogs"]
+#: The catalog metadata field that names the benchmark a catalog belongs to.
+BENCHMARK_FIELD = "benchmark"
+
+
+@functools.lru_cache(maxsize=None)
+def _read_metadata(ref: str) -> Mapping[str, Any]:
+    from symbolic_data import load_catalog
+
+    from srbf.paths import substitute_root_path
+
+    return types.MappingProxyType(dict(load_catalog(os.path.expanduser(substitute_root_path(ref))).meta or {}))
+
+
+def _metadata(catalog: Any) -> Mapping[str, Any]:
+    """A catalog's metadata block: a reference is read with symbolic-data (``{{ROOT}}`` and ``~`` expanded, as a run
+    expands them; once per process), a loaded catalog has its own, and a mapping (a generative catalog's config) has
+    none."""
+    if not isinstance(catalog, str):
+        meta = getattr(catalog, "meta", None)
+        return meta if isinstance(meta, Mapping) else {}
+    return _read_metadata(catalog)
+
+
+def _named_benchmark(meta: Mapping[str, Any], catalog: Any) -> str | None:
+    value = meta.get(BENCHMARK_FIELD)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"catalog {catalog!r}: its metadata's {BENCHMARK_FIELD!r} must be a non-empty string, not {value!r}")
+    return value.strip()
+
+
+def catalog_benchmark(catalog: Any) -> str | None:
+    """The benchmark ``catalog`` belongs to: the ``benchmark`` field of its metadata, or None when it names none.
+
+    ``catalog`` is what a run's ``data_source.catalog`` holds: a reference (``name``, ``name@version``,
+    ``repo_id:name``, or a path), read with symbolic-data, a loaded catalog, or a mapping (a generative catalog, which
+    has no such metadata). Raises when the catalog cannot be read, or when the field is not a non-empty string."""
+    return _named_benchmark(_metadata(catalog), catalog)
+
+
+def catalog_benchmarks(catalogs: Mapping[str, Any] | Iterable[str], *,
+                       warn: Callable[[str], None] | None = None) -> dict[str, str]:
+    """{catalog: benchmark} for ``catalogs`` (names, or {name: reference} where the reference is not the name itself):
+    each catalog's benchmark from its metadata (:func:`catalog_benchmark`), else the catalog's own name. A catalog
+    whose metadata cannot be read is a benchmark of its own too, and is reported through ``warn``; a field that is not
+    a non-empty string raises."""
+    refs = dict(catalogs) if isinstance(catalogs, Mapping) else {name: name for name in catalogs}
+    out: dict[str, str] = {}
+    for name, ref in refs.items():
+        try:
+            meta = _metadata(ref)
+        except Exception as exc:  # noqa: BLE001 - an unreadable catalog keeps its own name, and says so
+            if warn is not None:
+                warn(f"cannot read the metadata of catalog {name!r} ({type(exc).__name__}: {exc}); it is a benchmark of its own")
+            meta = {}
+        out[name] = _named_benchmark(meta, ref) or name
+    return out
+
+
+__all__ = ["BENCHMARK_FIELD", "SRBF_CATALOGS", "SUITES", "catalog_benchmark", "catalog_benchmarks", "expand_suite",
+           "suite_catalogs"]

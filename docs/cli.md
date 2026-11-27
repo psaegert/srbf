@@ -1,7 +1,7 @@
 # Command line
 
 ```text
-srbf {new, check, run, status, merge, analyze, decontamination}
+srbf {new, check, run, status, merge, analyze, table, rejudge, decontamination}
 ```
 
 `python -m srbf` is the same program. Every command prints its own `--help`.
@@ -96,7 +96,11 @@ Instead of `-c`, a manifest file can list the runs by hand:
 ```yaml
 runs:
   - {model: mymethod, benchmark: nguyen, scaling: 32, path: results/mymethod/nguyen.pkl}
+  - {model: mymethod, benchmark: nguyen, catalog: nguyen-points, scaling: 32, path: results/mymethod/nguyen-points.pkl}
 ```
+
+`benchmark` is the problem set the run is averaged in; `catalog`, by default the benchmark itself, names the catalog
+of a benchmark stored in several. With `-c`, each catalog's benchmark is read from its metadata.
 
 Figures need the `analysis` extra. See [Results](results.md#the-standard-report).
 
@@ -104,6 +108,9 @@ Figures need the `analysis` extra. See [Results](results.md#the-standard-report)
 
 Judge the result files of whole evaluations into one CSV: a row per problem and rung, with every
 metric of [Metrics](metrics.md) as a column. This is the table the results explorer is built from.
+Each row also names the benchmark of its catalog, read from the catalog's metadata before judging; a
+catalog whose metadata cannot be read is a benchmark of its own, with a warning
+([How results are averaged](averaging.md#a-problem-set-is-a-benchmark)).
 
 ```bash
 srbf table --tree mymethod:1:results/evaluation/scaling/mymethod \
@@ -125,6 +132,24 @@ srbf table --tree mymethod:1:results/evaluation/scaling/mymethod \
 
 A file that cannot be read, such as one that is still being written, is reported and left out. See
 [Results](results.md#one-table-for-every-problem) for the columns.
+
+## `srbf rejudge`
+
+Judge the [candidates](adapters.md#candidates) a run stored again, with the candidate judge of the
+installed srbf, for example after the price changed:
+
+```bash
+srbf rejudge results/evaluation/scaling/mymethod/fastsrb/niter_*.pkl
+```
+
+| flag | meaning |
+|---|---|
+| `--engine` | the SimpliPy engine to judge with; by default the engine the store names |
+
+Each result file judges the candidates of its own problems, from the strings in the store and the
+points the result file keeps; a shard's file judges its shard. The store's logs are rewritten in
+place, and every record then carries the fingerprint of this judge. The exit code is 1 when a file
+has no stored candidates.
 
 ## `srbf decontamination`
 

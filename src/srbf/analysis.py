@@ -5,17 +5,19 @@ standardized second stage (:func:`srbf.derive_metrics`): it takes raw snapshots 
 a benchmark, and an optional scaling coordinate, derives the metrics, and produces the four
 standardized views --
 
-* :func:`leaderboard` -- one row per model/baseline, each metric a bootstrap median + CI pooled over
-  the benchmarks (at a chosen scaling coordinate);
+* :func:`leaderboard` -- one row per model/baseline, each metric averaged over the benchmarks with its 95 % interval
+  (at a chosen scaling coordinate);
 * :func:`scaling_table` / :func:`scaling_figure` -- a metric vs the scaling coordinate (e.g. inference
-  compute), one line per model, with a bootstrap CI band;
+  compute), one line per model, with its interval band;
 * :func:`per_benchmark_table` / :func:`per_benchmark_figure` -- the metric split by benchmark;
 * :func:`distribution_figure` -- the per-expression metric distribution per model (violin).
 
 :func:`build_report` renders all four to a Markdown page + PNG figures for the docs / github.io site.
 
-Reproducibility follows the package policy: sources are unseeded, so every headline is a DISTRIBUTION
-over expressions with a bootstrap confidence interval, not a single seeded point.
+The averages are the results site's (:mod:`srbf.aggregate`, docs/averaging.md): a problem's value is the mean of its
+runs, each benchmark is a problem set (the catalogs of a benchmark split over several merge into one, every problem in
+it once), and the sets are combined by a random-effects average (rates by the beta-binomial model, ratios as geometric
+means, medians weighted by set), with an interval over these benchmarks.
 """
 from __future__ import annotations
 
@@ -27,8 +29,9 @@ from typing import Any, Iterable, Mapping, Sequence
 import numpy as np
 import pandas as pd
 
-from srbf.reporting import bootstrap_report
+from srbf.aggregate import Average, average, problem_value
 from srbf.result_processing import derive_metrics
+from srbf.table import RATE_COLUMNS
 
 
 def _plt() -> Any:
@@ -59,6 +62,27 @@ class Metric:
     #: The statistic a report takes over the expressions: ``"mean"``, or ``"median"`` for a column without a lower or
     #: upper bound, where one diverging prediction would decide the mean.
     statistic: str = "mean"
+    #: How the metric is averaged over benchmarks (:func:`srbf.aggregate.average`): ``"mean"``, ``"rate"``, ``"ratio"`` or
+    #: ``"median"``; None reads it from the column (:func:`metric_kind`).
+    kind: str | None = None
+
+
+#: Columns that are ratios to the ground truth: averaged in log2, as geometric means.
+RATIO_COLUMNS = frozenset({"mdl_ratio", "expr_length_ratio", "n_constants_ratio"})
+
+
+def metric_kind(metric: "Metric") -> str:
+    """How ``metric`` is averaged over benchmarks: its own ``kind``, else a median for a median statistic, a rate for a
+    hit-or-miss column (``srbf.table.RATE_COLUMNS``), a geometric mean for a ratio, and the mean otherwise."""
+    if metric.kind is not None:
+        return metric.kind
+    if metric.statistic == "median":
+        return "median"
+    if metric.key in RATE_COLUMNS:
+        return "rate"
+    if metric.key in RATIO_COLUMNS:
+        return "ratio"
+    return "mean"
 
 
 def as_metric(metric: "Metric | str") -> "Metric":
@@ -87,6 +111,9 @@ DEFAULT_METRICS: tuple[Metric, ...] = (
 class RunResult:
     """One raw ``Benchmark.run()`` snapshot tagged with its coordinates in the results grid.
 
+    ``benchmark`` names the benchmark the run's problems belong to, the problem set the views average over, and
+    ``catalog`` the catalog the run read (empty: the benchmark's own name). A benchmark split over several catalogs
+    (for hosting or format reasons) is one problem set: its catalogs' problems merge, every problem in it once.
     ``scaling`` is the x-value of this run's sweep ``axis`` (e.g. inference-compute time, noise level,
     or n-support), or ``None`` for a single-point benchmark. ``axis`` names which sweep it belongs to
     (so one dataset can carry several sweeps -- ``"compute"``, ``"noise"``, ``"n_support"``, ...).
@@ -100,7 +127,12 @@ class RunResult:
     scaling: float | None = None
     axis: str = "scaling"
     version: str = "-"
+    catalog: str = ""
     scored: dict[str, Any] | None = field(default=None, repr=False)
+
+    def __post_init__(self) -> None:
+        if not self.catalog:
+            self.catalog = self.benchmark
 
 
 # --- deriving + pooling -----------------------------------------------------------------------
@@ -112,32 +144,58 @@ def _score(run: RunResult, *, engine: Any, operator_arity: Mapping[str, int] | N
     return run.scored
 
 
-def _pool(scored_snapshots: Iterable[Mapping[str, Sequence[Any]]], metric_key: str) -> dict[str, list]:
-    """Concatenate several scored snapshots into one, keeping only the metric + grouping columns and
-    namespacing ``benchmark_eq_id`` per source so per-expression grouping never collides across
-    benchmarks."""
-    values: list[Any] = []
-    groups: list[Any] = []
-    placeholders: list[Any] = []
-    for i, snap in enumerate(scored_snapshots):
+def _problems(scored_snapshots: Iterable[Mapping[str, Sequence[Any]]], metric_key: str) -> list[list[Any]]:
+    """The runs' values of each problem of one catalog: a problem is a catalog row (``eval_row_index``, else the
+    expression ``benchmark_eq_id``, else the row's position), and its runs are its rows across the snapshots (the
+    draws). Placeholder rows are left out."""
+    by_problem: dict[Any, list[Any]] = {}
+    for snap in scored_snapshots:
         if metric_key not in snap:
             continue
         col = snap[metric_key]
-        n = len(col)
+        rows = snap.get("eval_row_index")
         eq = snap.get("benchmark_eq_id")
         ph = snap.get("placeholder")
-        values.extend(col)
-        groups.extend((f"{i}:{eq[j]}" if (eq is not None and j < len(eq)) else f"{i}:{j}") for j in range(n))
-        placeholders.extend(bool(ph[j]) if (ph is not None and j < len(ph)) else False for j in range(n))
-    return {metric_key: values, "benchmark_eq_id": groups, "placeholder": placeholders}
+        for j, v in enumerate(col):
+            if ph is not None and j < len(ph) and bool(ph[j]):
+                continue
+            key = rows[j] if rows is not None and j < len(rows) else (eq[j] if eq is not None and j < len(eq) else j)
+            by_problem.setdefault(key, []).append(v)
+    return list(by_problem.values())
 
 
-def _ci(scored_snapshots: Iterable[Mapping[str, Sequence[Any]]], metric: Metric, *, n_bootstrap: int, interval: float) -> dict[str, float]:
-    """Bootstrap ``(median, ci_lower, ci_upper, n_groups)`` of the metric's statistic over pooled snapshots."""
-    pooled = _pool(scored_snapshots, metric.key)
-    statistic = np.nanmedian if metric.statistic == "median" else np.nanmean
-    report = bootstrap_report(pooled, metric.key, aggregate=statistic, reduce=statistic, n=n_bootstrap, interval=interval)
-    return {"median": report["median"], "ci_lower": report["ci_lower"], "ci_upper": report["ci_upper"], "n_groups": report["n_groups"]}
+def _benchmark_of(runs: Iterable[RunResult]) -> dict[str, str]:
+    """{catalog: benchmark} of ``runs``; a catalog the runs place in two benchmarks is an error."""
+    out: dict[str, str] = {}
+    for run in runs:
+        if out.setdefault(run.catalog, run.benchmark) != run.benchmark:
+            raise ValueError(f"catalog {run.catalog!r} is in two benchmarks: {out[run.catalog]!r} and {run.benchmark!r}")
+    return out
+
+
+def _by_catalog(runs: Iterable[RunResult], *, engine: Any,
+                operator_arity: Mapping[str, int] | None) -> dict[str, list[Mapping[str, Sequence[Any]]]]:
+    """The scored snapshots of each catalog of ``runs`` (the runs of one catalog are its draws)."""
+    out: dict[str, list[Mapping[str, Sequence[Any]]]] = {}
+    for run in runs:
+        out.setdefault(run.catalog, []).append(_score(run, engine=engine, operator_arity=operator_arity))
+    return out
+
+
+def _summary(runs: Sequence[RunResult], metric: Metric, *, engine: Any, operator_arity: Mapping[str, int] | None) -> Average | None:
+    """``metric`` averaged over the benchmarks of ``runs``, the results site's average (:func:`srbf.aggregate.average`):
+    each benchmark is a problem set, the catalogs of one benchmark merged into it, and the runs of one catalog are its
+    draws."""
+    problems = {cat: _problems(snaps, metric.key) for cat, snaps in
+                _by_catalog(runs, engine=engine, operator_arity=operator_arity).items()}
+    return average({cat: p for cat, p in problems.items() if p}, metric_kind(metric), benchmarks=_benchmark_of(runs))
+
+
+def _cells(avg: Average | None) -> tuple[float, float, float, int]:
+    """(value, lo, hi, problems) of an average; NaN and 0 when there is none."""
+    if avg is None:
+        return float("nan"), float("nan"), float("nan"), 0
+    return avg.value, avg.lo, avg.hi, avg.n_problems
 
 
 def _select_scaling(runs: Sequence[RunResult], model: str, scaling: float | str | None) -> float | None:
@@ -161,8 +219,14 @@ def _models(runs: Sequence[RunResult]) -> list[str]:
     return sorted({r.model for r in runs})
 
 
-def _benchmarks(runs: Sequence[RunResult]) -> list[str]:
-    return sorted({r.benchmark for r in runs})
+#: How the per-benchmark views split the runs: by benchmark (the problem sets the averages are over), or by catalog.
+SPLITS = ("benchmark", "catalog")
+
+
+def _split_key(by: str) -> Any:
+    if by not in SPLITS:
+        raise ValueError(f"by must be one of {SPLITS}, not {by!r}")
+    return (lambda r: r.benchmark) if by == "benchmark" else (lambda r: r.catalog)
 
 
 # --- views ------------------------------------------------------------------------------------
@@ -174,34 +238,32 @@ def leaderboard(
     engine: Any = None,
     operator_arity: Mapping[str, int] | None = None,
     scaling: float | str | None = "max",
-    n_bootstrap: int = 10_000,
-    interval: float = 0.95,
 ) -> pd.DataFrame:
-    """One row per model: each metric's bootstrap median + CI, pooled over benchmarks.
+    """One row per model: each metric averaged over the benchmarks, with its 95 % interval over them.
 
-    ``scaling`` picks the scaling coordinate per model (``'max'`` by default); pass a value to fix it.
-    Returns a tidy DataFrame with ``model``, ``n_expressions``, and ``<metric> median/lower/upper``.
+    ``scaling`` picks the scaling coordinate per model (``'max'`` by default); pass a value to fix it. Returns a tidy
+    DataFrame with ``model``, ``scaling``, ``n_expressions`` (the problems behind the averages), ``n_benchmarks``, and
+    ``<metric label>``, ``<metric label> lo``, ``<metric label> hi`` per metric.
     """
     resolved: list[Metric] = [as_metric(m) for m in metrics]
     rows = []
     for model in _models(runs):
         s = _select_scaling(runs, model, scaling)
-        scored = [_score(r, engine=engine, operator_arity=operator_arity) for r in _runs_at(runs, model, s)]
+        at = _runs_at(runs, model, s)
         row: dict[str, Any] = {"model": model, "scaling": s}
         n_expr = 0
         for m in resolved:
-            ci = _ci(scored, m, n_bootstrap=n_bootstrap, interval=interval)
-            row[f"{m.label} median"] = ci["median"]
-            row[f"{m.label} lo"] = ci["ci_lower"]
-            row[f"{m.label} hi"] = ci["ci_upper"]
-            n_expr = max(n_expr, int(ci["n_groups"]))
+            value, lo, hi, n = _cells(_summary(at, m, engine=engine, operator_arity=operator_arity))
+            row[m.label], row[f"{m.label} lo"], row[f"{m.label} hi"] = value, lo, hi
+            n_expr = max(n_expr, n)
         row["n_expressions"] = n_expr
+        row["n_benchmarks"] = len({r.benchmark for r in at})
         rows.append(row)
     df = pd.DataFrame(rows)
     # rank by the first metric (respecting its polarity)
     if resolved and not df.empty:
         first = resolved[0]
-        df = df.sort_values(f"{first.label} median", ascending=not first.higher_is_better).reset_index(drop=True)
+        df = df.sort_values(first.label, ascending=not first.higher_is_better).reset_index(drop=True)
     return df
 
 
@@ -211,19 +273,16 @@ def scaling_table(
     *,
     engine: Any = None,
     operator_arity: Mapping[str, int] | None = None,
-    n_bootstrap: int = 10_000,
-    interval: float = 0.95,
 ) -> pd.DataFrame:
-    """A metric vs the scaling coordinate: one row per (model, scaling) with a bootstrap median + CI
-    pooled over benchmarks. Returns empty if the runs carry no scaling axis."""
+    """A metric vs the scaling coordinate: one row per (model, scaling) with the average over benchmarks and its 95 %
+    interval (``value``, ``lo``, ``hi``). Returns empty if the runs carry no scaling axis."""
     metric = as_metric(metric)
     rows = []
     for model in _models(runs):
         scalings = sorted({r.scaling for r in runs if r.model == model and r.scaling is not None})
         for s in scalings:
-            scored = [_score(r, engine=engine, operator_arity=operator_arity) for r in _runs_at(runs, model, s)]
-            ci = _ci(scored, metric, n_bootstrap=n_bootstrap, interval=interval)
-            rows.append({"model": model, "scaling": s, "median": ci["median"], "lo": ci["ci_lower"], "hi": ci["ci_upper"]})
+            value, lo, hi, _n = _cells(_summary(_runs_at(runs, model, s), metric, engine=engine, operator_arity=operator_arity))
+            rows.append({"model": model, "scaling": s, "value": value, "lo": lo, "hi": hi})
     return pd.DataFrame(rows)
 
 
@@ -234,36 +293,32 @@ def per_benchmark_table(
     engine: Any = None,
     operator_arity: Mapping[str, int] | None = None,
     scaling: float | str | None = "max",
-    n_bootstrap: int = 10_000,
-    interval: float = 0.95,
+    by: str = "benchmark",
 ) -> pd.DataFrame:
-    """A metric split by benchmark: rows = models, columns = benchmarks (bootstrap median)."""
+    """A metric split by benchmark: rows = models, columns = benchmarks, each cell the benchmark's own value over all
+    its catalogs' problems (a rate: its plain rate; a median: its median). ``by="catalog"`` splits by catalog instead,
+    one column per catalog of a benchmark split over several."""
     metric = as_metric(metric)
+    key = _split_key(by)
     rows = []
     for model in _models(runs):
         s = _select_scaling(runs, model, scaling)
         row: dict[str, Any] = {"model": model}
-        for bench in _benchmarks(runs):
-            scored = [_score(r, engine=engine, operator_arity=operator_arity)
-                      for r in _runs_at(runs, model, s) if r.benchmark == bench]
-            row[bench] = _ci(scored, metric, n_bootstrap=n_bootstrap, interval=interval)["median"] if scored else float("nan")
+        for col in sorted({key(r) for r in runs}):
+            at = [r for r in _runs_at(runs, model, s) if key(r) == col]
+            row[col] = _cells(_summary(at, metric, engine=engine, operator_arity=operator_arity))[0] if at else float("nan")
         rows.append(row)
     return pd.DataFrame(rows).set_index("model")
 
 
-def _per_expression_values(scored_snapshots: Iterable[Mapping[str, Sequence[Any]]], metric_key: str) -> np.ndarray:
-    """One value per expression (mean over its non-placeholder draws) for a distribution plot."""
-    from collections import defaultdict
-    by_group: dict[Any, list[float]] = defaultdict(list)
-    pooled = _pool(scored_snapshots, metric_key)
-    vals, groups, phs = pooled[metric_key], pooled["benchmark_eq_id"], pooled["placeholder"]
-    for v, g, ph in zip(vals, groups, phs):
-        if ph or v is None:
-            continue
-        fv = float(v)
-        if np.isfinite(fv):
-            by_group[g].append(fv)
-    return np.array([float(np.mean(vs)) for vs in by_group.values() if vs], dtype=float)
+def _per_expression_values(runs: Iterable[RunResult], metric_key: str, *, engine: Any,
+                           operator_arity: Mapping[str, int] | None) -> np.ndarray:
+    """One value per problem (the mean of its runs' finite values), over every catalog of ``runs``, for a
+    distribution plot."""
+    by_catalog = _by_catalog(runs, engine=engine, operator_arity=operator_arity)
+    vals = [v for snaps in by_catalog.values() for v in (problem_value(r) for r in _problems(snaps, metric_key))
+            if v is not None]
+    return np.array(vals, dtype=float)
 
 
 # --- figures ----------------------------------------------------------------------------------
@@ -278,7 +333,7 @@ def scaling_figure(runs: Sequence[RunResult], metric: Metric | str, *, engine: A
     if not table.empty:
         for model, g in table.groupby("model"):
             g = g.sort_values("scaling")
-            ax.plot(g["scaling"], g["median"], marker="o", label=model)
+            ax.plot(g["scaling"], g["value"], marker="o", label=model)
             ax.fill_between(g["scaling"], g["lo"], g["hi"], alpha=0.18)
         ax.set_xscale("log")
         ax.legend(fontsize=8)
@@ -323,8 +378,7 @@ def distribution_figure(runs: Sequence[RunResult], metric: Metric | str, *, engi
     data, labels = [], []
     for model in models:
         s = _select_scaling(runs, model, scaling)
-        scored = [_score(r, engine=engine, operator_arity=operator_arity) for r in _runs_at(runs, model, s)]
-        vals = _per_expression_values(scored, metric.key)
+        vals = _per_expression_values(_runs_at(runs, model, s), metric.key, engine=engine, operator_arity=operator_arity)
         if vals.size:
             data.append(vals)
             labels.append(model)
@@ -343,10 +397,10 @@ def distribution_figure(runs: Sequence[RunResult], metric: Metric | str, *, engi
 
 # --- report -----------------------------------------------------------------------------------
 
-def _fmt_ci(median: float, lo: float, hi: float) -> str:
-    if median is None or (isinstance(median, float) and np.isnan(median)):
+def _fmt_ci(value: float, lo: float, hi: float) -> str:
+    if value is None or (isinstance(value, float) and np.isnan(value)):
         return "--"
-    return f"{median:.3f} [{lo:.3f}, {hi:.3f}]"
+    return f"{value:.3f} [{lo:.3f}, {hi:.3f}]"
 
 
 def build_report(
@@ -358,14 +412,13 @@ def build_report(
     metrics: Sequence[Metric | str] = DEFAULT_METRICS,
     figures_subdir: str = "figures",
     title: str = "Results",
-    n_bootstrap: int = 10_000,
 ) -> str:
     """Render the four standardized views to a Markdown page (``<out_dir>/results.md``) + PNG figures
     (``<out_dir>/<figures_subdir>/``). Returns the path to the written Markdown page.
 
-    Each headline is a bootstrap median with a 95% CI over expressions (unseeded sources -> report the
-    distribution, not a point). Pass an ``engine`` (its ``operator_arity`` + ``simplify`` are used) or
-    an explicit ``operator_arity``.
+    Each headline is an average over the benchmarks with its 95 % interval, as the results site averages
+    (docs/averaging.md). Pass an ``engine`` (its ``operator_arity`` + ``simplify`` are used) or an explicit
+    ``operator_arity``.
     """
     resolved: list[Metric] = [as_metric(m) for m in metrics]
     plt = _plt()
@@ -373,10 +426,12 @@ def build_report(
     fig_dir = os.path.join(out_dir, figures_subdir)
     os.makedirs(fig_dir, exist_ok=True)
 
-    lb = leaderboard(runs, metrics=resolved, engine=engine, operator_arity=operator_arity, n_bootstrap=n_bootstrap)
+    lb = leaderboard(runs, metrics=resolved, engine=engine, operator_arity=operator_arity)
     lines: list[str] = [f"# {title}", ""]
-    lines += ["Each cell is a bootstrap median with a 95% confidence interval over the expressions. Problems are "
-              "sampled afresh in every run, so a cell describes a distribution, not one seeded draw.", ""]
+    lines += ["Each cell is the average over the benchmarks with its 95 % interval: a problem's value is the mean of "
+              "its runs, and every benchmark counts about the same whatever its size (rates by the beta-binomial model, "
+              "ratios as geometric means, R² as a median). The interval covers these benchmarks; see "
+              "https://srbf.readthedocs.io/en/latest/averaging/.", ""]
 
     has_scaling = any(r.scaling is not None for r in runs)
 
@@ -390,7 +445,7 @@ def build_report(
         if has_scaling:
             cells.append("" if r["scaling"] is None or pd.isna(r["scaling"]) else f"{r['scaling']:g}")
         for m in resolved:
-            cells.append(_fmt_ci(r[f"{m.label} median"], r[f"{m.label} lo"], r[f"{m.label} hi"]))
+            cells.append(_fmt_ci(r[m.label], r[f"{m.label} lo"], r[f"{m.label} hi"]))
         lines.append("| " + " | ".join(cells) + " |")
     lines.append("")
 
@@ -398,14 +453,14 @@ def build_report(
 
     # 2. Scaling curves
     if has_scaling:
-        fig = scaling_figure(runs, headline, engine=engine, operator_arity=operator_arity, n_bootstrap=n_bootstrap)
+        fig = scaling_figure(runs, headline, engine=engine, operator_arity=operator_arity)
         p = os.path.join(figures_subdir, "scaling.png")
         fig.savefig(os.path.join(out_dir, p), dpi=130)
         plt.close(fig)
         lines += ["## Scaling", "", f"![scaling]({p})", ""]
 
     # 3. Per-benchmark breakdown
-    fig = per_benchmark_figure(runs, headline, engine=engine, operator_arity=operator_arity, n_bootstrap=n_bootstrap)
+    fig = per_benchmark_figure(runs, headline, engine=engine, operator_arity=operator_arity)
     p = os.path.join(figures_subdir, "per_benchmark.png")
     fig.savefig(os.path.join(out_dir, p), dpi=130)
     plt.close(fig)
@@ -432,9 +487,11 @@ def load_runs(manifest_path: str) -> list[RunResult]:
         runs:
           - {model: flash-ansr-120M, benchmark: fastsrb, scaling: 4096, path: fastsrb_4096.pkl}
           - {model: brute-force,      benchmark: fastsrb,               path: bf_fastsrb.pkl}
+          - {model: brute-force,      benchmark: nguyen, catalog: nguyen-points, path: bf_nguyen_points.pkl}
 
     Each ``path`` (relative to the manifest) is a pickled RAW snapshot -- the dict-of-lists a
-    ``Benchmark.run()`` returns (also what ``ResultStore.snapshot()`` yields). ``scaling`` is optional.
+    ``Benchmark.run()`` returns (also what ``ResultStore.snapshot()`` yields). ``scaling`` is optional, and so is
+    ``catalog``: the catalog of a benchmark split over several (by default the benchmark's own name).
     """
     import pickle
 
@@ -450,7 +507,7 @@ def load_runs(manifest_path: str) -> list[RunResult]:
             path = os.path.join(base, path)
         with open(path, "rb") as handle:
             snapshot = pickle.load(handle)
-        runs.append(RunResult(model=entry["model"], benchmark=entry["benchmark"],
+        runs.append(RunResult(model=entry["model"], benchmark=entry["benchmark"], catalog=entry.get("catalog") or "",
                               scaling=entry.get("scaling"), snapshot=snapshot))
     return runs
 
@@ -469,13 +526,17 @@ def _model_name(model_cfg: Mapping[str, Any]) -> str:
     return kind
 
 
-def runs_from_config(config: str, *, model: str | None = None, warn: Any = None) -> list[RunResult]:
+def runs_from_config(config: str, *, model: str | None = None, warn: Any = None,
+                     benchmarks: Mapping[str, str] | None = None) -> list[RunResult]:
     """The RunResult of every (experiment, sweep rung) of a run config whose output exists.
 
-    The manifest ``srbf analyze`` otherwise reads is derived from the config: ``benchmark`` is the
-    experiment name (the catalog), ``scaling`` the rung's numeric sweep label (``ladder=128`` ->
-    128), ``model`` the given name or one derived from the adapter block (the checkpoint directory,
-    the worker's name). Outputs that do not exist yet are skipped and reported through ``warn``.
+    The manifest ``srbf analyze`` otherwise reads is derived from the config: ``catalog`` is the
+    experiment name (the catalog), ``benchmark`` the benchmark that catalog belongs to (the ``benchmark``
+    field of its metadata, :func:`srbf.suites.catalog_benchmarks`; the catalog's own name when it names
+    none or cannot be read, which ``warn`` reports), ``scaling`` the rung's numeric sweep label
+    (``ladder=128`` -> 128), ``model`` the given name or one derived from the adapter block (the
+    checkpoint directory, the worker's name). Outputs that do not exist yet are skipped and reported
+    through ``warn``. ``benchmarks`` ({catalog: benchmark}) is taken instead of the catalogs' metadata.
     """
     import pickle
 
@@ -488,6 +549,7 @@ def runs_from_config(config: str, *, model: str | None = None, warn: Any = None)
     experiments = raw.get("experiments")
     names: list[str | None] = list(experiments) if experiments else [None]
     runs: list[RunResult] = []
+    refs: dict[str, Any] = {}
     for name in names:
         section = select_experiment(raw, name) if name is not None else dict(raw)
         for resolved, labels in resolve_sweeps(section):
@@ -507,9 +569,17 @@ def runs_from_config(config: str, *, model: str | None = None, warn: Any = None)
                     break
             with open(path, "rb") as handle:
                 snapshot = pickle.load(handle)
-            benchmark = name or str((run_cfg.get("data_source") or {}).get("catalog", "run"))
+            ref = (run_cfg.get("data_source") or {}).get("catalog", "run")
+            catalog = name or str(ref)
+            refs.setdefault(catalog, ref)
             runs.append(RunResult(model=model or _model_name(run_cfg.get("model_adapter") or {}),
-                                  benchmark=benchmark, snapshot=snapshot, scaling=scaling, axis=axis))
+                                  benchmark=catalog, catalog=catalog, snapshot=snapshot, scaling=scaling, axis=axis))
+    if benchmarks is None:
+        from srbf.suites import catalog_benchmarks
+
+        benchmarks = catalog_benchmarks(refs, warn=warn)
+    for run in runs:
+        run.benchmark = benchmarks.get(run.catalog, run.catalog)
     return runs
 
 
@@ -528,30 +598,26 @@ def export_data(
     metrics: Sequence[Metric | str] = DEFAULT_METRICS,
     engine: Any = None,
     operator_arity: Mapping[str, int] | None = None,
-    n_bootstrap: int = 2000,
-    interval: float = 0.95,
 ) -> str:
-    """Export tidy aggregated records as JSON for the interactive results explorer.
+    """Export tidy aggregated records as JSON for an interactive results page.
 
-    One record per run = one ``(series, benchmark, axis, x)`` point, carrying each metric's bootstrap
-    median + CI (over expressions) and the run's ``version`` tag. The interactive page filters these
-    client-side (pick an axis / metric / benchmark / series). Returns the written path. The payload is::
+    One record per run = one ``(series, benchmark, catalog, axis, x)`` point, carrying each metric's value over that
+    run's problems with its 95 % interval (a rate: the plain rate with the Wilson interval) and the run's ``version``
+    tag. Returns the written path. The payload is::
 
         {"metrics": [{"key", "label", "higher_is_better"}, ...],
          "axes":    [<axis names present>],
-         "records": [{"series", "version", "benchmark", "axis", "x",
-                      "<metric.key>": {"median", "lo", "hi", "n"}, ...}, ...]}
+         "records": [{"series", "version", "benchmark", "catalog", "axis", "x",
+                      "<metric.key>": {"value", "lo", "hi", "n"}, ...}, ...]}
     """
     resolved: list[Metric] = [as_metric(m) for m in metrics]
     records: list[dict[str, Any]] = []
     for run in runs:
-        scored = _score(run, engine=engine, operator_arity=operator_arity)
-        rec: dict[str, Any] = {"series": run.model, "version": run.version,
-                               "benchmark": run.benchmark, "axis": run.axis, "x": _json_num(run.scaling)}
+        rec: dict[str, Any] = {"series": run.model, "version": run.version, "benchmark": run.benchmark,
+                               "catalog": run.catalog, "axis": run.axis, "x": _json_num(run.scaling)}
         for m in resolved:
-            ci = _ci([scored], m, n_bootstrap=n_bootstrap, interval=interval)
-            rec[m.key] = {"median": _json_num(ci["median"]), "lo": _json_num(ci["ci_lower"]),
-                          "hi": _json_num(ci["ci_upper"]), "n": int(ci["n_groups"])}
+            value, lo, hi, n = _cells(_summary([run], m, engine=engine, operator_arity=operator_arity))
+            rec[m.key] = {"value": _json_num(value), "lo": _json_num(lo), "hi": _json_num(hi), "n": int(n)}
         records.append(rec)
 
     payload = {

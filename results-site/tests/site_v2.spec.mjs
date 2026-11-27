@@ -13,6 +13,12 @@ function collectErrors(page) {
 }
 const V2 = '#results-explorer-v2';
 // every metric is chosen through the same picker: open the control, click the entry
+// the explorer computes the intervals of rate averages in idle time and draws again once they are in: a test that
+// reads or taps a drawing waits for that, so it sees the page at rest
+async function intervalsIn(page) {
+  await page.waitForFunction(() => document.documentElement.getAttribute('data-rate-intervals') === 'done', null, { timeout: 30000 });
+}
+
 async function pick(page, trigger, key) {
   await trigger.click();
   await expect(page.locator('.v2picker')).toBeVisible();
@@ -610,12 +616,14 @@ test('an untimed method changes nothing else on the time axis', async ({ page })
   await pick(page, page.locator(V2 + ' .v2plot .v2xsel').first(), 'time');
   const chart = page.locator(V2 + ' .v2view svg.v2chart').first();
   await calibrated(chart);
+  await intervalsIn(page);
   const before = await chart.textContent();                           // every drawn point, with its value and its pool
 
   await page.locator(V2 + ' .v2addmopen').click();
   await page.locator(V2 + ' .v2addmkey').fill(FIXTURE_KEY);
   await page.locator(V2 + ' [data-act="add-method-go"]').click();
   await expect(page.locator(V2 + ' .v2methods')).toContainText('Fixture Method', { timeout: 20000 });
+  await intervalsIn(page);
   // the point of the whole arrangement: an uncalibrated method costs its own points and nothing else -- same
   // methods, same values, same matched pool, because it never enters the set the axis is drawn over
   await expect(page.locator(V2 + ' .v2view svg.v2chart').first()).toHaveText(before);
@@ -865,6 +873,63 @@ test('the explorer averages over problem sets exactly as the reference does', ()
   });
   expect(off).toEqual([]);
   expect(core.holm([0.01, 0.04, 0.03]).map((x) => +x.toFixed(6))).toEqual([0.03, 0.06, 0.06]);
+});
+
+// ---- Benchmarks: the unit of every average --------------------------------------------------------------------------
+// A benchmark published as several problem sets (for licence or format reasons) is one set in every average: its sets'
+// counts and sums add up, every problem in it once. The page's merging (byBench) is cut out with reCombine and run on
+// stand-in sets, then on the release with two of its sets declared one benchmark, against what the page shows.
+function benchCore(CAT) {
+  const src = readFileSync(new URL('../explorer_v2.js', import.meta.url), 'utf8');
+  const a = src.indexOf('  function benchOf('), b = src.indexOf('  function binVal(');
+  expect(a).toBeGreaterThan(0); expect(b).toBeGreaterThan(a);
+  return new Function('CAT', src.slice(a, b) + '\nreturn { byBench: byBench, reCombine: reCombine, benchText: benchText };')(CAT);
+}
+
+test('the problem sets of one benchmark are averaged as one set, every problem once', () => {
+  const sets = { feynman: { n: 100, s1: 40, s2: 40 }, 'feynman-points': { n: 20, s1: 2, s2: 2 }, nguyen: { n: 12, s1: 9, s2: 9 },
+    keijzer: { n: 15, s1: 3, s2: 3 }, empty: { n: 0 } };
+  const cs = Object.keys(sets), of = (c) => sets[c];
+  const split = benchCore({ feynman: { benchmark: 'feynman' }, 'feynman-points': { benchmark: 'feynman' }, nguyen: {}, keijzer: { benchmark: 'keijzer' } });
+  const own = benchCore({});
+  expect(split.byBench(cs, of).map((q) => [q.b, q.n, q.s1, q.s2])).toEqual([['feynman', 120, 42, 42], ['nguyen', 12, 9, 9], ['keijzer', 15, 3, 3]]);
+  for (const scale of ['logit', 'normal']) {
+    const got = split.reCombine(split.byBench(cs, of), scale);
+    const want = split.reCombine([{ n: 120, s1: 42, s2: 42 }, sets.nguyen, sets.keijzer], scale);   // merged by hand
+    expect([got.S, got.n, got.mu, got.lo, got.hi]).toEqual([3, 147, want.mu, want.lo, want.hi]);
+    // every set its own benchmark (a release without the field): exactly the average over the sets
+    const plain = own.reCombine(cs.map(of), scale), same = own.reCombine(own.byBench(cs, of), scale);
+    expect([same.S, same.n, same.mu, same.lo, same.hi, same.tau2]).toEqual([plain.S, plain.n, plain.mu, plain.lo, plain.hi, plain.tau2]);
+    expect(got.mu).not.toBe(plain.mu);
+  }
+  expect([own.benchText(1), own.benchText(29)]).toEqual(['1 benchmark', '29 benchmarks']);
+});
+
+test('two problem sets declared one benchmark are one set in the explorer\'s averages, and keep their own rows', async ({ page }) => {
+  const errors = collectErrors(page);
+  const text = readFileSync(new URL('../data/2026-09/results.js', import.meta.url), 'utf8');
+  const D = new Function('window', text + '\nreturn window.RESULTS_V2;')({});
+  const pair = ['feynman', 'feynman-bonus'], m = 'e2e', r = '16', key = 'numeric_recovery_val';
+  const cs = D.catalogs.map((c) => c.key), of = (c) => { const t = D.cells[m][c][r].m[key]; return { n: t[0], s1: t[1], s2: t[2] }; };
+  const CAT = {}; D.catalogs.forEach((c) => { CAT[c.key] = pair.includes(c.key) ? { benchmark: 'feynman' } : {}; });
+  const merged = benchCore(CAT), apart = benchCore({});
+  const want = merged.reCombine(merged.byBench(cs, of), 'logit'), plain = apart.reCombine(apart.byBench(cs, of), 'logit');
+  const pct = (x) => (100 * x).toFixed(1) + ' %';
+  expect(want.S).toBe(cs.length - 1);
+  expect(pct(want.mu)).not.toBe(pct(plain.mu));   // the merge moves the shown number, so this test can fail
+  await page.route('**/data/2026-09/results.js', async (route) => {
+    const res = await route.fetch();
+    const add = `;window.RESULTS_V2.catalogs.forEach(function (c) { if (${JSON.stringify(pair)}.indexOf(c.key) >= 0) { c.benchmark = "feynman"; } });`;
+    await route.fulfill({ response: res, body: (await res.text()) + add });
+  });
+  await page.goto(`/explorer.html?release=2026-09&v=table&rows=rungs&p=${key}&x=rung&m=${m}&c=all`);
+  const row = page.locator(V2 + ' .v2table tbody tr').filter({ has: page.locator('td:first-child', { hasText: new RegExp('^' + r + '$') }) });
+  await expect(row).toBeVisible({ timeout: 15000 });
+  await expect(row.locator('td').nth(2)).toContainText(pct(want.mu));
+  // the per-set rows stay one per problem set: a split benchmark's sets are shown on their own
+  await page.goto(`/explorer.html?release=2026-09&v=table&rows=cats&p=${key}&pm=budget&r=${r}&m=${m}&c=all`);
+  for (const c of pair) { await expect(page.locator(V2 + ' .v2table tbody td:first-child', { hasText: new RegExp('^' + c + '$') })).toHaveCount(1); }
+  expect(errors).toEqual([]);
 });
 
 // ---- Positions between budgets -------------------------------------------------------------------------------------
@@ -1132,6 +1197,7 @@ test('a headline legend keeps its order while a method cycles: shown, hidden, fa
 test('on a phone a legend tap keeps the page where it is: the tapped name stays under the finger', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
+  await intervalsIn(page);
   const charts = page.locator('.headline-v2 svg.v2chart');
   expect(await charts.count()).toBeGreaterThan(1);
   const last = charts.nth((await charts.count()) - 1);           // a chart far below the first one
@@ -1790,6 +1856,7 @@ test('the release has one home: a title and its update time in the headline role
   const style = (sel) => page.locator(sel).first().evaluate((el) => { const c = getComputedStyle(el); return [c.fontSize, c.fontWeight, c.color, c.textTransform, c.letterSpacing].join(' '); });
   await page.goto('/');
   await expect(page.locator('.headline-v2 .v2hltitle')).toBeVisible();
+  await intervalsIn(page);
   const [hlTitle, hlSub] = [await style('.headline-v2 .v2hltitle'), await style('.headline-v2 .v2hlsub')];
   await page.goto('/explorer.html?release=2026-09&v=curves');
   const head = page.locator(V2 + ' .v2relhead');

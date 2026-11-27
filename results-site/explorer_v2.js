@@ -113,9 +113,9 @@
     postime: "Every method is read at the time per problem set here, on our timing workstation. Each budget a method was run at took a measured time; between two of them, its numbers are interpolated by where the time lies between theirs on a logarithmic scale, and marked \u2248. A method has no value at a time shorter than its smallest budget took or longer than its largest. Slide to any time, or type one into the box; the arrows step to the next of 0.1, 0.3, 1, 3, 10, 30, 100, 300 and 1,000 s.",
     between: "\u2248 marks a number read between two budgets a method was run at. Every sum over the problems is blended from the two budgets, in proportion to where the position lies between them on a logarithmic scale: a mean is the mean of the blended problems, and an interval is, if anything, a little too wide.",
     complete: "Each point is one method at one budget. Each method is run over its own range of budgets, and some runs are still in progress. A point appears only once the method has at least one finished run on every problem of the problem sets you selected (in the headline charts: all 29), so every point covers the same problems. Every problem is run twice, and its value is the average of its finished runs, so a point can rest partly on problems with one run so far. The page \u201cHow to read the results\u201d explains more, and how to see partial results by selecting fewer problem sets.",
-    interval: "The 95 % interval shows how precisely a value is known on the problem sets you selected, from how much the problems within each set vary. It is about srbf's problem sets, not about problem sets in general: the range for one more problem set, in tables and tooltips, shows how far single sets spread. Bands shade the interval around each point and between neighbouring points; crosses draw it as bars through each point. You can show either, both or neither.",
-    average: "First each problem's runs are averaged, then the problems of each problem set. Then the problem sets are averaged, each weighted by how precisely its own average is known, plus an allowance for how much problem sets differ from each other. Because they differ a lot, each counts about the same whatever its size, and a set of only a few problems counts less. A set of 5,000 problems therefore cannot decide the result on its own.",
-    setrange: "Where the value of one more problem set would fall, with 95 % probability, if it were like the selected ones. It is wider than the 95 % interval: the interval says how precisely the average is known, this range how far single problem sets spread around it. It needs at least three problem sets.",
+    interval: "The 95 % interval shows how precisely a value is known on the problem sets you selected, from how much the problems within each set vary. It is about srbf's benchmarks, not about benchmarks in general: the range for one more benchmark, in tables and tooltips, shows how far single benchmarks spread. Bands shade the interval around each point and between neighbouring points; crosses draw it as bars through each point. You can show either, both or neither.",
+    average: "First each problem's runs are averaged, then the problems of each benchmark. A benchmark published as several problem sets, for licence or format reasons, counts as one, with every problem in it once, so the way it is published cannot change its weight. Then the benchmarks are averaged, each weighted by how precisely its own average is known, plus an allowance for how much benchmarks differ from each other. Because they differ a lot, each counts about the same whatever its size, and a benchmark of only a few problems counts less. A benchmark of 5,000 problems therefore cannot decide the result on its own.",
+    setrange: "Where the value of one more benchmark would fall, with 95 % probability, if it were like the selected ones. It is wider than the 95 % interval: the interval says how precisely the average is known, this range how far single benchmarks spread around it. It needs at least three benchmarks.",
     median: "The median is read from a histogram with 128 bins, so it is accurate to the width of one bin (for log10 FVU, about 0.16). Each problem set weighs as much in the histogram as it does in an average, and a problem's runs share its weight.",
     mean: "The mean averages over the problems where the value is finite; a problem's value is the average of its runs. log10 FVU stops at -15.65, the precision of a 64-bit float, so an exact fit counts there like any other fit. A formula that blows up has an infinite value: the mean leaves it out, while the median counts it as the worst. Ratios, such as the MDL ratio, are averaged as geometric means, so a ratio of 2 and one of 0.5 average to 1. The tooltip of each point shows how many problems it averages.",
     regime: "How a problem without a usable formula counts. In a rate, such as Numeric Recovery, it counts as a miss. In the overlap metrics (Token Overlap, Variable Overlap) it counts as 0, unless you leave such problems out with the switch that appears in the side panel for these metrics. In log10 FVU and R\u00b2 it counts as the worst value in medians, distributions, places and comparisons, and means leave it out. All other metrics are measured only over the problems where the method returned a usable formula; most of them have no worst value, since a formula can always be worse.",
@@ -532,6 +532,20 @@
     return state.cats.length && state.cats.every(function (c) { return cell(m, c, r); }) ? state.cats.slice() : [];
   }
   function laws(cs) { return cs.reduce(function (a, c) { return a + CAT[c].laws; }, 0); }
+  // ---- benchmarks, the unit of every average (owner 2026-11-28) ----------------------------------------------------
+  // A benchmark split over several problem sets for hosting or format reasons (a licence, fixed points, its formulas and
+  // its data) is ONE set wherever the page averages: its sets' counts, sums and sums of squares add up, so every problem
+  // in it counts once and the split moves no weight. A problem set the release names no benchmark for is one of its own.
+  // The problem-set picker, the per-set rows and the matrix stay per set: a subset is a view, never an averaging unit.
+  function benchOf(c) { return (CAT[c] && CAT[c].benchmark) || c; }
+  // setOf(c) -> {n, s1, s2} or null for each set c of cs: one {n, s1, s2} per benchmark, in the order they first appear
+  function byBench(cs, setOf) {
+    var at = {}, out = [];
+    cs.forEach(function (c) { var st = setOf(c); if (!st || !(st.n > 0)) { return; } var b = benchOf(c), q = at[b];
+      if (!q) { q = at[b] = { b: b, n: 0, s1: 0, s2: 0 }; out.push(q); } q.n += st.n; q.s1 += st.s1 || 0; q.s2 += st.s2 || 0; });
+    return out;
+  }
+  function benchText(S) { return S + (S === 1 ? " benchmark" : " benchmarks"); }
   // ---- averaging over problem sets (owner 2026-09-27) --------------------------------------------------------------
   // The results are problem sets > problems > runs. A problem's value is the mean of its runs; a set is its number of
   // problems with a value, their sum and their sum of squares (the exporter's cells). Sets are combined by a random-
@@ -761,14 +775,15 @@
     return [ends[0] === -Infinity ? 0 : sig(ends[0]), ends[1] === Infinity ? 1 : sig(ends[1])];
   }
   // rates over problem sets on the 0-1 scale; one set: its plain rate and the Wilson interval. The interval inverts Rao's
-  // score test (see the reference's combine_rates)
-  function combineRates(sets) {
+  // score test (see the reference's combine_rates). rateCore is the fit without the interval; the interval is the part
+  // that costs (about 5 ms over 29 sets, up to 60 ms over 192), added by rateFinish
+  function rateCore(sets) {
     var S = sets.length, N = 0, K = 0, df = 0, j;
     for (j = 0; j < S; j++) { N += sets[j].n; K += sets[j].s1; df += sets[j].n - 1; }
     var f = S > 1 ? rateFit(sets) : { eta: 0, lam: 0 };
     if (S === 1 || !isFinite(f.eta)) {
       var wi = wilson(K, N);
-      return { mu: K / N, lo: wi[0], hi: wi[1], piLo: null, piHi: null, tau2: 0, w: sets.map(function (st) { return st.n / N; }), S: S, p: null };
+      return { mu: K / N, lo: wi[0], hi: wi[1], piLo: null, piHi: null, tau2: 0, w: sets.map(function (st) { return st.n / N; }), S: S, p: null, ci: null };
     }
     var lam = Math.min(f.lam, LAM_MAX), m = 1 / (1 + Math.exp(-f.eta)), s = Math.exp(lam), a = m * s, b = (1 - m) * s, q = m * (1 - m);
     var tgA = trigamma(a), tgB = trigamma(b), info = [], tot = 0;
@@ -776,9 +791,55 @@
       var fisher = -Math.pow(s * q, 2) * (trigamma(sets[j].s1 + a) - tgA + trigamma(sets[j].n - sets[j].s1 + b) - tgB);
       info.push(fisher); tot += fisher;
     }
-    var tq = tq975(Math.max(1, df)), ci = rateInterval(sets, f.eta, f.lam, tq * tq);
-    return { mu: m, lo: Math.min(ci[0], m), hi: Math.max(ci[1], m), piLo: S >= 3 ? betaPpf(0.025, a, b) : null, piHi: S >= 3 ? betaPpf(0.975, a, b) : null,
-             tau2: isFinite(f.lam) ? 1 / s : 0, w: info.map(function (x) { return x / tot; }), S: S, p: null };
+    var tq = tq975(Math.max(1, df));
+    return { mu: m, lo: NaN, hi: NaN, piLo: S >= 3 ? betaPpf(0.025, a, b) : null, piHi: S >= 3 ? betaPpf(0.975, a, b) : null,
+             tau2: isFinite(f.lam) ? 1 / s : 0, w: info.map(function (x) { return x / tot; }), S: S, p: null, ci: { eta: f.eta, lam: f.lam, t2: tq * tq } };
+  }
+  function rateFinish(core, sets) {
+    var lo = core.lo, hi = core.hi;
+    if (core.ci) { var ci = rateInterval(sets, core.ci.eta, core.ci.lam, core.ci.t2); lo = Math.min(ci[0], core.mu); hi = Math.max(ci[1], core.mu); }
+    return { mu: core.mu, lo: lo, hi: hi, piLo: core.piLo, piHi: core.piHi, tau2: core.tau2, w: core.w, S: core.S, p: null };
+  }
+  function combineRates(sets) { return rateFinish(rateCore(sets), sets); }
+  // Rate intervals in idle time. A drawing computes the intervals it needs while it is within RATE_SYNC_MS of its start;
+  // the rest are drawn without one (no whisker, "…" for the numbers), queued, computed while the browser is idle, and
+  // drawn once they are all in (on a long queue, at most every RATE_REDRAW_MS). A new drawing drops the queue the last one left, so a
+  // selection that changes fast never waits on intervals no one sees any more. Outside a drawing, every interval is
+  // computed at once.
+  var RATECORE = {}, RATEQ = [], RATEQUEUED = {}, RATE_SYNC_MS = 40, RATE_REDRAW_MS = 1000, rateSyncEnd = Infinity, ratePumping = false, rateFresh = false, rateDrawnAt = 0;
+  function rateIdle(fn) { if (window.requestIdleCallback) { window.requestIdleCallback(fn, { timeout: 100 }); } else { setTimeout(function () { fn(null); }, 0); } }
+  function ratePump(deadline) {
+    var t0 = Date.now(), first = true;
+    while (RATEQ.length) {
+      var left = deadline && deadline.timeRemaining ? deadline.timeRemaining() : 12 - (Date.now() - t0);
+      if (!first && left < 2) { break; }
+      first = false;
+      var job = RATEQ.shift(); delete RATEQUEUED[job.key];
+      if (!(job.key in RATEMEMO)) { RATEMEMO[job.key] = rateFinish(job.core, job.sets); rateFresh = true; }
+    }
+    if (rateFresh && (!RATEQ.length || Date.now() - rateDrawnAt >= RATE_REDRAW_MS)) { rateFresh = false; ratePumping = false; rateRedraw(); return; }
+    if (RATEQ.length) { rateIdle(ratePump); } else { ratePumping = false; }
+  }
+  // the drawing that brings intervals in: the reader did nothing, so it waits while a picker or a help text is open,
+  // and a legend entry they had focused keeps the focus
+  function rateRedraw() {
+    if (document.querySelector(".v2picker, .v2pop:not(.v2ctip)")) { setTimeout(rateRedraw, 300); return; }   // never close what the reader opened
+    var a = document.activeElement, charts, keep = null;
+    if (a && a.getAttribute && a.getAttribute("data-cycle") !== null && a.closest("svg.v2chart")) {
+      charts = Array.prototype.slice.call(document.querySelectorAll("svg.v2chart"));
+      keep = { chart: charts.indexOf(a.closest("svg.v2chart")), cycle: a.getAttribute("data-cycle") };
+    }
+    render();
+    if (keep && keep.chart >= 0) {
+      var c = document.querySelectorAll("svg.v2chart")[keep.chart], el = c && c.querySelector('[data-cycle="' + keep.cycle + '"]');
+      if (el && el.focus) { el.focus({ preventScroll: true }); }
+    }
+  }
+  function rateDrawStart() { RATEQ = []; RATEQUEUED = {}; rateSyncEnd = Date.now() + RATE_SYNC_MS; rateDrawnAt = Date.now(); }
+  function rateDrawEnd() {
+    rateSyncEnd = Infinity;
+    document.documentElement.setAttribute("data-rate-intervals", RATEQ.length ? "pending" : "done");
+    if (RATEQ.length && !ratePumping) { ratePumping = true; rateIdle(ratePump); }
   }
   // sets: [{n, s1, s2, ...}]; a rate ("logit") comes back on its own 0-1 scale. Also: the problems behind it, and n0,
   // the number of problems at which a set counts half as much as a very large one (sigma^2 / tau^2; not for rates)
@@ -787,8 +848,12 @@
     var c, n0 = Infinity;
     if (scale === "logit") {   // the same sets give the same fit: remembered, a chart asks for many
       var key = sets.map(function (st) { return st.n + ":" + st.s1; }).join(",");
-      if (!(key in RATEMEMO)) { RATEMEMO[key] = combineRates(sets); }
-      c = Object.assign({}, RATEMEMO[key]);
+      if (!(key in RATEMEMO)) {
+        var core = RATECORE[key] || (RATECORE[key] = rateCore(sets));
+        if (!core.ci || Date.now() < rateSyncEnd) { RATEMEMO[key] = rateFinish(core, sets); }
+        else if (!(key in RATEQUEUED)) { RATEQUEUED[key] = true; RATEQ.push({ key: key, core: core, sets: sets }); }
+      }
+      c = key in RATEMEMO ? Object.assign({}, RATEMEMO[key]) : Object.assign({}, rateFinish({ mu: RATECORE[key].mu, lo: NaN, hi: NaN, piLo: RATECORE[key].piLo, piHi: RATECORE[key].piHi, tau2: RATECORE[key].tau2, w: RATECORE[key].w, S: RATECORE[key].S, ci: null }, sets), { ciPending: true });
     } else {
       var e = setEstimates(sets); c = combineScale(e.y, e.v, sets.reduce(function (a, st) { return a + st.n - 1; }, 0));
       n0 = c.tau2 > 0 ? e.pooled / c.tau2 : Infinity;
@@ -815,15 +880,17 @@
   // problems less. Within a set every problem weighs 1 (the exporter shares it among its runs). Returned scaled to the
   // number of problems, so a share is h / n as before.
   function setWeights(k, m, r, cs) {
-    var mk = METRIC[k] && METRIC[k].median_via ? METRIC[k].median_via : k, sets = [];
-    cs.forEach(function (c) { var t = reading(cell(m, c, r), mk); if (t && t[1] > 0) { sets.push({ c: c, n: t[1], s1: t[2], s2: t[3] }); } });
+    var mk = METRIC[k] && METRIC[k].median_via ? METRIC[k].median_via : k;
+    var sets = byBench(cs, function (c) { var t = reading(cell(m, c, r), mk); return t && t[1] > 0 ? { n: t[1], s1: t[2], s2: t[3] } : null; });
     var fit = sets.length >= 2 ? reCombine(sets, "normal") : null;
     return function (n) { return fit && isFinite(fit.n0) ? n / (n + fit.n0) : n; };
   }
   function pooledHist(k, m, r, cs) {
     var H = histOf(histKey(k)); if (!H || !H.cells[m]) { return null; }
-    var weigh = setWeights(k, m, r, cs), acc = new Array(H.nb).fill(0), N = 0, parts = [];
-    cs.forEach(function (c) { var hc = histCell(H, m, c, r); if (!hc) { return; } var h = new Array(H.nb).fill(0); addHist(h, hc, H.nb); var tot = h.reduce(function (a, b) { return a + b; }, 0); if (tot > 0) { parts.push({ c: c, h: h, tot: tot, w: weigh(tot) }); N += tot; } });
+    var weigh = setWeights(k, m, r, cs), acc = new Array(H.nb).fill(0), N = 0, parts = [], at = {}, order = [];
+    cs.forEach(function (c) { var hc = histCell(H, m, c, r); if (!hc) { return; } var b = benchOf(c), pt = at[b];   // a benchmark's sets: one histogram
+      if (!pt) { pt = at[b] = { c: b, h: new Array(H.nb).fill(0) }; order.push(pt); } addHist(pt.h, hc, H.nb); });
+    order.forEach(function (pt) { var tot = pt.h.reduce(function (a, b) { return a + b; }, 0); if (tot > 0) { pt.tot = tot; pt.w = weigh(tot); parts.push(pt); N += tot; } });
     var W = parts.reduce(function (a, pt) { return a + pt.w; }, 0); if (!N || !W) { return null; }
     parts.forEach(function (pt) { for (var i = 0; i < H.nb; i++) { acc[i] += (pt.w / W) * pt.h[i] / pt.tot * N; } });
     return { h: acc, n: N, lo: H.lo, hi: H.hi, nb: H.nb, parts: parts, W: W };
@@ -848,12 +915,12 @@
     var d = 0, e = 0; cells.forEach(function (c) { var t = reading(c, metric.key); d += t ? t[1] : 0; e += c.e && c.e[metric.key] !== undefined ? c.e[metric.key] : c.n; });
     return e ? d / e : null;
   }
-  // where one more problem set would fall (at least three sets); shown in tooltips and tables, never drawn (owner 2026-09-27)
-  function rangeText(metric, st) { return st && st.piLo !== null && st.piLo !== undefined ? "; one problem set: " + fmt(metric, st.piLo) + " to " + fmt(metric, st.piHi) : ""; }
+  // where one more benchmark would fall (at least three); shown in tooltips and tables, never drawn (owner 2026-09-27)
+  function rangeText(metric, st) { return st && st.piLo !== null && st.piLo !== undefined ? "; one more benchmark: " + fmt(metric, st.piLo) + " to " + fmt(metric, st.piHi) : ""; }
   function problemsText(st, use) {
     var n = Math.round(st.n), S = st.S || use.length;
     var more = st.ndef ? st.ndef - n : 0;
-    return "From " + n.toLocaleString() + " problems in " + S + (S === 1 ? " problem set" : " problem sets") + (more > 0 ? "; " + more.toLocaleString() + " more have no finite value, which the mean leaves out" : "") + (st.d === 1 ? "; some problems have one finished run so far" : "");
+    return "From " + n.toLocaleString() + " problems in " + benchText(S) + (more > 0 ? "; " + more.toLocaleString() + " more have no finite value, which the mean leaves out" : "") + (st.d === 1 ? "; some problems have one finished run so far" : "");
   }
   function thin(st) { return !!st && !st.pending && typeof st.share === "number" && st.share < state.valid / 100; }
   function shareText(st) { return Math.floor(100 * st.share) + " % of the problems have a value"; }   // shown in tooltips
@@ -884,12 +951,12 @@
     var cells = cs.map(function (c) { return cell(m, c, r); }).filter(Boolean); if (!cells.length) { return null; }
     var fit, out;
     if (metric.kind === "rate") {
-      fit = reCombine(cells.map(function (c) { var t = c.m[metric.key]; return t ? { n: t[0], s1: t[1], s2: t[2] } : { n: 0 }; }), "logit");
-      return fit ? { v: fit.mu, lo: fit.lo, hi: fit.hi, piLo: fit.piLo, piHi: fit.piHi, n: fit.n, S: fit.S, share: 1 } : null;
+      fit = reCombine(byBench(cs, function (c) { var x = cell(m, c, r), t = x && x.m[metric.key]; return t ? { n: t[0], s1: t[1], s2: t[2] } : null; }), "logit");
+      return fit ? { v: fit.mu, lo: fit.lo, hi: fit.hi, piLo: fit.piLo, piHi: fit.piHi, n: fit.n, S: fit.S, share: 1, ciPending: !!fit.ciPending } : null;
     }
     var share = validShare(metric, cells);
     if (statOf(metric) === "mean") {
-      fit = reCombine(cells.map(function (c) { var t = reading(c, metric.key); return t ? { n: t[1], s1: t[2], s2: t[3] } : { n: 0 }; }), "normal");
+      fit = reCombine(byBench(cs, function (c) { var t = reading(cell(m, c, r), metric.key); return t ? { n: t[1], s1: t[2], s2: t[3] } : null; }), "normal");
       if (!fit) { return null; }
       var nd = cells.reduce(function (a, c) { var t = reading(c, metric.key); return a + (t ? t[0] : 0); }, 0);
       return { v: fit.mu, lo: fit.lo, hi: fit.hi, piLo: fit.piLo, piHi: fit.piHi, n: fit.n, ndef: nd, S: fit.S, share: share };
@@ -1140,7 +1207,7 @@
         var least = thin(sx) && (!thin(sy) || sx.share < sy.share) ? sx : sy;
         if (thin(sx) || thin(sy)) { thinDrawn = true; }
         pts.push({ x: sx.v, xlo: sx.lo, xhi: sx.hi, v: sy.v, lo: sy.lo, hi: sy.hi, hollow: thin(sx) || thin(sy), end: endsAt(m.key, r),
-          title: withEnd(m.key, r, m.label + " @ " + r + ": " + fmt(xm, sx.v, sx.edge) + " " + xm.short + ", " + fmt(ym, sy.v, sy.edge) + " " + ym.short + ", " + Math.round(sy.n).toLocaleString() + " problems in " + sy.S + (sy.S === 1 ? " problem set" : " problem sets") + (least.share < 1 ? ", " + shareText(least) : "")) });
+          title: withEnd(m.key, r, m.label + " @ " + r + ": " + fmt(xm, sx.v, sx.edge) + " " + xm.short + ", " + fmt(ym, sy.v, sy.edge) + " " + ym.short + ", " + Math.round(sy.n).toLocaleString() + " problems in " + benchText(sy.S) + (least.share < 1 ? ", " + shareText(least) : "")) });
         [sx.v, anyCI() ? sx.lo : sx.v, anyCI() ? sx.hi : sx.v].forEach(function (v) { if (isFinite(v)) { xmin = Math.min(xmin, v); xmax = Math.max(xmax, v); } });
         [sy.v, anyCI() ? sy.lo : sy.v, anyCI() ? sy.hi : sy.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
       });
@@ -1197,7 +1264,7 @@
     shown.forEach(function (m) { var pts = [];
       D.rungs.forEach(function (r) { var use = poolCats(m.key, r, keys); if (!use.length) { return; } var x = xOf(m.key, r, use, src); if (x === null) { return; }
         var st = stat(metric, m.key, r, use); if (!st) { return; } if (st.pending) { pending = true; return; } if (!isFinite(st.v)) { return; }
-        var title = m.label + " at budget " + r + (state.xaxis === "time" ? " (" + x.toFixed(2) + " s per problem)" : "") + ": " + fmt(metric, st.v, st.edge) + " (95 % interval " + fmt(metric, st.lo) + " to " + fmt(metric, st.hi) + rangeText(metric, st) + "). " + problemsText(st, use) + (st.share < 1 ? "; " + shareText(st) : "") + ".";
+        var title = m.label + " at budget " + r + (state.xaxis === "time" ? " (" + x.toFixed(2) + " s per problem)" : "") + ": " + fmt(metric, st.v, st.edge) + " (95 % interval " + (st.ciPending ? "still being computed" : fmt(metric, st.lo) + " to " + fmt(metric, st.hi)) + rangeText(metric, st) + "). " + problemsText(st, use) + (st.share < 1 ? "; " + shareText(st) : "") + ".";
         if (thin(st)) { thinDrawn = true; }
         pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, hollow: thin(st), end: endsAt(m.key, r), title: withEnd(m.key, r, title) });   // a budget has no interval: the candidate count is exact, and the measured time is within a pixel of its mean (0.4-1.1 px, measured)
         [st.v, anyCI() ? st.lo : st.v, anyCI() ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } });
@@ -1488,7 +1555,7 @@
   var rangeShown = false, tweenShown = false;   // tweenShown: a table cell held a number between two budgets
   function cellText(st, p) { if (!st) { return ""; } if (st.pending) { return "…"; } if (thin(st)) { thinDrawn = true; } var pi = anyCI() && st.piLo !== null && st.piLo !== undefined; if (pi) { rangeShown = true; }
     if (st.between) { tweenShown = true; }
-    return (st.between ? '<span class="v2tween" title="' + esc(tweenText(st.between)) + '">\u2248</span>' : "") + (thin(st) ? '<span title="' + esc(shareText(st)) + '">' + THIN_MARK + "</span>" : "") + fmt(p, st.v, st.edge) + (anyCI() ? ' <span class="v2ci-txt">[' + fmt(p, st.lo) + ", " + fmt(p, st.hi) + "]</span>" : "") + (pi ? '<br><span class="v2ci-txt">one set: ' + fmt(p, st.piLo) + " to " + fmt(p, st.piHi) + "</span>" : ""); }
+    return (st.between ? '<span class="v2tween" title="' + esc(tweenText(st.between)) + '">\u2248</span>' : "") + (thin(st) ? '<span title="' + esc(shareText(st)) + '">' + THIN_MARK + "</span>" : "") + fmt(p, st.v, st.edge) + (anyCI() ? ' <span class="v2ci-txt">[' + (st.ciPending ? "\u2026" : fmt(p, st.lo) + ", " + fmt(p, st.hi)) + "]</span>" : "") + (pi ? '<br><span class="v2ci-txt">one set: ' + fmt(p, st.piLo) + " to " + fmt(p, st.piHi) + "</span>" : ""); }
   function renderTable(shown) {
     var plots = plotMetrics().map(function (k) { return METRIC[k]; }); var keys = shown.map(function (m) { return m.key; });
     if (!plots.length || !shown.length) { return '<p class="v2hint">Select at least one method and one metric.</p>'; }
@@ -1513,7 +1580,7 @@
     lastTable = { header: [state.rows === "cats" ? "problem set" : "budget", "problems"].concat(shown.reduce(function (a, m) { return a.concat(plots.map(function (p) { return m.label + " · " + mname(p); })); }, [])), rows: rowsOut };
     var ctl = '<div class="v2row v2tablectl"><span class="v2lab">rows</span><label><input type="radio" name="v2rows" value="rungs"' + (state.rows === "rungs" ? " checked" : "") + '> every budget</label><label><input type="radio" name="v2rows" value="cats"' + (state.rows === "cats" ? " checked" : "") + '> problem sets at one budget or time</label>' + (state.rows === "cats" ? posControl(shown) : "") +
       '<span class="v2spacer"></span><button type="button" class="v2btn" data-act="copy-tsv">copy as TSV</button><button type="button" class="v2btn" data-act="csv">download CSV</button></div>';
-    return ctl + '<div class="v2table-wrap"><table class="v2table"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>' + (state.rows === "cats" ? tweenNote(shown, curPos()) : "") + '<p class="v2hint">' + (anyCI() ? "Brackets: the " + term("interval", "95 % interval") + ". " + (rangeShown ? "One set: " + term("setrange", "where one more problem set would fall") + ". " : "") : "") + term("regime", "How problems without a usable formula count") + ". " + (thinDrawn ? term("valid", "\u25cb marks a number based on fewer than " + state.valid + " % of the problems") + ". " : "") + term("complete", "A value appears once a method has results for all selected problem sets at that budget") + ".</p>";
+    return ctl + '<div class="v2table-wrap"><table class="v2table"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>' + (state.rows === "cats" ? tweenNote(shown, curPos()) : "") + '<p class="v2hint">' + (anyCI() ? "Brackets: the " + term("interval", "95 % interval") + ". " + (rangeShown ? "One set: " + term("setrange", "where one more benchmark would fall") + ". " : "") : "") + term("regime", "How problems without a usable formula count") + ". " + (thinDrawn ? term("valid", "\u25cb marks a number based on fewer than " + state.valid + " % of the problems") + ". " : "") + term("complete", "A value appears once a method has results for all selected problem sets at that budget") + ".</p>";
   }
 
   // ---- Catalog matrix --------------------------------------------------------------------------------------------
@@ -1707,8 +1774,8 @@
     cats.forEach(function (c, i) { var yy = T + (i + 0.5) * rowH; s += '<text x="' + (Lw - 8) + '" y="' + (yy + 4) + '" class="tick" text-anchor="end">' + esc(c) + " · " + CAT[c].laws + "</text>";
       if (i % 2) { s += '<rect x="' + Lw + '" y="' + (yy - rowH / 2) + '" width="' + (W - Lw - R) + '" height="' + rowH + '" class="v2stripe"/>'; }
       present.forEach(function (m, j) { var st = cell(m.key, c, r) ? stat(p, m.key, r, [c]) : null; if (!st) { return; } var yj = yy + (j - (present.length - 1) / 2) * 7, col = colorOf(m);
-        s += '<line x1="' + xs(st.lo).toFixed(1) + '" y1="' + yj.toFixed(1) + '" x2="' + xs(st.hi).toFixed(1) + '" y2="' + yj.toFixed(1) + '" stroke="' + col + '" stroke-width="2" stroke-opacity="0.4"/>';
-        s += '<circle cx="' + xs(st.v).toFixed(1) + '" cy="' + yj.toFixed(1) + '" r="3.2" fill="' + col + '"><title>' + esc(m.label + " on " + c + ": " + fmt(p, st.v) + ", 95 % interval " + fmt(p, st.lo) + " to " + fmt(p, st.hi) + ", from " + Math.round(st.n).toLocaleString() + " problems") + "</title></circle>"; }); });
+        if (isFinite(st.lo) && isFinite(st.hi)) { s += '<line x1="' + xs(st.lo).toFixed(1) + '" y1="' + yj.toFixed(1) + '" x2="' + xs(st.hi).toFixed(1) + '" y2="' + yj.toFixed(1) + '" stroke="' + col + '" stroke-width="2" stroke-opacity="0.4"/>'; }
+        s += '<circle cx="' + xs(st.v).toFixed(1) + '" cy="' + yj.toFixed(1) + '" r="3.2" fill="' + col + '"><title>' + esc(m.label + " on " + c + ": " + fmt(p, st.v) + ", 95 % interval " + (st.ciPending ? "still being computed" : fmt(p, st.lo) + " to " + fmt(p, st.hi)) + ", from " + Math.round(st.n).toLocaleString() + " problems") + "</title></circle>"; }); });
     var ly = Hh - B1 + 34; present.forEach(function (m) { s += '<circle cx="' + (Lw + 6) + '" cy="' + ly + '" r="4" fill="' + colorOf(m) + '"/><text x="' + (Lw + 16) + '" y="' + (ly + 4) + '" class="leg">' + esc(m.label + (m.local ? " (local)" : "")) + "</text>"; ly += 18; });
     return swap + s + "</svg>" + '<p class="v2hint">One row per problem set, largest first; one dot per method with its ' + term("interval", "95 % interval") + ".</p>" + missingNote(shown, present, "any selected problem set at " + posText(r), r, true) + tweenNote(present, r);
   }
@@ -1828,13 +1895,13 @@
   // a contrast pooled over the problem sets cs from their cells (cellOf(c): paired_cell's {n, m}), flipped when the
   // cells hold the other method first
   function pairedPool(metric, cellOf, cs, flip) {
-    var pk = metric.key + (leftOut(metric.key) ? "@answered" : ""), sgn = flip ? -1 : 1, rate = metric.kind === "rate", dsets = [], ssets = [], wins = 0, losses = 0;
+    var pk = metric.key + (leftOut(metric.key) ? "@answered" : ""), sgn = flip ? -1 : 1, rate = metric.kind === "rate", dsets = {}, ssets = {}, has = [], wins = 0, losses = 0;
     cs.forEach(function (c) { var pc = cellOf(c), t = pc && pc.m[pk]; if (!t) { return; }
-      dsets.push({ n: t[0], s1: sgn * t[1], s2: t[2] });
+      has.push(c); dsets[c] = { n: t[0], s1: sgn * t[1], s2: t[2] };
       if (rate) { wins += flip ? t[4] : t[3]; losses += flip ? t[3] : t[4]; }
-      else { ssets.push({ n: t[3], s1: sgn * t[4], s2: t[5] }); wins += flip ? t[7] : t[6]; losses += flip ? t[6] : t[7]; } });
-    var fd = reCombine(dsets, "normal"); if (!fd) { return null; }
-    var ft = rate ? fd : reCombine(ssets, "normal");
+      else { ssets[c] = { n: t[3], s1: sgn * t[4], s2: t[5] }; wins += flip ? t[7] : t[6]; losses += flip ? t[6] : t[7]; } });
+    var fd = reCombine(byBench(has, function (c) { return dsets[c]; }), "normal"); if (!fd) { return null; }
+    var ft = rate ? fd : reCombine(byBench(has, function (c) { return ssets[c]; }), "normal");
     return { v: fd.mu, lo: fd.lo, hi: fd.hi, piLo: fd.piLo, piHi: fd.piHi, n: ft ? ft.n : fd.n, S: fd.S, p: ft ? ft.p : null, wins: wins, losses: losses };
   }
   function fmtDelta(metric, d) { if (!isFinite(d)) { return "–"; } var tf = tfOf(metric); if (metric.kind === "rate" || metric.fmt === "pct") { return (d >= 0 ? "+" : "") + (100 * d).toFixed(1) + " pp"; } if (tf === "log2") { return "× " + Math.pow(2, d).toFixed(2); } if (tf === "log10") { return "× " + Math.pow(10, d).toFixed(2); } return (d >= 0 ? "+" : "") + d.toFixed(metric.fmt === "num3" ? 3 : 2); }
@@ -1852,7 +1919,7 @@
     var charts = inBlock(root.querySelector(".v2main"), plots.length, function () { return plots.map(function (p) { var series = [], ymin = Infinity, ymax = -Infinity, tmin = Infinity, tmax = -Infinity;
       var ctx = p.key + (leftOut(p.key) ? "@answered" : "") + "|" + base.key + "|" + slotContext(pairCellsOf(p.key));
       others.forEach(function (m) { var pts = []; slots.forEach(function (sl) { var x = sl.x, st = slotMemo("pair|" + ctx + "|" + m.key + "|" + sl.slot, function () { return pairedSlotStat(p, m.key, base.key, sl.slot); }); if (!st || !isFinite(st.v)) { return; }
-          pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, title: m.label + " − " + base.label + " at " + posText(time ? "t" + x : x) + ": " + fmtDelta(p, st.v) + " [" + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + "], over " + st.n.toLocaleString() + " problems in " + st.S + " problem sets, p = " + fmtP(st.p) });
+          pts.push({ x: x, v: st.v, lo: st.lo, hi: st.hi, title: m.label + " − " + base.label + " at " + posText(time ? "t" + x : x) + ": " + fmtDelta(p, st.v) + " [" + fmtDelta(p, st.lo) + ", " + fmtDelta(p, st.hi) + "], over " + st.n.toLocaleString() + " problems in " + benchText(st.S) + ", p = " + fmtP(st.p) });
           [st.v, anyCI() ? st.lo : st.v, anyCI() ? st.hi : st.v].forEach(function (v) { if (isFinite(v)) { ymin = Math.min(ymin, v); ymax = Math.max(ymax, v); } }); if (time) { tmin = Math.min(tmin, x); tmax = Math.max(tmax, x); } });
         if (pts.length) { series.push({ key: m.key, label: m.label + (m.local ? " (local)" : ""), color: colorOf(m), dash: !!m.dash, pts: pts }); } });
       var title = "Δ " + mname(p) + " vs " + base.label;
@@ -2136,7 +2203,7 @@
     // over the problem sets like any value. A method's average place is 1 + the chances that each other method beats it.
     var beat = ro.map(function () { return ro.map(function () { return null; }); }), pairs = [];
     ro.forEach(function (x, i) { ro.forEach(function (z, j) { if (j <= i) { return; }
-      var f = reCombine(out.cats.map(function (c) { return pair(x, z, c); }).filter(Boolean), "normal");
+      var f = reCombine(byBench(out.cats, function (c) { return pair(x, z, c); }), "normal");
       if (!f) { f = { mu: 0, lo: 0, hi: 0, p: 1, n: 0, S: 0 }; }
       beat[i][j] = { p: (1 + f.mu) / 2, lo: (1 + f.lo) / 2, hi: (1 + f.hi) / 2, pv: f.p, n: f.n, S: f.S };
       beat[j][i] = { p: (1 - f.mu) / 2, lo: (1 - f.hi) / 2, hi: (1 - f.lo) / 2, pv: f.p, n: f.n, S: f.S };
@@ -2202,7 +2269,7 @@
       ord.map(function (x) { return '<tr><td><span class="v2sw" style="background:' + colorOf(x.m) + '"></span>' + esc(x.m.label) + "</td><td>" + placeText(x.m, x.places, time) + "</td><td><b>" + x.rank.toFixed(2) + "</b></td><td>" + (100 * x.share).toFixed(1) + " %</td><td>" + Math.round(x.blank).toLocaleString() + ' <span class="v2ci-txt">of ' + lg.n.toLocaleString() + "</span></td></tr>"; }).join("") + "</tbody></table></div>";
     var t2 = '<h3 class="v2h">Head to head</h3><div class="v2table-wrap"><table class="v2table v2matrix v2h2h"><thead><tr><th>row beats column on</th>' + ord.map(function (x) { return '<th><span class="v2sw" style="background:' + colorOf(x.m) + '"></span>' + esc(x.m.label) + "</th>"; }).join("") + "</tr></thead><tbody>" +
       ord.map(function (x, a) { return '<tr><td><span class="v2sw" style="background:' + colorOf(x.m) + '"></span>' + esc(x.m.label) + "</td>" + ord.map(function (z, b) { if (a === b) { return '<td class="v2na">·</td>'; } var e = lg.beat[idx[a]][idx[b]], w = e.p, rgb = accentRGB();
-        return '<td style="background:rgba(' + rgb.join(",") + "," + (0.04 + 0.5 * w).toFixed(2) + ')" title="' + esc(x.m.label + " does better than " + z.m.label + " on " + (100 * e.p).toFixed(1) + " % of the problems (95 % interval " + (100 * e.lo).toFixed(1) + " to " + (100 * e.hi).toFixed(1) + " %), ties counting half, averaged over " + e.S + " problem sets; " + (e.sep ? "the pairwise test tells them apart" : "the pairwise test does not tell them apart") + " (p = " + fmtP(e.padj) + ")") + '">' + (w > 0.5 && e.sep ? "<b>" : "") + (100 * w).toFixed(1) + " %" + (w > 0.5 && e.sep ? "</b>" : "") + ' <span class="v2ci-txt">[' + (100 * e.lo).toFixed(0) + ", " + (100 * e.hi).toFixed(0) + "]</span></td>"; }).join("") + "</tr>"; }).join("") + "</tbody></table></div>" +
+        return '<td style="background:rgba(' + rgb.join(",") + "," + (0.04 + 0.5 * w).toFixed(2) + ')" title="' + esc(x.m.label + " does better than " + z.m.label + " on " + (100 * e.p).toFixed(1) + " % of the problems (95 % interval " + (100 * e.lo).toFixed(1) + " to " + (100 * e.hi).toFixed(1) + " %), ties counting half, averaged over " + benchText(e.S) + "; " + (e.sep ? "the pairwise test tells them apart" : "the pairwise test does not tell them apart") + " (p = " + fmtP(e.padj) + ")") + '">' + (w > 0.5 && e.sep ? "<b>" : "") + (100 * w).toFixed(1) + " %" + (w > 0.5 && e.sep ? "</b>" : "") + ' <span class="v2ci-txt">[' + (100 * e.lo).toFixed(0) + ", " + (100 * e.hi).toFixed(0) + "]</span></td>"; }).join("") + "</tr>"; }).join("") + "</tbody></table></div>" +
       '<p class="v2hint">Each cell: the share of problems on which the row\u2019s method does better than the column\u2019s on ' + esc(p.label) + ", ties counting half, averaged over the problem sets, with its 95 % interval. Bold: the row\u2019s method does better, and the " + term("pairtest", "pairwise test") + " tells the two apart.</p>";
     return t1 + t2;
   }
@@ -2320,12 +2387,14 @@
   // Every run's weight (0 where a metric of ks has no value), summing to 1; n: the problems behind them; neff: the number
   // of equally weighted problems that would be as precise (Kish), for the intervals.
   function ppWeights(cl, ks) {
-    var w = new Float64Array(cl.n), cnt = cl.cs.map(function () { return 0; }), ok = new Uint8Array(cl.n), i, j;
-    for (i = 0; i < cl.n; i++) { var good = true; for (j = 0; j < ks.length; j++) { if (!ppOk(cl, ks[j], i)) { good = false; break; } } if (good) { ok[i] = 1; cnt[cl.cat[i]] += cl.share[i]; } }
+    // a run's set is counted by its benchmark (bi): the sets of one benchmark share its weight, every problem in it once
+    var idx = {}, nb = 0, bi = cl.cs.map(function (c) { var b = benchOf(c); if (!(b in idx)) { idx[b] = nb++; } return idx[b]; });
+    var w = new Float64Array(cl.n), cnt = new Array(nb).fill(0), ok = new Uint8Array(cl.n), i, j;
+    for (i = 0; i < cl.n; i++) { var good = true; for (j = 0; j < ks.length; j++) { if (!ppOk(cl, ks[j], i)) { good = false; break; } } if (good) { ok[i] = 1; cnt[bi[cl.cat[i]]] += cl.share[i]; } }
     var weigh = setWeights("log10_fvu_val", cl.m.key, cl.r, cl.cs), W = cnt.map(function (x) { return x > 0 ? weigh(x) : 0; });
     var tot = W.reduce(function (a, b) { return a + b; }, 0), q = 0;
-    W.forEach(function (x, ci) { if (cnt[ci] > 0) { q += x * x / cnt[ci]; } });
-    for (i = 0; i < cl.n; i++) { if (ok[i] && tot > 0) { w[i] = W[cl.cat[i]] * cl.share[i] / cnt[cl.cat[i]] / tot; } }
+    W.forEach(function (x, bj) { if (cnt[bj] > 0) { q += x * x / cnt[bj]; } });
+    for (i = 0; i < cl.n; i++) { if (ok[i] && tot > 0) { w[i] = W[bi[cl.cat[i]]] * cl.share[i] / cnt[bi[cl.cat[i]]] / tot; } }
     var all = cl.cs.reduce(function (a, c) { return a + CAT[c].laws; }, 0), have = cnt.reduce(function (a, b) { return a + b; }, 0);
     return { w: w, n: have, all: all, neff: q > 0 ? tot * tot / q : 0 };
   }
@@ -2959,7 +3028,8 @@
   }
   var rt = null;
   function scheduleRender() { clearTimeout(rt); rt = setTimeout(render, 30); }
-  function render() {
+  function render() { rateDrawStart(); try { renderNow(); } finally { rateDrawEnd(); } }
+  function renderNow() {
     if (!root) {   // the home page: the headline, and the release's line of progress where the page has a place for it
       renderHeadline();
       var pl = document.getElementById("results-progress-v2");

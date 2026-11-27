@@ -244,8 +244,9 @@ def _patch_flash_ansr(monkeypatch, captured):
             return SimpleNamespace()
 
     class DummyAdapter:
-        def __init__(self, model, device, complexity, candidate_store_dir=None):
+        def __init__(self, model, device, complexity, candidate_store_dir=None, seed=None):
             self.model = model
+            self.seed = seed
 
     monkeypatch.setattr(flash_ansr.utils.generation, "create_generation_config", fake_create_generation_config)
     monkeypatch.setattr(flash_ansr.flash_ansr, "FlashANSR", FakeFlashANSR)
@@ -279,6 +280,15 @@ def test_build_flash_ansr_adapter_generation_overrides(tmp_path, monkeypatch):
     assert captured["flash_ansr_kwargs"]["ranking"].mode == "weighted"
     assert dict(captured["flash_ansr_kwargs"]["ranking"].weights) == {"n_nodes": 0.2, "n_constants": 0.01}
     assert captured["flash_ansr_kwargs"]["ranking"].mdl_strength is None
+
+
+def test_build_flash_ansr_adapter_passes_its_seed(monkeypatch):
+    _patch_flash_ansr(monkeypatch, {})
+    inline_cfg = {"n_restarts": 2, "refiner_method": "curve_fit_lm", "refiner_p0_noise": "normal",
+                  "ranking": {"mode": "mdl"}, "generation_config": {"method": "softmax_sampling", "kwargs": {"draws": 4}}}
+    seeded = run_config.build_model_adapter({"type": "flash_ansr", "model_path": "./m", "evaluation_config": inline_cfg, "seed": "5"})
+    unseeded = run_config.build_model_adapter({"type": "flash_ansr", "model_path": "./m", "evaluation_config": inline_cfg})
+    assert seeded.seed == 5 and unseeded.seed is None
 
 
 def test_build_flash_ansr_adapter_inline_evaluation_config(monkeypatch):
@@ -524,7 +534,7 @@ def test_run_persists_config_provenance_into_meta(tmp_path, monkeypatch):
         "run": {
             "data_source": {"catalog": catalog},
             "model_adapter": {"type": "flash_ansr", "config_provenance": "author_blessed"},
-            "runner": {"output": str(out)},
+            "runner": {"output": str(out), "candidates": False},
         }
     })
     caller_meta = {"config_provenance": "harness_tuned", "extra": "kept"}
@@ -541,7 +551,7 @@ def test_run_persists_config_provenance_into_meta(tmp_path, monkeypatch):
     # validated and respected; with no label anywhere the conservative default lands
     from srbf.data_sources import CatalogSource
     out2 = tmp_path / "run2.pkl"
-    bench2 = Benchmark(CatalogSource.from_catalog(catalog), _FakeAdapter())
+    bench2 = Benchmark(CatalogSource.from_catalog(catalog), _FakeAdapter(), candidates=False)
     bench2.run(verbose=False, progress=False, output_path=str(out2), save_every=1,
                meta={"config_provenance": "upstream_default"})
     with out2.open("rb") as handle:

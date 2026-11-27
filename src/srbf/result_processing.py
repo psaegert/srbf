@@ -383,6 +383,14 @@ def _nestedness(prefix: Any, operator_arity: Mapping[str, int]) -> int | None:
         return None
 
 
+def _no_variance(y: Any) -> bool:
+    """Whether a split's target cannot define a fit quality: no points, or the same value on every point."""
+    if y is None:
+        return True
+    a = np.asarray(y, dtype=float).ravel()
+    return a.size == 0 or bool(np.all(a == a[0]))
+
+
 def compute_derived_metrics(
     results: dict[str, Any],
     test_sets: Sequence[str],
@@ -546,6 +554,32 @@ def compute_derived_metrics(
                         if column in r:
                             r[column] = np.asarray(r[column], dtype=bool) & answered
 
+                # ── Undefined fit quality: no test split, or a target without variance ──
+                # A data catalog whose authors give no test split has no validation points (owner 2026-10-17: "if
+                # people fail to tell us what to test on, we don't"). A target that is the same number on every point
+                # (ERBench windows on which a formula saturates in float64) has an FVU of 0/0 or x/0 whatever the
+                # prediction (owner 2026-11-03: "The FVU can be undefined then"). Either way the split's fit-quality
+                # metrics are not a miss and not a perfect fit; they do not exist: NaN for the analysis metrics, None
+                # for the recovery rates.
+                if 'y_val' in r:
+                    r['n_validation'] = np.array([0 if yv is None else int(np.asarray(yv).shape[0]) for yv in r['y_val']])
+                for split, saved_split_name in [('fit', ''), ('val', '_val')]:
+                    y_key = f'y{saved_split_name}'
+                    if y_key not in r:
+                        continue
+                    undefined = np.array([_no_variance(yt) for yt in r[y_key]], dtype=bool)
+                    r[f'fit_quality_undefined_{split}'] = undefined
+                    if not undefined.any():
+                        continue
+                    for column in (f'fvu_{split}', f'log10_fvu_{split}', f'r2_{split}', f'only_approx_fvu_{split}',
+                                   f'only_approx_log10_fvu_{split}', f'reference_fvu_{split}'):
+                        if column in r:
+                            r[column] = np.where(undefined, np.nan, np.asarray(r[column], dtype=float))
+                    for column in (f'numeric_recovery_{split}', f'numeric_recovery_relative_{split}'):
+                        if column in r:
+                            r[column] = np.array([None if u else (None if v is None else bool(v))
+                                                  for v, u in zip(r[column], undefined)], dtype=object)
+
                 if 'skeleton_simplified' not in r:
                     r['skeleton_simplified'] = list(r['skeleton'])
 
@@ -616,10 +650,11 @@ def compute_derived_metrics(
                         for agrees, miss, fp in zip(r['symbolic_recovery'], failed, fittable_pairs)
                     ])
                     if 'numeric_recovery_val' in r:
+                        # "all numbers right" is read on the validation points: without them it is not defined
                         r['symbolic_recovery_mask_none'] = np.array([
-                            bool(typed) and bool(numeric)
+                            None if numeric is None else bool(typed) and bool(numeric)
                             for typed, numeric in zip(r['symbolic_recovery_mask_fittable'], r['numeric_recovery_val'])
-                        ])
+                        ], dtype=object)
 
                 # ── Length ratio ──────────────────────────────────
                 r['skeleton_length_ratio'] = np.array([
@@ -630,8 +665,8 @@ def compute_derived_metrics(
                 ])
 
                 # ── MDL: the description length of the REALIZED expressions ──
-                # ``mdl_fn`` is the engine's complexity (milli-bits, simplipy's native unit; the
-                # same pricing the flash-ansr ranking modes score with). Priced on the realized
+                # ``mdl_fn`` is the price in bits (``srbf.pricing.price_bits`` unless the caller
+                # passes its own). Priced on the realized
                 # expressions, numeric constants inlined: a prefix that still carries a
                 # ``<constant>`` placeholder is not priced (a skeleton price would masquerade as a
                 # realized one), and an unpriceable expression is None, never a made-up number.
@@ -748,6 +783,9 @@ def derive_metrics(
     simplify_fn : callable, optional
         Skeleton simplifier; defaults to the engine's ``simplify`` when an ``engine`` is given, else
         ``None`` (simplified skeletons then fall back to the raw skeletons).
+    mdl_fn : callable, optional
+        The price of a realized prefix, for ``predicted_mdl``, ``ground_truth_mdl`` and ``mdl_ratio``; defaults to
+        :func:`srbf.pricing.price_bits` with the engine (bits) when an ``engine`` is given, else no price.
     convert_fn : callable, optional
         Converts the stored predicted prefixes into the engine grammar before they are judged or
         priced; defaults to the engine's ``convert_expression`` when an ``engine`` is given (the
@@ -770,9 +808,9 @@ def derive_metrics(
     if simplify_fn is None and engine is not None:
         simplify_fn = engine.simplify
     if mdl_fn is None and engine is not None:
-        # The price the flash-ansr ranking modes use: certified, f64 parse, the public Default canon.
-        def mdl_fn(tokens: list[str], _engine: Any = engine) -> float:
-            return float(_engine.complexity(list(tokens), certified=True, mode='f64', canon='default'))
+        from srbf.pricing import pricer
+
+        mdl_fn = pricer(engine)   # the price in bits, as the table reports it
 
     if convert_fn is None and engine is not None:
         convert_fn = engine.convert_expression

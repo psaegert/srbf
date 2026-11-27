@@ -7,7 +7,7 @@ import weakref
 import numpy as np
 import pytest
 
-from srbf.table import COLUMNS, ResultTree, build_table, judge_result_file, parse_index_bases
+from srbf.table import COLUMNS, JUDGED_COLUMNS, ResultTree, build_table, judge_result_file, parse_index_bases
 
 ENGINE = "acj-4-3"
 
@@ -50,13 +50,14 @@ def _write(tmp_path, catalog, name, snapshot):
 
 
 def _col(rows, name):
-    return [r[COLUMNS.index(name)] for r in rows]
+    """A column of judged rows (judge_result_file: every column but the benchmark)."""
+    return [r[JUDGED_COLUMNS.index(name)] for r in rows]
 
 
 def test_a_file_becomes_one_row_per_problem_with_the_identity_columns(tmp_path, engine):
     path = _write(tmp_path, "toy", "choices_000064.pkl", _snapshot([["+", "x1", "x2"], ["+", "x2", "x1"], ["*", "x1", "x2"], None]))
     rows = judge_result_file(path, method="m", draw=2, engine=engine)
-    assert len(rows) == 4 and all(len(r) == len(COLUMNS) for r in rows)
+    assert len(rows) == 4 and all(len(r) == len(JUDGED_COLUMNS) for r in rows)
     assert _col(rows, "model") == ["m"] * 4 and _col(rows, "draw") == [2] * 4
     assert _col(rows, "catalog") == ["toy"] * 4 and _col(rows, "rung") == [64] * 4 and _col(rows, "row") == [0, 1, 2, 3]
     assert _col(rows, "symbolic_recovery") == [1, 1, 0, 0]
@@ -65,7 +66,7 @@ def test_a_file_becomes_one_row_per_problem_with_the_identity_columns(tmp_path, 
 def test_a_failed_problem_is_a_miss_in_the_rates_and_takes_the_worst_value_only_where_there_is_one(tmp_path, engine):
     path = _write(tmp_path, "toy", "choices_000001.pkl", _snapshot([["+", "x1", "x2"], None]))
     ok, failed = judge_result_file(path, method="m", engine=engine)
-    at = COLUMNS.index
+    at = JUDGED_COLUMNS.index
     assert failed[at("success")] == 0 and failed[at("numeric_recovery_val")] == 0 and failed[at("symbolic_recovery")] == 0
     assert failed[at("f1_score")] == 0.0          # a worst value exists: a failure takes it
     assert failed[at("log10_fvu_val")] == ""      # none exists: nothing is filled in
@@ -81,10 +82,10 @@ def test_index_spelled_variables_are_renamed_when_the_tree_says_how_they_are_cou
     for first, snap in ((0, e2e_style), (1, nesymres_style), (None, named)):
         path = _write(tmp_path, f"toy{first}", "choices_000001.pkl", snap)
         (row,) = judge_result_file(path, method="m", engine=engine, first_index=first)
-        assert row[COLUMNS.index("symbolic_recovery")] == 1
+        assert row[JUDGED_COLUMNS.index("symbolic_recovery")] == 1
     path = _write(tmp_path, "toy_unmapped", "choices_000001.pkl", _snapshot([["+", "x_0", "x_1"]]))
     (row,) = judge_result_file(path, method="m", engine=engine)
-    assert row[COLUMNS.index("symbolic_recovery")] == 0   # without the count the spelling is left alone
+    assert row[JUDGED_COLUMNS.index("symbolic_recovery")] == 0   # without the count the spelling is left alone
 
 
 def _read(path):
@@ -110,6 +111,39 @@ def test_the_cache_serves_a_file_until_it_changes(tmp_path):
     changed = build_table([tree], out, engine=ENGINE, workers=1, cache_dir=cache, log=None)
     assert (changed.judged, changed.from_cache) == (1, 1)
     assert sum(int(r[COLUMNS.index("symbolic_recovery")]) for r in _read(out)[1:]) == 1
+
+
+def test_every_row_names_its_catalogs_benchmark_and_the_cache_does_not_hold_it(tmp_path):
+    """The benchmark column sits next to the catalog: the benchmarks mapping places two catalogs in one benchmark, and a
+    catalog it does not name is a benchmark of its own. The cache holds the judged rows only, so a benchmark that
+    changes is written without judging any file again."""
+    for catalog in ("feynman", "feynman-points", "nguyen"):
+        _write(tmp_path, catalog, "choices_000001.pkl", _snapshot([["+", "x1", "x2"], ["*", "x1", "x2"]]))
+    tree = ResultTree("m", 1, str(tmp_path / "tree"))
+    cache, out = str(tmp_path / "cache"), str(tmp_path / "t.csv")
+    first = build_table([tree], out, engine=ENGINE, workers=1, cache_dir=cache, log=None,
+                        benchmarks={"feynman": "feynman", "feynman-points": "feynman"})
+    header, *rows = _read(out)
+    assert header == COLUMNS and header[header.index("catalog") + 1] == "benchmark"
+    pairs = {(r[COLUMNS.index("catalog")], r[COLUMNS.index("benchmark")]) for r in rows}
+    assert pairs == {("feynman", "feynman"), ("feynman-points", "feynman"), ("nguyen", "nguyen")}
+    assert first.rows == 6
+    # the same files, a different mapping: nothing is judged again, and only the benchmark column moves
+    again = build_table([tree], out, engine=ENGINE, workers=1, cache_dir=cache, log=None)
+    assert (again.judged, again.from_cache) == (0, 3)
+    header2, *rows2 = _read(out)
+    assert {r[COLUMNS.index("benchmark")] for r in rows2} == {"feynman", "feynman-points", "nguyen"}
+    at = COLUMNS.index("benchmark")
+    assert [r[:at] + r[at + 1:] for r in rows2] == [r[:at] + r[at + 1:] for r in rows]
+
+
+def test_the_catalogs_of_the_trees_are_their_directories(tmp_path):
+    from srbf.table import tree_catalogs
+
+    for catalog in ("b", "a"):
+        _write(tmp_path, catalog, "choices_000001.pkl", _snapshot([["+", "x1", "x2"]]))
+    (tmp_path / "tree" / "empty").mkdir()
+    assert tree_catalogs([ResultTree("m", 1, str(tmp_path / "tree"))]) == ["a", "b"]
 
 
 def test_cached_rows_are_read_one_file_at_a_time(tmp_path, monkeypatch):
@@ -171,7 +205,7 @@ def test_a_ladder_counting_evaluations_samples_epochs_or_generations_is_read_lik
     _write(tmp_path, "toy", "notes_000001.pkl", _snapshot([["+", "x1", "x2"]]))     # not a rung file
     out = str(tmp_path / "t.csv")
     report = build_table([ResultTree("m", 1, str(tmp_path / "tree"))], out, engine=ENGINE, workers=1, log=None)
-    assert report.files == 5 and sorted(_col(_read(out)[1:], "rung")) == ["16", "4096", "512", "64", "8"]
+    assert report.files == 5 and sorted(r[COLUMNS.index("rung")] for r in _read(out)[1:]) == ["16", "4096", "512", "64", "8"]
 
 
 def test_an_unreadable_file_is_reported_and_left_out(tmp_path):
@@ -193,20 +227,24 @@ def test_tree_and_index_specs_parse_as_the_command_line_takes_them():
 
 
 def test_a_new_worker_does_not_change_the_judge(tmp_path, monkeypatch):
-    """The judge fingerprint names the srbf source the judge runs; the out-of-process workers are not part of it,
-    so adding a baseline worker keeps every cached judgment, while a change to judging code discards them."""
+    """The judge fingerprint names the srbf source the judge runs (srbf.table and what it imports); the
+    out-of-process workers and the rest of the package are not part of it, so adding a baseline worker or changing
+    the reports keeps every cached judgment, while a change to judging code discards them."""
     import srbf
     from srbf.table import judge_fingerprint
     pkg = tmp_path / "srbf"
     (pkg / "worker" / "models").mkdir(parents=True)
-    (pkg / "__init__.py").write_text("")
+    (pkg / "__init__.py").write_text("from srbf.reporting import REPORT\n")
+    (pkg / "table.py").write_text("def judge():\n    from srbf.result_processing import JUDGE\n    return JUDGE\n")
     (pkg / "result_processing.py").write_text("JUDGE = 1\n")
+    (pkg / "reporting.py").write_text("REPORT = 1\n")
     (pkg / "worker" / "models" / "one_worker.py").write_text("X = 1\n")
     monkeypatch.setattr(srbf, "__file__", str(pkg / "__init__.py"))
     before = judge_fingerprint("acj-5-4-llm")
     (pkg / "worker" / "models" / "another_worker.py").write_text("Y = 2\n")
     (pkg / "worker" / "models" / "one_worker.py").write_text("X = 3\n")
     (pkg / "rungs.py").write_text("RUNG_PREFIXES = ('choices', 'another_unit')\n")   # a new budget unit
+    (pkg / "reporting.py").write_text("REPORT = 2\n")                                   # not judging code
     assert judge_fingerprint("acj-5-4-llm") == before
     (pkg / "result_processing.py").write_text("JUDGE = 2\n")
     assert judge_fingerprint("acj-5-4-llm") != before
@@ -237,3 +275,43 @@ def test_a_prediction_the_spelling_cannot_walk_stays_as_written_and_the_file_is_
     path = _write(tmp_path, "toy", "choices_000001.pkl", snap)
     rows = judge_result_file(path, method="m", engine=engine)
     assert len(rows) == 2 and _col(rows, "symbolic_recovery")[0] == 1
+
+
+def test_a_problem_without_validation_points_has_no_validation_metrics(tmp_path, engine):
+    """A data catalog whose authors give no test split has no validation points (owner 2026-10-17: "if people fail to
+    tell us what to test on, we don't"): its validation metrics are empty -- neither a miss nor a perfect fit -- while
+    a problem with validation points next to it is judged as before."""
+    snap = _snapshot([["+", "x1", "x2"], ["+", "x1", "x2"], ["*", "x1", "x2"]])
+    for i in (1, 2):                                       # rows 1 and 2: no validation points
+        snap["y_val"][i] = np.empty((0,))
+        snap["y_pred_val"][i] = np.empty((0,))
+    rows = judge_result_file(_write(tmp_path, "toy", "choices_000008.pkl", snap), method="m", engine=engine)
+    assert _col(rows, "n_validation") == [16.0, 0.0, 0.0]
+    assert _col(rows, "numeric_recovery_val") == [1, "", ""]          # empty, not 0 (a miss) and not 1
+    assert _col(rows, "symbolic_recovery_mask_none") == [1, "", ""]
+    assert _col(rows, "numeric_recovery_fit") == [1, 1, 1]           # the fit split is judged as always (the toy
+    #                                                                  predictions all reproduce y numerically)
+    assert _col(rows, "symbolic_recovery") == [1, 1, 0]
+    lf = _col(rows, "log10_fvu_val")
+    assert np.isfinite(lf[0]) and all(isinstance(v, float) and np.isnan(v) for v in lf[1:])
+    assert np.isfinite(_col(rows, "log10_fvu_fit")[1])
+
+
+def test_a_target_without_variance_has_no_fit_quality(tmp_path, engine):
+    """A target that is the same number on every point (an ERBench window on which the formula saturates in float64)
+    has an FVU of 0/0 or x/0 whatever the prediction (owner 2026-11-03: "The FVU can be undefined then"): that split's
+    fit-quality metrics are empty, as without a test split, and the other split is judged as before."""
+    snap = _snapshot([["+", "x1", "x2"], ["+", "x1", "x2"], ["*", "x1", "x2"]])
+    snap["y_val"][1] = np.full(16, 7.0)                    # row 1: a constant test target, predicted exactly
+    snap["y_pred_val"][1] = np.full(16, 7.0)
+    snap["y_val"][2] = np.full(16, 7.0)                    # row 2: a constant test target, predicted wrongly
+    snap["y_pred_val"][2] = np.full(16, 3.0)
+    snap["y"][2] = np.full(16, 7.0)                        # ... and a constant fitting target
+    snap["y_pred"][2] = np.full(16, 3.0)
+    rows = judge_result_file(_write(tmp_path, "toy", "choices_000008.pkl", snap), method="m", engine=engine)
+    assert _col(rows, "numeric_recovery_val") == [1, "", ""]          # empty, not a perfect fit and not a miss
+    assert _col(rows, "numeric_recovery_fit") == [1, 1, ""]
+    lf = _col(rows, "log10_fvu_val")
+    assert np.isfinite(lf[0]) and all(isinstance(v, float) and np.isnan(v) for v in lf[1:])
+    assert np.isfinite(_col(rows, "log10_fvu_fit")[1]) and np.isnan(_col(rows, "log10_fvu_fit")[2])
+    assert _col(rows, "constant_target_val") == [0, 1, 1] and _col(rows, "constant_target_fit") == [0, 0, 1]

@@ -19,7 +19,7 @@ from srbf.core import EvaluationModelAdapter, EvaluationResult, EvaluationSample
 from srbf.spelling import engine_spelling
 from srbf.variable_renaming import (
     E2E_FIRST_INDEX, NESYMRES_FIRST_INDEX, rename_variable_tokens, rename_variables_in_infix, skeleton_variable_names)
-from srbf.candidate_store import CandidateStoreWriter
+from srbf.candidate_store import MDL_UNIT, CandidateStoreWriter, milli_bits_to_bits
 from srbf.metrics.numeric import fvu as _fvu
 
 PySRRegressor: type[Any] | None  # pragma: no cover - assigned lazily
@@ -69,9 +69,13 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         device: str = "cpu",
         complexity: str | list[int | float] | int | float = "none",
         candidate_store_dir: str | None = None,
+        seed: int | None = None,
     ) -> None:
         self.model = model
         self.device = device
+        # A seed makes every fit reproducible (flash-ansr derives each candidate's restarts from it and the candidate);
+        # None keeps fresh entropy per fit.
+        self.seed = None if seed is None else int(seed)
         # Fail fast on an unknown mode: a bad string would otherwise only surface on the first problem,
         # AFTER the (slow) model load. Keep the accepted strings in sync with `_resolve_complexity`.
         if isinstance(complexity, str) and complexity not in ("none", "ground_truth"):
@@ -98,7 +102,15 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         as_dict = getattr(ranking, "as_dict", None)
         return dict(as_dict()) if callable(as_dict) else None
 
+    def inference_precision(self) -> str | None:
+        """The arithmetic the model's transformer runs in, ``'bf16'`` or ``'fp32'`` (flash-ansr >= 0.20; ``None``
+        before, which ran fp32/TF32). Recorded beside the ranking: pools drawn in different precisions are
+        different protocols and must not be mixed in one comparison."""
+        return getattr(self.model, "precision", None)
+
     def prepare(self, *, data_source: Any | None = None) -> None:  # type: ignore[override]
+        # Data-independent preparation, before the clock (docs/fairness.md): the weights were loaded when the adapter
+        # was built; here the model moves to its device. srbf's warm-up problem, when the run asks for it, follows.
         self.model.to(self.device).eval()
 
         # Fail HERE, once, before the campaign starts -- not per problem inside _capture_ledger,
@@ -123,18 +135,9 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         ``np.errstate`` restores the model's ``numpy_errors`` policy around the call."""
         record = sample.clone_metadata()
         record["ranking"] = self.ranking_config()
+        record["inference_precision"] = self.inference_precision()
 
         y_fit = sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support
-        if getattr(self.model.generation_config, "method", None) == "oracle":
-            # The oracle's one privilege, in oracle mode only: this problem's ground truth (the law with its
-            # literals spelled, over the columns as x1..xN) becomes the one candidate the refiner fits.
-            # A fresh config of the model's own kind, so srbf needs no newer flash-ansr to run older ones.
-            expression = record.get("expression")
-            if not expression:
-                record["error"] = "The oracle needs the problem's ground truth, and this problem has none."
-                record["prediction_success"] = False
-                return EvaluationResult(record)
-            self.model.generation_config = type(self.model.generation_config)(expression=list(expression))
         complexity_value = self._resolve_complexity(record)
         variable_names = record.get("variable_names")
         x_val = sample.x_validation if sample.x_validation.shape[0] > 0 else None
@@ -149,6 +152,7 @@ class FlashANSRAdapter(EvaluationModelAdapter):
                     sample.x_support, y_fit,
                     variable_names=variable_names if variable_names is not None else "auto",
                     complexity=complexity_value,
+                    **({} if self.seed is None else {"seed": self.seed}),
                 )
         except (ConvergenceError, OverflowError, TypeError, ValueError) as exc:
             record["error"] = str(exc)
@@ -159,8 +163,9 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         record["generation_time"] = result.generation_time
         record["refinement_time"] = result.refinement_time
 
-        # Full candidate ledger -> compact columnar store (save-all tier); off (None) => zero overhead.
-        if self.candidate_store_dir is not None:
+        # Full candidate ledger -> compact columnar store (save-all tier); off (None) => zero overhead. srbf's warm-up
+        # problem (srbf.warmup) is no row of the run, and its ledger is not stored.
+        if self.candidate_store_dir is not None and not record.get("warmup"):
             self._capture_ledger(record, result, sample)
 
         best = result.best
@@ -179,7 +184,8 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         record["predicted_constants"] = list(best.constants) if best.constants is not None else None
         record["predicted_score"] = best.score
         record["predicted_log_prob"] = best.log_prob
-        record["predicted_mdl"] = best.mdl
+        # flash-ansr prices in thousandths of a bit; srbf states every description length in bits
+        record["predicted_mdl"] = milli_bits_to_bits(best.mdl)
         record["predicted_n_nodes"] = best.n_nodes
         record["predicted_pareto_rank"] = best.pareto_rank
         # Provenance of the prediction (flash-ansr >= 0.16.1): how many predicted typed literals it kept
@@ -189,6 +195,12 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         record["predicted_typed_frozen"] = int(getattr(best, "typed_frozen", 0) or 0)
         record["predicted_typed_thaw"] = getattr(best, "typed_thaw", None)
         record["predicted_spelling"] = getattr(best, "spelling", None)
+        # Every candidate the model fitted, its constants substituted, for the run to judge and store
+        # (srbf.candidates): the prefix speaks x1..xN by column, and the best is the prediction.
+        record["candidate_expressions"] = [" ".join(map(str, c.expression_prefix)) for c in result.candidates]
+        record["candidate_notation"] = "prefix"
+        record["candidate_variables"] = [f"x{i + 1}" for i in range(np.asarray(sample.x_support).shape[1])]
+        record["candidate_prediction"] = 0
 
         # The prediction's curves, evaluated through the result (a candidate carries no predictions):
         # the support set as fitted and the validation split when the sample has one.
@@ -231,7 +243,8 @@ class FlashANSRAdapter(EvaluationModelAdapter):
             for col in ("n_nodes", "n_constants", "mdl", "score", "pareto_rank", "rank", "spelling", "parent"):
                 values = getattr(led, col, None)
                 if values is not None and len(values) == len(led):
-                    extra[col] = values
+                    # the ledger's mdl is flash-ansr's thousandths of a bit; the store holds bits (its mdl_dialect says so)
+                    extra[col] = [milli_bits_to_bits(v) for v in values] if col == "mdl" else values
             result_index = getattr(led, "result_index", None)
             candidates = getattr(result, "candidates", None)
             if sample is not None and result_index is not None and candidates is not None and len(result_index) == len(led):
@@ -272,10 +285,12 @@ class FlashANSRAdapter(EvaluationModelAdapter):
     def _store_run_meta(self) -> dict[str, Any]:
         """What a later reader of the candidate store needs once per run: the ranking that produced
         `score`/`rank`, and the dialect `mdl` was priced in (mu moves up to 1.8x between dialects, so a
-        bare number is unusable later)."""
+        bare number is unusable later) and its unit, bits (stores written before said milli-bits;
+        ``CandidateStoreReader.mdl_bits`` reads either)."""
         meta: dict[str, Any] = {"ranking": self.ranking_config(),
+                                "inference_precision": self.inference_precision(),
                                 "constant_ladder": self._constant_ladder_config(),
-                                "mdl_dialect": {"certified": True, "mode": "f64", "canon": "default", "unit": "milli-bits"}}
+                                "mdl_dialect": {"certified": True, "mode": "f64", "canon": "default", "unit": MDL_UNIT}}
         try:
             import simplipy
             meta["simplipy"] = simplipy.__version__
@@ -301,6 +316,90 @@ class FlashANSRAdapter(EvaluationModelAdapter):
         if mode == "ground_truth":
             return metadata.get("complexity")
         raise NotImplementedError(f"Unsupported complexity configuration: {mode}")
+
+
+class OracleAdapter(EvaluationModelAdapter):
+    """The oracle (:mod:`srbf.oracle`): each problem's ground truth with its constants refitted.
+
+    The ground truth is the one thing the adapter reads that no method is given. ``refine`` holds the refinement
+    settings (flash-ansr's ``RefineConfig``), ``ranking`` the ranking that picks the answer among the fitted spellings,
+    ``seed`` fixes every fit's starting values (None: fresh entropy per fit). No model is loaded: the engine is the
+    adapter's whole state.
+    """
+
+    def __init__(self, simplipy_engine: Any, *, refine: Any, ranking: Any, seed: int | None = None) -> None:
+        self.simplipy_engine = simplipy_engine
+        self.refine = refine
+        self.ranking = ranking
+        self.seed = None if seed is None else int(seed)
+
+    def get_simplipy_engine(self) -> Any:
+        """Return the SimpliPy engine the oracle reads, fits and prices the ground truth with."""
+        return self.simplipy_engine
+
+    def ranking_config(self) -> dict[str, Any] | None:
+        """The resolved ranking in force, as ``__meta__`` and every row record it."""
+        return dict(self.ranking.as_dict())
+
+    def prepare(self, *, data_source: Any | None = None) -> None:  # noqa: ARG002
+        return None
+
+    def evaluate_sample(self, sample: EvaluationSample) -> EvaluationResult:
+        from srbf.oracle import refit_formula
+
+        record = sample.clone_metadata()
+        record["ranking"] = self.ranking_config()
+        expression = record.get("expression")
+        if not expression:
+            record["error"] = "The oracle needs the problem's ground truth, and this problem has none."
+            record["prediction_success"] = False
+            return EvaluationResult(record)
+        y_fit = sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support
+        fit_t0 = time.time()
+        try:
+            fit = refit_formula(list(expression), sample.x_support, y_fit, engine=self.simplipy_engine,
+                                refine=self.refine, ranking=self.ranking, seed=self.seed,
+                                variable_names=record.get("variable_names"))
+        except (OverflowError, TypeError, ValueError) as exc:
+            record["error"] = str(exc)
+            record["prediction_success"] = False
+            return EvaluationResult(record)
+        record["fit_time"] = time.time() - fit_t0
+        return EvaluationResult(self.answer(record, sample, fit))
+
+    @staticmethod
+    def answer(record: dict[str, Any], sample: EvaluationSample, fit: Any) -> dict[str, Any]:
+        """``record`` (the sample's metadata) with the answer of ``fit`` (an :class:`srbf.oracle.OracleFit` on
+        ``sample``) and its candidates, as a run stores them; returns ``record``."""
+        record["refinement_time"] = fit.refinement_time
+        best = fit.best
+        if best is None:
+            record["error"] = f"The oracle fitted no candidate: {fit.reason}."
+            record["prediction_success"] = False
+            return record
+
+        record["prediction_success"] = True
+        record["predicted_expression"] = best.infix
+        record["predicted_expression_prefix"] = normalize_expression(list(best.prefix))
+        record["predicted_skeleton_prefix"] = list(best.skeleton)
+        record["predicted_constants"] = list(best.constants)
+        record["predicted_score"] = best.score
+        record["predicted_mdl"] = best.mdl
+        record["predicted_n_nodes"] = best.n_nodes
+        record["predicted_pareto_rank"] = best.pareto_rank
+        record["predicted_typed_frozen"] = best.typed_frozen
+        record["predicted_typed_thaw"] = best.typed_thaw
+        record["predicted_spelling"] = best.spelling
+        # every spelling the oracle fitted, its constants substituted, for the run to judge and store (srbf.candidates)
+        record["candidate_expressions"] = [" ".join(c.prefix) for c in fit.candidates]
+        record["candidate_notation"] = "prefix"
+        record["candidate_variables"] = [f"x{i + 1}" for i in range(np.asarray(sample.x_support).shape[1])]
+        record["candidate_prediction"] = 0
+
+        x_val = sample.x_validation if sample.x_validation.shape[0] > 0 else None
+        record["y_pred"] = best.predict(sample.x_support).copy()
+        record["y_pred_val"] = best.predict(x_val).copy() if x_val is not None else np.empty_like(sample.y_validation)
+        return record
 
 
 def _evaluate_refiner_baseline(model: Any, sample: EvaluationSample) -> EvaluationResult:
@@ -340,8 +439,9 @@ def _evaluate_refiner_baseline(model: Any, sample: EvaluationSample) -> Evaluati
         return EvaluationResult(record)
 
     try:
-        predicted_expression = model.get_expression(nth_best=0, return_prefix=False)
-        predicted_prefix = model.get_expression(nth_best=0, return_prefix=True)
+        # constants at full precision: the recorded answer evaluates to y_pred, as its candidate below does
+        predicted_expression = model.get_expression(nth_best=0, return_prefix=False, precision=None)
+        predicted_prefix = model.get_expression(nth_best=0, return_prefix=True, precision=None)
         record["predicted_expression"] = predicted_expression
         record["predicted_expression_prefix"] = normalize_expression(predicted_prefix)
         record["predicted_skeleton_prefix"] = normalize_skeleton(predicted_prefix)
@@ -349,6 +449,18 @@ def _evaluate_refiner_baseline(model: Any, sample: EvaluationSample) -> Evaluati
         record["error"] = f"Failed to extract expression: {exc}"
         record["prediction_success"] = False
         return EvaluationResult(record)
+
+    # Every expression the baseline fitted, its constants at full precision, for the run to judge and store
+    # (srbf.candidates); the best is the prediction. Without them the run falls back to the prediction alone.
+    try:
+        record["candidate_expressions"] = [
+            " ".join(map(str, model.get_expression(nth_best=k, return_prefix=True, precision=None)))
+            for k in range(len(model._results))]
+        record["candidate_notation"] = "prefix"
+        record["candidate_prediction"] = 0
+    except Exception:  # noqa: BLE001 - the candidates are auxiliary to the answer recorded above
+        for key in ("candidate_expressions", "candidate_notation", "candidate_prediction"):
+            record.pop(key, None)
 
     best_result = model._results[0]
     fits = best_result.get("fits")
@@ -830,6 +942,9 @@ class FlashANSRHybridAdapter(EvaluationModelAdapter):
     def ranking_config(self) -> dict[str, Any] | None:
         return self.flash.ranking_config()
 
+    def inference_precision(self) -> str | None:
+        return self.flash.inference_precision()
+
     def prepare(self, *, data_source: Any | None = None) -> None:  # type: ignore[override]
         self.flash.prepare(data_source=data_source)
         self.regressor.prepare()
@@ -837,6 +952,7 @@ class FlashANSRHybridAdapter(EvaluationModelAdapter):
     def evaluate_sample(self, sample: EvaluationSample) -> EvaluationResult:
         record = sample.clone_metadata()
         record["ranking"] = self.ranking_config()
+        record["inference_precision"] = self.inference_precision()
         y_fit = sample.y_support_noisy if sample.y_support_noisy is not None else sample.y_support
         y_val = sample.y_validation_noisy if sample.y_validation_noisy is not None else sample.y_validation
         variables = list(record.get("variables") or record.get("variable_names") or [])

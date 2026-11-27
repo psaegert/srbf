@@ -78,3 +78,41 @@ def test_loader_expands_a_file_with_sweeps(tmp_path):
     assert [labels for _, labels in rungs] == [{"ladder": 1}, {"ladder": 2}]
     assert [cfg["runner"]["output"] for cfg, _ in rungs] == ["{{ROOT}}/feynman_1.pkl", "{{ROOT}}/feynman_2.pkl"]
     assert rungs[1][0]["model_adapter"]["options"]["choices"] == 2
+
+
+# ---- the benchmark a catalog belongs to: its metadata's `benchmark` -----------------------------------------------
+def _catalog(tmp_path, name, **meta):
+    import yaml
+
+    path = tmp_path / f"{name}.yaml"
+    path.write_text(yaml.safe_dump({"metadata": {"name": name, **meta}, "expressions": {}}))
+    return str(path)
+
+
+def test_a_catalog_names_its_benchmark_in_its_metadata(tmp_path):
+    from srbf.suites import catalog_benchmark
+
+    assert catalog_benchmark(_catalog(tmp_path, "feynman-points", benchmark="feynman")) == "feynman"
+    assert catalog_benchmark(_catalog(tmp_path, "nguyen")) is None                 # no field: no benchmark named
+    assert catalog_benchmark({"type": "generative"}) is None                        # a generative catalog's config
+    for bad in ("", "  ", 3, ["feynman"]):
+        with pytest.raises(ValueError, match="non-empty string"):
+            catalog_benchmark(_catalog(tmp_path, f"bad{bad!r}".replace(" ", "_"), benchmark=bad))
+
+
+def test_catalogs_map_to_their_benchmarks_or_to_themselves(tmp_path, monkeypatch):
+    from srbf.suites import catalog_benchmarks
+
+    refs = {"feynman": _catalog(tmp_path, "feynman", benchmark="feynman"),
+            "feynman-restricted": _catalog(tmp_path, "feynman-restricted", benchmark="feynman"),
+            "nguyen": _catalog(tmp_path, "nguyen"),
+            "gone": str(tmp_path / "gone.yaml")}
+    said = []
+    assert catalog_benchmarks(refs, warn=said.append) == {
+        "feynman": "feynman", "feynman-restricted": "feynman", "nguyen": "nguyen", "gone": "gone"}
+    assert len(said) == 1 and "'gone'" in said[0] and "a benchmark of its own" in said[0]
+    # names alone are references too, and {{ROOT}} is expanded as a run expands it
+    import srbf.paths as paths
+    assert catalog_benchmarks([refs["nguyen"]]) == {refs["nguyen"]: refs["nguyen"]}
+    monkeypatch.setattr(paths, "substitute_root_path", lambda p: p.replace("{{ROOT}}", str(tmp_path)))
+    assert catalog_benchmarks({"f": "{{ROOT}}/feynman-restricted.yaml"}) == {"f": "feynman"}

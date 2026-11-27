@@ -1,14 +1,37 @@
 # How results are averaged
 
 The [results explorer](https://psaegert.github.io/srbf/) reports every value as an average over problem sets
-(catalogs), with a 95 % interval. This page describes how, why, and what the method rests on.
-`srbf analyze` and `bootstrap_report` ([Results](results.md)) summarise differently, over all expressions of a run;
-the last section says how the two differ.
+(benchmarks), with a 95 % interval. This page describes how, why, and what the method rests on.
+`srbf analyze` ([Results](results.md)) averages the same way; [In the package](#in-the-package) says where the code is.
+
+## A problem set is a benchmark
+
+The unit of every average is a benchmark: a problem set as its authors published it. srbf stores some benchmarks in
+several catalogs, for reasons that have nothing to do with the problems:
+
+- licence: data that may only be shared under other terms lives in its own repository (`-restricted`,
+  `-share-alike`);
+- format: problems that come with fixed data points are kept apart from those whose points srbf draws (`-points`);
+- the formula and the data halves of one benchmark.
+
+If each catalog were a problem set of its own, how a benchmark is stored would decide its weight: since every set
+counts about the same whatever its size (below), a benchmark split over two catalogs would count about twice as much
+as it does whole. So the catalogs of one benchmark are one problem set: their problems are put together, and within
+the benchmark every problem counts once. The files stay separate.
+
+Each catalog names its benchmark in the `benchmark` field of its metadata
+([Benchmarks](benchmarks.md#benchmarks-and-catalogs)). A catalog without the field is a benchmark of its own; srbf
+does not guess benchmarks from catalog names. `srbf table` writes the benchmark of every row next to its catalog, and
+`srbf analyze` reads it from the catalogs' metadata, so the site and the package average over the same sets.
+
+A selection of problem sets in the explorer, or a subset of a benchmark, is a view: it narrows what is averaged, and
+the average is still over benchmarks. The explorer still shows each catalog on its own where it lists problem sets one
+by one.
 
 ## Why average over problem sets
 
-The problem sets differ a lot, in difficulty and in size. In srbf's suite one catalog, `erbench-syneq`, holds 5,301
-of the 6,660 problems, so an average over all problems is mostly an average over that one catalog. The explorer
+The problem sets differ a lot, in difficulty and in size. In srbf's suite one benchmark, `erbench-syneq`, holds 5,301
+of the 6,660 problems, so an average over all problems is mostly an average over that one benchmark. The explorer
 therefore averages in three steps:
 
 1. A problem's value is the mean of its runs, so every problem counts once.
@@ -140,14 +163,18 @@ draws of the sets. The delta-method interval held it 91 to 99 % of the time, but
 and a bootstrap that redrew the problems from the sets' posterior rates held it 81 to 98 % of the time, its intervals
 too narrow.
 
-## The explorer and `srbf analyze`
+## In the package
 
-`srbf analyze`, `leaderboard` and `bootstrap_report` ([Results](results.md)) take every expression of a run alike,
-across its benchmarks, and give a bootstrap interval over the expressions. With benchmarks of very different sizes,
-their numbers are dominated by the largest benchmark and differ from the explorer's.
-
-The explorer's averages are computed in the browser by `results-site/explorer_v2.js`; `scripts/site_random_effects.py`
-is the reference implementation, and the site's test suite checks that the two agree.
+The averaging is `srbf.aggregate`: `average(problems, kind)` takes, for each problem set, the values of each problem's
+runs and a kind (`"mean"`, `"rate"`, `"ratio"` or `"median"`), and returns the average with its interval, the range
+for one more set and each set's weight; `combine` works from per-set sums. Given `benchmarks` (`{catalog:
+benchmark}`), `average(problems, kind, benchmarks=...)` takes the problems per catalog and puts the catalogs of one
+benchmark together first (`by_benchmark`; `merge_sets` does the same for per-set sums). `srbf.suites.catalog_benchmarks`
+reads each catalog's benchmark from its metadata. `srbf analyze` and its views (`leaderboard`, `scaling_table`,
+`per_benchmark_table`, `export_data`, [Results](results.md)) average over the benchmarks of a run with it, so their
+numbers are the explorer's; `per_benchmark_table(..., by="catalog")` splits by catalog instead. The explorer computes
+the same arithmetic in the browser (`results-site/explorer_v2.js`), and the site's test suite checks that the two agree.
+`bootstrap_report` remains for a bootstrap over the expressions of a single benchmark.
 
 ## Sources
 

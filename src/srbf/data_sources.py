@@ -6,6 +6,10 @@ policy -- e.g. ``v23-val`` / ``fastsrb`` resolved by name, or a generative confi
 srbf records: the shared `build_base_metadata` block + tokenizer ``input_ids``/``labels`` + the
 ground-truth expression + a resume-stable ``eval_row_index``.
 
+With ``draws`` (``data_source.draws``), the problems are read from a frozen-draws render instead
+(`srbf.frozen_draws.FrozenDrawsSource`): nothing is drawn, every reader of the render sees the same data, and each
+record carries the draws' identity (``draws_sha256``, ``draws_repeat``).
+
 This replaces the old `SkeletonDatasetSource` + `FastSRBSource`. The data layer (symbolic_data) now
 owns ALL sampling -- on-the-fly generation, fixed-set iteration, noise, decontamination, and the
 per-draw placeholder protocol -- so srbf no longer reaches into the data layer's internal sampling state, reproduces the
@@ -53,6 +57,7 @@ class CatalogSource(EvaluationDataSource):
             shard = (index, count)
         self._shard = shard
         self._engine: Any | None = None
+        self._draws: dict[str, Any] | None = None
         self._produced = 0
         if resume_state is not None:
             self.load_state_dict(resume_state)
@@ -66,9 +71,20 @@ class CatalogSource(EvaluationDataSource):
         holdouts: Sequence[Mapping[str, Any]] | None = None,
         simplipy_engine: Any | None = None,
         tokenizer: Any | None = None,
+        draws: Mapping[str, Any] | None = None,
         **kwargs: Any,
     ) -> "CatalogSource":
-        """Build a `ProblemSource` from a catalog ref/config (+ usage policy) and wrap it."""
+        """Build a `ProblemSource` from a catalog ref/config (+ usage policy) and wrap it.
+
+        ``draws`` (``{root, repeat, manifest_sha256}``) reads the catalog's frozen draws from a render instead, after
+        checking that the render holds this catalog and repeat and agrees with ``sampling``; it never draws."""
+        if draws is not None:
+            from srbf.frozen_draws import FrozenDrawsSource, parse_draws_config
+
+            spec = parse_draws_config(draws)
+            frozen = FrozenDrawsSource(spec["root"], catalog=catalog, repeat=spec["repeat"], sampling=sampling,
+                                       holdouts=holdouts, manifest_sha256=spec["manifest_sha256"])
+            return cls(frozen, tokenizer=tokenizer, **kwargs)
         from symbolic_data import ProblemSource
 
         config: dict[str, Any] = {"catalog": catalog}
@@ -80,6 +96,11 @@ class CatalogSource(EvaluationDataSource):
         return cls(source, tokenizer=tokenizer, **kwargs)
 
     # ----------------------------------------------------------------- driver hooks
+    def draws_identity(self) -> dict[str, Any] | None:
+        """The frozen draws this source reads (their file, sha256 and repeat), or None when it draws afresh."""
+        identity = getattr(self.problem_source, "identity", None)
+        return identity() if callable(identity) else None
+
     def size_hint(self) -> int | None:
         hint = self.problem_source.size_hint()
         if hint is None:
@@ -215,7 +236,19 @@ class CatalogSource(EvaluationDataSource):
             # exact | reference | none (symbolic-data 0.11.0); "exact" for older releases.
             # Metric regimes key on this: never pool reference/none FVU with exact-GT rows.
             "gt_kind": getattr(problem, "gt_kind", "exact"),
+            **self._draws_fields(row_index),
         }
+
+    def _draws_fields(self, row_index: int) -> dict[str, Any]:
+        """Which draws a row was read from: the file's sha256, the repeat, the attempt the problem keeps and its
+        formula-inherent flag (no fields when drawn afresh)."""
+        if self._draws is None:
+            identity = self.draws_identity()
+            self._draws = {} if identity is None else {"draws_sha256": identity["sha256"], "draws_repeat": identity["repeat"]}
+        if not self._draws:
+            return {}
+        row_fields = getattr(self.problem_source, "row_fields", None)
+        return {**self._draws, **(row_fields(row_index) if callable(row_fields) else {})}
 
     def _encode_input_ids(self, skeleton_tokens: list[str]) -> list[int]:
         tokenizer = self.tokenizer

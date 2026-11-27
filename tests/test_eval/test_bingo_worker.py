@@ -163,6 +163,7 @@ def test_the_answer_is_bingo_s_equation_at_full_precision_in_srbf_s_names(fake_b
     assert extra["converged"] and extra["fitness"] == 2e-17 and extra["model_complexity"] == 10
     assert extra["bingo_string"] == "bingo's console string" and extra["fitness_predictor_island"] is False
     assert [m["expression"] for m in extra["front"]] == ["v1", out["expression"]]
+    assert out["candidates"] == ["v1", out["expression"]]     # Bingo's hall of fame, the answer on it
 
 
 def test_every_operator_is_written_as_what_bingo_computes():

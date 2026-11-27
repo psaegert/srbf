@@ -113,7 +113,7 @@ def _write_shard(path, rows, index, count, extra_meta=None):
 class TestMetaAndMerge:
     def test_run_stamps_the_shard_into_meta(self, tmp_path) -> None:
         out = tmp_path / "choices_000128.shard-1-of-2.pkl"
-        bench = Benchmark(_ListSource([_sample(1), _sample(3)]), _Adapter(), shard=(1, 2))
+        bench = Benchmark(_ListSource([_sample(1), _sample(3)]), _Adapter(), shard=(1, 2), candidates=False)
         bench.run(output_path=str(out), verbose=False, progress=False, meta={"config_provenance": "harness_tuned"})
         with out.open("rb") as f:
             payload = pickle.load(f)

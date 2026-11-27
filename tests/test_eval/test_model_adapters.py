@@ -129,12 +129,15 @@ def _patch_pysr_factory(monkeypatch):
     return created
 
 
-def test_pysr_worker_load_runs_a_warmup_fit_by_default(monkeypatch):
-    # Julia precompile makes the first fit an order-of-magnitude timing outlier; load()
-    # must pay it on a THROWAWAY model so problem 0's fit_time starts warm.
+def test_pysr_worker_setup_runs_a_warmup_fit_by_default(monkeypatch):
+    # Julia's compilation makes the first fit an order-of-magnitude timing outlier; setup() runs
+    # before the clock and pays it on a THROWAWAY model so problem 0's fit_time starts warm.
     from srbf.worker.models import pysr_worker
     created = _patch_pysr_factory(monkeypatch)
-    state = pysr_worker.load({"timeout_in_seconds": 10, "niterations": 5})
+    options = {"timeout_in_seconds": 10, "niterations": 5}
+    state = pysr_worker.load(options)
+    assert len(created) == 1 and created[0].n_fits == 0               # load builds the timed model only
+    assert pysr_worker.setup(state, options, warmup=False) is None    # the state stays
 
     assert len(created) == 2                      # the timed model + the warmup model
     timed, warmup = created
@@ -146,13 +149,50 @@ def test_pysr_worker_load_runs_a_warmup_fit_by_default(monkeypatch):
     assert warmup.maxsize is None
 
 
-def test_pysr_worker_warmup_can_be_disabled(monkeypatch):
+def test_pysr_worker_warmup_can_be_disabled_and_leaves_it_to_srbfs_warmup_problem(monkeypatch):
     from srbf.worker.models import pysr_worker
     created = _patch_pysr_factory(monkeypatch)
-    pysr_worker.load({"timeout_in_seconds": 10, "niterations": 5, "warmup": False})
+    off = {"timeout_in_seconds": 10, "niterations": 5, "warmup": False}
+    pysr_worker.setup(pysr_worker.load(off), off, warmup=False)
+    on = {"timeout_in_seconds": 10, "niterations": 5}
+    pysr_worker.setup(pysr_worker.load(on), on, warmup=True)          # srbf's warm-up problem compiles the same code
 
-    assert len(created) == 1
-    assert created[0].n_fits == 0
+    assert len(created) == 2 and all(model.n_fits == 0 for model in created)   # two timed models, no warmup fit
+
+
+class _FittedPySRModel:
+    """PySRRegressor after fit, as far as the worker reads it: ``equations_`` (a DataFrame with the columns
+    ``complexity``, ``loss``, ``score``, ``equation``, ...), ``get_best()`` (one of its rows) and ``predict``."""
+
+    def __init__(self) -> None:
+        import pandas as pd
+        self.equations_ = pd.DataFrame({
+            "complexity": [1, 3, 5], "loss": [1.0, 0.1, 1e-12], "score": [0.0, 1.1, 5.0],
+            "equation": ["v1", "(v1 * 2.0)", "((v1 * 2.0) - (v2 * 0.5)) + 1.0"],
+            "sympy_format": [None, None, None], "lambda_format": [None, None, None]})
+
+    def fit(self, X, y, variable_names=None):
+        self.variable_names = variable_names
+
+    def get_best(self):
+        return self.equations_.iloc[2]
+
+    def predict(self, X):
+        import numpy as np
+        X = np.asarray(X)
+        return 2.0 * X[:, 0] - 0.5 * X[:, 1] + 1.0
+
+
+def test_pysr_worker_returns_the_hall_of_fame_as_candidates():
+    import numpy as np
+    from srbf.worker.models import pysr_worker
+    model = _FittedPySRModel()
+    X = np.arange(12.0).reshape(-1, 2)
+    out = pysr_worker.fit(X.tolist(), list(2.0 * X[:, 0] - 0.5 * X[:, 1] + 1.0), x_val=[[1.0, 2.0]], variables=["v1", "v2"],
+                          meta={}, options={}, state={"model": model})
+    assert out["expression"] == "((v1 * 2.0) - (v2 * 0.5)) + 1.0" and model.variable_names == ["v1", "v2"]
+    assert out["candidates"] == list(model.equations_["equation"]) and out["expression"] in out["candidates"]
+    assert [e["equation"] for e in out["extra"]["equations"]] == out["candidates"]
 
 
 def test_pysr_config_builds_a_worker_backed_adapter(monkeypatch):
@@ -298,6 +338,7 @@ class TestAnswerProvenanceColumns:
         assert record["predicted_typed_frozen"] == 0
         assert record["predicted_typed_thaw"] == "2"
         assert record["predicted_spelling"] == "c0=/ 231 100"
+        assert record["predicted_mdl"] == 19.443          # flash-ansr's thousandths of a bit, stated in bits
 
 
 class _SplitEngine:

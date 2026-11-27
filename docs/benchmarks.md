@@ -12,6 +12,14 @@ on first use, checked against its SHA-256 and cached.
 `suite: srbf` names 29 catalogs with 6,660 expressions. In every one of them the targets are computed
 from the ground truth, so a perfect prediction exists for every problem.
 
+### Benchmarks and catalogs
+
+A catalog names the benchmark it belongs to in the `benchmark` field of its metadata. Most benchmarks are one catalog.
+A benchmark stored in several, for its licence (`-restricted`, `-share-alike`), for its fixed data points (`-points`)
+or as a formula and a data half, names the same benchmark in each of them, and results are averaged over benchmarks,
+not catalogs ([How results are averaged](averaging.md#a-problem-set-is-a-benchmark)). A catalog without the field is a
+benchmark of its own.
+
 ### Physics
 
 | catalog | expressions | variables | what it is | source and license |
@@ -145,37 +153,83 @@ Points are drawn from each variable's declared range (uniform, log-uniform or in
 declared sign) and rejected one by one where the ground truth is not finite, so the accepted points follow
 the declared distribution on the ground truth's valid domain.
 
-Sampling is not seeded: two runs of the same config see the same expressions at different points. A
-number therefore comes with an interval ([Results](results.md#summaries-with-intervals)), and
+Without `draws`, sampling is not seeded: two runs of the same config see the same expressions at different
+points. A number therefore comes with an interval ([Results](results.md#summaries-with-intervals)), and
 running a config again under another root is a genuine repeat.
 
-### The same points for several methods
+### `draws`: the same data for every method
 
-To give several methods identical points, draw the problems once, save them, and point every
-config at the file:
-
-```python
-from types import SimpleNamespace
-
-from simplipy import SimpliPyEngine
-from symbolic_data import ProblemCatalog
-from srbf.config import build_catalog_source
-
-engine = SimpliPyEngine.load("acj-5-4-llm", install=True)
-source = build_catalog_source(
-    {"catalog": "nguyen", "sampling": {"n_support": 512, "n_validation": 512}}, target_size=None, skip=0)
-source.prepare(adapter=SimpleNamespace(get_simplipy_engine=lambda: engine))
-ProblemCatalog.from_problems(list(source.problem_source), name="nguyen-frozen").save("nguyen_frozen.npz")
-```
+`draws` reads each problem's data from a render of **frozen draws** instead of drawing it. The render is made once by
+symbolic-data (`symbolic-data render-draws`) and holds, for every problem of a catalog, one draw: the 512 fitting
+and 512 held-out points, the values the benchmark's authors draw anew in every run (with the ground truth written
+with them), and one standard normal noise vector per side; for a data catalog, the rows of one draw from its pools
+(a random split cut, a fold picked, at most `n_support` fitting and `n_validation` test rows; an authors' test split
+is used as it is). Every method, budget, shard and machine that reads the same render evaluates on the same data,
+and nothing is drawn while a run runs.
 
 ```yaml
 data_source:
-  catalog: "{{ROOT}}/data/nguyen_frozen.npz"
+  catalog: fastsrb
+  sampling: {n_support: 512, n_validation: 512, noise: 0.01}
+  draws:
+    root: "{{ROOT}}/data/draws"      # the folder holding the render's manifest.json
+    repeat: 1                        # the default: one draw per problem
+    manifest_sha256: null            # optional: pin the render
 ```
 
-Every run on that file sees the same points, its SHA-256 is stored with each result, and a paired
-comparison verifies that both sides used the same file
-([Paired comparisons](paired.md#pairing-is-checked)).
+The render's layout is `<root>/manifest.json` and `<root>/<catalog>/repeat-<r>.npz`; the manifest records the
+SHA-256 of each catalog file the draws were rendered from and of each draws file. The catalog is found by the
+SHA-256 of the file the run's `catalog` resolves to, so a name, a pinned version and a local path all work, and a
+catalog of another version is not mistaken for this one. `{{ROOT}}` and `~` are expanded in `root`.
+
+A noise level `s` gives the targets `y + s * std(y) * noise` per side from the stored vector, the same definition as
+`noise` without draws, so every noise level of a sweep scales the same vector. Data problems are not noised.
+
+**Every draw lets its own formula be recognized.** With one draw per problem, a draw on which the true formula
+cannot be recovered would waste the problem for every method. So each problem's draw is the first of a fixed,
+seeded sequence of attempts on which (a) every target is finite and the FVU is defined on the fitting and on the
+held-out points, and at some restart (b) the [oracle](models.md#the-oracle) (the ground truth with its constants
+refitted; no checkpoint takes part, so a formula over any number of variables is checked) reaches numeric recovery on
+the held-out points and (c) the judge recognizes that restart's refitted formula symbolically. The oracle runs restart
+by restart, restart `r` from the seed `(seed, r)`, and stops at the first restart that passes both: the check only
+asks whether the formula can be recovered from the draw, and the first success answers that. An attempt fails only
+when none of its 1,024 restarts passes both (`srbf.oracle.first_recovery`), so that the verdict is the draw's and not
+one restart's: where only a product or ratio of a law's constants is fixed by the data, restarts land on different
+members of the family of equivalent constants, and the judge recognizes some of them and not others. Each failed
+attempt is recorded with the first check it fails: `not_finite` or `fvu_undefined` (a), `no_prediction` or `numeric`
+(b), `symbolic` (c), or `time`: an attempt gets at most 1,000 CPU seconds (`srbf.headline.T_MAX`, the end of the
+index's time axis), measured on the machine that runs the check and not calibrated to the reference machine, and one
+that reaches the cap is stopped there and fails, and the next attempt follows. Attempts differ only in what the
+benchmark leaves to chance (input
+points, random constants, per-run values), never in the formula or its fixed constants. This is a deviation from
+every benchmark with random values: the points are conditioned on the formula being recoverable from them. A problem
+on which no attempt within `max_trials` passes keeps its first attempt and is flagged formula-inherent: what defeats
+recovery there is the formula, not the draw. Formulas that are constants by construction and data catalogs are not
+checked. `scripts/accept_frozen_draws.py` (`srbf.draw_acceptance`) chooses the attempts and writes the document
+symbolic-data renders with. Every problem is an independent task: `--shard K/N` judges every N-th problem of the plan
+with a journal of its own, one line per attempt, from which a restarted shard resumes, in the middle of a problem if
+it stopped there, and `--merge` writes the document from the shards' journals.
+
+A run is refused, before the model loads, when:
+
+- `root` has no `manifest.json`, or `manifest_sha256` is given and differs;
+- the render holds no draws of the catalog, or not the `repeat` asked for;
+- the draws file is missing, its SHA-256 differs from the manifest, or it names another catalog, repeat or settings;
+- `sampling` asks for something else than what was rendered: another `n_support`, `n_validation`, `layout` or
+  `max_trials`, more than one problem per expression, another `method` than `iterate`, a noise mixture, or keys
+  such as `size`;
+- `holdouts` are given (the render is the problem set) or `catalog` is a mapping;
+- the output file already holds rows read from other draws, or drawn without draws; `srbf merge` likewise refuses
+  shards that read different draws.
+
+Shards address the problems by their position in the render, which is the catalog's order, so `--shard K/N` and a
+subset of rows pick the same problems on every machine. Every row records `draws_sha256` (the draws file's SHA-256),
+`draws_repeat`, `draws_attempt` (the attempt the problem keeps), `draws_formula_inherent` and `draws_failures` (the kind of each failed attempt), and `__meta__` records the draws under `draws` and as the input `catalog_draws`, so a paired
+comparison verifies that both sides read the same file ([Paired comparisons](paired.md#pairing-is-checked)).
+
+Another way to share points is a frozen catalog file: draw the problems once with symbolic-data, save them with
+`ProblemCatalog.save`, and give the file as `catalog`. Its SHA-256 is stored with each result as well, but it holds
+no noise vector, so every noise level draws its own noise.
 
 ### `holdouts`
 
