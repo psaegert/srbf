@@ -344,6 +344,24 @@ def test_an_attempt_that_reaches_the_cap_fails_with_time_and_the_next_one_runs(t
     assert signal.getitimer(signal.ITIMER_PROF) == (0.0, 0.0) and signal.getsignal(signal.SIGPROF) == handler
 
 
+def _profiling_clock() -> tuple[int, float] | None:
+    """The calling process's profiling CPU clock, the clock ITIMER_PROF counts (user + system time, sampled at every
+    tick; Linux's clock id for a process's CPUCLOCK_PROF, pid 0 meaning the caller), and its resolution, one tick.
+    None where it cannot be read."""
+    clock = (~0 << 3) | 0
+    try:
+        time.clock_gettime(clock)
+        return clock, time.clock_getres(clock)
+    except (OSError, AttributeError):
+        return None
+
+
+#: Where the profiling clock cannot be read, how far below the cap time.process_time may stop: 20 ms. On a loaded
+#: 1000 Hz machine the profiling clock ran up to 14 ms ahead of process_time at a 1 s cap (2026-11-27), while it read
+#: the cap plus one tick every time.
+PROCESS_TIME_MARGIN = 0.02
+
+
 def test_the_cap_abandons_the_oracle_in_the_middle_of_its_restarts(engine):
     import signal
 
@@ -351,10 +369,14 @@ def test_the_cap_abandons_the_oracle_in_the_middle_of_its_restarts(engine):
     unrecoverable = _problem(f=lambda x: 2 * x + 0.3 * np.sin(5 * x))       # would run a million restarts
     assert check(unrecoverable) == TIME                                      # warm: the engine's own pools exist now
     before, tasks = _children(), len(os.listdir("/proc/self/task"))
-    started = time.process_time()
+    prof = _profiling_clock()
+    started, prof_started = time.process_time(), time.clock_gettime(prof[0]) if prof else 0.0
     verdict = check(unrecoverable)
     spent = time.process_time() - started
-    assert verdict == TIME and 1.0 <= spent < 6 and 0 < check.spent < 10 ** 6
+    # the cap stops the attempt once the profiling clock reaches it; that clock samples whole ticks and runs ahead of
+    # process_time under load, so the floor is read on it, with one tick of tolerance (its resolution)
+    capped, slack = (time.clock_gettime(prof[0]) - prof_started, prof[1]) if prof else (spent, PROCESS_TIME_MARGIN)
+    assert verdict == TIME and 1.0 - slack <= capped and spent < 6 and 0 < check.spent < 10 ** 6
     assert _children() == before and len(os.listdir("/proc/self/task")) == tasks
     assert signal.getitimer(signal.ITIMER_PROF) == (0.0, 0.0)
     assert check(_problem()) == ACCEPTED                                     # the next attempt runs as usual
