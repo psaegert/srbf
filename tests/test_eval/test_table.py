@@ -159,6 +159,36 @@ def test_every_row_names_its_problems_subset_and_the_cache_does_not_hold_it(tmp_
     assert {r[COLUMNS.index("subset")] for r in _read(out)[1:]} == {"srsd", "nguyen", "gone"}
 
 
+def test_srbf_table_refuses_a_catalog_it_cannot_read_unless_told_to_leave_its_cells_empty(tmp_path, monkeypatch):
+    """A published table must not guess: by default srbf table stops before judging when a catalog's benchmark and
+    subsets cannot be read, naming it. With --lenient-metadata it writes that catalog's benchmark and subset cells
+    empty, so that the site export can tell, and the readable catalogs as read."""
+    import types
+
+    from srbf import __main__ as cli
+    from srbf import suites
+
+    for catalog in ("srsd", "gone"):
+        _write(tmp_path, catalog, "choices_000001.pkl", _snapshot([["+", "x1", "x2"], ["*", "x1", "x2"]]))
+
+    def read(ref):
+        if ref == "gone":
+            raise FileNotFoundError("no such catalog")
+        return types.MappingProxyType({"benchmark": "srsd-benchmark"}), ("easy", "hard")
+    monkeypatch.setattr(suites, "_read_catalog", read)
+    out = tmp_path / "t.csv"
+    argv = ["table", "--tree", f"m:1:{tmp_path / 'tree'}", "-o", str(out), "--engine", ENGINE, "--workers", "1"]
+    with pytest.raises(SystemExit) as stop:
+        cli.main(argv)
+    assert "'gone'" in str(stop.value.code) and "--lenient-metadata" in str(stop.value.code) and not out.exists()
+    cli.main(argv + ["--lenient-metadata"])
+    header, *rows = _read(str(out))
+    got = {(r[header.index("catalog")], r[header.index("row")]): (r[header.index("benchmark")], r[header.index("subset")])
+           for r in rows}
+    assert got == {("srsd", "0"): ("srsd-benchmark", "easy"), ("srsd", "1"): ("srsd-benchmark", "hard"),
+                   ("gone", "0"): ("", ""), ("gone", "1"): ("", "")}
+
+
 def test_the_catalogs_of_the_trees_are_their_directories(tmp_path):
     from srbf.table import tree_catalogs
 

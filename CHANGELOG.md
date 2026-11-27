@@ -118,6 +118,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   catalog, as before; a subset must be a non-empty name without "/" (the site keys a subset's cells
   `<catalog>/<subset>`). The judged rows and the per-file cache hold neither column (`srbf.table.CATALOG_COLUMNS`).
   `srbf analyze -c` gives a snapshot without the column its catalog's subsets (by `eval_row_index`).
+- **Strict where it publishes: an unreadable catalog stops the table and the release.** `srbf table` stops before
+  judging when a catalog's benchmark and subsets cannot be read, naming every such catalog
+  (`srbf.suites.catalog_structure(..., strict=True)`, `UnreadableCatalogs`); `--lenient-metadata` writes the table
+  with that catalog's benchmark and subset cells empty instead. `scripts/site_export_v2.py` refuses rows that name no
+  benchmark or subset (`load_rows(..., strict=True)`, its default from the command line), so a table written before
+  the `subset` column, or leniently, is not published with guessed structure; `--lenient-metadata` takes each
+  catalog's name, as local builds may. `srbf analyze` keeps the fallback.
 - **The time axis nests each problem in its own subset.** `scripts/site_timing.py` averages the seconds per problem
   over benchmarks > subsets by the problems' subsets (`over_sets(..., subsets=)`), as every other metric is averaged,
   no longer by catalog: `scripts/freeze_timing_subset.py` records each catalog's `subsets` in the timing manifest

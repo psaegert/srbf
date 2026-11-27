@@ -21,7 +21,7 @@ def _export(monkeypatch, root, site, *extra):
     monkeypatch.setattr(export, "canonical_truths", lambda *a, **k: {})   # no SimpliPy engine for a toy
     monkeypatch.setattr(sys, "argv", ["site_export_v2.py", str(root), "rel", str(site / "data" / "rel" / "results.js"),
                                       "--sizes", str(root / "none.json"), "--site-dir", str(site), "--public", "pub",
-                                      "--methods-file", str(root / "methods.json"), *extra])
+                                      "--methods-file", str(root / "methods.json"), "--lenient-metadata", *extra])
     export.main()
 
 

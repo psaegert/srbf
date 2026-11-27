@@ -49,6 +49,9 @@ python scripts/site_export_v2.py <root> 2026-09 results-site/data/2026-09/result
 ```
 
 The method names in `--tree`, `--subset` and `--suite` are the site's method keys (`METHODS` in the exporter).
+Steps 1 and 3 are strict by default: `srbf table` stops on a catalog whose benchmark and subsets it cannot read, and the
+exporter refuses rows that name no benchmark or subset (a table written before the `subset` column, or with
+`srbf table --lenient-metadata`). `--lenient-metadata` on either takes each catalog's own name instead, for local builds.
 `--pattern KEY=PATTERN` names one method's rung files when they are not `choices_<rung>.pkl`: a ladder that counts
 iterations keeps its `niter_{rung:05d}.pkl` files on the timing subset too.
 `--index-variables` is for the E2E and NeSymReS result files written before srbf renamed their variables at the

@@ -195,24 +195,34 @@ def catalog_benchmarks(catalogs: Mapping[str, Any] | Iterable[str], *,
     return out
 
 
-def catalog_structure(catalogs: Mapping[str, Any] | Iterable[str], *, warn: Callable[[str], None] | None = None
-                      ) -> tuple[dict[str, str], dict[str, list[str] | None]]:
+class UnreadableCatalogs(ValueError):
+    """Catalogs whose benchmark and subsets cannot be read, where falling back to their names is not allowed."""
+
+
+def catalog_structure(catalogs: Mapping[str, Any] | Iterable[str], *, warn: Callable[[str], None] | None = None,
+                      strict: bool = False) -> tuple[dict[str, str], dict[str, list[str] | None]]:
     """({catalog: benchmark}, {catalog: the subset of each of its problems}) for ``catalogs``, each catalog read once:
-    :func:`catalog_benchmarks` and :func:`catalog_subsets` together, a catalog that cannot be read reported once (a
-    benchmark of its own, one subset: None)."""
+    :func:`catalog_benchmarks` and :func:`catalog_subsets` together. A catalog that cannot be read is reported once and
+    is a benchmark of its own, one subset (None); with ``strict``, :class:`UnreadableCatalogs` names every such catalog
+    instead (what publishes must not guess)."""
     refs = dict(catalogs) if isinstance(catalogs, Mapping) else {name: name for name in catalogs}
     benchmarks: dict[str, str] = {}
     subsets: dict[str, list[str] | None] = {}
+    unreadable: list[str] = []
     for name, ref in refs.items():
         try:
             meta, fields = _metadata(ref), _subset_fields(ref)
         except Exception as exc:  # noqa: BLE001 - an unreadable catalog keeps its own name, and says so
-            if warn is not None:
+            unreadable.append(f"{name!r} ({type(exc).__name__}: {exc})")
+            if warn is not None and not strict:
                 warn(f"cannot read catalog {name!r} ({type(exc).__name__}: {exc}); it is a benchmark of its own, one subset")
             benchmarks[name], subsets[name] = name, None
             continue
         benchmarks[name] = _named_benchmark(meta, ref) or name
         subsets[name] = [_named_subset(v, ref, name) for v in fields]
+    if strict and unreadable:
+        raise UnreadableCatalogs(f"cannot read the benchmark and subsets of {len(unreadable)} catalog(s): "
+                                 + "; ".join(unreadable))
     return benchmarks, subsets
 
 
@@ -237,4 +247,5 @@ def catalog_subsets(catalogs: Mapping[str, Any] | Iterable[str], *,
 
 
 __all__ = ["BENCHMARK_FIELD", "SRBF_CATALOGS", "SUBSET_FIELD", "SUITES", "catalog_benchmark", "catalog_benchmarks",
-           "catalog_structure", "catalog_subset_rows", "catalog_subsets", "expand_suite", "suite_catalogs"]
+           "catalog_structure", "catalog_subset_rows", "catalog_subsets", "expand_suite", "suite_catalogs",
+           "UnreadableCatalogs"]

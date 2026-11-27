@@ -45,7 +45,11 @@ A unit's slots are the release's budgets, the time limits and the budgets of its
 method's. unit.js pushes the overlay onto window.RESULTS_V2_PRIVATE_UNITS, so any number of units load side by side.
 
 usage: site_export_v2.py <root> <release id> <out.js> [--title ...] [--notes ...] [--sizes catalog_mu.json]
-       [--public e2e,nesymres-100M,...] [--private KEY[,KEY] --private-dir DIR --methods-file FILE]"""
+       [--public e2e,nesymres-100M,...] [--private KEY[,KEY] --private-dir DIR --methods-file FILE] [--lenient-metadata]
+
+STRICT BY DEFAULT. Every row must name its benchmark and its subset (srbf table reads both from the catalogs, and refuses
+a catalog it cannot read); a table whose rows leave them empty is refused unless --lenient-metadata says to take each
+catalog's name instead."""
 import argparse
 import csv
 import datetime as dt
@@ -526,7 +530,7 @@ Rows = dict[tuple[int, int], Row]   # (draw, row) -> {metric: value}
 
 
 def load_rows(root: str, benchmarks: dict[str, str] | None = None,
-              subsets: dict[str, dict[int, str]] | None = None) -> dict[str, dict[tuple[str, int], Rows]]:
+              subsets: dict[str, dict[int, str]] | None = None, strict: bool = False) -> dict[str, dict[tuple[str, int], Rows]]:
     """{method: {(catalog, rung): {(draw, row): {metric: value}}}}: every draw the rows carry (a model is run twice
     with different seeds; a cell averages each problem's runs, see problems_of).
 
@@ -535,12 +539,19 @@ def load_rows(root: str, benchmarks: dict[str, str] | None = None,
     before the column) is a benchmark of its own; a catalog the rows place in two benchmarks is an error.
     ``subsets``, when given, is filled with {catalog: {row: subset}} from the rows' subset column, where they name one:
     the subset of its benchmark a problem belongs to (problems within subsets within benchmarks); a problem the rows
-    place in two subsets is an error."""
+    place in two subsets is an error. With ``strict`` (the release's default), a row that names no benchmark or no
+    subset is refused: its catalog was not read when the table was written (an older table, or srbf table
+    --lenient-metadata), and what publishes must not fall back to the catalog's name."""
     data: dict[str, dict[tuple[str, int], Rows]] = defaultdict(lambda: defaultdict(dict))
     files = sorted(set(glob.glob(os.path.join(root, "rows_full_*.csv")) + glob.glob(os.path.join(root, "*_rows_full.csv"))))
+    unnamed: dict[str, set[str]] = defaultdict(set)   # catalog -> the columns its rows leave empty
     for path in files:
         with open(path) as fh:
             for r in csv.DictReader(fh):
+                if strict:
+                    for column in ("benchmark", "subset"):
+                        if not r.get(column):
+                            unnamed[r["catalog"]].add(column)
                 vals: dict[str, float | None] = {}
                 no_val = fnum(r.get("n_validation")) == 0 or fnum(r.get("constant_target_val")) == 1
                 no_fit = fnum(r.get("constant_target_fit")) == 1
@@ -564,6 +575,11 @@ def load_rows(root: str, benchmarks: dict[str, str] | None = None,
                     if subsets.setdefault(r["catalog"], {}).setdefault(row, r["subset"]) != r["subset"]:
                         raise ValueError(f"{path}: problem {row} of catalog {r['catalog']!r} is in two subsets, "
                                          f"{subsets[r['catalog']][row]!r} and {r['subset']!r}")
+    if unnamed:
+        listed = "; ".join(f"{c} (no {' and no '.join(sorted(cols))})" for c, cols in sorted(unnamed.items()))
+        raise ValueError(f"the rows of {len(unnamed)} catalog(s) name no benchmark or subset: {listed}. Write the table "
+                         "with srbf table, which reads them from the catalogs, or pass --lenient-metadata to take each "
+                         "catalog's name instead")
     return data
 
 
@@ -1801,6 +1817,9 @@ def main() -> None:
     ap.add_argument("--public", default=",".join(m[0] for m in METHODS))
     ap.add_argument("--private", default="")
     ap.add_argument("--private-dir", default=None)
+    ap.add_argument("--lenient-metadata", action="store_true",
+                    help="take a catalog's own name for a row that names no benchmark or subset (local builds); by default "
+                         "such rows are refused, since a release must not guess them")
     ap.add_argument("--methods-file", default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results-site", "private", "methods.json"),
                     help="JSON list of local-only method entries, shaped like METHODS (default: results-site/private/methods.json, if it exists)")
     a = ap.parse_args()
@@ -1823,7 +1842,7 @@ def main() -> None:
         DNF.update({k: int(v["rung"]) for k, v in json.load(open(dpath)).items() if isinstance(v, dict) and "rung" in v})
     benchmarks: dict[str, str] = {}
     row_subsets: dict[str, dict[int, str]] = {}
-    data = load_rows(a.root, benchmarks, row_subsets)
+    data = load_rows(a.root, benchmarks, row_subsets, strict=not a.lenient_metadata)
     derive_improvability(data, improvability_pool(public), usable)
     present: dict[str, int] = defaultdict(int)
     for mk in data:

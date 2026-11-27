@@ -173,3 +173,17 @@ def test_a_subset_is_a_name_without_a_slash(tmp_path, bad):
         catalog_subset_rows(path, "bad")
     with pytest.raises(ValueError, match="without '/'"):
         catalog_subsets({"bad": path})
+
+
+def test_strict_reading_names_every_catalog_it_cannot_read(tmp_path):
+    """What publishes must not fall back to a catalog's name: strict reading raises, naming each unreadable catalog,
+    and reports nothing through warn."""
+    from srbf.suites import UnreadableCatalogs, catalog_structure
+
+    ok = _catalog_with(tmp_path, "srsd", ["easy"], benchmark="srsd")
+    said = []
+    with pytest.raises(UnreadableCatalogs, match=r"2 catalog\(s\): 'gone'.*'lost'"):
+        catalog_structure({"srsd": ok, "gone": str(tmp_path / "gone.yaml"), "lost": str(tmp_path / "lost.yaml")},
+                          warn=said.append, strict=True)
+    assert said == []
+    assert catalog_structure({"srsd": ok}, strict=True) == ({"srsd": "srsd"}, {"srsd": ["easy"]})
