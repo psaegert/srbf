@@ -12,8 +12,13 @@ projected from the previous rung times the measured growth of the last two rungs
 known); a rung whose projection does not fit in the remaining ``--budget-hours`` is skipped together with
 everything above it (marks/BUDGET_STOP records why). Every kept rung is measured on the whole subset.
 
+Setup before the clock (docs/fairness.md): every timed unit runs srbf's warm-up problem through the method before its
+first problem (`runner.warmup: true`, in every worker process, after every restart too), unless the config sets
+`runner.warmup` itself. Loading, compiling and the warm-up are recorded in each result file's __meta__['setup'], never
+in a fit time.
+
 Writes <root>/timing/<model-name>/<config stem>.timing.yaml (every experiment's data source pointed at its frozen
-file, model_path overridden when given, refiner_workers pinned, outputs under
+file, model_path overridden when given, refiner_workers pinned, the warm-up on, outputs under
 {{ROOT}}/results/evaluation/timing/<model-name>/<catalog>/<rung file>) and runs `srbf run` per unit, with markers
 and logs under <root>/timing/<model-name>/marks/. It is resumable; `srbf run` resumes a partial file itself.
 With --host, it refuses to measure on any other machine.
@@ -102,7 +107,8 @@ def budget_decision(rung_seconds: dict[int, float], done_rungs: list[int], next_
 def timing_config(cfg: Any, experiments: list[str], data_dir: Path | None, model_name: str, model_path: str | None,
                   refiner_workers: int | None) -> dict:
     """The derived config: every data source pointed at its frozen file (``data_dir``), or left as the config
-    draws it -- the whole catalog -- when ``data_dir`` is None (--full-suite)."""
+    draws it -- the whole catalog -- when ``data_dir`` is None (--full-suite). Every unit warms the method up before its
+    first timed problem (``runner.warmup``), unless the config says otherwise."""
     import copy
 
     out = copy.deepcopy(cfg)
@@ -120,6 +126,7 @@ def timing_config(cfg: Any, experiments: list[str], data_dir: Path | None, model
         if refiner_workers is not None:
             adapter["refiner_workers"] = int(refiner_workers)
         runner = block["runner"] = dict(block.get("runner") or select_experiment(cfg, e)["runner"])
+        runner.setdefault("warmup", True)       # setup before the clock: a timed fit never pays for a cold start
         output = runner["output"]
         prefix = f"{{{{ROOT}}}}/results/evaluation/{'timing' if data_dir is not None else 'suite'}/{model_name}/{e}/"
         if isinstance(output, Sweep):

@@ -50,6 +50,9 @@ Every fit runs in a child process forked for it: the method's two-second timeout
 simplifies running when it passes, the C++ core exits the process on some errors, and its caches grow with the
 search, all of which stay in the child. The child dies with its parent. The returned ``fit_time`` is the method's
 fit (search and simplification), measured in the child.
+
+RILS-ROLS ends with one model and returns it alone, without ``candidates``: in srbf's candidate store the answer is
+the problem's only candidate.
 """
 import ctypes
 import hashlib

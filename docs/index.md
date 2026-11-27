@@ -54,6 +54,7 @@ The example configs live in the [repository](https://github.com/psaegert/srbf); 
 | look up a command or a flag | [Command line](cli.md) |
 | read result files, derive metrics, build a report | [Results](results.md) |
 | know exactly what a metric measures | [Metrics](metrics.md) |
+| score a method's whole front of formulas over time | [The headline index](headline.md) |
 | compare two methods, or rank many | [Paired comparisons](paired.md) |
 | pick catalogs or bring your own | [Benchmarks](benchmarks.md) |
 | install and configure the built-in methods | [Models](models.md) |

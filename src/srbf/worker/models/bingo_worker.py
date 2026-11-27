@@ -35,7 +35,9 @@ operators and srbf's variable names. Bingo's logarithm and square root are prote
 it: ``log(u)`` computes ``log(|u|)`` and ``sqrt(u)`` computes ``sqrt(|u|)``, so they are written ``log(abs(u))`` and
 ``sqrt(abs(u))``, and srbf evaluates what Bingo evaluated. A graph reuses subexpressions; the string writes each use
 out. ``extra`` keeps the largest deviation of the string from Bingo's own values on the data (``string_deviation``),
-Bingo's own printed equation, the evaluations and generations used, and the Pareto front.
+Bingo's own printed equation, the evaluations and generations used, and the Pareto front. The Pareto front of the
+refitted equations (``get_pareto_front``, on which the answer lies) is returned as ``candidates``, each member written
+like the answer, which srbf judges and stores; producing it is part of ``fit_time``.
 
 Nothing in Bingo is patched. Three settings of its surroundings are fixed, none of which the search sees:
 
@@ -312,7 +314,15 @@ def fit(x, y, *, x_val, variables, meta, options, state):
         best = model.get_best_individual()
         commands, constants = equation_stack(best.equation)
         expression = infix(commands, constants, names)
-    fit_time = time.perf_counter() - started   # the search and its answer; the bookkeeping below is not timed
+        # Bingo's hall of fame (the Pareto front of its refitted equations) is part of what the method returns
+        front = None
+        try:
+            front = [{"expression": infix(*equation_stack(member.equation), names),
+                      "complexity": int(member.complexity), "fitness": float(member.fitness)}
+                     for member in model.get_pareto_front()]
+        except Exception:  # noqa: BLE001 - persistence is best-effort
+            pass
+    fit_time = time.perf_counter() - started   # the search, its answer and its front; the bookkeeping below is not timed
 
     extra = {"seed": seed, "max_evals": state["max_evals"], "bingo_string": str(best),
              "fitness": float(best.fitness), "model_complexity": int(best.complexity)}
@@ -325,10 +335,7 @@ def fit(x, y, *, x_val, variables, meta, options, state):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         extra["string_deviation"] = string_deviation(expression, names, X, best.equation.evaluate_equation_at(X))
-        try:
-            extra["front"] = [{"expression": infix(*equation_stack(member.equation), names),
-                               "complexity": int(member.complexity), "fitness": float(member.fitness)}
-                              for member in model.get_pareto_front()]
-        except Exception:  # noqa: BLE001 - persistence is best-effort
-            pass
-    return {"expression": expression, "fit_time": fit_time, "extra": extra}
+    if front is not None:
+        extra["front"] = front
+    candidates = None if front is None else [member["expression"] for member in front]
+    return {"expression": expression, "candidates": candidates, "fit_time": fit_time, "extra": extra}

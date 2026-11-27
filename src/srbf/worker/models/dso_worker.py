@@ -58,8 +58,10 @@ Three patches to DSO v3.0.0 are applied in :func:`load`, each the smallest chang
   config can switch it on, and the worker stops that pool too.
 * ``max_seconds`` (float, 3600): a wall-clock guard checked after each iteration, set far above any budget of the
   ladders. When it passes, the best expression so far is returned and ``guard_hit`` is set.
-* ``warmup`` (bool, true): run a small throwaway fit in :func:`load`, so that the one-time compilation of DSO's
-  numba functions is not part of the first problem's time.
+* ``warmup`` (bool, true): run a small throwaway fit in :func:`setup`, before the clock, so that the one-time
+  compilation of DSO's numba functions is not part of the first problem's time. It is skipped when srbf's own warm-up
+  problem follows (``runner.warmup: true``): that is a fit of the run's own configuration, in a child like every fit,
+  which compiles and caches the same functions.
 * ``config`` (dict, none): settings merged over the arm's configuration (lists replace). For side experiments
   only, such as reproducing a published configuration; published results never set it.
 
@@ -542,9 +544,13 @@ def load(options):
              "max_seconds": float(options.get("max_seconds", 3600.0)), "config": dict(options.get("config") or {}),
              "threads": resolve_threads(options.get("threads", 1)), "modules": modules, "patches": patches,
              "numba_cache": numba_cache}
-    if options.get("warmup", True):
-        warmup_fit(state)
     return state
+
+
+def setup(state, options, *, warmup):
+    """Before the clock: the throwaway fit (``options.warmup``), unless srbf's warm-up problem follows (``warmup``)."""
+    if options.get("warmup", True) and not warmup:
+        warmup_fit(state)
 
 
 # A run small enough to take a second or two that still calls every compiled function of the real runs.
@@ -619,7 +625,14 @@ def fit_here(x, y, *, x_val, variables, meta, options, state):
                 break
         best = trainer.p_r_best
         expression = infix(best.traversal, names)
-        fit_time = time.perf_counter() - started   # the search and its answer; the bookkeeping below is not timed
+        # DSO's own front (its logger's ``save_pareto_front``) is part of what the method returns, so it is timed
+        candidates, front = None, None
+        try:
+            front = pareto_front(list(Program.cache.values()), names)
+            candidates = [member["expression"] for member in front]
+        except Exception:  # noqa: BLE001 - persistence is best-effort
+            pass
+        fit_time = time.perf_counter() - started   # the search, its answer and its front; the bookkeeping below is not timed
 
         extra = {"arm": state["arm"], "seed": seed, "n_samples": state["n_samples"], "threads": threads,
                  "nevals": int(trainer.nevals),
@@ -639,12 +652,10 @@ def fit_here(x, y, *, x_val, variables, meta, options, state):
             degree = int(config["task"]["poly_optimizer_params"]["degree"])
             # DSO's least squares needs a row per monomial; with fewer rows LINEAR is the constant 1
             extra["linear_underdetermined"] = _comb(X.shape[1] + degree, degree) > X.shape[0]
-        try:
-            extra["front"] = pareto_front(list(Program.cache.values()), names)
-        except Exception:  # noqa: BLE001 - persistence is best-effort
-            pass
+        if front is not None:
+            extra["front"] = front
 
-        return {"expression": expression, "fit_time": fit_time, "extra": extra}
+        return {"expression": expression, "candidates": candidates, "fit_time": fit_time, "extra": extra}
     finally:
         # Whatever the search raises, its processes and session go with it: a pool left behind outlives the fit, one per
         # failed problem, and its children keep the worker's socket open if the worker dies.

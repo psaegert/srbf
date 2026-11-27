@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Setup before the clock, one rule for every method.** Anything that does not depend on the data may happen before
+  the clock starts: loading weights, compiling, warming up on a fixed synthetic problem. This happens once per worker
+  process and again after every worker restart. Everything after the problem's data arrives counts toward fit time.
+  A worker may define `setup(state, options)`, which runs after `load` in every worker process; `ready` reports the
+  seconds of both. With `runner.warmup: true` srbf sends one fixed problem (`srbf.warmup.warmup_sample`:
+  \(1.5\,x_1 \sin(x_2) + 0.5\), 512 support and 512 validation points, seed 0) through the method's fit before the
+  first timed problem and discards the answer: an in-process adapter's `evaluate_sample` once, after `prepare`, and a
+  worker after every start, a restart after a crash, a timeout or a hang included (`SubprocessAdapter.warm_up`). The
+  seconds of building and preparing the adapter and of every worker start, with its warm-up's time and error, go into
+  `__meta__['setup']`, never into a `fit_time`. A failing warm-up is recorded and warned about; one that takes the
+  worker down counts as a crash. `scripts/run_timing_ladder.py` turns the warm-up on in every timed unit; other runs
+  leave it off by default (their times are not published, and it costs one fit at the run's budget per worker start).
+- **`flash_ansr_worker`: a Flash-ANSR checkpoint in the flash-ansr and SimpliPy it was trained with.** The adapter type
+  takes a `flash_ansr` block plus `python` (the environment's interpreter) and `simplipy_engine` (the judge's engine)
+  and runs the checkpoint through the shipped worker `flash_ansr_worker.py` (no srbf in that environment). The worker
+  returns the model's answer and every fitted candidate as infix in the problem's column names, constants at full
+  precision, in a spelling SimpliPy 0.14 and 0.15 both read; `fit_time` is measured around the model's fit, as the
+  in-process adapter measures it. `precision` (`auto`, `bf16`, `fp32`) is applied by a flash-ansr that has the
+  setting, and otherwise by the worker under bf16 autocast with the same rule. The oracle, `complexity: ground_truth`
+  and `candidate_store_dir` are refused: a worker never sees the ground truth. `srbf.config.flash_ansr_settings`
+  resolves a `flash_ansr` block without importing flash-ansr, for both types. A worker that reports `ranking` and
+  `inference_precision` in its `info` has them recorded in `__meta__` like the in-process adapter's.
+  `configs/evaluation/scaling/flash-ansr-v25.0-T8-3M-worker_srbf.yaml` runs T8-3M this way on the whole suite.
+- **`srbf_worker_helpers.prefix_to_infix(tokens, names=None)`** renames variables (leaves only), writes `np.pi` and
+  `np.e` as `pi` and `e`, puts a negative number in parentheses and refuses an unfilled `<constant>` or other special
+  token.
+- **`srbf.headline`: the front area and the time index.** `front_area(bits, fvu, l_lo=, l_hi=)` is the share of a
+  problem's box that a run's candidates dominate: lengths on a log2 axis from the price of the support targets' mean
+  (`lower_edge_bits`) to 26 bits per support point (`upper_edge_bits`), FVU on a log10 axis from 2^-52 to 1, computed
+  from the staircase of the front. `time_index(budgets, times, areas)` is the front area averaged over log10 time from
+  1 ms to 1000 s, linear between the budgets that every larger budget outlasts (`kept_budgets`); `budget_time` is the
+  geometric mean of a budget's per-problem times, and `average_over_problems` averages the problems' values (one run
+  per problem) over problem sets with `srbf.aggregate.average`. A new docs page, "The headline index", gives the definitions, the
+  derivation of the edges and the sources.
 - **Frozen draws: every method reads the same data** (`data_source.draws`, `srbf.frozen_draws`). With
   `draws: {root, repeat}` a run reads each problem's data from a render made once by symbolic-data
   (`symbolic-data render-draws`: fitting and held-out points, per-run values with their ground truth, a standard
@@ -24,6 +58,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   document symbolic-data renders with; rows record `draws_attempt` and `draws_formula_inherent`, `__meta__.draws` the
   acceptance. `srbf.table.judge_snapshot` is the judge on one snapshot (what `judge_result_file` runs).
 - **`model_adapter.seed` (flash_ansr)**: seeds every fit, so that the same problem gives the same answer.
+- **Every candidate of every method, stored and judged by srbf.** A worker returns its own front (PySR's hall of fame,
+  Operon's, DSO's and Bingo's Pareto fronts, QLattice's diverse models, TiSR's hall of fame) as `candidates` beside its
+  `expression`, which stays the answer; Flash-ANSR and the sampling and enumeration baselines hand over every
+  expression they fitted, and a method with one model has its answer as its only candidate. After each problem, outside `fit_time`, the run judges every candidate itself
+  (price in bits by `srbf.pricing.price_bits`, FVU on the support and validation points by `srbf.metrics.numeric.fvu`,
+  and a status) and appends them to `<result file>.candidates/<result file>.log`, one record per problem
+  (`runner.candidates` moves the store or switches it off). `srbf.candidates.iter_candidates` and `load_candidates`
+  read a run's judged candidates back as arrays; `rejudge_candidates` judges a stored run again when the judge
+  changes. The worker protocol keeps at most 100,000 candidates of at most 10,000 characters per problem. Producing
+  the front is part of `fit_time` for DSO and Bingo, which report their own.
+- **`srbf rejudge <result files>`** judges the candidates stored with result files again with the installed srbf's
+  candidate judge (`rejudge_candidates`), with the engine the store names or `--engine`; the exit code is 1 when a file
+  has no stored candidates.
+- **A time limit per candidate in the candidate judge.** A candidate the judge has not read, priced and evaluated within
+  `srbf.candidates.JUDGE_TIMEOUT_S` (10 s) is `unevaluable`, with the reason, and the judge goes on with the next one,
+  so one pathological candidate cannot stall a problem. The limit is the main thread's interval timer (`SIGALRM`):
+  nothing is started that could outlive the candidate; a judgement off the main thread runs without a limit.
 - **`srbf.aggregate`: the results site's averaging in the package.** `average(problems, kind)` averages per-problem
   run values over problem sets: `"mean"` (random-effects average, Paule-Mandel between-set variance), `"rate"`
   (beta-binomial), `"ratio"` (in log2, a geometric mean) or `"median"` (each set weighted as the average weighs it,
@@ -39,6 +90,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its mean over problems is the Mean Improvability.
 
 ### Changed
+- **A run that is to keep its candidates does not start without them.** A candidate store that cannot be opened, or an
+  adapter without a SimpliPy engine to judge them with, stops the run with the reason before the method is prepared or
+  fits anything, instead of warning and running without candidates; `runner.candidates: false` runs without them.
+- **The PySR, TiSR and DSO workers warm up in `setup`, and only once.** Their throwaway fit (`warmup`, on by default)
+  moved from `load` to the new `setup` hook, before the clock as before, and is skipped when srbf's warm-up problem
+  follows (`runner.warmup: true`), which is a fit at the run's own options and compiles the same code; timing runs no
+  longer warm these methods twice. A worker's `setup(state, options, *, warmup)` is told whether the warm-up problem
+  follows (`init` carries `warmup`); a `setup(state, options)` is called as before. The run arms a worker-backed
+  adapter with the warm-up before it starts its first worker.
+- **One MDL unit, bits, everywhere.** The Flash-ANSR adapter's raw `predicted_mdl` and the `mdl` column of its
+  `candidate_store_dir` store were flash-ansr's thousandths of a bit; both are bits now, as `derive_metrics` and the
+  table report them, and the store's `run_meta.mdl_dialect.unit` says `bits`. `CandidateStoreReader.mdl_bits(block)`
+  reads a store in bits whatever unit it states (a store without the statement holds thousandths of a bit).
+- **One price for every expression, in bits.** `srbf.pricing.price_bits(engine, prefix)` is the only place srbf
+  calls the engine's `complexity`: the table's MDL columns (`srbf.table.mdl_bits`), the `selection: {mode: mdl}` rule,
+  `scripts/catalog_mu.py` and the headline box all price through it. `derive_metrics(..., engine=...)` without an
+  `mdl_fn` now reports `predicted_mdl` and `ground_truth_mdl` in bits, as the table does (it reported thousandths of a
+  bit); `mdl_ratio` is unchanged.
 - **`srbf analyze` averages over benchmarks as the results site does.** `leaderboard`, `scaling_table`,
   `per_benchmark_table`, `export_data` and `build_report` no longer pool every expression of a run across its benchmarks
   with a bootstrap; each benchmark is a problem set, a problem's value is the mean of its runs (a problem is a catalog
@@ -69,6 +138,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (storage key .9), so an earlier visit cannot keep the old default.
 
 ### Fixed
+- **The sampling and enumeration baselines record their answer at full precision.** `predicted_expression` and
+  `predicted_expression_prefix` carried the constants rounded to two decimals (`get_expression`'s former default
+  `precision=2`), so the table priced and judged a rounded formula while `y_pred` came from the exact constants. The
+  answer is written as its candidate is, each constant the shortest string that reads back as the same float, and
+  evaluates to `y_pred`.
+- **A worker that crashes is recorded with its exit code.** A dying process's socket closes before the process can be
+  reaped, so srbf could see the end of the stream first and record `worker exited (returncode None)`. srbf now waits
+  up to two seconds for the worker to finish exiting before it reads the code.
 - **Results site: the interval of a rate average near 0 % and 100 %.** The beta-binomial average's interval was the
   delta method on the log-odds, which fails where many problem sets sit at 0 % or 100 %: one success in 6,660 problems
   (E2E, Symbolic Recovery at 8 candidates) showed 0.05 % with an interval of 0 % to 88 %, and 104 of the 2026-09

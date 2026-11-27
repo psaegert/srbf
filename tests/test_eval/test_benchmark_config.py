@@ -534,7 +534,7 @@ def test_run_persists_config_provenance_into_meta(tmp_path, monkeypatch):
         "run": {
             "data_source": {"catalog": catalog},
             "model_adapter": {"type": "flash_ansr", "config_provenance": "author_blessed"},
-            "runner": {"output": str(out)},
+            "runner": {"output": str(out), "candidates": False},
         }
     })
     caller_meta = {"config_provenance": "harness_tuned", "extra": "kept"}
@@ -551,7 +551,7 @@ def test_run_persists_config_provenance_into_meta(tmp_path, monkeypatch):
     # validated and respected; with no label anywhere the conservative default lands
     from srbf.data_sources import CatalogSource
     out2 = tmp_path / "run2.pkl"
-    bench2 = Benchmark(CatalogSource.from_catalog(catalog), _FakeAdapter())
+    bench2 = Benchmark(CatalogSource.from_catalog(catalog), _FakeAdapter(), candidates=False)
     bench2.run(verbose=False, progress=False, output_path=str(out2), save_every=1,
                meta={"config_provenance": "upstream_default"})
     with out2.open("rb") as handle:

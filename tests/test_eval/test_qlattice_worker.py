@@ -243,6 +243,8 @@ def test_the_answer_is_the_first_model_at_full_precision_in_the_given_names(fake
     assert extra["loss"] == 1e-6 and extra["edge_count"] == 3 and len(extra["diverse"]) == 1
     assert extra["diverse"][0]["loss"] == 2e-6 and extra["diverse"][0]["expression"] == out["expression"]
     assert "y_pred" not in out and out["fit_time"] >= 0
+    # every model the method returns goes to srbf as a candidate, the answer first
+    assert out["candidates"] == [out["expression"]] + [d["expression"] for d in extra["diverse"]]
 
 
 def test_the_input_map_keeps_every_digit():

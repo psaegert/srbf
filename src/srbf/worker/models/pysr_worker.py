@@ -6,13 +6,14 @@ Runs in whichever interpreter has ``pysr`` (and its Julia backend); imports pysr
 * ``timeout_in_seconds`` (int, 60), ``niterations`` (int, 100): the search budget, the compute
   axis of the scaling sweeps.
 * ``maxsize``, ``parsimony`` (None = PySR's own defaults; see docs/fairness.md), ``model_selection`` ('best' = PySR's default).
-* ``warmup`` (True): pay the one-off Julia precompile on a throwaway model in ``load`` so the
-  first timed fit starts warm.
+* ``warmup`` (True): pay the one-off Julia compilation on a throwaway fit in ``setup``, before the
+  clock, so the first timed fit starts warm. It is skipped when srbf's own warm-up problem follows
+  (``runner.warmup: true``): that is a fit at the run's own options, which compiles the same code.
 
 The result carries PySR's own predictions (``y_pred``/``y_pred_val`` from ``predict``), the best
-equation as ``expression`` (in the variable names srbf handed over) and the full Pareto hall of
-fame under ``extra["equations"]``: plain columns only, so every selection rule stays an offline
-re-score against the stored raw arrays.
+equation as ``expression`` (in the variable names srbf handed over), PySR's hall of fame (its
+Pareto front of loss against complexity, ``equations_``) as ``candidates``, which srbf judges and
+stores, and the hall of fame with PySR's own measures under ``extra["equations"]``.
 """
 import numpy as np
 
@@ -81,8 +82,8 @@ def _model_kwargs(options):
 
 
 def warmup_fit(options):
-    """Pay the Julia startup + SymbolicRegression.jl compile cost OUTSIDE timing: a throwaway
-    minimal fit, best-effort (a failing warmup forfeits only the warmup)."""
+    """Pay SymbolicRegression.jl's compile cost OUTSIDE timing: a throwaway minimal fit, best-effort (a failing warmup
+    forfeits only the warmup)."""
     kwargs = _model_kwargs(options)
     kwargs["niterations"] = 1
     model = create_model(**kwargs)
@@ -95,10 +96,13 @@ def warmup_fit(options):
 
 
 def load(options):
-    model = create_model(**_model_kwargs(options))
-    if bool(options.get("warmup", True)):
+    return {"model": create_model(**_model_kwargs(options))}
+
+
+def setup(state, options, *, warmup):
+    """Before the clock: the throwaway fit (``options.warmup``), unless srbf's warm-up problem follows (``warmup``)."""
+    if bool(options.get("warmup", True)) and not warmup:
         warmup_fit(options)
-    return {"model": model}
 
 
 def info(state):
@@ -127,8 +131,10 @@ def fit(x, y, *, x_val, variables, meta, options, state):
     y_pred = np.asarray(model.predict(X), dtype=float).ravel()
     y_pred_val = np.asarray(model.predict(X_val), dtype=float).ravel() if X_val.shape[0] else []
     extra = {}
+    candidates = None
     try:
         hof = model.equations_
+        candidates = [str(equation) for equation in hof["equation"]]
         extra["equations"] = hof[["complexity", "loss", "score", "equation"]].to_dict("records")
     except Exception:  # noqa: BLE001 - persistence is best-effort
         pass
@@ -136,4 +142,5 @@ def fit(x, y, *, x_val, variables, meta, options, state):
         extra["n_guesses"] = len(overrides.get("guesses") or [])
         extra["niterations_used"] = int(overrides.get("niterations", options.get("niterations", 100)))
     best = model.get_best()
-    return {"expression": str(best["equation"]), "y_pred": y_pred, "y_pred_val": y_pred_val, "extra": extra}
+    return {"expression": str(best["equation"]), "candidates": candidates, "y_pred": y_pred, "y_pred_val": y_pred_val,
+            "extra": extra}
