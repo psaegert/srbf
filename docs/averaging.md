@@ -316,6 +316,28 @@ rule came out at 0.23 and 0.51 for true values of 0.25 and 0.5 at a mean rate of
 where the maximum-likelihood fit with every benchmark's rate fitted alongside gave 0.17 and 0.40; at a mean rate of
 5 % both gave about 0.17 for 0.25, since most subsets then hold no success at all.
 
+### Weights from a working model: a test
+
+A subset's own variance sets both its weight and its share of the interval, so a subset whose variance came out small
+by chance gets too much weight and too narrow an error bar at once, and the interval with them is too narrow (90 to
+95 % above, less with subsets of two to four problems). A variant separates the two
+([Henmi and Copas 2010](https://doi.org/10.1002/sim.4029); robust variances:
+[Hedges, Tipton and Johnson 2010](https://doi.org/10.1002/jrsm.5)). The weights come from a working model in which every
+subset has the same spread within it, the variance pooled over all subsets, \(v_{bs} = \hat\sigma^2 / n_{bs}\), with
+\(\tau_S^2\), \(\tau_B^2\) and the three-level weights \(\omega_{bs}\) computed from \(v\) as above. The interval's
+variance uses each subset's own variance, \(\sum \omega_{bs}^2 s_{bs}^2 / n_{bs}\) (a subset of one problem takes
+\(\hat\sigma^2\)), with the Welch-Satterthwaite degrees of freedom of that sum
+([Satterthwaite 1946](https://doi.org/10.2307/3002019); [Welch 1947](https://doi.org/10.1093/biomet/34.1-2.28);
+small-sample degrees of freedom for robust variances: [Tipton 2015](https://doi.org/10.1037/met0000011)). A subset's
+weight then depends on its own variance only through \(\hat\sigma^2\) and the \(\tau\)s.
+
+It is tested on a gate fixed before it was run (`scripts/averaging_simulation.py`, `model_weights`): the 60 settings of
+800 redraws each of the moderated-variance test (three structures, five spreads, four kinds of spread within subsets),
+paired against the average as it is. It is adopted only if, in every setting, its coverage is not below the average's
+by more than twice the paired Monte Carlo error, it reaches 95 % (less twice the Monte Carlo error) wherever the average
+falls short, and its mean squared error, against the interval's own target and against the generating mean, is not
+above the average's by more than twice the paired Monte Carlo error. MODEL_WEIGHTS_RESULT
+
 ## In the package
 
 The averaging is `srbf.aggregate`. `average(problems, kind, benchmarks=..., subsets=...)` takes, for each catalog, the
@@ -345,6 +367,10 @@ expressions of a single benchmark.
 - Griffiths, D. A. (1973). Maximum likelihood estimation for the beta-binomial distribution and an application to
   the household distribution of the total number of cases of a disease. *Biometrics* 29(4), 637–648.
   [doi:10.2307/2529131](https://doi.org/10.2307/2529131)
+- Hedges, L. V., Tipton, E. and Johnson, M. C. (2010). Robust variance estimation in meta-regression with dependent
+  effect size estimates. *Research Synthesis Methods* 1(1), 39–65. [doi:10.1002/jrsm.5](https://doi.org/10.1002/jrsm.5)
+- Henmi, M. and Copas, J. B. (2010). Confidence intervals for random effects meta-analysis and robustness to
+  publication bias. *Statistics in Medicine* 29(29), 2969–2983. [doi:10.1002/sim.4029](https://doi.org/10.1002/sim.4029)
 - Higgins, J. P. T., Thompson, S. G. and Spiegelhalter, D. J. (2009). A re-evaluation of random-effects
   meta-analysis. *Journal of the Royal Statistical Society, Series A* 172(1), 137–159.
   [doi:10.1111/j.1467-985X.2008.00552.x](https://doi.org/10.1111/j.1467-985X.2008.00552.x)
@@ -366,18 +392,24 @@ expressions of a single benchmark.
 - Rice, K., Higgins, J. P. T. and Lumley, T. (2018). A re-evaluation of fixed effect(s) meta-analysis. *Journal of
   the Royal Statistical Society, Series A* 181(1), 205–227.
   [doi:10.1111/rssa.12275](https://doi.org/10.1111/rssa.12275)
+- Satterthwaite, F. E. (1946). An approximate distribution of estimates of variance components. *Biometrics Bulletin*
+  2(6), 110–114. [doi:10.2307/3002019](https://doi.org/10.2307/3002019)
 - Skellam, J. G. (1948). A probability distribution derived from the binomial distribution by regarding the
   probability of success as variable between the sets of trials. *Journal of the Royal Statistical Society,
   Series B* 10(2), 257–261. [doi:10.1111/j.2517-6161.1948.tb00014.x](https://doi.org/10.1111/j.2517-6161.1948.tb00014.x)
 - Sweeting, M. J., Sutton, A. J. and Lambert, P. C. (2004). What to add to nothing? Use and avoidance of continuity
   corrections in meta-analysis of sparse data. *Statistics in Medicine* 23(9), 1351–1375.
   [doi:10.1002/sim.1761](https://doi.org/10.1002/sim.1761)
+- Tipton, E. (2015). Small sample adjustments for robust variance estimation with meta-regression. *Psychological
+  Methods* 20(3), 375–393. [doi:10.1037/met0000011](https://doi.org/10.1037/met0000011)
 - Van den Noortgate, W., López-López, J. A., Marín-Martínez, F. and Sánchez-Meca, J. (2013). Three-level
   meta-analysis of dependent effect sizes. *Behavior Research Methods* 45(2), 576–594.
   [doi:10.3758/s13428-012-0261-6](https://doi.org/10.3758/s13428-012-0261-6)
 - Veroniki, A. A., Jackson, D., Viechtbauer, W. et al. (2016). Methods to estimate the between-study variance and its
   uncertainty in meta-analysis. *Research Synthesis Methods* 7(1), 55–79.
   [doi:10.1002/jrsm.1164](https://doi.org/10.1002/jrsm.1164)
+- Welch, B. L. (1947). The generalization of 'Student's' problem when several different population variances are
+  involved. *Biometrika* 34(1–2), 28–35. [doi:10.1093/biomet/34.1-2.28](https://doi.org/10.1093/biomet/34.1-2.28)
 - White, H. (1982). Maximum likelihood estimation of misspecified models. *Econometrica* 50(1), 1–25.
   [doi:10.2307/1912526](https://doi.org/10.2307/1912526)
 - Williams, D. A. (1982). Extra-binomial variation in logistic linear models. *Applied Statistics* 31(2), 144–148.

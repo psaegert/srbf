@@ -11,8 +11,29 @@ subsets) and "small" (29 benchmarks of 38 subsets).
              agreement of the two-stage estimate with the full nested beta-binomial model fitted by maximum likelihood
              (FullModel), and rho_S against its true value
   rho        rho_S by Williams' rule against a maximum-likelihood fit of rho_S with every benchmark's rate fitted too
+  model_weights
+             weights from a working model, error bars from each subset's own variance (combine_model_weights), against
+             the average as it is (srbf.aggregate.combine_nested), on the gate below
 
-usage: python scripts/averaging_simulation.py {means,twolevel,rates,rho} OUT.json [--workers K] [--reps R]
+THE GATE FOR THE MODEL WEIGHTS (fixed before it was run). The estimator: every subset's weight comes from the
+homoscedastic working model, v = sigma^2 / n with sigma^2 the variance within subsets pooled over all of them (degrees
+of freedom n - 1 each), tau_S^2, tau_B^2 and the three-level weights omega as the average computes them from v; the mean
+is sum omega x; its variance is sum omega^2 s^2 / n with each subset's own s^2 (0 stays 0; a subset of one problem takes
+sigma^2), with Welch-Satterthwaite degrees of freedom (sum a s^2)^2 / sum (a s^2)^2 / (n - 1), a = omega^2 / n, a subset
+of one problem entering with sigma^2's sum (n - 1), and sum (n - 1) where that is undefined; the range for one more
+benchmark as the average builds it, on v. Settings and draws are the moderated-variance gate's: three structures
+("release", "small", and "tiny": 145 benchmarks of 255 subsets, four in five of 1 to 4 problems) x the five spreads of
+"means" x four kinds of within-subset spread (every subset sd 1; log sd ~ N(0, 0.5^2) and N(0, 1) across subsets; log
+sd = 0.5 times the subset's standardised true mean), 4 draws of the subsets x 200 redraws of the problems, R = 800 per
+setting, paired against the average as it is. The model weights are adopted only if, in every one of the 60 settings,
+(1) their coverage of what their interval claims (the weighted average of these subsets' true means with their own
+weights) minus the average's is at least -2 times the paired Monte Carlo standard error sqrt(b + c - (b - c)^2 / R) / R,
+b and c the redraws only one of the two covers; (2) where the average's coverage is below 0.95 - 2 sqrt(0.95 0.05 / R),
+theirs is not; and (3) their mean squared error minus the average's, measured both against the interval's own target
+and against the generating mean (0), is at most 2 paired Monte Carlo standard errors of the difference of the squared
+errors (redraws taken as independent). Otherwise they are not adopted. The mean interval width is reported.
+
+usage: python scripts/averaging_simulation.py {means,twolevel,rates,rho,model_weights} OUT.json [--workers K] [--reps R]
        [--full small:6,release:2]
 """
 from __future__ import annotations
@@ -35,7 +56,13 @@ from srbf import aggregate as ag  # noqa: E402
 
 # ---- structures -------------------------------------------------------------------------------------------------------
 def structure(kind: str) -> list[list[int]]:
-    """Subset sizes per benchmark. "release": 145 benchmarks, 255 subsets; "small": 29 benchmarks, 38 subsets."""
+    """Subset sizes per benchmark. "release": 145 benchmarks, 255 subsets; "small": 29 benchmarks, 38 subsets;
+    "tiny": the release's nesting with four subsets in five of 1 to 4 problems, the rest of 10 to 1,000."""
+    if kind == "tiny":
+        rng = np.random.default_rng(20261128)
+        counts = [1] * 95 + [2] * 25 + [3] * 12 + [4] * 8 + [6] * 3 + [12] * 2
+        return [[int(rng.integers(1, 5)) if rng.random() < 0.8 else int(round(10 ** rng.uniform(1, 3))) for _ in range(c)]
+                for c in counts]
     rng = np.random.default_rng(20261127 if kind == "release" else 20260927)
     if kind == "release":
         counts = [1] * 95 + [2] * 25 + [3] * 12 + [4] * 8 + [6] * 3 + [12] * 2
@@ -265,9 +292,114 @@ def rho_task(args: Any) -> dict[str, Any]:
             "williams": float(np.mean(w)), "profile_ml": float(np.mean(ml))}
 
 
+# ---- weights from a working model, error bars from the subsets' own variances -----------------------------------------
+def combine_model_weights(groups: Any) -> dict[str, Any]:
+    """The estimator of the model-weights gate (see the docstring): weights from v = sigma^2 / n, the variance from each
+    subset's own s^2, Welch-Satterthwaite degrees of freedom. Returns mu, lo, hi, the subset weights and df."""
+    groups = [g for g in ([st for st in g if st.n > 0] for g in groups) if g]
+    flat = [st for g in groups for st in g]
+    own = [st for st in flat if st.var is not None]
+    df_pool = sum(st.n - 1 for st in flat)
+    sigma2 = sum((st.n - 1) * st.var for st in own) / df_pool if df_pool > 0 else 0.0   # pooled, as set_estimates pools
+    c = ag.combine_scale_nested([[st.mean for st in g] for g in groups],
+                                [[max(ag.EPS_VAR, sigma2 / st.n) for st in g] for g in groups], df=max(1, df_pool))
+    assert c.subset_weights is not None
+    terms, dfs = [], []
+    for ws, g in zip(c.subset_weights, groups):
+        for w, st in zip(ws, g):
+            own = st.var if st.var is not None else None
+            terms.append(w * w * (own if own is not None else sigma2) / st.n)
+            dfs.append(st.n - 1 if own is not None else df_pool)
+    var = sum(terms)
+    den = sum(t * t / d for t, d in zip(terms, dfs) if t > 0 and d > 0)
+    df = var * var / den if var > 0 and den > 0 else max(1, df_pool)
+    se = math.sqrt(var)
+    tq = ag.t_ppf(0.975, max(1.0, df))
+    return {"mu": c.mu, "lo": c.mu - tq * se, "hi": c.mu + tq * se, "subset_weights": c.subset_weights, "df": df,
+            "pi_lo": c.pi_lo, "pi_hi": c.pi_hi}
+
+
+SPREADS = [(1.0, 0.0), (1.0, 0.3), (1.0, 1.0), (0.3, 1.0), (0.0, 1.0)]
+SDS = ("equal", "lognormal-0.5", "lognormal-1", "mean-correlated")
+
+
+def model_weights_task(args: Any) -> dict[str, Any]:
+    """One draw of the subsets (the moderated-variance gate's seeds and draws) and its redraws, both estimators on each."""
+    kind, tb, ts, sd_kind, draw, reps = args
+    sizes = structure(kind)
+    rng = np.random.default_rng([int(1000 * tb), int(1000 * ts), SDS.index(sd_kind), draw, 13, ["release", "small", "tiny"].index(kind)])
+    truth = [[rng.normal(ub, ts) for _ in g] for g, ub in ((g, rng.normal(0.0, tb)) for g in sizes)]
+    flat = np.array([m for g in truth for m in g])
+    if sd_kind == "equal":
+        sds = np.ones(flat.size)
+    elif sd_kind.startswith("lognormal"):
+        sds = np.exp(rng.normal(0.0, float(sd_kind.split("-")[1]), flat.size))
+    else:
+        sds = np.exp(0.5 * (flat - flat.mean()) / (flat.std() or 1.0))
+    sd_of, at = [], 0
+    for g in sizes:
+        sd_of.append(list(sds[at:at + len(g)]))
+        at += len(g)
+    rec: dict[str, dict[str, list[float]]] = {name: {"hit": [], "err": [], "err_target": [], "width": []}
+                                              for name in ("before", "model")}
+    for _ in range(reps):
+        groups = [[ag.SetStat(n, float(x.sum()), float((x * x).sum())) for n, x in
+                   ((n, rng.normal(mu, sd, n)) for n, mu, sd in zip(g, mus, sdg))] for g, mus, sdg in zip(sizes, truth, sd_of)]
+        c = ag.combine_nested(groups, "normal")
+        assert c is not None and c.subset_weights is not None
+        fits = {"before": (c.mu, c.lo, c.hi, c.subset_weights)}
+        m = combine_model_weights(groups)
+        fits["model"] = (m["mu"], m["lo"], m["hi"], m["subset_weights"])
+        for name, (mu, lo, hi, sw) in fits.items():
+            t = sum(w * x for ws, xs in zip(sw, truth) for w, x in zip(ws, xs))
+            rec[name]["hit"].append(float(lo <= t <= hi))
+            rec[name]["err"].append(mu)
+            rec[name]["err_target"].append(mu - t)
+            rec[name]["width"].append(hi - lo)
+    return {"kind": kind, "tau_B": tb, "tau_S": ts, "sd": sd_kind, "draw": draw, "reps": reps, **rec}
+
+
+def model_weights_gate(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """The gate of the docstring over the draws of every setting."""
+    by: dict[tuple[str, float, float, str], list[dict[str, Any]]] = {}
+    for r in results:
+        by.setdefault((r["kind"], r["tau_B"], r["tau_S"], r["sd"]), []).append(r)
+    rows, ok = [], True
+    for key, rs in sorted(by.items()):
+        cat = {name: {f: np.concatenate([np.asarray(r[name][f]) for r in rs]) for f in ("hit", "err", "err_target", "width")}
+               for name in ("before", "model")}
+        R = cat["before"]["hit"].size
+        cov = {name: float(cat[name]["hit"].mean()) for name in cat}
+        b = int(((cat["model"]["hit"] == 1) & (cat["before"]["hit"] == 0)).sum())
+        c = int(((cat["model"]["hit"] == 0) & (cat["before"]["hit"] == 1)).sum())
+        se_diff = math.sqrt(max(0.0, b + c - (b - c) ** 2 / R)) / R
+        floor = 0.95 - 2 * math.sqrt(0.95 * 0.05 / R)
+        c1 = cov["model"] - cov["before"] >= -2 * se_diff
+        c2 = cov["before"] >= floor or cov["model"] >= floor
+        row: dict[str, Any] = {"setting": list(key), "R": R, "cover_before": cov["before"], "cover_model": cov["model"],
+                               "se_before": math.sqrt(cov["before"] * (1 - cov["before"]) / R),
+                               "se_model": math.sqrt(cov["model"] * (1 - cov["model"]) / R), "se_diff": se_diff,
+                               "c1_coverage_not_worse": c1, "c2_nominal_where_short": c2,
+                               "width_before": float(cat["before"]["width"].mean()), "width_model": float(cat["model"]["width"].mean())}
+        c3 = True
+        for f, label in (("err", "generating"), ("err_target", "target")):
+            d = cat["model"][f] ** 2 - cat["before"][f] ** 2
+            se = float(d.std(ddof=1) / math.sqrt(R)) if R > 1 else 0.0
+            worse = float(d.mean()) > 2 * se
+            c3 = c3 and not worse
+            row.update({f"rmse_{label}_before": float(np.sqrt((cat["before"][f] ** 2).mean())),
+                        f"rmse_{label}_model": float(np.sqrt((cat["model"][f] ** 2).mean())),
+                        f"bias_{label}_before": float(cat["before"][f].mean()), f"bias_{label}_model": float(cat["model"][f].mean()),
+                        f"mse_diff_{label}": float(d.mean()), f"mse_diff_se_{label}": se})
+        row["c3_rmse_not_worse"] = c3
+        ok = ok and c1 and c2 and c3
+        rows.append(row)
+    return {"adopt": ok, "settings": rows}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("what", choices=["means", "twolevel", "rates", "rho"])
+    ap.add_argument("what", choices=["means", "twolevel", "rates", "rho", "model_weights"])
     ap.add_argument("out")
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--reps", type=int, default=0)
@@ -284,6 +416,11 @@ def main() -> None:
         reps = a.reps or 150
         tasks = [(k, drop, d, reps) for k in kinds for drop in (False, True) for d in range(4)]
         fn = twolevel_task
+    elif a.what == "model_weights":
+        reps = a.reps or 200
+        tasks = [(k, tb, ts, sd, d, reps) for k in ("release", "small", "tiny") for tb, ts in SPREADS for sd in SDS
+                 for d in range(4)]
+        fn = model_weights_task
     elif a.what == "rho":
         reps = a.reps or 15
         tasks = [(k, m, nb, ns, reps) for k in kinds for m, nb, ns in ((0.3, 3.0, 3.0), (0.3, 20.0, 1.0), (0.05, 3.0, 3.0))]
@@ -295,10 +432,14 @@ def main() -> None:
                  for nb, ns in [(3.0, None), (3.0, 3.0), (20.0, 1.0)] for d in range(3)]
         fn = rates_task
     with Pool(a.workers) as pool:
-        res = []
+        res: Any = []
         for i, r in enumerate(pool.imap_unordered(fn, tasks)):
             res.append(r)
             print(f"{i + 1}/{len(tasks)}", json.dumps(r), flush=True)
+    if a.what == "model_weights":
+        verdict = model_weights_gate(res)
+        res = {"draws": res, "gate": verdict}
+        print("gate:", "ADOPT" if verdict["adopt"] else "DO NOT ADOPT", flush=True)
     with open(a.out, "w") as fh:
         json.dump(res, fh, indent=1)
 
